@@ -1,0 +1,45 @@
+#include "clang/AST/ASTConsumer.h"
+#include "clang/AST/ASTContext.h"
+#include "clang/Frontend/FrontendActions.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/Tooling/CommonOptionsParser.h"
+#include "clang/Tooling/Tooling.h"
+#include "llvm/Support/CommandLine.h"
+#include <memory>
+
+using namespace clang;
+using namespace clang::tooling;
+using namespace llvm;
+
+static cl::OptionCategory ACSLGCategory("ACSLG options");
+
+class TUASTConsumer : public ASTConsumer {
+public:
+  void HandleTranslationUnit(ASTContext &Context) override {
+    TranslationUnitDecl *TUD = Context.getTranslationUnitDecl();
+    for (auto *D : TUD->decls()) {
+      D->dump();
+    }
+  }
+};
+
+class TUFrontendAction : public ASTFrontendAction {
+public:
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override {
+    return std::make_unique<TUASTConsumer>();
+  }
+};
+
+int main(int argc, const char **argv) {
+  auto ExpectedParser = CommonOptionsParser::create(argc, argv, ACSLGCategory);
+  if (!ExpectedParser) {
+    llvm::errs() << "Error while parsing options.\n";
+    return 1;
+  }
+  CommonOptionsParser &OptionsParser = ExpectedParser.get();
+
+  ClangTool Tool(OptionsParser.getCompilations(), OptionsParser.getSourcePathList());
+
+  return Tool.run(newFrontendActionFactory<TUFrontendAction>().get());
+}
