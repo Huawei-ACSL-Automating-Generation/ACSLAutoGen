@@ -12,7 +12,8 @@ add_library(ACSLG_compiler_flags INTERFACE)
 
 target_compile_features(ACSLG_compiler_flags INTERFACE cxx_std_17)
 target_compile_options(ACSLG_compiler_flags INTERFACE 
-  -Wall-Wextra
+  -Wall
+  -Wextra
   -Wshadow
   -Wformat=2
   -Wunused
