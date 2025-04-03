@@ -1,6 +1,6 @@
 .vscode/
 build/
 .DS_STORE
-
+*.list
 *.sh
 .cache/
