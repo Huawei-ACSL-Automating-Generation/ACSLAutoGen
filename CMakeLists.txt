@@ -8,10 +8,9 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
 
-add_library(ACSLG_compiler_flags INTERFACE)
-
-target_compile_features(ACSLG_compiler_flags INTERFACE cxx_std_17)
-target_compile_options(ACSLG_compiler_flags INTERFACE 
+add_library(ACSLG_strict_flags INTERFACE)
+target_compile_features(ACSLG_strict_flags INTERFACE cxx_std_17)
+target_compile_options(ACSLG_strict_flags INTERFACE 
   -Wall
   -Wextra
   -Wshadow
@@ -19,9 +18,16 @@ target_compile_options(ACSLG_compiler_flags INTERFACE
   -Wunused
 )
 
-target_include_directories(ACSLG_compiler_flags INTERFACE
+add_library(ACSLG_system_includes INTERFACE)
+target_include_directories(ACSLG_system_includes INTERFACE SYSTEM
   ${LLVM_INCLUDE_DIRS}
   ${Clang_INCLUDE_DIRS}
+)
+
+add_library(ACSLG_compiler_flags INTERFACE)
+target_link_libraries(ACSLG_compiler_flags INTERFACE
+  ACSLG_strict_flags
+  ACSLG_system_includes
 )
 
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
