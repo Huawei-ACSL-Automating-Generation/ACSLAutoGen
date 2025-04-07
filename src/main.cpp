@@ -21,7 +21,7 @@ class TUASTConsumer : public ASTConsumer
     {
         ACSLContext acslContext(Context);
         ACSLAnalyzer analyzer(acslContext);
-        analyzer.analysis_funcs();
+        analyzer.analyzeFunctions();
     }
 };
 

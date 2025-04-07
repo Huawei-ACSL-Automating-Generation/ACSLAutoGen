@@ -1,21 +1,23 @@
 #ifndef ANALYSIS_H
 #define ANALYSIS_H
 
-#include "../Context/context.h"
+#include "Context/context.h"
+#include "function.h"
+#include <vector>
+#include <memory>
 
 class ACSLAnalyzer
 {
   public:
     ACSLAnalyzer(ACSLContext &Ctx) : Context(Ctx) {}
 
-    // TODO : returns for analysis?
-    void analysis_funcs();
+    void analyzeFunctions();
 
   private:
     ACSLContext &Context;
+    std::vector<std::unique_ptr<ACSLFunction>> Functions;
 
-    // TODO : return for process single func?
-    void process_func(const clang::FunctionDecl *);
+    void generateFunctionSpec(ACSLFunction *func);
 };
 
 #endif

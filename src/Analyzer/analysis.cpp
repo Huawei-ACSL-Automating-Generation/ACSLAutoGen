@@ -1,18 +1,21 @@
 #include "analysis.h"
-
 #include "macros.h"
+#include "function.h"
 
 using namespace clang;
-void ACSLAnalyzer::analysis_funcs()
+using namespace std;
+void ACSLAnalyzer::analyzeFunctions()
 {
     PROCESS("Running analysis functions...");
     for(auto *func : this->Context.getFunctions())
     {
-        process_func(func);
+        auto wrappedFunc = make_unique<ACSLFunction>(func);
+        generateFunctionSpec(wrappedFunc.get());
+        Functions.push_back(std::move(wrappedFunc));
     }
 }
 
-void ACSLAnalyzer::process_func(const FunctionDecl *func)
+void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
 {
-    std::cout << "Processing function: " << func->getNameAsString() << std::endl;
+    INFO("Processing Function " + func->getFunctionDecl()->getNameAsString());
 }

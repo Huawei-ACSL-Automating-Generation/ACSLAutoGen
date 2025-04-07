@@ -20,5 +20,21 @@
         std::string padding(pad, ' ');                                                             \
         std::cout << "\n\033[1;32m" << stars << "\033[0m" << std::endl;                            \
         std::cout << "\033[1;32m" << padding << "\033[1m" << s << "\033[0m" << std::endl;          \
-        std::cout << "\033[1;32m" << stars << "\033[0m" << std::endl;                              \
+        std::cout << "\033[1;32m" << stars << "\033[0m\n\n" << std::endl;                          \
     } while(0)
+
+#define INFO(info)                                                                                 \
+    do                                                                                             \
+    {                                                                                              \
+        std::string file = __FILE__;                                                               \
+        size_t pos = file.rfind("src/");                                                           \
+        if(pos != std::string::npos)                                                               \
+        {                                                                                          \
+            file = file.substr(pos);                                                               \
+        }                                                                                          \
+        std::cout << "\033[1;32m[INFO "                                                            \
+                  << "\033[0;33m" << file << ":" << __LINE__ << "\033[1;32m]" << "\033[0m "        \
+                  << info << std::endl;                                                            \
+    } while(0)
+
+inline void _noWarn() { PROCESS("unreachable"); }
