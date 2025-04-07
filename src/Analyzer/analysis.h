@@ -13,6 +13,9 @@ class ACSLAnalyzer
 
   private:
     ACSLContext &Context;
+
+    // TODO : return for process single func?
+    void process_func(const clang::FunctionDecl *);
 };
 
 #endif

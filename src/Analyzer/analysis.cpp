@@ -1,9 +1,18 @@
 #include "analysis.h"
-#include <iostream>
+
 #include "macros.h"
+
+using namespace clang;
 void ACSLAnalyzer::analysis_funcs()
 {
-    std::cout << "Running analysis functions..." << std::endl;
-    TODO();
-    // Additional analysis code can be added here.
+    PROCESS("Running analysis functions...");
+    for(auto *func : this->Context.getFunctions())
+    {
+        process_func(func);
+    }
+}
+
+void ACSLAnalyzer::process_func(const FunctionDecl *func)
+{
+    std::cout << "Processing function: " << func->getNameAsString() << std::endl;
 }

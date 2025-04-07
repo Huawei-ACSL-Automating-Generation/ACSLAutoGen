@@ -9,6 +9,8 @@ class ACSLContext
   public:
     ACSLContext(clang::ASTContext &Context) : TU(Context.getTranslationUnitDecl()) {}
 
+    std::vector<const clang::FunctionDecl *> getFunctions() const;
+
   private:
     const clang::TranslationUnitDecl *TU;
 };
