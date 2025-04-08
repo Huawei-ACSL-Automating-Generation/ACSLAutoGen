@@ -57,7 +57,7 @@
         std::string padding(pad, ' ');                                                             \
         std::cout << "\n" << ANSI_BRIGHT_GREEN << stars << ANSI_RESET << std::endl;                \
         std::cout << ANSI_BRIGHT_GREEN << padding << "\033[1m" << s << ANSI_RESET << std::endl;    \
-        std::cout << ANSI_BRIGHT_GREEN << stars << ANSI_RESET << "\n\n" << std::endl;              \
+        std::cout << ANSI_BRIGHT_GREEN << stars << ANSI_RESET << std::endl;                        \
     } while (0)
 
 #define INFO(info)                                                                                 \

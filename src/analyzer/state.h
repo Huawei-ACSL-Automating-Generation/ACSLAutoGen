@@ -11,15 +11,17 @@ class Path
     Path() = default;
     ~Path() = default;
 
-    SymbolicExpr *getVarState(clang::VarDecl *var);
+    SymbolicExpr *getVarState(const clang::VarDecl *var);
     const std::vector<std::unique_ptr<SymbolicExpr>> &getPathConditions() const;
 
-    void insertVarState(clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
+    void insertVarState(const clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
     void insertPathCondition(std::unique_ptr<SymbolicExpr> cond);
 
   private:
+    std::unique_ptr<SymbolicExpr> convertExpr(const clang::Expr *expr);
+
     // Map: variable record definition ID -> corresponding symbolic expression.
-    std::unordered_map<clang::VarDecl *, std::unique_ptr<SymbolicExpr>> stateMap;
+    std::unordered_map<const clang::VarDecl *, std::unique_ptr<SymbolicExpr>> stateMap;
 
     // SET: List of symbolic expressions representing the path condition.
     std::vector<std::unique_ptr<SymbolicExpr>> pathConditions;
