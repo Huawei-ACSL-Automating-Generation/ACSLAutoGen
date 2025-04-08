@@ -5,8 +5,8 @@
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Support/CommandLine.h"
 #include <memory>
-#include "Context/context.h"
-#include "Analyzer/analysis.h"
+#include "context/context.h"
+#include "analyzer/analysis.h"
 
 using namespace clang;
 using namespace clang::tooling;
@@ -14,14 +14,26 @@ using namespace llvm;
 
 static cl::OptionCategory ACSLGCategory("ACSLG options");
 
+static cl::opt<bool> ASTOnly("ast-only",
+    cl::desc("Output only the entire AST (Decls) using Clang's pretty print"),
+    cl::cat(ACSLGCategory));
+
 class TUASTConsumer : public ASTConsumer
 {
   public:
     void HandleTranslationUnit(ASTContext &Context) override
     {
-        ACSLContext acslContext(Context);
-        ACSLAnalyzer analyzer(acslContext);
-        analyzer.analyzeFunctions();
+        if (ASTOnly)
+        {
+            TranslationUnitDecl *TUDecl = Context.getTranslationUnitDecl();
+            TUDecl->dump();
+        }
+        else
+        {
+            ACSLContext acslContext(Context);
+            ACSLAnalyzer analyzer(acslContext);
+            analyzer.analyzeFunctions();
+        }
     }
 };
 
@@ -37,7 +49,7 @@ class TUFrontendAction : public ASTFrontendAction
 int main(int argc, const char **argv)
 {
     auto ExpectedParser = CommonOptionsParser::create(argc, argv, ACSLGCategory);
-    if(!ExpectedParser)
+    if (!ExpectedParser)
     {
         llvm::errs() << "Error while parsing options.\n";
         return 1;

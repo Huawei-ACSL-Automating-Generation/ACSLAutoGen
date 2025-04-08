@@ -4,6 +4,10 @@ target_link_libraries(ACSLG PRIVATE ACSLG_compiler_flags)
 
 llvm_map_components_to_libnames(llvm_libs support core irreader)
 
+add_subdirectory(analyzer)
+add_subdirectory(context)
+add_subdirectory(utils) 
+
 target_link_libraries(ACSLG PRIVATE
   ${llvm_libs}
   clangTooling
@@ -11,7 +15,6 @@ target_link_libraries(ACSLG PRIVATE
   clangAST
   AnalyzerLib
   ContextLib
+  UtilsLib
 )
 
-add_subdirectory(Analyzer)
-add_subdirectory(Context)

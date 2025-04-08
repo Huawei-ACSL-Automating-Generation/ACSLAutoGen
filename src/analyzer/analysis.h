@@ -1,7 +1,7 @@
 #ifndef ANALYSIS_H
 #define ANALYSIS_H
 
-#include "Context/context.h"
+#include "context/context.h"
 #include "function.h"
 #include <vector>
 #include <memory>

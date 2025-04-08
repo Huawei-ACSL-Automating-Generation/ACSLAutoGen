@@ -1,12 +1,49 @@
 #include <sstream>
 #include <iostream>
+#include <cstdlib>
+
+#define ANSI_RESET "\033[0m"
+#define ANSI_CUSTOM_BLUE "\033[38;2;120;220;232m"
+#define ANSI_BRIGHT_YELLOW "\033[0;33m"
+#define ANSI_BRIGHT_GREEN "\033[1;32m"
+#define ANSI_BRIGHT_RED "\033[1;31m"
 
 #define TODO()                                                                                     \
     do                                                                                             \
     {                                                                                              \
-        std::cerr << "TODO: Not implemented yet!" << std::endl;                                    \
+        /* Get relative file path starting with "src/" */                                          \
+        std::string file = __FILE__;                                                               \
+        size_t pos = file.rfind("src/");                                                           \
+        if (pos != std::string::npos)                                                              \
+        {                                                                                          \
+            file = file.substr(pos);                                                               \
+        }                                                                                          \
+                                                                                                   \
+        std::cerr << ANSI_CUSTOM_BLUE << "[TODO " << ANSI_BRIGHT_YELLOW << file << ":" << __LINE__ \
+                  << ANSI_CUSTOM_BLUE << "]" << ANSI_RESET << " "                                  \
+                  << "Not Implemented Yet!" << ANSI_RESET << std::endl;                            \
         std::abort();                                                                              \
-    } while(0)
+    } while (0)
+
+#define UNIMPLEMENT(info)                                                                          \
+    do                                                                                             \
+    {                                                                                              \
+        std::string file = __FILE__;                                                               \
+        size_t pos = file.rfind("src/");                                                           \
+        if (pos != std::string::npos)                                                              \
+        {                                                                                          \
+            file = file.substr(pos);                                                               \
+        }                                                                                          \
+                                                                                                   \
+        std::ostringstream oss;                                                                    \
+        oss << info;                                                                               \
+        std::string s = oss.str();                                                                 \
+                                                                                                   \
+        std::cerr << ANSI_BRIGHT_RED << "[UNIMPLEMENT " << ANSI_BRIGHT_YELLOW << file << ":"       \
+                  << __LINE__ << ANSI_BRIGHT_RED << "]" << ANSI_RESET << " " << s << ANSI_RESET    \
+                  << std::endl;                                                                    \
+        std::abort();                                                                              \
+    } while (0)
 
 #define PROCESS(info)                                                                              \
     do                                                                                             \
@@ -18,23 +55,37 @@
         int pad = s.size() < SEPARATOR_LENGTH ? (SEPARATOR_LENGTH - s.size()) / 2 : 0;             \
         std::string stars(SEPARATOR_LENGTH, '=');                                                  \
         std::string padding(pad, ' ');                                                             \
-        std::cout << "\n\033[1;32m" << stars << "\033[0m" << std::endl;                            \
-        std::cout << "\033[1;32m" << padding << "\033[1m" << s << "\033[0m" << std::endl;          \
-        std::cout << "\033[1;32m" << stars << "\033[0m\n\n" << std::endl;                          \
-    } while(0)
+        std::cout << "\n" << ANSI_BRIGHT_GREEN << stars << ANSI_RESET << std::endl;                \
+        std::cout << ANSI_BRIGHT_GREEN << padding << "\033[1m" << s << ANSI_RESET << std::endl;    \
+        std::cout << ANSI_BRIGHT_GREEN << stars << ANSI_RESET << "\n\n" << std::endl;              \
+    } while (0)
 
 #define INFO(info)                                                                                 \
     do                                                                                             \
     {                                                                                              \
         std::string file = __FILE__;                                                               \
         size_t pos = file.rfind("src/");                                                           \
-        if(pos != std::string::npos)                                                               \
+        if (pos != std::string::npos)                                                              \
         {                                                                                          \
             file = file.substr(pos);                                                               \
         }                                                                                          \
-        std::cout << "\033[1;32m[INFO "                                                            \
-                  << "\033[0;33m" << file << ":" << __LINE__ << "\033[1;32m]" << "\033[0m "        \
-                  << info << std::endl;                                                            \
-    } while(0)
+        std::cout << ANSI_BRIGHT_GREEN << "[INFO " << ANSI_BRIGHT_YELLOW << file << ":"            \
+                  << __LINE__ << ANSI_BRIGHT_GREEN << "]" << ANSI_RESET << " " << info             \
+                  << std::endl;                                                                    \
+    } while (0)
+
+#define ERROR(info)                                                                                \
+    do                                                                                             \
+    {                                                                                              \
+        std::string file = __FILE__;                                                               \
+        size_t pos = file.rfind("src/");                                                           \
+        if (pos != std::string::npos)                                                              \
+        {                                                                                          \
+            file = file.substr(pos);                                                               \
+        }                                                                                          \
+        std::cout << ANSI_BRIGHT_RED << "[ERROR " << ANSI_BRIGHT_YELLOW << file << ":" << __LINE__ \
+                  << ANSI_BRIGHT_RED << "]" << ANSI_RESET << " " << info << std::endl;             \
+        std::abort();                                                                              \
+    } while (0)
 
 inline void _noWarn() { PROCESS("unreachable"); }

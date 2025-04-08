@@ -34,6 +34,6 @@ PenaltyExcessCharacter: 100
 PenaltyReturnTypeOnItsOwnLine: 1
 PointerAlignment: Right
 SortIncludes: false
-SpaceBeforeParens: Never
+SpaceBeforeParens: ControlStatements
 SpacesInContainerLiterals: false
 Standard:        Cpp11
