@@ -15,3 +15,4 @@ target_link_libraries(ACSLG PRIVATE
 
 add_subdirectory(Analyzer)
 add_subdirectory(Context)
+add_subdirectory(SpecGenerator)
