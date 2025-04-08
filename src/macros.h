@@ -45,6 +45,21 @@
         std::abort();                                                                              \
     } while (0)
 
+#define UNREACHABLE()                                                                              \
+    do                                                                                             \
+    {                                                                                              \
+        std::string file = __FILE__;                                                               \
+        size_t pos = file.rfind("src/");                                                           \
+        if (pos != std::string::npos)                                                              \
+        {                                                                                          \
+            file = file.substr(pos);                                                               \
+        }                                                                                          \
+                                                                                                   \
+        std::cerr << ANSI_BRIGHT_RED << "[UNREACHABLE " << ANSI_BRIGHT_YELLOW << file << ":"       \
+                  << __LINE__ << ANSI_BRIGHT_RED << "]" << ANSI_RESET << std::endl;                \
+        std::abort();                                                                              \
+    } while (0)
+
 #define PROCESS(info)                                                                              \
     do                                                                                             \
     {                                                                                              \

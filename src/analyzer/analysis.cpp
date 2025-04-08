@@ -3,6 +3,7 @@
 #include "function.h"
 #include "clang/AST/Stmt.h"
 #include "utils/utils.h"
+#include "state.h"
 
 using namespace clang;
 using namespace llvm;
@@ -23,16 +24,22 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
     const FunctionDecl *FD = func->getFunctionDecl();
     INFO("Processing Function " + FD->getNameAsString());
 
+    auto state = make_unique<ProgramState>();
+
     if (const Stmt *Body = FD->getBody())
     {
         if (!isa<CompoundStmt>(Body))
             UNIMPLEMENT("Function body of " + FD->getNameAsString() + " is not a CompoundStmt");
 
         const CompoundStmt *CS = cast<CompoundStmt>(Body);
-        for (const Stmt *child : CS->children())
+        for (const Stmt *stmt : CS->children())
         {
-            if (isLoopStmt(child)) {}
-            else {}
+            if (!isLoopStmt(stmt))
+            {
+                state->step(stmt);
+                continue;
+            }
+
             TODO();
         }
     }

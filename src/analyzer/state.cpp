@@ -4,6 +4,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include <memory>
 #include <llvm/ADT/APSInt.h>
+#include <clang/AST/StmtCXX.h>
 
 using namespace std;
 using namespace clang;
@@ -35,15 +36,13 @@ void Path::insertPathCondition(unique_ptr<SymbolicExpr> cond)
     pathConditions.push_back(std::move(cond));
 }
 
-ProgramState::ProgramState() { paths.push_back(std::make_unique<Path>()); }
-
 unique_ptr<SymbolicExpr> Path::convertExpr(const Expr *expr)
 {
     if (!expr)
         ERROR("Fail to convert an empty Expr");
 
     expr = expr->IgnoreParenImpCasts();
-    return llvm::TypeSwitch<const Expr *, unique_ptr<SymbolicExpr>>(expr)
+    return TypeSwitch<const Expr *, unique_ptr<SymbolicExpr>>(expr)
         .Case<IntegerLiteral>([this](const IntegerLiteral *lit) -> unique_ptr<SymbolicExpr> {
             APInt ap = lit->getValue();
             QualType litType = lit->getType();
@@ -166,3 +165,46 @@ unique_ptr<SymbolicExpr> Path::convertExpr(const Expr *expr)
             return nullptr;
         });
 }
+
+ProgramState::ProgramState() { paths.push_back(std::make_unique<Path>()); }
+
+void ProgramState::init(const clang::FunctionDecl *FD) {}
+
+void ProgramState::step(const Stmt *stmt)
+{
+    TypeSwitch<const Stmt *, void>(stmt)
+        .Case<CompoundStmt>([this](const CompoundStmt *cs) {
+            for (const Stmt *child : cs->children())
+            {
+                if (child)
+                    step(child);
+            }
+        })
+        .Case<IfStmt>([this](const IfStmt *ifStmt) {
+            // Process IfStmt
+        })
+        .Case<ReturnStmt>([this](const ReturnStmt *retStmt) {
+            // TODO: Implement ReturnStmt handling
+        })
+        .Case<DeclStmt>([this](const DeclStmt *declStmt) {
+            // TODO: Implement DeclStmt handling
+        })
+        .Case<ImplicitCastExpr>([this](const ImplicitCastExpr *ice) -> unique_ptr<SymbolicExpr> {
+            UNIMPLEMENT("Unexpected top-level ImplicitCastExpr: " << ice->getStmtClassName());
+        })
+        .Case<SwitchStmt>([this](const SwitchStmt *switchStmt) { TODO(); })
+        .Case<CaseStmt>([this](const CaseStmt *caseStmt) { TODO(); })
+        .Case<DefaultStmt>([this](const DefaultStmt *defaultStmt) { TODO(); })
+        .Case<ForStmt>([this](const ForStmt *forStmt) { UNREACHABLE(); })
+        .Case<WhileStmt>([this](const WhileStmt *whileStmt) { UNREACHABLE(); })
+        .Case<DoStmt>([this](const DoStmt *doStmt) { UNREACHABLE(); })
+        .Case<CXXForRangeStmt>([this](const CXXForRangeStmt *rangeStmt) { UNREACHABLE(); })
+        .Case<BreakStmt>([this](const BreakStmt *breakStmt) { UNREACHABLE(); })
+        .Case<ContinueStmt>([this](const ContinueStmt *continueStmt) { UNREACHABLE(); })
+        .Default([this](const Stmt *s) {
+            UNIMPLEMENT("Unsupported Stmt type: " << s->getStmtClassName());
+        });
+    return;
+}
+
+void ProgramState::stepBranch() {}

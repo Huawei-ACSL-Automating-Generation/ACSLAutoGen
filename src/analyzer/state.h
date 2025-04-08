@@ -33,6 +33,11 @@ class ProgramState
     ProgramState();
     ~ProgramState() = default;
 
+    void init(const clang::FunctionDecl *FD);
+
+    void step(const clang::Stmt *stmt);
+    void stepBranch();
+
   private:
     std::vector<std::unique_ptr<Path>> paths;
 };
