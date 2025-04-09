@@ -1,6 +1,15 @@
+// src/SpecGenerator/stringTemplate.cpp
+
 #include "stringTemplate.h"
 
 using namespace std;
+
+StringTemplate::StringTemplate(const StringTemplate &templ)
+    : rawText_(templ.rawText_), placeholders_(templ.placeholders_), name2PH_(templ.name2PH_)
+{
+    if(templ.next_)
+        next_ = make_unique<StringTemplate>(*templ.next_);
+}
 
 // Initialize the instance with rawText_, nested $ will be ignored.
 void StringTemplate::initialize()
@@ -31,7 +40,7 @@ void StringTemplate::initialize()
         {
             inBraces = true;
             curPH.name = "";
-            curPH.pos = i;
+            curPH.pos = i - 1;
             curPH.len = 2;
         }
 
@@ -87,15 +96,6 @@ void StringTemplate::withPrefix(const string &prefix)
         next_->withPrefix(prefix);
 }
 
-// In terms of frequent concatenations.
-template <typename T, typename> void StringTemplate::append(T &&templ)
-{
-    if(next_)
-        next_->append(forward<T>(templ));
-    else
-        next_ = make_unique(forward<T>(templ));
-}
-
 // /return the string with all placeholders replaced by mp
 string StringTemplate::operator()(const unordered_map<string, string> &mp) const
 {
@@ -116,6 +116,14 @@ string StringTemplate::operator()(const unordered_map<string, string> &mp) const
     return result;
 }
 
+// Just for a simpler interface.
+// /return the string with all placeholder replaced with ""
+string StringTemplate::operator()() const
+{
+    unordered_map<string, string> emptyMap;
+    return (*this)(emptyMap);
+}
+
 // Output string with placeholders replaced by mp to os.
 void StringTemplate::operator()(ostream &os, const unordered_map<string, string> &mp) const
 {
@@ -132,6 +140,14 @@ void StringTemplate::operator()(ostream &os, const unordered_map<string, string>
 
     if(next_)
         (*next_)(os, mp);
+}
+
+// Just for a simpler interface.
+// /return the string with all placeholder replaced with ""
+void StringTemplate::operator()(ostream &os) const
+{
+    unordered_map<string, string> emptyMap;
+    return (*this)(os, emptyMap);
 }
 
 // String literal to StringTemplate.
