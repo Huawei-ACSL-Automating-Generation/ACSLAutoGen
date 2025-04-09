@@ -16,6 +16,10 @@
 
 using namespace std;
 
+// Parse a string containing placeholders in the form of ${name} as a template, supporting
+// placeholder substitution and templates concatenation.
+// The current implementation handles only simple placeholders: any text from ${ up to the first }
+// is interpreted as the name, without special parsing.
 class StringTemplate
 {
   private:
@@ -29,7 +33,7 @@ class StringTemplate
     };
     vector<Placeholder> placeholders_;
     unordered_map<string,
-        unordered_set<size_t>> name2PH_; // PH = placeholder
+        unordered_set<size_t>> nameToPh_; // Ph = placeholder
     unique_ptr<StringTemplate> next_;
 
     void initialize();
@@ -37,45 +41,16 @@ class StringTemplate
   public:
     StringTemplate() = delete;
     StringTemplate(const StringTemplate &);
-    // Has same behavior with nullptr and empty string.
-    StringTemplate(const char *str)
-    {
-        if(str == nullptr)
-            rawText_ = "";
-        else
-            rawText_ = str;
-        initialize();
-    };
+    StringTemplate(const char *str);
     StringTemplate(const string &str) : rawText_(str) { initialize(); }
 
-    size_t getPlaceholderNum() const
-    {
-        return placeholders_.size() + (next_ ? next_->placeholders_.size() : 0);
-    }
+    size_t getPlaceholderNum() const;
     void withPrefix(const string &);
     size_t remap(const unordered_map<string, string> &);
 
-    // In terms of frequent concatenations.
-    template <typename T,
-        typename = std::enable_if_t<
-            std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
-    void append(T &&templ)
-    {
-        if(next_)
-            next_->append(std::forward<T>(templ));
-        else
-            next_ = make_unique<StringTemplate>(std::forward<T>(templ));
-    }
+    template <typename T, typename> void append(T &&templ);
+    template <typename T, typename> friend StringTemplate operator+(T &&templA, T &&templB);
 
-    template <typename T,
-        typename = std::enable_if_t<
-            std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
-    friend StringTemplate operator+(T &&templA, T &&templB)
-    {
-        StringTemplate temp = std::forward<T>(templA);
-        temp.append(std::forward<T>(templB));
-        return std::move(temp);
-    }
     string operator()(const unordered_map<string, string> &) const;
     string operator()() const;
     void operator()(ostream &, const unordered_map<string, string> &) const;
@@ -83,5 +58,27 @@ class StringTemplate
 };
 
 StringTemplate operator"" _ST(const char *);
+
+// In terms of frequent concatenations between rValue
+template <typename T,
+    typename = std::enable_if_t<
+        std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
+void StringTemplate::append(T &&templ)
+{
+    if(next_)
+        next_->append(std::forward<T>(templ));
+    else
+        next_ = make_unique<StringTemplate>(std::forward<T>(templ));
+}
+
+template <typename T,
+    typename = std::enable_if_t<
+        std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
+StringTemplate operator+(T &&templA, T &&templB)
+{
+    StringTemplate temp = std::forward<T>(templA);
+    temp.append(std::forward<T>(templB));
+    return std::move(temp);
+}
 
 #endif

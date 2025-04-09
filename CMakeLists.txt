@@ -37,8 +37,11 @@ target_compile_definitions(ACSLG_compiler_flags INTERFACE
   ${CLANG_DEFINITIONS_LIST}
 )
 
-option(BUILD_TESTS "Build tests" OFF)
-enable_testing()
-
 add_subdirectory(src)
-add_subdirectory(tests)
+
+option(BUILD_TESTS "Build tests" OFF)
+
+if(BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
