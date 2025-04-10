@@ -254,7 +254,10 @@ void ProgramState::step(const Stmt *stmt)
             UNIMPLEMENT("Unexpected top-level ImplicitCastExpr: " << ice->getStmtClassName());
         })
         .Case<SwitchStmt>([this](const SwitchStmt *switchStmt) { TODO(); })
-        .Case<CaseStmt>([this](const CaseStmt *caseStmt) { step(caseStmt->getSubStmt()); })
+        .Case<CaseStmt>([this](const CaseStmt *caseStmt) {
+            step(caseStmt->getSubStmt());
+            TODO();
+        })
         .Case<DefaultStmt>(
             [this](const DefaultStmt *defaultStmt) { step(defaultStmt->getSubStmt()); })
         .Case<ForStmt>([this](const ForStmt *forStmt) { TODO(); })

@@ -2,7 +2,6 @@
 #include "macros.h"
 #include "function.h"
 #include "clang/AST/Stmt.h"
-#include "utils/utils.h"
 #include "state.h"
 
 using namespace clang;
