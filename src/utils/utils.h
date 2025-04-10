@@ -2,8 +2,7 @@
 #define UTILS_H
 
 #include "analyzer/symbolic.h"
-#include "clang/AST/Stmt.h"
 
-bool isLoopStmt(const clang::Stmt *stmt);
-
+// bool isLoopStmt(const clang::Stmt *stmt);
+std::unique_ptr<SymbolicExpr> createLNotExpr(std::unique_ptr<SymbolicExpr> expr);
 #endif // UTILS_H

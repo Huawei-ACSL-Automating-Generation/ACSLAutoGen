@@ -14,13 +14,15 @@ class SymbolicExpr
         Variable,
         BinaryOp,
         UnaryOp,
-        ArraySubscript
+        ArraySubscript,
+        SNULL
     };
 
     SymbolicExpr(Type type) : type_(type) {}
     virtual ~SymbolicExpr() = default;
 
     Type getType() const { return type_; }
+    virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
 
   private:
     Type type_;
@@ -66,6 +68,8 @@ class LiteralExpr : public SymbolicExpr
 
     LiteralType getLiteralType() const { return type; }
 
+    std::unique_ptr<SymbolicExpr> clone() const override;
+
   private:
     LiteralType type;
     union Data
@@ -81,14 +85,6 @@ class LiteralExpr : public SymbolicExpr
     } data;
 };
 
-class VariableExpr : public SymbolicExpr
-{
-  public:
-    VariableExpr(const std::string &name) : SymbolicExpr(Type::Variable), name_(name) {}
-
-  private:
-    std::string name_;
-};
 class BinaryOpExpr : public SymbolicExpr
 {
   public:
@@ -136,6 +132,8 @@ class BinaryOpExpr : public SymbolicExpr
         : SymbolicExpr(Type::BinaryOp), left_(left), op_(op), right_(right)
     {}
 
+    std::unique_ptr<SymbolicExpr> clone() const override;
+
   private:
     std::unique_ptr<SymbolicExpr> left_;
     Operator op_;
@@ -168,6 +166,8 @@ class UnaryOpExpr : public SymbolicExpr
     UnaryOpExpr(Operator op, SymbolicExpr *expr) : SymbolicExpr(Type::UnaryOp), op_(op), expr_(expr)
     {}
 
+    std::unique_ptr<SymbolicExpr> clone() const override;
+
   private:
     Operator op_;
     std::unique_ptr<SymbolicExpr> expr_;
@@ -184,9 +184,44 @@ class ArrayExpr : public SymbolicExpr
         : SymbolicExpr(Type::ArraySubscript), array_(array), index_(index)
     {}
 
+    std::unique_ptr<SymbolicExpr> clone() const override;
+
   private:
     std::unique_ptr<SymbolicExpr> array_;
     std::unique_ptr<SymbolicExpr> index_;
+};
+
+class NullExpr : public SymbolicExpr
+{
+  public:
+    NullExpr() : SymbolicExpr(Type::SNULL) {}
+    ~NullExpr() = default;
+
+    std::unique_ptr<SymbolicExpr> clone() const override;
+};
+
+class Variable : public SymbolicExpr
+{
+  public:
+    enum class VarType
+    {
+        Int,
+        UInt,
+        Bool,
+    };
+
+    Variable(const std::string &name, VarType varType)
+        : SymbolicExpr(Type::Variable), name_(name), varType_(varType)
+    {}
+
+    VarType getVarType() const { return varType_; }
+    void setVarType(VarType varType) { varType_ = varType; }
+
+    std::unique_ptr<SymbolicExpr> clone() const override;
+
+  private:
+    std::string name_;
+    VarType varType_;
 };
 
 #endif // SYMBOLIC_H

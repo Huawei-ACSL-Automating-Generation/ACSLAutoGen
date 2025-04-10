@@ -33,15 +33,7 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
 
         const CompoundStmt *CS = cast<CompoundStmt>(Body);
         for (const Stmt *stmt : CS->children())
-        {
-            if (!isLoopStmt(stmt))
-            {
-                state->step(stmt);
-                continue;
-            }
-
-            TODO();
-        }
+            state->step(stmt);
     }
     else
     {

@@ -1,8 +1,10 @@
 #include "state.h"
 #include "macros.h"
 #include <clang/AST/Expr.h>
+#include "clang/AST/Stmt.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include <memory>
+#include "utils/utils.h"
 #include <llvm/ADT/APSInt.h>
 #include <clang/AST/StmtCXX.h>
 
@@ -21,19 +23,51 @@ SymbolicExpr *Path::getVarState(const VarDecl *var)
 
 const vector<unique_ptr<SymbolicExpr>> &Path::getPathConditions() const { return pathConditions; }
 
-void Path::insertVarState(const VarDecl *var, unique_ptr<SymbolicExpr> expr)
+void Path::insertVarState(const VarDecl *var, const Expr *expr)
 {
     auto canonicalVar = var->getCanonicalDecl();
+    unique_ptr<SymbolicExpr> convertedExpr;
+    if (expr)
+        convertedExpr = convertExpr(expr);
+    else
+        convertedExpr = make_unique<NullExpr>();
     auto it = stateMap.find(canonicalVar);
     if (it != stateMap.end())
-        it->second = std::move(expr);
+        it->second = std::move(convertedExpr);
     else
-        stateMap.insert({canonicalVar, std::move(expr)});
+        stateMap.insert({canonicalVar, std::move(convertedExpr)});
 }
 
-void Path::insertPathCondition(unique_ptr<SymbolicExpr> cond)
+void Path::insertPathCondition(const Expr *cond)
 {
-    pathConditions.push_back(std::move(cond));
+    if (!cond)
+        return;
+    auto convertedCond = convertExpr(cond);
+    pathConditions.push_back(std::move(convertedCond));
+}
+
+void Path::insertDefaultPathConds(const vector<const Expr *> &conds)
+{
+    for (auto cond : conds)
+    {
+        if (!cond)
+            continue;
+        auto converted = convertExpr(cond);
+        auto notExpr = createLNotExpr(std::move(converted));
+        pathConditions.push_back(std::move(notExpr));
+    }
+}
+
+std::unique_ptr<Path> Path::clone() const
+{
+    auto cloned = std::make_unique<Path>();
+    cloned->currentState = currentState;
+    for (const auto &entry : stateMap)
+        cloned->stateMap.insert({entry.first, entry.second->clone()});
+    for (const auto &cond : pathConditions)
+        cloned->pathConditions.push_back(cond->clone());
+    cloned->returnExpr = returnExpr->clone();
+    return cloned;
 }
 
 unique_ptr<SymbolicExpr> Path::convertExpr(const Expr *expr)
@@ -166,12 +200,15 @@ unique_ptr<SymbolicExpr> Path::convertExpr(const Expr *expr)
         });
 }
 
-ProgramState::ProgramState() { paths.push_back(std::make_unique<Path>()); }
+ProgramState::ProgramState() { paths.push_back(make_unique<Path>()); }
 
-void ProgramState::init(const clang::FunctionDecl *FD) {}
+void ProgramState::init(const FunctionDecl *FD) {}
 
 void ProgramState::step(const Stmt *stmt)
 {
+    if (!stmt)
+        return;
+    TODO(); // Stack State for break, continue context.
     TypeSwitch<const Stmt *, void>(stmt)
         .Case<CompoundStmt>([this](const CompoundStmt *cs) {
             for (const Stmt *child : cs->children())
@@ -181,30 +218,148 @@ void ProgramState::step(const Stmt *stmt)
             }
         })
         .Case<IfStmt>([this](const IfStmt *ifStmt) {
-            // Process IfStmt
+            vector<const Expr *> branchConds;
+            vector<const Stmt *> branchStmts;
+            branchConds.push_back(ifStmt->getCond());
+            branchStmts.push_back(ifStmt->getThen());
+            if (ifStmt->getElse())
+                branchStmts.push_back(ifStmt->getElse());
+            else
+                branchStmts.push_back(nullptr);
+
+            stepBranch(branchConds, branchStmts);
         })
         .Case<ReturnStmt>([this](const ReturnStmt *retStmt) {
-            // TODO: Implement ReturnStmt handling
+            setStates(Path::PathState::Return);
+            setReturnExpr(retStmt->getRetValue());
         })
         .Case<DeclStmt>([this](const DeclStmt *declStmt) {
-            // TODO: Implement DeclStmt handling
+            vector<const VarDecl *> varDecls;
+            for (auto it = declStmt->decl_begin(); it != declStmt->decl_end(); ++it)
+            {
+                Decl *decl = *it;
+                if (!dyn_cast<VarDecl>(decl))
+                {
+                    WARNING(string("Unhandled Decl type: ") + decl->getDeclKindName());
+                    continue;
+                }
+                varDecls.push_back(dyn_cast<VarDecl>(decl));
+            }
+            addNewDecls(varDecls);
+        })
+        .Case<BinaryOperator>([this](const BinaryOperator *binOp) {
+            // Do nothing
         })
         .Case<ImplicitCastExpr>([this](const ImplicitCastExpr *ice) -> unique_ptr<SymbolicExpr> {
             UNIMPLEMENT("Unexpected top-level ImplicitCastExpr: " << ice->getStmtClassName());
         })
         .Case<SwitchStmt>([this](const SwitchStmt *switchStmt) { TODO(); })
-        .Case<CaseStmt>([this](const CaseStmt *caseStmt) { TODO(); })
-        .Case<DefaultStmt>([this](const DefaultStmt *defaultStmt) { TODO(); })
-        .Case<ForStmt>([this](const ForStmt *forStmt) { UNREACHABLE(); })
-        .Case<WhileStmt>([this](const WhileStmt *whileStmt) { UNREACHABLE(); })
-        .Case<DoStmt>([this](const DoStmt *doStmt) { UNREACHABLE(); })
-        .Case<CXXForRangeStmt>([this](const CXXForRangeStmt *rangeStmt) { UNREACHABLE(); })
-        .Case<BreakStmt>([this](const BreakStmt *breakStmt) { UNREACHABLE(); })
-        .Case<ContinueStmt>([this](const ContinueStmt *continueStmt) { UNREACHABLE(); })
+        .Case<CaseStmt>([this](const CaseStmt *caseStmt) { step(caseStmt->getSubStmt()); })
+        .Case<DefaultStmt>(
+            [this](const DefaultStmt *defaultStmt) { step(defaultStmt->getSubStmt()); })
+        .Case<ForStmt>([this](const ForStmt *forStmt) { TODO(); })
+        .Case<WhileStmt>([this](const WhileStmt *whileStmt) { TODO(); })
+        .Case<DoStmt>([this](const DoStmt *doStmt) { TODO(); })
+        .Case<CXXForRangeStmt>([this](const CXXForRangeStmt *rangeStmt) { TODO(); })
+        .Case<BreakStmt>([this](const BreakStmt *breakStmt) { TODO(); })
+        .Case<ContinueStmt>([this](const ContinueStmt *continueStmt) { TODO(); })
         .Default([this](const Stmt *s) {
             UNIMPLEMENT("Unsupported Stmt type: " << s->getStmtClassName());
         });
     return;
 }
 
-void ProgramState::stepBranch() {}
+void ProgramState::stepBranch(
+    const vector<const Expr *> &branchConds, const vector<const Stmt *> &branchStmts)
+{
+    assert(branchStmts.size() == branchConds.size() + 1);
+
+    vector<unique_ptr<ProgramState>> clones;
+    vector<const ProgramState *> statesForMerge;
+
+    auto splitPair = splitActiveInactive();
+    size_t n = branchConds.size();
+    for (size_t i = 0; i < n; ++i)
+    {
+        auto newState = splitPair.first->clone();
+        for (auto &path : newState->paths)
+            path->insertPathCondition(branchConds[i]);
+        newState->step(branchStmts[i]);
+
+        statesForMerge.push_back(newState.get());
+        clones.push_back(std::move(newState));
+    }
+
+    for (auto &path : splitPair.first->paths)
+        path->insertDefaultPathConds(branchConds);
+    splitPair.first->step(branchStmts.back());
+
+    statesForMerge.push_back(splitPair.first.get());
+    auto mergedActive = Merge(statesForMerge);
+    for (auto &path : splitPair.second->paths)
+        mergedActive->paths.push_back(std::move(path));
+
+    paths = std::move(mergedActive->paths);
+}
+
+void ProgramState::setStates(Path::PathState state)
+{
+    for (auto &pathPtr : paths)
+    {
+        if (pathPtr->isActive())
+            pathPtr->setPathState(state);
+    }
+}
+
+void ProgramState::setReturnExpr(const Expr *expr)
+{
+    for (auto &pathPtr : paths)
+    {
+        if (pathPtr->isActive())
+            pathPtr->setReturnExpr(expr);
+    }
+}
+
+void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls)
+{
+    for (auto *varDecl : varDecls)
+    {
+        auto *initExpr = varDecl->getInit();
+        for (auto &path : paths)
+            path->insertVarState(varDecl, initExpr);
+    }
+}
+
+pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActiveInactive() const
+{
+    auto activeState = make_unique<ProgramState>();
+    auto inactiveState = make_unique<ProgramState>();
+    for (const auto &path : paths)
+    {
+        if (path->isActive())
+            activeState->paths.push_back(path->clone());
+        else
+            inactiveState->paths.push_back(path->clone());
+    }
+    return {std::move(activeState), std::move(inactiveState)};
+}
+
+unique_ptr<ProgramState> ProgramState::Merge(const vector<const ProgramState *> &states)
+{
+    auto merged = make_unique<ProgramState>();
+    for (const auto *state : states)
+        for (const auto &path : state->paths)
+            merged->paths.push_back(path->clone());
+    return merged;
+}
+
+unique_ptr<ProgramState> ProgramState::clone() const
+{
+    auto newState = make_unique<ProgramState>();
+    newState->paths.clear();
+    for (const auto &path : paths)
+    {
+        newState->paths.push_back(path->clone());
+    }
+    return newState;
+}

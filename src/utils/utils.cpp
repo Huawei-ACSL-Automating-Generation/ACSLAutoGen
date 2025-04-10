@@ -1,12 +1,15 @@
 #include "utils.h"
-#include "clang/AST/Stmt.h"
-#include "clang/AST/StmtCXX.h"
 
-using namespace clang;
-using namespace llvm;
+// using namespace clang;
+// using namespace llvm;
 using namespace std;
-bool isLoopStmt(const Stmt *stmt)
+// bool isLoopStmt(const Stmt *stmt)
+// {
+//     return isa<ForStmt>(stmt) || isa<WhileStmt>(stmt) || isa<DoStmt>(stmt) ||
+//            isa<CXXForRangeStmt>(stmt);
+// }
+
+unique_ptr<SymbolicExpr> createLNotExpr(unique_ptr<SymbolicExpr> expr)
 {
-    return isa<ForStmt>(stmt) || isa<WhileStmt>(stmt) || isa<DoStmt>(stmt) ||
-           isa<CXXForRangeStmt>(stmt);
+    return make_unique<UnaryOpExpr>(UnaryOpExpr::Operator::LogicalNot, std::move(expr));
 }

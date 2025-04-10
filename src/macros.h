@@ -89,6 +89,19 @@
                   << std::endl;                                                                    \
     } while (0)
 
+#define WARNING(info)                                                                              \
+    do                                                                                             \
+    {                                                                                              \
+        std::string file = __FILE__;                                                               \
+        size_t pos = file.rfind("src/");                                                           \
+        if (pos != std::string::npos)                                                              \
+        {                                                                                          \
+            file = file.substr(pos);                                                               \
+        }                                                                                          \
+        std::cout << ANSI_BRIGHT_YELLOW << "[WARNING " << file << ":" << __LINE__ << "]"           \
+                  << ANSI_RESET << " " << info << std::endl;                                       \
+    } while (0)
+
 #define ERROR(info)                                                                                \
     do                                                                                             \
     {                                                                                              \
