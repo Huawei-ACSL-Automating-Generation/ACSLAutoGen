@@ -16,10 +16,12 @@
 
 using namespace std;
 
+using NameMap = unordered_map<string, string>;
+
 // Parse a string containing placeholders in the form of ${name} as a template, supporting
 // placeholder substitution and templates concatenation.
-// The current implementation handles only simple placeholders: any text from ${ up to the first }
-// is interpreted as the name, without special parsing.
+// The current implementation handles only simple placeholders: any text from ${ up to the first
+// } is interpreted as the name, without special parsing.
 class StringTemplate
 {
   private:
@@ -46,18 +48,19 @@ class StringTemplate
 
     size_t getPlaceholderNum() const;
     void withPrefix(const string &);
-    size_t remap(const unordered_map<string, string> &);
-
+    size_t remap(const NameMap &);
     template <typename T, typename> void append(T &&templ);
-    template <typename T, typename> friend StringTemplate operator+(T &&templA, T &&templB);
 
-    string operator()(const unordered_map<string, string> &) const;
+    string operator()(const NameMap &) const;
     string operator()() const;
-    void operator()(ostream &, const unordered_map<string, string> &) const;
+    void operator()(ostream &, const NameMap &) const;
     void operator()(ostream &) const;
+
+  private:
+    template <typename T, typename> friend StringTemplate operator+(T &&templA, T &&templB);
 };
 
-StringTemplate operator"" _ST(const char *);
+StringTemplate operator"" _st(const char *, size_t);
 
 // In terms of frequent concatenations between rValue
 template <typename T,

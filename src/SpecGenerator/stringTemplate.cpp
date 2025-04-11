@@ -36,6 +36,7 @@ void StringTemplate::initialize()
             ++curPh.len;
             if(ch == '}')
             {
+                nameToPh_[curPh.name].insert(placeholders_.size());
                 placeholders_.push_back(curPh);
                 inBraces = false;
             }
@@ -66,22 +67,23 @@ size_t StringTemplate::getPlaceholderNum() const
 // Replace placeholders named ${key} with ${value}.
 // With nameMap has both <A, B> and <B, C>, the placeholders named A will have name B eventually.
 // /return the total number of replaced placeholders.
-size_t StringTemplate::remap(const unordered_map<string, string> &nameMap)
+size_t StringTemplate::remap(const NameMap &nameMap)
 {
     size_t count = 0;
     unordered_map<string, unordered_set<size_t>> temp;
-    for(auto &kv : nameMap)
+    for(auto &nameMap_it : nameMap)
     {
-        if(!nameToPh_.count(kv.first))
-            continue;
-
-        for(auto &id : nameToPh_[kv.first])
+        if(auto nameToPh_it = nameToPh_.find(nameMap_it.first); nameToPh_it != nameToPh_.end())
         {
-            placeholders_[id].name = kv.second;
-            ++count;
+            auto &phSet = nameToPh_it->second;
+            for(auto &id : phSet)
+            {
+                placeholders_[id].name = nameMap_it.second;
+                ++count;
+            }
+            temp[nameMap_it.second] = std::move(phSet);
+            nameToPh_.erase(nameToPh_it);
         }
-        temp[kv.second] = std::move(nameToPh_[kv.first]);
-        nameToPh_.erase(kv.first);
     }
     for(auto &kv : temp)
     {
@@ -112,15 +114,15 @@ void StringTemplate::withPrefix(const string &prefix)
 }
 
 // /return the string with all placeholders replaced by phMap(placeholderMap)
-string StringTemplate::operator()(const unordered_map<string, string> &phMap) const
+string StringTemplate::operator()(const NameMap &phMap) const
 {
     string result;
     size_t curPos = 0;
     for(auto &ph : placeholders_)
     {
         result += rawText_.substr(curPos, ph.pos - curPos);
-        if(phMap.count(ph.name))
-            result += phMap.at(ph.name);
+        if(auto kv = phMap.find(ph.name); kv != phMap.end())
+            result += kv->second;
         curPos = ph.pos + ph.len;
     }
     if(curPos < rawText_.length())
@@ -135,19 +137,19 @@ string StringTemplate::operator()(const unordered_map<string, string> &phMap) co
 // /return the string with all placeholder replaced by ""
 string StringTemplate::operator()() const
 {
-    unordered_map<string, string> emptyMap;
+    NameMap emptyMap;
     return (*this)(emptyMap);
 }
 
 // Output string with placeholders replaced by phMap(placeholderMap) to os.
-void StringTemplate::operator()(ostream &os, const unordered_map<string, string> &phMap) const
+void StringTemplate::operator()(ostream &os, const NameMap &phMap) const
 {
     size_t curPos = 0;
     for(auto &ph : placeholders_)
     {
         os << rawText_.substr(curPos, ph.pos - curPos);
-        if(phMap.count(ph.name))
-            os << phMap.at(ph.name);
+        if(auto kv = phMap.find(ph.name); kv != phMap.end())
+            os << kv->second;
         curPos = ph.pos + ph.len;
     }
     if(curPos < rawText_.length())
@@ -161,9 +163,9 @@ void StringTemplate::operator()(ostream &os, const unordered_map<string, string>
 // /return the string with all placeholder replaced with ""
 void StringTemplate::operator()(ostream &os) const
 {
-    unordered_map<string, string> emptyMap;
+    NameMap emptyMap;
     return (*this)(os, emptyMap);
 }
 
 // Convert string literal to StringTemplate.
-StringTemplate operator"" _ST(const char *str) { return std::move(StringTemplate(str)); }
+StringTemplate operator"" _st(const char *str, size_t) { return std::move(StringTemplate(str)); }
