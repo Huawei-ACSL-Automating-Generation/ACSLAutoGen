@@ -3,6 +3,7 @@
 #include <clang/AST/Expr.h>
 #include "clang/AST/Stmt.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <unordered_map>
 #include <memory>
 #include "utils/utils.h"
 #include <llvm/ADT/APSInt.h>
@@ -11,31 +12,66 @@
 using namespace std;
 using namespace clang;
 using namespace llvm;
+
 SymbolicExpr *Path::getVarState(const VarDecl *var)
 {
     auto canonicalVar = var->getCanonicalDecl();
-    auto it = stateMap.find(canonicalVar);
-    if (it == stateMap.end())
-        ERROR("Variable state not found");
+    auto varIt = varAddr.find(canonicalVar);
+    if (varIt == varAddr.end())
+        ERROR("Variable has no allocated address");
 
-    return it->second.get();
+    auto addr = varIt->second.get();
+    auto memIt = memoryState.find(addr);
+    if (memIt == memoryState.end())
+        ERROR("No memory state entry for allocated address");
+
+    return memIt->second.get();
 }
 
 const vector<unique_ptr<SymbolicExpr>> &Path::getPathConditions() const { return pathConditions; }
 
-void Path::insertVarState(const VarDecl *var, const Expr *expr)
+void Path::allocMemory(const VarDecl *var, unsigned int addr)
 {
     auto canonicalVar = var->getCanonicalDecl();
+    if (varAddr.find(canonicalVar) != varAddr.end())
+        ERROR("Variable already has allocated memory");
+
+    auto newAddr = make_unique<Address>(addr);
+    varAddr.emplace(canonicalVar, std::move(newAddr));
+}
+
+void Path::insertVarState(const VarDecl *var, const Expr *expr)
+{
     unique_ptr<SymbolicExpr> convertedExpr;
     if (expr)
         convertedExpr = convertExpr(expr);
     else
         convertedExpr = make_unique<NullExpr>();
-    auto it = stateMap.find(canonicalVar);
-    if (it != stateMap.end())
-        it->second = std::move(convertedExpr);
+
+    auto canonicalVar = var->getCanonicalDecl();
+    auto addrIt = varAddr.find(canonicalVar);
+    if (addrIt == varAddr.end())
+        ERROR("Variable has no allocated address");
+
+    auto &addr = addrIt->second;
+    memoryState[addr.get()] = std::move(convertedExpr);
+}
+
+void Path::insertVarState(const VarDecl *var, unique_ptr<SymbolicExpr> expr)
+{
+    unique_ptr<SymbolicExpr> exprPtr;
+    if (expr)
+        exprPtr = std::move(expr);
     else
-        stateMap.insert({canonicalVar, std::move(convertedExpr)});
+        exprPtr = make_unique<NullExpr>();
+
+    auto canonicalVar = var->getCanonicalDecl();
+    auto addrIt = varAddr.find(canonicalVar);
+    if (addrIt == varAddr.end())
+        ERROR("Variable has no allocated address");
+
+    auto &addr = addrIt->second;
+    memoryState[addr.get()] = std::move(exprPtr);
 }
 
 void Path::insertPathCondition(const Expr *cond)
@@ -58,12 +94,39 @@ void Path::insertDefaultPathConds(const vector<const Expr *> &conds)
     }
 }
 
-std::unique_ptr<Path> Path::clone() const
+void Path::updateVarState(const BinaryOperator *binOp)
 {
-    auto cloned = std::make_unique<Path>();
+    auto *var = [&]() -> const VarDecl * {
+        if (auto *declRef = dyn_cast<DeclRefExpr>(binOp->getLHS()))
+            return dyn_cast<VarDecl>(declRef->getDecl());
+        return nullptr;
+    }();
+
+    if (!var || var->getType()->isPointerType() || var->getType()->isArrayType())
+        TODO();
+
+    if (binOp->isCompoundAssignmentOp())
+    {
+        auto opKind = getCompoundAssignOp(binOp->getOpcode());
+        auto compoundExpr = std::make_unique<BinaryOpExpr>(
+            convertExpr(binOp->getLHS()), opKind, convertExpr(binOp->getRHS()));
+        insertVarState(var, std::move(compoundExpr));
+    }
+    else
+    {
+        insertVarState(var, binOp->getRHS());
+    }
+}
+
+unique_ptr<Path> Path::clone() const
+{
+    auto cloned = make_unique<Path>();
     cloned->currentState = currentState;
-    for (const auto &entry : stateMap)
-        cloned->stateMap.insert({entry.first, entry.second->clone()});
+    for (const auto &entry : varAddr)
+        cloned->varAddr.emplace(entry.first,
+            unique_ptr<Address>(static_cast<Address *>(entry.second->clone().release())));
+    for (const auto &entry : memoryState)
+        cloned->memoryState.emplace(entry.first, entry.second->clone());
     for (const auto &cond : pathConditions)
         cloned->pathConditions.push_back(cond->clone());
     cloned->returnExpr = returnExpr->clone();
@@ -133,17 +196,17 @@ unique_ptr<SymbolicExpr> Path::convertExpr(const Expr *expr)
             case BO_Or: op = BinaryOpExpr::Operator::BitOr; break;
             case BO_LAnd: op = BinaryOpExpr::Operator::LogicalAnd; break;
             case BO_LOr: op = BinaryOpExpr::Operator::LogicalOr; break;
-            case BO_Assign: op = BinaryOpExpr::Operator::Assign; break;
-            case BO_MulAssign: op = BinaryOpExpr::Operator::MultiplyAssign; break;
-            case BO_DivAssign: op = BinaryOpExpr::Operator::DivideAssign; break;
-            case BO_RemAssign: op = BinaryOpExpr::Operator::RemainderAssign; break;
-            case BO_AddAssign: op = BinaryOpExpr::Operator::AddAssign; break;
-            case BO_SubAssign: op = BinaryOpExpr::Operator::SubtractAssign; break;
-            case BO_ShlAssign: op = BinaryOpExpr::Operator::ShiftLeftAssign; break;
-            case BO_ShrAssign: op = BinaryOpExpr::Operator::ShiftRightAssign; break;
-            case BO_AndAssign: op = BinaryOpExpr::Operator::AndAssign; break;
-            case BO_XorAssign: op = BinaryOpExpr::Operator::XorAssign; break;
-            case BO_OrAssign: op = BinaryOpExpr::Operator::OrAssign; break;
+            case BO_Assign:
+            case BO_MulAssign:
+            case BO_DivAssign:
+            case BO_RemAssign:
+            case BO_AddAssign:
+            case BO_SubAssign:
+            case BO_ShlAssign:
+            case BO_ShrAssign:
+            case BO_AndAssign:
+            case BO_XorAssign:
+            case BO_OrAssign: UNREACHABLE(); break;
             default:
                 UNIMPLEMENT("Unsupported binary operator: " << binOp->getOpcode());
                 return nullptr;
@@ -248,18 +311,18 @@ void ProgramState::step(const Stmt *stmt)
             addNewDecls(varDecls);
         })
         .Case<BinaryOperator>([this](const BinaryOperator *binOp) {
-            // Do nothing
+            if (ignoreTopBinop(binOp))
+                return;
+            if (!isAssignOp(binOp))
+                UNIMPLEMENT("BinaryOperator not implemented: " << binOp->getOpcode());
+            updateVarState(binOp);
         })
         .Case<ImplicitCastExpr>([this](const ImplicitCastExpr *ice) -> unique_ptr<SymbolicExpr> {
             UNIMPLEMENT("Unexpected top-level ImplicitCastExpr: " << ice->getStmtClassName());
         })
         .Case<SwitchStmt>([this](const SwitchStmt *switchStmt) { TODO(); })
-        .Case<CaseStmt>([this](const CaseStmt *caseStmt) {
-            step(caseStmt->getSubStmt());
-            TODO();
-        })
-        .Case<DefaultStmt>(
-            [this](const DefaultStmt *defaultStmt) { step(defaultStmt->getSubStmt()); })
+        .Case<CaseStmt>([this](const CaseStmt *caseStmt) { UNREACHABLE(); })
+        .Case<DefaultStmt>([this](const DefaultStmt *defaultStmt) { UNREACHABLE(); })
         .Case<ForStmt>([this](const ForStmt *forStmt) { TODO(); })
         .Case<WhileStmt>([this](const WhileStmt *whileStmt) { TODO(); })
         .Case<DoStmt>([this](const DoStmt *doStmt) { TODO(); })
@@ -323,13 +386,25 @@ void ProgramState::setReturnExpr(const Expr *expr)
     }
 }
 
+void ProgramState::updateVarState(const BinaryOperator *binOp)
+{
+    for (auto &path : paths)
+    {
+        if (path->isActive())
+            path->updateVarState(binOp);
+    }
+}
+
 void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls)
 {
     for (auto *varDecl : varDecls)
     {
         auto *initExpr = varDecl->getInit();
         for (auto &path : paths)
+        {
+            path->allocMemory(varDecl, allocateAddr());
             path->insertVarState(varDecl, initExpr);
+        }
     }
 }
 
@@ -360,6 +435,8 @@ unique_ptr<ProgramState> ProgramState::clone() const
 {
     auto newState = make_unique<ProgramState>();
     newState->paths.clear();
+
+    newState->addrCounter = addrCounter;
     for (const auto &path : paths)
     {
         newState->paths.push_back(path->clone());

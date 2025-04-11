@@ -12,6 +12,7 @@ class SymbolicExpr
     {
         Literal,
         Variable,
+        Address,
         BinaryOp,
         UnaryOp,
         ArraySubscript,
@@ -108,17 +109,6 @@ class BinaryOpExpr : public SymbolicExpr
         BitOr,
         LogicalAnd,
         LogicalOr,
-        Assign,
-        MultiplyAssign,
-        DivideAssign,
-        RemainderAssign,
-        AddAssign,
-        SubtractAssign,
-        ShiftLeftAssign,
-        ShiftRightAssign,
-        AndAssign,
-        XorAssign,
-        OrAssign
     };
 
     // Constructor accepting unique_ptr for both operands
@@ -224,4 +214,15 @@ class Variable : public SymbolicExpr
     VarType varType_;
 };
 
+class Address : public SymbolicExpr
+{
+  public:
+    Address(unsigned int id) : SymbolicExpr(Type::Address), id_(id) {}
+    std::unique_ptr<SymbolicExpr> clone() const override;
+    bool operator==(const Address &other) const { return id_ == other.id_; }
+    unsigned int getId() const { return id_; }
+
+  private:
+    unsigned int id_;
+};
 #endif // SYMBOLIC_H

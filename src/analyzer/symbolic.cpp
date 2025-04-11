@@ -33,3 +33,16 @@ unique_ptr<SymbolicExpr> ArrayExpr::clone() const
 unique_ptr<SymbolicExpr> NullExpr::clone() const { return make_unique<NullExpr>(); }
 
 unique_ptr<SymbolicExpr> Variable::clone() const { return make_unique<Variable>(name_, varType_); }
+
+unique_ptr<SymbolicExpr> Address::clone() const { return make_unique<Address>(id_); }
+
+namespace std
+{
+    template <> struct hash<Address>
+    {
+        std::size_t operator()(const Address &addr) const
+        {
+            return std::hash<unsigned int>()(addr.getId());
+        }
+    };
+} // namespace std
