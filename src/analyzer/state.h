@@ -37,6 +37,8 @@ class Path
 
     std::unique_ptr<Path> clone() const;
 
+    const clang::Stmt *StmtCtx = nullptr;
+
   private:
     std::unique_ptr<SymbolicExpr> convertExpr(const clang::Expr *expr);
 
@@ -71,7 +73,8 @@ class ProgramState
     void addNewDecls(const std::vector<const clang::VarDecl *> &varDecls);
     unsigned int allocateAddr() { return ++addrCounter; }
 
-    void setStates(Path::PathState state);
+    void setStates(Path::PathState state, const clang::Stmt *stmt);
+
     void setReturnExpr(const clang::Expr *expr);
     void updateVarState(const clang::BinaryOperator *binOp);
 
@@ -80,8 +83,12 @@ class ProgramState
     std::unique_ptr<ProgramState> Merge(const std::vector<const ProgramState *> &states);
     std::unique_ptr<ProgramState> clone() const;
 
+    const clang::Stmt *StmtCtx = nullptr;
+    void ResetState();
+
   private:
     std::vector<std::unique_ptr<Path>> paths;
+
     unsigned int addrCounter = 0;
 };
 #endif

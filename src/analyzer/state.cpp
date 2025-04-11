@@ -271,7 +271,7 @@ void ProgramState::step(const Stmt *stmt)
 {
     if (!stmt)
         return;
-    TODO(); // Stack State for break, continue context.
+
     TypeSwitch<const Stmt *, void>(stmt)
         .Case<CompoundStmt>([this](const CompoundStmt *cs) {
             for (const Stmt *child : cs->children())
@@ -293,7 +293,7 @@ void ProgramState::step(const Stmt *stmt)
             stepBranch(branchConds, branchStmts);
         })
         .Case<ReturnStmt>([this](const ReturnStmt *retStmt) {
-            setStates(Path::PathState::Return);
+            setStates(Path::PathState::Return, NULL);
             setReturnExpr(retStmt->getRetValue());
         })
         .Case<DeclStmt>([this](const DeclStmt *declStmt) {
@@ -317,16 +317,45 @@ void ProgramState::step(const Stmt *stmt)
                 UNIMPLEMENT("BinaryOperator not implemented: " << binOp->getOpcode());
             updateVarState(binOp);
         })
-        .Case<ImplicitCastExpr>([this](const ImplicitCastExpr *ice) -> unique_ptr<SymbolicExpr> {
-            UNIMPLEMENT("Unexpected top-level ImplicitCastExpr: " << ice->getStmtClassName());
-        })
-        .Case<SwitchStmt>([this](const SwitchStmt *switchStmt) { TODO(); })
+        .Case<ImplicitCastExpr>(
+            [this](const ImplicitCastExpr *ice) -> unique_ptr<SymbolicExpr> { UNREACHABLE(); })
         .Case<CaseStmt>([this](const CaseStmt *caseStmt) { UNREACHABLE(); })
         .Case<DefaultStmt>([this](const DefaultStmt *defaultStmt) { UNREACHABLE(); })
-        .Case<ForStmt>([this](const ForStmt *forStmt) { TODO(); })
-        .Case<WhileStmt>([this](const WhileStmt *whileStmt) { TODO(); })
-        .Case<DoStmt>([this](const DoStmt *doStmt) { TODO(); })
-        .Case<CXXForRangeStmt>([this](const CXXForRangeStmt *rangeStmt) { TODO(); })
+        .Case<SwitchStmt>([this](const SwitchStmt *switchStmt) {
+            auto prevStmtCtx = this->StmtCtx;
+            this->StmtCtx = switchStmt;
+            TODO();
+            ResetState();
+            this->StmtCtx = prevStmtCtx;
+        })
+        .Case<ForStmt>([this](const ForStmt *forStmt) {
+            auto prevStmtCtx = this->StmtCtx;
+            this->StmtCtx = forStmt;
+            TODO();
+            ResetState();
+            this->StmtCtx = prevStmtCtx;
+        })
+        .Case<WhileStmt>([this](const WhileStmt *whileStmt) {
+            auto prevStmtCtx = this->StmtCtx;
+            this->StmtCtx = whileStmt;
+            TODO();
+            ResetState();
+            this->StmtCtx = prevStmtCtx;
+        })
+        .Case<DoStmt>([this](const DoStmt *doStmt) {
+            auto prevStmtCtx = this->StmtCtx;
+            this->StmtCtx = doStmt;
+            TODO();
+            ResetState();
+            this->StmtCtx = prevStmtCtx;
+        })
+        .Case<CXXForRangeStmt>([this](const CXXForRangeStmt *rangeStmt) {
+            auto prevStmtCtx = this->StmtCtx;
+            this->StmtCtx = rangeStmt;
+            TODO();
+            ResetState();
+            this->StmtCtx = prevStmtCtx;
+        })
         .Case<BreakStmt>([this](const BreakStmt *breakStmt) { TODO(); })
         .Case<ContinueStmt>([this](const ContinueStmt *continueStmt) { TODO(); })
         .Default([this](const Stmt *s) {
@@ -368,12 +397,15 @@ void ProgramState::stepBranch(
     paths = std::move(mergedActive->paths);
 }
 
-void ProgramState::setStates(Path::PathState state)
+void ProgramState::setStates(Path::PathState state, const Stmt *stmt)
 {
     for (auto &pathPtr : paths)
     {
         if (pathPtr->isActive())
+        {
             pathPtr->setPathState(state);
+            pathPtr->StmtCtx = stmt;
+        }
     }
 }
 
@@ -442,4 +474,13 @@ unique_ptr<ProgramState> ProgramState::clone() const
         newState->paths.push_back(path->clone());
     }
     return newState;
+}
+
+void ProgramState::ResetState()
+{
+    for (auto &path : paths)
+    {
+        if (!path->isActive() && (path->StmtCtx && path->StmtCtx == this->StmtCtx))
+            path->setPathState(Path::PathState::Step);
+    }
 }

@@ -1,15 +1,16 @@
 #include "utils.h"
 #include "macros.h"
+
 #include <clang/AST/Expr.h>
 #include <string>
 
 using namespace clang;
-// using namespace llvm;
+using namespace llvm;
 using namespace std;
-// bool isLoopStmt(const Stmt *stmt)
+// bool isLoopOrSwitchStmt(const Stmt *stmt)
 // {
 //     return isa<ForStmt>(stmt) || isa<WhileStmt>(stmt) || isa<DoStmt>(stmt) ||
-//            isa<CXXForRangeStmt>(stmt);
+//            isa<CXXForRangeStmt>(stmt) || isa<SwitchStmt>(stmt);
 // }
 
 unique_ptr<SymbolicExpr> createLNotExpr(unique_ptr<SymbolicExpr> expr)

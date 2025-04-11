@@ -2,9 +2,10 @@
 #define UTILS_H
 
 #include <clang/AST/Expr.h>
+// #include <clang/AST/Stmt.h>
 #include "analyzer/symbolic.h"
 
-// bool isLoopStmt(const clang::Stmt *stmt);
+// bool isLoopOrSwitchStmt(const clang::Stmt *stmt);
 std::unique_ptr<SymbolicExpr> createLNotExpr(std::unique_ptr<SymbolicExpr> expr);
 
 BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
