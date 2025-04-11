@@ -11,7 +11,8 @@ llvm_map_components_to_libnames(llvm_libs support core irreader)
 
 add_subdirectory(analyzer)
 add_subdirectory(context)
-add_subdirectory(utils) 
+add_subdirectory(utils)
+add_subdirectory(specGenerator)
 
 target_link_libraries(ACSLG PRIVATE
   ${llvm_libs}

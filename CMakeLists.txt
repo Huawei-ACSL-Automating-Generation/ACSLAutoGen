@@ -41,3 +41,10 @@ target_compile_definitions(ACSLG_compiler_flags INTERFACE
 )
 
 add_subdirectory(src)
+
+option(BUILD_TESTS "Build tests" OFF)
+
+if(BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
