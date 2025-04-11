@@ -4,7 +4,6 @@
 
 using namespace std;
 
-// If the input is nullptr, treat it as empty string.
 StringTemplate::StringTemplate(const char *str)
 {
     if(str == nullptr)
@@ -21,7 +20,6 @@ StringTemplate::StringTemplate(const StringTemplate &templ)
         next_ = make_unique<StringTemplate>(*templ.next_);
 }
 
-// Initialize the instance with rawText_, nested $ will be ignored.
 void StringTemplate::initialize()
 {
     Placeholder curPh; // Ph = placeholder
@@ -64,9 +62,6 @@ size_t StringTemplate::getPlaceholderNum() const
     return placeholders_.size() + (next_ ? next_->placeholders_.size() : 0);
 }
 
-// Replace placeholders named ${key} with ${value}.
-// With nameMap has both <A, B> and <B, C>, the placeholders named A will have name B eventually.
-// /return the total number of replaced placeholders.
 size_t StringTemplate::remap(const NameMap &nameMap)
 {
     size_t count = 0;
@@ -95,7 +90,6 @@ size_t StringTemplate::remap(const NameMap &nameMap)
     return count;
 }
 
-// prefix all placeholders' name
 void StringTemplate::withPrefix(const string &prefix)
 {
     for(auto &ph : placeholders_)
@@ -113,7 +107,6 @@ void StringTemplate::withPrefix(const string &prefix)
         next_->withPrefix(prefix);
 }
 
-// /return the string with all placeholders replaced by phMap(placeholderMap)
 string StringTemplate::operator()(const NameMap &phMap) const
 {
     string result;
@@ -133,15 +126,12 @@ string StringTemplate::operator()(const NameMap &phMap) const
     return result;
 }
 
-// Just for a simpler interface.
-// /return the string with all placeholder replaced by ""
 string StringTemplate::operator()() const
 {
     NameMap emptyMap;
     return (*this)(emptyMap);
 }
 
-// Output string with placeholders replaced by phMap(placeholderMap) to os.
 void StringTemplate::operator()(ostream &os, const NameMap &phMap) const
 {
     size_t curPos = 0;
@@ -159,13 +149,10 @@ void StringTemplate::operator()(ostream &os, const NameMap &phMap) const
         (*next_)(os, phMap);
 }
 
-// Just for a simpler interface.
-// /return the string with all placeholder replaced with ""
 void StringTemplate::operator()(ostream &os) const
 {
     NameMap emptyMap;
     return (*this)(os, emptyMap);
 }
 
-// Convert string literal to StringTemplate.
 StringTemplate operator"" _st(const char *str, size_t) { return std::move(StringTemplate(str)); }

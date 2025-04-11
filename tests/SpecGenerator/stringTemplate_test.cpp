@@ -97,7 +97,7 @@ TEST(StringTemplateTest, Remap)
     EXPECT_EQ(combine(mapping), "Hello, Cat! and Cat!");
 }
 
-TEST(StringTemplateTest, ParserTest)
+TEST(StringTemplateTest, Initialize)
 {
     auto st = "$}$Hello, $${name_1}! and ${${name_2}}! and ${}! and ${"_st;
     EXPECT_EQ(st.getPlaceholderNum(), 3);
