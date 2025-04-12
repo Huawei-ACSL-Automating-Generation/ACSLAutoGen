@@ -131,7 +131,7 @@ StringTemplate operator+(T &&LHS, T &&RHS)
 {
     StringTemplate temp = std::forward<T>(LHS);
     temp.append(std::forward<T>(RHS));
-    return std::move(temp);
+    return temp;
 }
 
 #endif

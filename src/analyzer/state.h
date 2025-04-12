@@ -28,6 +28,11 @@ class Path
     void insertVarState(const clang::VarDecl *var, const clang::Expr *expr);
     void insertVarState(const clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
     void insertPathCondition(const clang::Expr *cond);
+
+    // ProgramState has no ASTContext to construct new clang::Expr, so Expr must be passed to Path.
+    // However, has param typed BinaryOpExpr::Operator is ugly, may modify it later.
+    void insertPathCondition(
+        const clang::Expr *LHS, const BinaryOpExpr::Operator op, const clang::Expr *RHS);
     void insertDefaultPathConds(const std::vector<const clang::Expr *> &conds);
     void setReturnExpr(const clang::Expr *expr) { returnExpr = convertExpr(expr); };
     void setPathState(PathState state) { currentState = state; }
@@ -90,5 +95,8 @@ class ProgramState
     std::vector<std::unique_ptr<Path>> paths;
 
     unsigned int addrCounter = 0;
+
+    // Only be used in step when processing SwitchStmt, just for a cleaner code.
+    void stepSimpleSwitch(const clang::SwitchStmt *switchstmt);
 };
 #endif

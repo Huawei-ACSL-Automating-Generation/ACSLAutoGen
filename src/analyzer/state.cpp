@@ -82,6 +82,14 @@ void Path::insertPathCondition(const Expr *cond)
     pathConditions.push_back(std::move(convertedCond));
 }
 
+void Path::insertPathCondition(const Expr *LHS, const BinaryOpExpr::Operator op, const Expr *RHS)
+{
+    if (!LHS || !RHS)
+        return;
+    pathConditions.push_back(
+        std::make_unique<BinaryOpExpr>(convertExpr(LHS), op, convertExpr(RHS)));
+}
+
 void Path::insertDefaultPathConds(const vector<const Expr *> &conds)
 {
     for (auto cond : conds)
@@ -319,12 +327,40 @@ void ProgramState::step(const Stmt *stmt)
         })
         .Case<ImplicitCastExpr>(
             [this](const ImplicitCastExpr *ice) -> unique_ptr<SymbolicExpr> { UNREACHABLE(); })
-        .Case<CaseStmt>([this](const CaseStmt *caseStmt) { UNREACHABLE(); })
-        .Case<DefaultStmt>([this](const DefaultStmt *defaultStmt) { UNREACHABLE(); })
+        .Case<CaseStmt>([this](const CaseStmt *caseStmt) {
+            // Can only be met during step(SwitchStmt), just ignore it.
+            step(caseStmt->getSubStmt());
+        })
+        .Case<DefaultStmt>([this](const DefaultStmt *defaultStmt) {
+            // Can only be met during step(SwitchStmt), just ignore it.
+            step(defaultStmt->getSubStmt());
+        })
         .Case<SwitchStmt>([this](const SwitchStmt *switchStmt) {
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx = switchStmt;
-            TODO();
+
+            if (switchStmt->hasInitStorage())
+                UNIMPLEMENT(
+                    "Unsupported Switch type, Cond has init statement: " << switchStmt->getCond());
+            if (auto bodyStmt = dyn_cast_if_present<CompoundStmt>(switchStmt->getBody()))
+            {
+                if (isa_and_present<CaseStmt>(bodyStmt->body_front()))
+                {
+                    // simple SwitchStmt
+                    stepSimpleSwitch(switchStmt);
+                }
+                else
+                {
+                    UNIMPLEMENT("Unsupported Switch type, body's first Stmt is not CaseStmt: "
+                                << switchStmt->getBody());
+                }
+            }
+            else
+            {
+                WARNING("A SwtichStmt without CompoundStmt body (why?) has been ignored: "
+                        << switchStmt);
+            }
+
             ResetState();
             this->StmtCtx = prevStmtCtx;
         })
@@ -483,4 +519,65 @@ void ProgramState::ResetState()
         if (!path->isActive() && (path->StmtCtx && path->StmtCtx == this->StmtCtx))
             path->setPathState(Path::PathState::Step);
     }
+}
+
+void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
+{
+    auto switchCond = switchStmt->getCond();
+    unique_ptr<ProgramState> activePS,
+        inactivePS; // PS = ProgramState
+    tie(activePS, inactivePS) = splitActiveInactive();
+    vector<ProgramState *> statesForMerge; // Every case we meet will emit a new
+                                           // ProgramState to statesForMerge.
+    vector<Expr *> caseConds; // Collect case conds to construct the default branch's cond.
+
+    // Caller ensures the *Simple* switch has non-empty body typed CompoundStmt.
+    for (auto stmt : dyn_cast<CompoundStmt>(switchStmt->getBody())->body())
+    {
+        if (auto caseStmt = dyn_cast<CaseStmt>(stmt))
+        {
+            // Split a new state step into the case.
+            auto newState = activePS->clone();
+            for (auto &path : newState->paths)
+            {
+                auto caseCond = caseStmt->getLHS();
+                caseConds.push_back(caseCond);
+                path->insertPathCondition(switchCond, BinaryOpExpr::Operator::Equal, caseCond);
+            }
+            statesForMerge.push_back(newState.release());
+        }
+        else if (auto defaultStmt = dyn_cast<DefaultStmt>(stmt))
+        {
+            // Use activePS as the state into default branch.
+            for (auto &path : activePS->paths)
+            {
+                for (auto &cond : caseConds)
+                {
+                    path->insertPathCondition(switchCond, BinaryOpExpr::Operator::NotEqual, cond);
+                }
+            }
+            statesForMerge.push_back(activePS.release()); // activePS released
+        }
+        // Every state existed steps through the whole switch's body together.
+        for (auto state : statesForMerge)
+        {
+            state->step(stmt);
+        }
+    }
+    if (activePS)
+    {
+        // Switch has no default:, so activePS has not been released.
+        statesForMerge.push_back(activePS.release()); // activePS released
+    }
+    // Merge all paths in different ProgramStates into one.
+    auto mergedActive =
+        Merge(vector<const ProgramState *>(make_move_iterator(statesForMerge.begin()),
+            make_move_iterator(statesForMerge.end()))); // statesForMerge moved
+
+    // Merge inactive paths in.
+    mergedActive->paths.insert(mergedActive->paths.end(),
+        make_move_iterator(inactivePS->paths.begin()),
+        make_move_iterator(inactivePS->paths.end())); // inactivePS->paths moved
+
+    paths = std::move(mergedActive->paths); // mergedActive->paths moved
 }
