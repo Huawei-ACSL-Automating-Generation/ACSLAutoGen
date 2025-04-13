@@ -5,5 +5,6 @@
 #include "state.h"
 #include <unordered_map>
 #include <string>
+#include "ASTExtractor.h"
 
 using namespace std;

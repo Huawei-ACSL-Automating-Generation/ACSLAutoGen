@@ -34,9 +34,12 @@ target_link_libraries(test_all PRIVATE
   gmock
   gtest_main
   ACSLG_compiler_flags
+  Utils
   ${llvm_libs}
   AnalyzerLib
   SpecGeneratorLib
 )
 
 gtest_discover_tests(test_all)
+
+add_subdirectory(utils)
