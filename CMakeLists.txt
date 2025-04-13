@@ -22,9 +22,8 @@ target_compile_options(ACSLG_strict_flags INTERFACE
 )
 
 add_library(ACSLG_system_includes INTERFACE)
-target_include_directories(ACSLG_system_includes INTERFACE SYSTEM
+target_include_directories(ACSLG_system_includes SYSTEM INTERFACE
   ${LLVM_INCLUDE_DIRS}
-  ${Clang_INCLUDE_DIRS}
 )
 
 add_library(ACSLG_compiler_flags INTERFACE)
@@ -34,10 +33,8 @@ target_link_libraries(ACSLG_compiler_flags INTERFACE
 )
 
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
-separate_arguments(CLANG_DEFINITIONS_LIST NATIVE_COMMAND ${CLANG_DEFINITIONS})
 target_compile_definitions(ACSLG_compiler_flags INTERFACE
   ${LLVM_DEFINITIONS_LIST}
-  ${CLANG_DEFINITIONS_LIST}
 )
 
 add_subdirectory(src)

@@ -131,6 +131,7 @@ StringTemplate operator+(T &&LHS, T &&RHS)
 {
     StringTemplate temp = std::forward<T>(LHS);
     temp.append(std::forward<T>(RHS));
+    // copy elision
     return temp;
 }
 
