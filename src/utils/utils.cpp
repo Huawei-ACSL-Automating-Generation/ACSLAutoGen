@@ -2,6 +2,7 @@
 #include "macros.h"
 
 #include <clang/AST/Expr.h>
+#include <llvm/ADT/TypeSwitch.h>
 #include <string>
 
 using namespace clang;
@@ -54,6 +55,23 @@ bool isAssignOp(const BinaryOperator *binOp)
     case BO_XorAssign: return true;
     default: return false;
     }
+}
+Variable::VarType deriveVarType(QualType type)
+{
+    return llvm::TypeSwitch<QualType, Variable::VarType>(type)
+        .Case([](const BuiltinType *BT) -> Variable::VarType {
+            if (BT->getKind() == BuiltinType::Bool)
+                return Variable::VarType::Bool;
+            else if (BT->getKind() == BuiltinType::Int)
+                return Variable::VarType::Int;
+            else if (BT->getKind() == BuiltinType::UInt)
+                return Variable::VarType::UInt;
+            else
+                UNIMPLEMENT("Unsupported builtin type for pointer base");
+        })
+        .Default([](QualType) -> Variable::VarType {
+            UNIMPLEMENT("Unsupported non-builtin type for pointer base");
+        });
 }
 
 bool ignoreTopBinop(const BinaryOperator *binOp)

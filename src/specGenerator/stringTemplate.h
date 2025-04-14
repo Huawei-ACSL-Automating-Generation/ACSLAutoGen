@@ -107,7 +107,13 @@ class StringTemplate
     /// @param LHS
     /// @param RHS
     /// @return Return the emptyTemplate.append(LHS).append(RHS).
-    template <typename T, typename> friend StringTemplate operator+(T &&LHS, T &&RHS);
+    template <typename T, typename> friend StringTemplate operator+(T &&LHS, T &&RHS)
+    {
+        StringTemplate temp = std::forward<T>(LHS);
+        temp.append(std::forward<T>(RHS));
+        // copy elision
+        return temp;
+    }
 };
 
 /// @brief Literal operator for construct template from C-string literal easily.
@@ -124,15 +130,9 @@ void StringTemplate::append(T &&templ)
         next_ = make_unique<StringTemplate>(std::forward<T>(templ));
 }
 
-template <typename T,
-    typename = std::enable_if_t<
-        std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
-StringTemplate operator+(T &&LHS, T &&RHS)
-{
-    StringTemplate temp = std::forward<T>(LHS);
-    temp.append(std::forward<T>(RHS));
-    // copy elision
-    return temp;
-}
+// template <typename T,
+//     typename = std::enable_if_t<
+//         std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
+// StringTemplate operator+(T &&LHS, T &&RHS)
 
 #endif

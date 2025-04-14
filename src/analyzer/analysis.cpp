@@ -30,6 +30,7 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
         if (!isa<CompoundStmt>(Body))
             UNIMPLEMENT("Function body of " + FD->getNameAsString() + " is not a CompoundStmt");
 
+        state->init(FD);
         const CompoundStmt *CS = cast<CompoundStmt>(Body);
         for (const Stmt *stmt : CS->children())
             state->step(stmt);

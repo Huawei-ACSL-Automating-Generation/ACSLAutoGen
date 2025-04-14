@@ -15,7 +15,7 @@ int max_seq(int* p, int n) {
         loop invariant p == \at(p, Pre) && n == \at(n, Pre);
         loop invariant \valid(p + (0..n-1));
     */
-    for(int i = 0; i < n; i+=2) {
+    for(int i = 0; i < n; i+=1) {
         if (res < p[i]) {
             res = p[i];
             //@ ghost e = i;

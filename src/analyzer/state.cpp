@@ -30,14 +30,32 @@ SymbolicExpr *Path::getVarState(const VarDecl *var)
 
 const vector<unique_ptr<SymbolicExpr>> &Path::getPathConditions() const { return pathConditions; }
 
-void Path::allocMemory(const VarDecl *var, unsigned int addr)
+Address *Path::allocMemory(const VarDecl *var, unsigned int addr)
 {
     auto canonicalVar = var->getCanonicalDecl();
     if (varAddr.find(canonicalVar) != varAddr.end())
         ERROR("Variable already has allocated memory");
-
     auto newAddr = make_unique<Address>(addr);
+    Address *rawPtr = newAddr.get();
     varAddr.emplace(canonicalVar, std::move(newAddr));
+    return rawPtr;
+}
+
+void Path::insertVarState(Address *addr, const Expr *expr)
+{
+    unique_ptr<SymbolicExpr> convertedExpr;
+    if (expr)
+        convertedExpr = convertExpr(expr);
+    else
+        convertedExpr = make_unique<NullExpr>();
+    memoryState[addr] = std::move(convertedExpr);
+}
+
+void Path::insertVarState(Address *addr, unique_ptr<SymbolicExpr> expr)
+{
+    if (!expr)
+        expr = make_unique<NullExpr>();
+    memoryState[addr] = std::move(expr);
 }
 
 void Path::insertVarState(const VarDecl *var, const Expr *expr)
@@ -86,8 +104,7 @@ void Path::insertPathCondition(const Expr *LHS, const BinaryOpExpr::Operator op,
 {
     if (!LHS || !RHS)
         return;
-    pathConditions.push_back(
-        std::make_unique<BinaryOpExpr>(convertExpr(LHS), op, convertExpr(RHS)));
+    pathConditions.push_back(make_unique<BinaryOpExpr>(convertExpr(LHS), op, convertExpr(RHS)));
 }
 
 void Path::insertDefaultPathConds(const vector<const Expr *> &conds)
@@ -116,7 +133,7 @@ void Path::updateVarState(const BinaryOperator *binOp)
     if (binOp->isCompoundAssignmentOp())
     {
         auto opKind = getCompoundAssignOp(binOp->getOpcode());
-        auto compoundExpr = std::make_unique<BinaryOpExpr>(
+        auto compoundExpr = make_unique<BinaryOpExpr>(
             convertExpr(binOp->getLHS()), opKind, convertExpr(binOp->getRHS()));
         insertVarState(var, std::move(compoundExpr));
     }
@@ -273,7 +290,46 @@ unique_ptr<SymbolicExpr> Path::convertExpr(const Expr *expr)
 
 ProgramState::ProgramState() { paths.push_back(make_unique<Path>()); }
 
-void ProgramState::init(const FunctionDecl *FD) {}
+void ProgramState::init(const FunctionDecl *FD)
+{
+    for (const ParmVarDecl *param : FD->parameters())
+    {
+        QualType paramType = param->getType();
+        if (!paramType->isPointerType() && !paramType->isArrayType())
+        {
+            unsigned int addrId = allocateAddr();
+            Address *addr = paths[0]->allocMemory(param, addrId);
+            Variable::VarType varType = deriveVarType(paramType);
+            unique_ptr<SymbolicExpr> varExpr =
+                make_unique<Variable>(param->getNameAsString(), varType);
+            paths[0]->insertVarState(addr, std::move(varExpr));
+        }
+        else if (paramType->isPointerType())
+        {
+            QualType baseType = paramType->getPointeeType();
+            if (baseType->isPointerType() || baseType->isArrayType())
+                UNIMPLEMENT("Unsupported pointer to pointer/array");
+
+            unsigned int ptrAddrId = allocateAddr();
+            Address *ptrAddr = paths[0]->allocMemory(param, ptrAddrId);
+
+            unsigned int pointeeAddrId = allocateAddr();
+            auto pointeeAddrUnique = make_unique<Address>(pointeeAddrId);
+            Address *pointeeAddr = pointeeAddrUnique.get();
+            unique_ptr<SymbolicExpr> pointerValue = pointeeAddr->clone();
+            paths[0]->insertVarState(ptrAddr, std::move(pointerValue));
+
+            Variable::VarType varType = deriveVarType(baseType);
+            unique_ptr<SymbolicExpr> pointeeVarExpr =
+                make_unique<Variable>("*" + param->getNameAsString(), varType);
+            paths[0]->insertVarState(pointeeAddr, std::move(pointeeVarExpr));
+        }
+        else if (paramType->isArrayType())
+        {
+            TODO();
+        }
+    }
+}
 
 void ProgramState::step(const Stmt *stmt)
 {
@@ -470,8 +526,11 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls)
         auto *initExpr = varDecl->getInit();
         for (auto &path : paths)
         {
-            path->allocMemory(varDecl, allocateAddr());
-            path->insertVarState(varDecl, initExpr);
+            if (path->isActive())
+            {
+                path->allocMemory(varDecl, allocateAddr());
+                path->insertVarState(varDecl, initExpr);
+            }
         }
     }
 }

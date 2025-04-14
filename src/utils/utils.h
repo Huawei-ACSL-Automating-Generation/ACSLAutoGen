@@ -12,5 +12,7 @@ BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAss
 
 bool isAssignOp(const clang::BinaryOperator *binOp);
 
+Variable::VarType deriveVarType(clang::QualType type);
+
 bool ignoreTopBinop(const clang::BinaryOperator *binOp);
 #endif // UTILS_H

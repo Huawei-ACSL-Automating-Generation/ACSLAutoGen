@@ -24,9 +24,13 @@ class Path
     SymbolicExpr *getVarState(const clang::VarDecl *var);
     const std::vector<std::unique_ptr<SymbolicExpr>> &getPathConditions() const;
 
-    void allocMemory(const clang::VarDecl *, unsigned int);
+    Address *allocMemory(const clang::VarDecl *, unsigned int);
+
+    void insertVarState(Address *addr, const clang::Expr *expr);
+    void insertVarState(Address *addr, std::unique_ptr<SymbolicExpr> expr);
     void insertVarState(const clang::VarDecl *var, const clang::Expr *expr);
     void insertVarState(const clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
+
     void insertPathCondition(const clang::Expr *cond);
 
     // ProgramState has no ASTContext to construct new clang::Expr, so Expr must be passed to Path.
