@@ -116,4 +116,22 @@
         std::abort();                                                                              \
     } while (0)
 
+#ifdef DEBUG_MODE
+#define DEBUG(info)                                                                                \
+    do                                                                                             \
+    {                                                                                              \
+        std::string file = __FILE__;                                                               \
+        size_t pos = file.rfind("src/");                                                           \
+        if (pos != std::string::npos)                                                              \
+        {                                                                                          \
+            file = file.substr(pos);                                                               \
+        }                                                                                          \
+        std::cout << ANSI_BRIGHT_GREEN << "[DEBUG " << ANSI_BRIGHT_YELLOW << file << ":"           \
+                  << __LINE__ << ANSI_BRIGHT_GREEN << "]" << ANSI_RESET << " " << info             \
+                  << std::endl;                                                                    \
+    } while (0)
+#else
+#define DEBUG(...)
+#endif
+
 inline void _noWarn() { PROCESS("unreachable"); }

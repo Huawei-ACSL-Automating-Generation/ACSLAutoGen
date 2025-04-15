@@ -24,6 +24,11 @@ class SymbolicExpr
 
     Type getType() const { return type_; }
     virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
+    virtual std::string dump() const = 0;
+    friend std::ostream &operator<<(std::ostream &os, const SymbolicExpr &expr)
+    {
+        return os << expr.dump();
+    }
 
   private:
     Type type_;
@@ -70,6 +75,7 @@ class LiteralExpr : public SymbolicExpr
     LiteralType getLiteralType() const { return type; }
 
     std::unique_ptr<SymbolicExpr> clone() const override;
+    std::string dump() const override;
 
   private:
     LiteralType type;
@@ -123,6 +129,7 @@ class BinaryOpExpr : public SymbolicExpr
     {}
 
     std::unique_ptr<SymbolicExpr> clone() const override;
+    std::string dump() const override;
 
   private:
     std::unique_ptr<SymbolicExpr> left_;
@@ -157,6 +164,7 @@ class UnaryOpExpr : public SymbolicExpr
     {}
 
     std::unique_ptr<SymbolicExpr> clone() const override;
+    std::string dump() const override;
 
   private:
     Operator op_;
@@ -175,6 +183,7 @@ class ArrayExpr : public SymbolicExpr
     {}
 
     std::unique_ptr<SymbolicExpr> clone() const override;
+    std::string dump() const override;
 
   private:
     std::unique_ptr<SymbolicExpr> array_;
@@ -188,6 +197,7 @@ class NullExpr : public SymbolicExpr
     ~NullExpr() = default;
 
     std::unique_ptr<SymbolicExpr> clone() const override;
+    std::string dump() const override;
 };
 
 class Variable : public SymbolicExpr
@@ -208,6 +218,7 @@ class Variable : public SymbolicExpr
     void setVarType(VarType varType) { varType_ = varType; }
 
     std::unique_ptr<SymbolicExpr> clone() const override;
+    std::string dump() const override;
 
   private:
     std::string name_;
@@ -221,6 +232,7 @@ class Address : public SymbolicExpr
     std::unique_ptr<SymbolicExpr> clone() const override;
     bool operator==(const Address &other) const { return id_ == other.id_; }
     unsigned int getId() const { return id_; }
+    std::string dump() const override;
 
   private:
     unsigned int id_;

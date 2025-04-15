@@ -21,6 +21,14 @@ target_compile_options(ACSLG_strict_flags INTERFACE
   -Wunused
 )
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Debug CACHE STRING "Choose the type of build." FORCE)
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_compile_definitions(DEBUG_MODE)
+endif()
+
 add_library(ACSLG_system_includes INTERFACE)
 target_include_directories(ACSLG_system_includes SYSTEM INTERFACE
   ${LLVM_INCLUDE_DIRS}

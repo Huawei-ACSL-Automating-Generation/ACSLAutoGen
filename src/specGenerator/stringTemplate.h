@@ -78,7 +78,16 @@ class StringTemplate
     /// @brief Append another StringTemplate to *this.
     /// @tparam T Can only be StringTemplate. Use template just for supporting rValue reference.
     /// @param templ
-    template <typename T, typename> void append(T &&templ);
+    template <typename T,
+        typename = std::enable_if_t<
+            std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
+    void append(T &&templ)
+    {
+        if (next_)
+            next_->append(std::forward<T>(templ));
+        else
+            next_ = make_unique<StringTemplate>(std::forward<T>(templ));
+    }
 
     /// @brief Output the rawText_ with placeholders replaced, "Hello, ${name}!" will be "Hello,
     /// Alice!" with NameMap containing {"name": "Alice"}.
@@ -107,7 +116,10 @@ class StringTemplate
     /// @param LHS
     /// @param RHS
     /// @return Return the emptyTemplate.append(LHS).append(RHS).
-    template <typename T, typename> friend StringTemplate operator+(T &&LHS, T &&RHS)
+    template <typename T,
+        typename = std::enable_if_t<
+            std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
+    friend StringTemplate operator+(T &&LHS, T &&RHS)
     {
         StringTemplate temp = std::forward<T>(LHS);
         temp.append(std::forward<T>(RHS));
@@ -119,16 +131,16 @@ class StringTemplate
 /// @brief Literal operator for construct template from C-string literal easily.
 StringTemplate operator"" _st(const char *, size_t);
 
-template <typename T,
-    typename = std::enable_if_t<
-        std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
-void StringTemplate::append(T &&templ)
-{
-    if (next_)
-        next_->append(std::forward<T>(templ));
-    else
-        next_ = make_unique<StringTemplate>(std::forward<T>(templ));
-}
+// template <typename T,
+//     typename = std::enable_if_t<
+//         std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
+// void StringTemplate::append(T &&templ)
+// {
+//     if (next_)
+//         next_->append(std::forward<T>(templ));
+//     else
+//         next_ = make_unique<StringTemplate>(std::forward<T>(templ));
+// }
 
 // template <typename T,
 //     typename = std::enable_if_t<

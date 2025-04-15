@@ -7,6 +7,7 @@
 #include <memory>
 #include "context/context.h"
 #include "analyzer/analysis.h"
+#include "globalSM/globalSM.h"
 
 using namespace clang;
 using namespace clang::tooling;
@@ -40,6 +41,12 @@ class TUASTConsumer : public ASTConsumer
 class TUFrontendAction : public ASTFrontendAction
 {
   public:
+    bool BeginSourceFileAction(CompilerInstance &CI) override
+    {
+        GlobalSM::getInstance().initialize(CI.getASTContext());
+        return ASTFrontendAction::BeginSourceFileAction(CI);
+    }
+
     std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &, StringRef) override
     {
         return std::make_unique<TUASTConsumer>();
