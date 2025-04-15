@@ -46,4 +46,4 @@ class GlobalSM
     mutable std::mutex mutex_;
 };
 
-#endif // SIMPLE_SM_H
+#endif // GLOBAL_SM_H

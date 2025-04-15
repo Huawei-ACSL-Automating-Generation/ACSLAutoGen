@@ -14,7 +14,6 @@ namespace utils
     {
       public:
         explicit ASTExtractor(const std::string &code);
-        ~ASTExtractor();
 
         ASTExtractor(const ASTExtractor &) = delete;
         ASTExtractor &operator=(const ASTExtractor &) = delete;
@@ -26,8 +25,7 @@ namespace utils
         clang::ASTContext &getASTContext() const;
 
       private:
-        struct Impl;
-        std::unique_ptr<Impl> PImpl;
+        std::unique_ptr<clang::ASTUnit> AST;
     };
 
 } // namespace utils

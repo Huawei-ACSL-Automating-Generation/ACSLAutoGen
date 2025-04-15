@@ -12,23 +12,16 @@ using namespace clang::tooling;
 namespace utils
 {
 
-    struct ASTExtractor::Impl
+    ASTExtractor::ASTExtractor(const std::string &code) : AST()
     {
-        std::unique_ptr<ASTUnit> AST;
-    };
-
-    ASTExtractor::ASTExtractor(const std::string &code) : PImpl(std::make_unique<Impl>())
-    {
-        PImpl->AST = buildASTFromCode(code, "input.cc");
-        if (!PImpl->AST)
+        AST = buildASTFromCode(code);
+        if (!AST)
         {
             llvm::errs() << "Failed to parse code.\n";
         }
     }
 
-    ASTExtractor::~ASTExtractor() = default;
-
-    clang::ASTContext &ASTExtractor::getASTContext() const { return PImpl->AST->getASTContext(); }
+    clang::ASTContext &ASTExtractor::getASTContext() const { return AST->getASTContext(); }
 
     template <typename NodeType>
     class NodeFinderVisitor : public clang::RecursiveASTVisitor<NodeFinderVisitor<NodeType>>

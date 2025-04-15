@@ -11,6 +11,8 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+namespace utils
+{
 #define MOCK_NONVIRTUAL_METHOD(_Ret, _MethodName, _Args, _Spec, _Class)                            \
     GMOCK_INTERNAL_WARNING_PUSH()                                                                  \
     GMOCK_INTERNAL_WARNING_CLANG(ignored, "-Wunused-member-function")                              \
@@ -90,6 +92,7 @@
             mprotect((void *)pgStart, pg, PROT_READ | PROT_EXEC);                                  \
         }                                                                                          \
     } _hook_guard_##_MethodName;
+} // namespace utils
 
 namespace
 {

@@ -25,6 +25,7 @@ add_executable(test_all
   ${CMAKE_CURRENT_SOURCE_DIR}/specGenerator/stringTemplate_test.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/specGenerator/templates_test.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/analyzer/state_test.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/globalSM/globalSM_test.cpp
 )
 
 llvm_map_components_to_libnames(llvm_libs support)
@@ -34,10 +35,15 @@ target_link_libraries(test_all PRIVATE
   gmock
   gtest_main
   ACSLG_compiler_flags
+  clangTooling
+  clangFrontend
+  clangAST
+  clangBasic
   Utils
   ${llvm_libs}
   AnalyzerLib
   SpecGeneratorLib
+  GlobalSMLib
 )
 
 gtest_discover_tests(test_all)
