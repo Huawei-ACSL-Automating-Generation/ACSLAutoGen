@@ -12,7 +12,7 @@ class SymbolicExpr
     {
         Literal,
         Variable,
-        Address,
+        SymbolAddress,
         BinaryOp,
         UnaryOp,
         ArraySubscript,
@@ -217,12 +217,31 @@ class Variable : public SymbolicExpr
 class Address : public SymbolicExpr
 {
   public:
-    Address(unsigned int id) : SymbolicExpr(Type::Address), id_(id) {}
+    Address() : SymbolicExpr(Type::SymbolAddress), id_(0), offset_(false) {}
+    Address(unsigned int id) : SymbolicExpr(Type::SymbolAddress), id_(id) {}
+    Address(unsigned int id, bool offset)
+        : SymbolicExpr(Type::SymbolAddress), id_(id), offset_(offset)
+    {}
     std::unique_ptr<SymbolicExpr> clone() const override;
-    bool operator==(const Address &other) const { return id_ == other.id_; }
+    bool operator==(const Address &other) const
+    {
+        return id_ == other.id_ && offset_ == other.offset_;
+    }
     unsigned int getId() const { return id_; }
+    bool getOffset() const { return offset_; }
 
   private:
     unsigned int id_;
+    bool offset_ = false;
+};
+
+struct AddressHash
+{
+    std::size_t operator()(const Address &addr) const noexcept
+    {
+        std::size_t h1 = std::hash<unsigned int>{}(addr.getId());
+        std::size_t h2 = std::hash<bool>{}(addr.getOffset());
+        return h1 ^ (h2 << 1);
+    }
 };
 #endif // SYMBOLIC_H
