@@ -1,7 +1,7 @@
-// src/globalSMS/globalSM.h
+// src/globalSM/globalSM.h
 
-#ifndef SIMPLE_SM_H
-#define SIMPLE_SM_H
+#ifndef GLOBAL_SM_H
+#define GLOBAL_SM_H
 
 #include <memory>
 #include <mutex>

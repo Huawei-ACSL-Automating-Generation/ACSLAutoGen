@@ -131,7 +131,7 @@ std::string Variable::dump() const
 std::string Address::dump() const
 {
     std::ostringstream oss;
-    oss << "Address(" << id_ << ")";
+    oss << "Address(" << id_ << ")" << (getOffset() ? " (Offset)" : "");
     return oss.str();
 }
 
