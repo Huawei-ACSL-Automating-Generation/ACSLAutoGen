@@ -41,11 +41,11 @@ class TUASTConsumer : public ASTConsumer
 class TUFrontendAction : public ASTFrontendAction
 {
   public:
-    bool BeginSourceFileAction(CompilerInstance &CI) override
-    {
-        GlobalSM::getInstance().initialize(CI.getASTContext());
-        return ASTFrontendAction::BeginSourceFileAction(CI);
-    }
+    // bool BeginSourceFileAction(CompilerInstance &CI) override
+    // {
+    //     GlobalSM::getInstance().initialize(CI.getASTContext());
+    //     return ASTFrontendAction::BeginSourceFileAction(CI);
+    // }
 
     std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &, StringRef) override
     {

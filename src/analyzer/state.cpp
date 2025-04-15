@@ -15,34 +15,33 @@ using namespace llvm;
 
 void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap) {}
 
-SymbolicExpr *Path::getVarState(const VarDecl *var)
+unique_ptr<SymbolicExpr> Path::getVarState(const VarDecl *var)
 {
     auto canonicalVar = var->getCanonicalDecl();
-
     auto varIt = varAddr.find(canonicalVar);
     if (varIt == varAddr.end())
         ERROR("Variable '" + canonicalVar->getNameAsString() + "' has no allocated address");
-
     auto addr = varIt->second.get();
     auto memIt = memoryState.find(*addr);
     if (memIt == memoryState.end())
         ERROR("No memory state entry for allocated address");
-
-    return memIt->second.get();
+    return memIt->second->clone();
 }
 
 const vector<unique_ptr<SymbolicExpr>> &Path::getPathConditions() const { return pathConditions; }
 
-Address *Path::allocMemory(const VarDecl *var, unsigned int addr)
+Address *Path::allocMemory(const VarDecl *var)
 {
     auto canonicalVar = var->getCanonicalDecl();
     if (varAddr.find(canonicalVar) != varAddr.end())
         ERROR("Variable already has allocated memory");
-    auto newAddr = make_unique<Address>(addr);
+    auto newAddr = make_unique<Address>(addrCounter++);
     Address *rawPtr = newAddr.get();
     varAddr.emplace(canonicalVar, std::move(newAddr));
     return rawPtr;
 }
+
+Address *Path::allocMemory() { return new Address(addrCounter++); }
 
 void Path::insertVarState(Address *addr, const Expr *expr)
 {
@@ -158,6 +157,7 @@ unique_ptr<Path> Path::clone() const
     for (const auto &cond : pathConditions)
         cloned->pathConditions.push_back(cond->clone());
     cloned->returnExpr = returnExpr->clone();
+    cloned->addrCounter = addrCounter;
     return cloned;
 }
 
@@ -272,8 +272,7 @@ unique_ptr<SymbolicExpr> Path::convertExpr(const Expr *expr)
                 UNIMPLEMENT("Unsupported Decl type: " << declRef->getDecl()->getDeclKindName());
                 return nullptr;
             }
-            SymbolicExpr *state = getVarState(varDecl);
-            return unique_ptr<SymbolicExpr>(state);
+            return getVarState(varDecl);
         })
         .Case<ArraySubscriptExpr>(
             [this](const ArraySubscriptExpr *arrSub) -> unique_ptr<SymbolicExpr> {
@@ -306,11 +305,12 @@ void ProgramState::init(const FunctionDecl *FD)
         QualType paramType = param->getType();
         if (!paramType->isPointerType() && !paramType->isArrayType())
         {
-            unsigned int addrId = allocateAddr();
-            Address *addr = paths[0]->allocMemory(param, addrId);
+            Address *addr = paths[0]->allocMemory(param);
+
             Variable::VarType varType = deriveVarType(paramType);
             unique_ptr<SymbolicExpr> varExpr =
                 make_unique<Variable>(param->getNameAsString(), varType);
+
             paths[0]->insertVarState(addr, std::move(varExpr));
         }
         else if (paramType->isPointerType())
@@ -319,12 +319,9 @@ void ProgramState::init(const FunctionDecl *FD)
             if (baseType->isPointerType() || baseType->isArrayType())
                 UNIMPLEMENT("Unsupported pointer to pointer/array");
 
-            unsigned int ptrAddrId = allocateAddr();
-            Address *ptrAddr = paths[0]->allocMemory(param, ptrAddrId);
+            Address *ptrAddr = paths[0]->allocMemory(param);
+            Address *pointeeAddr = paths[0]->allocMemory();
 
-            unsigned int pointeeAddrId = allocateAddr();
-            auto pointeeAddrUnique = make_unique<Address>(pointeeAddrId);
-            Address *pointeeAddr = pointeeAddrUnique.get();
             unique_ptr<SymbolicExpr> pointerValue = pointeeAddr->clone();
             paths[0]->insertVarState(ptrAddr, std::move(pointerValue));
 
@@ -500,19 +497,22 @@ void ProgramState::stepBranch(
     paths = std::move(mergedActive->paths);
 }
 
-void ProgramState::stepLoop(const Stmt *init, const Stmt *body, const Stmt *step)
+void ProgramState::stepLoop(const Stmt *init, const Stmt *body, const Stmt *inc)
 {
-    vector<const VarDecl *> indexVars = determineIndexVars(init, body, step);
+    vector<const VarDecl *> indexVars = determineIndexVars(init, body, inc);
     vector<unique_ptr<ProgramState>> newStates;
     for (auto &p : paths)
     {
         unique_ptr<ProgramState> newState = make_unique<ProgramState>(std::move(p));
         newState->loopIndexes = indexVars;
 
+        newState->step(init);
+
         unordered_map<Variable *, unique_ptr<SymbolicExpr>> loopInitMap;
         newState->paths.back()->LoopInit(loopInitMap);
 
         newState->step(body);
+        newState->step(inc);
 
         newState->CollectLoopACSL();
     }
@@ -572,7 +572,7 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls)
         {
             if (path->isActive())
             {
-                path->allocMemory(varDecl, allocateAddr());
+                path->allocMemory(varDecl);
                 path->insertVarState(varDecl, initExpr);
             }
         }
@@ -591,6 +591,7 @@ pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActi
         else
             inactiveState->paths.push_back(std::move(path));
     }
+    paths.clear();
     return {std::move(activeState), std::move(inactiveState)};
 }
 
@@ -608,7 +609,6 @@ unique_ptr<ProgramState> ProgramState::clone() const
 {
     auto newState = make_unique<ProgramState>();
 
-    newState->addrCounter = addrCounter;
     for (const auto &path : paths)
     {
         newState->paths.push_back(path->clone());
