@@ -21,8 +21,8 @@ class GlobalSM
 
     void initialize(clang::ASTContext &context)
     {
-        // std::lock_guard<std::mutex> lock(mutex_);
-        // SM = &context.getSourceManager();
+        std::lock_guard<std::mutex> lock(mutex_);
+        SM = &context.getSourceManager();
     }
 
     GlobalSM(const GlobalSM &) = delete;

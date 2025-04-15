@@ -24,6 +24,7 @@ class TUASTConsumer : public ASTConsumer
   public:
     void HandleTranslationUnit(ASTContext &Context) override
     {
+        GlobalSM::getInstance().initialize(Context);
         if (ASTOnly)
         {
             TranslationUnitDecl *TUDecl = Context.getTranslationUnitDecl();
@@ -41,12 +42,6 @@ class TUASTConsumer : public ASTConsumer
 class TUFrontendAction : public ASTFrontendAction
 {
   public:
-    // bool BeginSourceFileAction(CompilerInstance &CI) override
-    // {
-    //     GlobalSM::getInstance().initialize(CI.getASTContext());
-    //     return ASTFrontendAction::BeginSourceFileAction(CI);
-    // }
-
     std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &, StringRef) override
     {
         return std::make_unique<TUASTConsumer>();
