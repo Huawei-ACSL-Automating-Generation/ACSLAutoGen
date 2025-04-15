@@ -21,6 +21,8 @@ class Path
         Return
     };
 
+    void LoopInit(std::unordered_map<Variable *, std::unique_ptr<SymbolicExpr>> &initMap);
+
     SymbolicExpr *getVarState(const clang::VarDecl *var);
     const std::vector<std::unique_ptr<SymbolicExpr>> &getPathConditions() const;
 
@@ -56,7 +58,7 @@ class Path
 
     // Map: symbolic address -> value stored at that address, separating variable–address mapping
     // from address–value mapping.
-    std::unordered_map<Address *, std::unique_ptr<SymbolicExpr>> memoryState;
+    std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash> memoryState;
 
     // SET: List of symbolic expressions representing the path condition.
     std::vector<std::unique_ptr<SymbolicExpr>> pathConditions;
@@ -70,14 +72,13 @@ class Path
 class ProgramState
 {
   public:
-    ProgramState();
+    ProgramState() = default;
+    ProgramState(std::unique_ptr<Path> initialPath);
     ~ProgramState() = default;
 
     void init(const clang::FunctionDecl *FD);
 
     void step(const clang::Stmt *stmt);
-    void stepBranch(const std::vector<const clang::Expr *> &branchConds,
-        const std::vector<const clang::Stmt *> &branchStmts);
 
     void addNewDecls(const std::vector<const clang::VarDecl *> &varDecls);
     unsigned int allocateAddr() { return ++addrCounter; }
@@ -87,8 +88,7 @@ class ProgramState
     void setReturnExpr(const clang::Expr *expr);
     void updateVarState(const clang::BinaryOperator *binOp);
 
-    std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<ProgramState>>
-    splitActiveInactive() const;
+    std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<ProgramState>> splitActiveInactive();
     std::unique_ptr<ProgramState> Merge(const std::vector<const ProgramState *> &states);
     std::unique_ptr<ProgramState> clone() const;
 
@@ -96,11 +96,22 @@ class ProgramState
     void ResetState();
 
   private:
-    std::vector<std::unique_ptr<Path>> paths;
+    std::vector<std::unique_ptr<Path>> paths{};
+
+    std::vector<const clang::VarDecl *> loopIndexes{};
 
     unsigned int addrCounter = 0;
 
     // Only be used in step when processing SwitchStmt, just for a cleaner code.
     void stepSimpleSwitch(const clang::SwitchStmt *switchstmt);
+
+    void stepBranch(const std::vector<const clang::Expr *> &branchConds,
+        const std::vector<const clang::Stmt *> &branchStmts);
+
+    void stepLoop(const clang::Stmt *init, const clang::Stmt *body, const clang::Stmt *step);
+    std::vector<const clang::VarDecl *>
+    determineIndexVars(const clang::Stmt *init, const clang::Stmt *body, const clang::Stmt *step);
+
+    void CollectLoopACSL();
 };
 #endif
