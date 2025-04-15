@@ -1,6 +1,13 @@
 // src/specGenerator/utilityTemplates.h
 
+#ifndef UTILITY_TEMPLATES_H
+#define UTILITY_TEMPLATES_H
+
+#include <stringTemplate.h>
+
 // TODO: some scaffolds
 
-#define ACSL_HEADER "/*@ "_st
-#define ACSL_END "*/\n"_st
+const StringTemplate ACSL_HEAD = "/*@ ";
+const StringTemplate ACSL_END = "*/";
+
+#endif

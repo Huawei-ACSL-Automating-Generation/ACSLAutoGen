@@ -15,6 +15,7 @@ include(GoogleTest)
 # Use 'test_all' instead of 'TestAll' for better distinction.
 add_executable(test_all
   ${CMAKE_CURRENT_SOURCE_DIR}/specGenerator/stringTemplate_test.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/specGenerator/templates_test.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/analyzer/state_test.cpp
 )
 

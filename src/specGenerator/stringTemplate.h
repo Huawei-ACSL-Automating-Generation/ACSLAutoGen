@@ -1,7 +1,7 @@
 // src/specGenerator/stringTemplate.h
 
-#ifndef STRINGTEMPLATE_H
-#define STRINGTEMPLATE_H
+#ifndef STRING_TEMPLATE_H
+#define STRING_TEMPLATE_H
 
 #include <string>
 #include <vector>
@@ -76,75 +76,67 @@ class StringTemplate
     size_t remap(const NameMap &nameMap);
 
     /// @brief Append another StringTemplate to *this.
-    /// @tparam T Can only be StringTemplate. Use template just for supporting rValue reference.
+    /// @tparam Use template for supporting rValue reference.
     /// @param templ
-    template <typename T,
-        typename = std::enable_if_t<
-            std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
-    void append(T &&templ)
+    template <typename T> void append(T &&templ)
     {
         if (next_)
             next_->append(std::forward<T>(templ));
         else
-            next_ = make_unique<StringTemplate>(std::forward<T>(templ));
+            next_ = make_unique<StringTemplate>(StringTemplate(std::forward<T>(templ)));
     }
 
     /// @brief Output the rawText_ with placeholders replaced, "Hello, ${name}!" will be "Hello,
-    /// Alice!" with NameMap containing {"name": "Alice"}.
+    /// Alice!" with NameMap containing {"name": "Alice"}. Unmapped placeholder will hold its name.
+    /// e.g. "Hello, ${name}!" will be "Hello, name!".
     /// @param nameMap Map from placeholders' name to string you want.
     /// @return String with placeholders replaced.
     string operator()(const NameMap &nameMap) const;
 
-    /// @brief Output the rawText_ with placeholders replaced. Override for a simpler interface.
+    /// @brief Output the rawText_ with placeholders replaced by its name. Override for a simpler
+    /// interface.
     /// @return String with placeholders replaced by empty string.
     string operator()() const;
 
     /// @brief Output the rawText_ with placeholders replaced, "Hello, ${name}!" will be "Hello,
-    /// Alice!" with NameMap containing {"name": "Alice"}. Stream version.
+    /// Alice!" with NameMap containing {"name": "Alice"}. Unmapped placeholder will hold its name.
+    /// e.g. "Hello, ${name}!" will be "Hello, name!". Stream version.
     /// @param os
     /// @param nameMap Map from placeholders' name to string you want.
     void operator()(ostream &os, const NameMap &nameMap) const;
 
-    /// @brief @brief Output the rawText_ with placeholders replaced by empty string. Override for a
+    /// @brief @brief Output the rawText_ with placeholders replaced by its name. Override for a
     /// simpler interface.
     /// @param os
     void operator()(ostream &os) const;
 
   private:
-    /// @brief Operator +, functionally equivalent to append.
-    /// @tparam T Can only be StringTemplate. Use template just for supporting rValue reference.
+    /// @brief Operator +.
+    /// @tparam Use template for supporting rValue reference.
     /// @param LHS
     /// @param RHS
     /// @return Return the emptyTemplate.append(LHS).append(RHS).
-    template <typename T,
-        typename = std::enable_if_t<
-            std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
-    friend StringTemplate operator+(T &&LHS, T &&RHS)
+    template <typename T1, typename T2> friend StringTemplate operator+(T1 &&LHS, T2 &&RHS)
     {
-        StringTemplate temp = std::forward<T>(LHS);
-        temp.append(std::forward<T>(RHS));
+        StringTemplate temp = StringTemplate(std::forward<T1>(LHS));
+        temp.append(StringTemplate(std::forward<T2>(RHS)));
         // copy elision
         return temp;
+    }
+
+    /// @brief Operator +=, functionally equivalent to append.
+    /// @tparam Use template for supporting rValue reference.
+    /// @param RHS
+    /// @return Return the LHS.append(RHS).
+    template <typename T> friend StringTemplate &operator+=(StringTemplate &LHS, T &&RHS)
+    {
+        LHS.append(StringTemplate(std::forward<T>(RHS)));
+        // copy elision
+        return LHS;
     }
 };
 
 /// @brief Literal operator for construct template from C-string literal easily.
 StringTemplate operator"" _st(const char *, size_t);
-
-// template <typename T,
-//     typename = std::enable_if_t<
-//         std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
-// void StringTemplate::append(T &&templ)
-// {
-//     if (next_)
-//         next_->append(std::forward<T>(templ));
-//     else
-//         next_ = make_unique<StringTemplate>(std::forward<T>(templ));
-// }
-
-// template <typename T,
-//     typename = std::enable_if_t<
-//         std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, StringTemplate>>>
-// StringTemplate operator+(T &&LHS, T &&RHS)
 
 #endif
