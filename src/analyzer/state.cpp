@@ -8,13 +8,62 @@
 #include "utils/utils.h"
 #include <llvm/ADT/APSInt.h>
 #include <clang/AST/StmtCXX.h>
-#include "globalSM.h"
+#include "globalSM/globalSM.h"
 
 using namespace std;
 using namespace clang;
 using namespace llvm;
 
-void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap) {}
+void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap)
+{
+    for (auto &entry : varAddr)
+    {
+        const VarDecl *varDecl = entry.first;
+        QualType varType = varDecl->getType();
+        Address *addr = entry.second.get();
+        auto memIt = memoryState.find(*addr);
+        if (memIt == memoryState.end())
+            ERROR("No memory state entry for allocated address");
+
+        if (!varType->isPointerType() && !varType->isArrayType())
+        {
+            unique_ptr<SymbolicExpr> origExpr = std::move(memIt->second);
+
+            Variable::VarType derived = deriveVarType(varType);
+            unique_ptr<SymbolicExpr> newExpr =
+                make_unique<Variable>(varDecl->getNameAsString(), derived);
+
+            memIt->second = std::move(newExpr);
+
+            Variable *varPtr = dynamic_cast<Variable *>(memIt->second.get());
+            if (varPtr)
+                initMap[varPtr] = std::move(origExpr);
+        }
+        else if (varType->isPointerType())
+        {
+            unique_ptr<SymbolicExpr> ptrOrigExpr = std::move(memIt->second);
+            Address *pointeeAddr = dynamic_cast<Address *>(ptrOrigExpr.get());
+            if (!pointeeAddr)
+                ERROR("Pointer stored value is not an Address");
+
+            auto memItPointee = memoryState.find(*pointeeAddr);
+            if (memItPointee == memoryState.end())
+                ERROR("No memory state entry for pointee");
+            unique_ptr<SymbolicExpr> pointeeOrigExpr = std::move(memItPointee->second);
+
+            QualType baseType = varType->getPointeeType();
+            Variable::VarType baseDerived = deriveVarType(baseType);
+            unique_ptr<SymbolicExpr> newPointeeExpr =
+                make_unique<Variable>("*" + varDecl->getNameAsString(), baseDerived);
+            memItPointee->second = std::move(newPointeeExpr);
+            Variable *varPtr = dynamic_cast<Variable *>(memItPointee->second.get());
+            if (varPtr)
+                initMap[varPtr] = std::move(pointeeOrigExpr);
+            // Restore the pointer's memoryState entry.
+            memIt->second = std::move(ptrOrigExpr);
+        }
+    }
+}
 
 unique_ptr<SymbolicExpr> Path::getVarState(const VarDecl *var)
 {
@@ -347,13 +396,20 @@ string Path::dump() const
     return oss.str();
 }
 
-ProgramState::ProgramState(unique_ptr<Path> initialPath)
+ProgramState::ProgramState(std::unique_ptr<Path> initialPath, ACSLFunction *context)
 {
     paths.push_back(std::move(initialPath));
+    Context = std::unique_ptr<ACSLFunction>(context);
 }
 
-void ProgramState::init(const FunctionDecl *FD)
+ProgramState::ProgramState(ACSLFunction *context)
 {
+    Context = std::unique_ptr<ACSLFunction>(context);
+}
+
+void ProgramState::init()
+{
+    auto FD = Context->getFunctionDecl();
     paths.clear();
     paths.push_back(make_unique<Path>());
 
@@ -486,28 +542,28 @@ void ProgramState::step(const Stmt *stmt)
         .Case<ForStmt>([this](const ForStmt *forStmt) {
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx = forStmt;
-            stepLoop(forStmt->getInit(), forStmt->getBody(), forStmt->getInc());
+            stepLoop(forStmt);
             ResetState();
             this->StmtCtx = prevStmtCtx;
         })
         .Case<WhileStmt>([this](const WhileStmt *whileStmt) {
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx = whileStmt;
-            stepLoop(nullptr, whileStmt->getBody(), nullptr);
+            stepLoop(whileStmt);
             ResetState();
             this->StmtCtx = prevStmtCtx;
         })
         .Case<DoStmt>([this](const DoStmt *doStmt) {
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx = doStmt;
-            TODO();
+            stepLoop(doStmt);
             ResetState();
             this->StmtCtx = prevStmtCtx;
         })
         .Case<CXXForRangeStmt>([this](const CXXForRangeStmt *rangeStmt) {
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx = rangeStmt;
-            TODO();
+            stepLoop(rangeStmt);
             ResetState();
             this->StmtCtx = prevStmtCtx;
         })
@@ -554,13 +610,38 @@ void ProgramState::stepBranch(
     paths = std::move(mergedActive->paths);
 }
 
-void ProgramState::stepLoop(const Stmt *init, const Stmt *body, const Stmt *inc)
+void ProgramState::stepLoop(const Stmt *loopStmt)
+
 {
-    vector<const VarDecl *> indexVars = determineIndexVars(init, body, inc);
+    const Stmt *init = nullptr;
+    const Expr *cond = nullptr;
+    const Stmt *body = nullptr;
+    const Stmt *inc = nullptr;
+
+    if (const auto *forStmt = dyn_cast<ForStmt>(loopStmt))
+    {
+        init = forStmt->getInit();
+        cond = forStmt->getCond();
+        body = forStmt->getBody();
+        inc = forStmt->getInc();
+    }
+    else if (const auto *whileStmt = dyn_cast<WhileStmt>(loopStmt))
+    {
+        cond = whileStmt->getCond();
+        body = whileStmt->getBody();
+    }
+    else
+    {
+        UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
+        return;
+    }
+
+    vector<const VarDecl *> indexVars = determineIndexVars(init, cond, body, inc);
     vector<unique_ptr<ProgramState>> newStates;
     for (auto &p : paths)
     {
-        unique_ptr<ProgramState> newState = make_unique<ProgramState>(std::move(p));
+        unique_ptr<ProgramState> newState =
+            make_unique<ProgramState>(std::move(p), Context->clone());
         newState->loopIndexes = indexVars;
 
         newState->step(init);
@@ -584,8 +665,8 @@ void ProgramState::stepLoop(const Stmt *init, const Stmt *body, const Stmt *inc)
     // }
 }
 
-vector<const VarDecl *>
-ProgramState::determineIndexVars(const Stmt *init, const Stmt *body, const Stmt *step)
+vector<const VarDecl *> ProgramState::determineIndexVars(
+    const Stmt *init, const Expr *cond, const Stmt *body, const Stmt *step)
 {
     return vector<const VarDecl *>{};
 }
@@ -638,8 +719,8 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls)
 
 pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActiveInactive()
 {
-    auto activeState = make_unique<ProgramState>();
-    auto inactiveState = make_unique<ProgramState>();
+    auto activeState = make_unique<ProgramState>(Context->clone());
+    auto inactiveState = make_unique<ProgramState>(Context->clone());
 
     for (auto &path : paths)
     {
@@ -654,7 +735,7 @@ pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActi
 
 unique_ptr<ProgramState> ProgramState::Merge(const vector<const ProgramState *> &states)
 {
-    auto merged = make_unique<ProgramState>();
+    auto merged = make_unique<ProgramState>(Context->clone());
 
     for (const auto *state : states)
         for (const auto &path : state->paths)
@@ -664,7 +745,7 @@ unique_ptr<ProgramState> ProgramState::Merge(const vector<const ProgramState *> 
 
 unique_ptr<ProgramState> ProgramState::clone() const
 {
-    auto newState = make_unique<ProgramState>();
+    auto newState = make_unique<ProgramState>(Context->clone());
 
     for (const auto &path : paths)
     {

@@ -23,14 +23,15 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
     const FunctionDecl *FD = func->getFunctionDecl();
     INFO("Processing Function " + FD->getNameAsString());
 
-    auto state = make_unique<ProgramState>();
+    auto acslFunc = new ACSLFunction(FD);
+    auto state = std::make_unique<ProgramState>(acslFunc);
 
     if (const Stmt *Body = FD->getBody())
     {
         if (!isa<CompoundStmt>(Body))
             UNIMPLEMENT("Function body of " + FD->getNameAsString() + " is not a CompoundStmt");
 
-        state->init(FD);
+        state->init();
         const CompoundStmt *CS = cast<CompoundStmt>(Body);
         for (const Stmt *stmt : CS->children())
             state->step(stmt);

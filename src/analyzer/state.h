@@ -3,6 +3,7 @@
 
 #include <unordered_map>
 #include "symbolic.h"
+#include "function.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/Expr.h"
@@ -50,9 +51,6 @@ class Path
     std::unique_ptr<Path> clone() const;
 
     const clang::Stmt *StmtCtx = nullptr;
-    // Map: symbolic address -> value stored at that address, separating variable–address mapping
-    // from address–value mapping.
-    std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash> memoryState;
 
     std::string dump() const;
 
@@ -61,6 +59,10 @@ class Path
 
     // Map: variable record definition ID -> corresponding symbolic address.
     std::unordered_map<const clang::VarDecl *, std::unique_ptr<Address>> varAddr;
+
+    // Map: symbolic address -> value stored at that address, separating variable–address mapping
+    // from address–value mapping.
+    std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash> memoryState;
 
     // SET: List of symbolic expressions representing the path condition.
     std::vector<std::unique_ptr<SymbolicExpr>> pathConditions;
@@ -76,11 +78,11 @@ class Path
 class ProgramState
 {
   public:
-    ProgramState() = default;
-    ProgramState(std::unique_ptr<Path> initialPath);
+    ProgramState(std::unique_ptr<Path> initialPath, ACSLFunction *context);
+    ProgramState(ACSLFunction *context);
     ~ProgramState() = default;
 
-    void init(const clang::FunctionDecl *FD);
+    void init();
 
     void step(const clang::Stmt *stmt);
 
@@ -103,15 +105,20 @@ class ProgramState
 
     std::vector<const clang::VarDecl *> loopIndexes{};
 
+    std::unique_ptr<ACSLFunction> Context;
+
     // Only be used in step when processing SwitchStmt, just for a cleaner code.
     void stepSimpleSwitch(const clang::SwitchStmt *switchstmt);
 
     void stepBranch(const std::vector<const clang::Expr *> &branchConds,
         const std::vector<const clang::Stmt *> &branchStmts);
 
-    void stepLoop(const clang::Stmt *init, const clang::Stmt *body, const clang::Stmt *step);
-    std::vector<const clang::VarDecl *>
-    determineIndexVars(const clang::Stmt *init, const clang::Stmt *body, const clang::Stmt *step);
+    void stepLoop(const clang::Stmt *loopStmt);
+
+    std::vector<const clang::VarDecl *> determineIndexVars(const clang::Stmt *init,
+        const clang::Expr *cond,
+        const clang::Stmt *body,
+        const clang::Stmt *step);
 
     void CollectLoopACSL();
 };
