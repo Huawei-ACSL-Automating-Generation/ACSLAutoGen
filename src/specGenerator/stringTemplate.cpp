@@ -116,6 +116,8 @@ string StringTemplate::operator()(const NameMap &phMap) const
         result += rawText_.substr(curPos, ph.pos - curPos);
         if (auto kv = phMap.find(ph.name); kv != phMap.end())
             result += kv->second;
+        else
+            result += ph.name;
         curPos = ph.pos + ph.len;
     }
     if (curPos < rawText_.length())
@@ -140,6 +142,8 @@ void StringTemplate::operator()(ostream &os, const NameMap &phMap) const
         os << rawText_.substr(curPos, ph.pos - curPos);
         if (auto kv = phMap.find(ph.name); kv != phMap.end())
             os << kv->second;
+        else
+            os << ph.name;
         curPos = ph.pos + ph.len;
     }
     if (curPos < rawText_.length())

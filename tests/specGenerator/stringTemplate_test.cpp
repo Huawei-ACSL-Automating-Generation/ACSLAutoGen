@@ -1,4 +1,4 @@
-// tests/specGenerator/stringTemplate.cpp
+// tests/specGenerator/stringTemplate_test.cpp
 
 #include <gtest/gtest.h>
 #include "stringTemplate.h"
@@ -122,5 +122,13 @@ TEST(StringTemplateTest, ReMapAndWrongMapping)
     EXPECT_EQ(
         st.remap(NameMap{{{"name_1", "name_0"}, {"name_2", "name_1"}, {"name_3", "name_2"}}}), 3);
     EXPECT_EQ(st(NameMap({{"name", "Queen"}, {"name_0", "Alice"}, {"name_3", "Carroll"}})),
-        "Hello, Alice! and ! and !");
+        "Hello, Alice! and name_1! and name_2!");
+}
+
+TEST(StringTemplateTest, PlusString)
+{
+    StringTemplate st = "";
+    st += "Hello, ";
+    st += "${name}"_st + "!";
+    EXPECT_EQ(st(NameMap({{"name", "Alice"}})), "Hello, Alice!");
 }

@@ -23,10 +23,11 @@ class Path
 
     void LoopInit(std::unordered_map<Variable *, std::unique_ptr<SymbolicExpr>> &initMap);
 
-    SymbolicExpr *getVarState(const clang::VarDecl *var);
+    std::unique_ptr<SymbolicExpr> getVarState(const clang::VarDecl *var);
     const std::vector<std::unique_ptr<SymbolicExpr>> &getPathConditions() const;
 
-    Address *allocMemory(const clang::VarDecl *, unsigned int);
+    Address *allocMemory(const clang::VarDecl *);
+    Address *allocMemory();
 
     void insertVarState(Address *addr, const clang::Expr *expr);
     void insertVarState(Address *addr, std::unique_ptr<SymbolicExpr> expr);
@@ -49,16 +50,15 @@ class Path
     std::unique_ptr<Path> clone() const;
 
     const clang::Stmt *StmtCtx = nullptr;
+    // Map: symbolic address -> value stored at that address, separating variable–address mapping
+    // from address–value mapping.
+    std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash> memoryState;
 
   private:
     std::unique_ptr<SymbolicExpr> convertExpr(const clang::Expr *expr);
 
     // Map: variable record definition ID -> corresponding symbolic address.
     std::unordered_map<const clang::VarDecl *, std::unique_ptr<Address>> varAddr;
-
-    // Map: symbolic address -> value stored at that address, separating variable–address mapping
-    // from address–value mapping.
-    std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash> memoryState;
 
     // SET: List of symbolic expressions representing the path condition.
     std::vector<std::unique_ptr<SymbolicExpr>> pathConditions;
@@ -67,6 +67,8 @@ class Path
     PathState currentState = PathState::Step;
 
     std::unique_ptr<SymbolicExpr> returnExpr = std::make_unique<NullExpr>();
+
+    unsigned int addrCounter = 0;
 };
 
 class ProgramState
@@ -81,7 +83,6 @@ class ProgramState
     void step(const clang::Stmt *stmt);
 
     void addNewDecls(const std::vector<const clang::VarDecl *> &varDecls);
-    unsigned int allocateAddr() { return ++addrCounter; }
 
     void setStates(Path::PathState state, const clang::Stmt *stmt);
 
@@ -99,8 +100,6 @@ class ProgramState
     std::vector<std::unique_ptr<Path>> paths{};
 
     std::vector<const clang::VarDecl *> loopIndexes{};
-
-    unsigned int addrCounter = 0;
 
     // Only be used in step when processing SwitchStmt, just for a cleaner code.
     void stepSimpleSwitch(const clang::SwitchStmt *switchstmt);
