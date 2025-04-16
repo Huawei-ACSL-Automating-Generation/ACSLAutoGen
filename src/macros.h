@@ -28,19 +28,19 @@
 #define UNIMPLEMENT(info)                                                                          \
     do                                                                                             \
     {                                                                                              \
-        std::string file = __FILE__;                                                               \
-        size_t pos = file.rfind("src/");                                                           \
+        std::string _file = __FILE__;                                                              \
+        size_t pos = _file.rfind("src/");                                                          \
         if (pos != std::string::npos)                                                              \
         {                                                                                          \
-            file = file.substr(pos);                                                               \
+            _file = _file.substr(pos);                                                             \
         }                                                                                          \
                                                                                                    \
         std::ostringstream oss;                                                                    \
         oss << info;                                                                               \
-        std::string s = oss.str();                                                                 \
+        std::string _msg = oss.str();                                                              \
                                                                                                    \
-        std::cerr << ANSI_BRIGHT_RED << "[UNIMPLEMENT " << ANSI_BRIGHT_YELLOW << file << ":"       \
-                  << __LINE__ << ANSI_BRIGHT_RED << "]" << ANSI_RESET << " " << s << ANSI_RESET    \
+        std::cerr << ANSI_BRIGHT_RED << "[UNIMPLEMENT " << ANSI_BRIGHT_YELLOW << _file << ":"      \
+                  << __LINE__ << ANSI_BRIGHT_RED << "]" << ANSI_RESET << " " << _msg << ANSI_RESET \
                   << std::endl;                                                                    \
         std::abort();                                                                              \
     } while (0)

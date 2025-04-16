@@ -24,4 +24,5 @@ target_link_libraries(ACSLG PRIVATE
   ContextLib
   UtilsLib
   GlobalSMLib
+  SpecGeneratorLib
 )

@@ -826,4 +826,11 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
     paths = std::move(mergedActive->paths); // mergedActive->paths moved
 }
 
-void ProgramState::CollectLoopACSL() {}
+#include "specGenerator/stringTemplate.h"
+#include "specGenerator/loopInvTemplates.h"
+
+void ProgramState::CollectLoopACSL()
+{
+    NameMap map = {{"index", "i"}, {"max", "res"}, {"array", "p"}, {"i", "i"}, {"n", "n"}};
+    INFO(FIND_MAX_LOOP(map));
+}
