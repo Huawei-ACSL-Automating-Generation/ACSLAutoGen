@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <mutex>
+#include <tuple>
 #include "clang/Basic/SourceManager.h"
 #include "clang/AST/ASTContext.h"
 
@@ -18,6 +19,15 @@ class GlobalSM
     }
 
     static clang::SourceManager &getSM() { return *getInstance().SM; }
+
+    // Tuple{name(empty string for unnamed Decl), sourceText, filename, lineNumber, columnNumber}
+    static std::optional<
+        std::tuple<std::string, llvm::StringRef, llvm::StringRef, unsigned, unsigned>>
+    getDeclInfo(const clang::Decl *decl);
+
+    // Tuple{sourceText, filename, lineNumber, columnNumber}
+    static std::optional<std::tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned>>
+    getStmtInfo(const clang::Stmt *stmt);
 
     void initialize(clang::ASTContext &context)
     {

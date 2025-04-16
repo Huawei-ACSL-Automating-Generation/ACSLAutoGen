@@ -54,6 +54,8 @@ class Path
     // from address–value mapping.
     std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash> memoryState;
 
+    std::string dump() const;
+
   private:
     std::unique_ptr<SymbolicExpr> convertExpr(const clang::Expr *expr);
 

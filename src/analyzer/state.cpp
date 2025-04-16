@@ -8,6 +8,7 @@
 #include "utils/utils.h"
 #include <llvm/ADT/APSInt.h>
 #include <clang/AST/StmtCXX.h>
+#include "globalSM.h"
 
 using namespace std;
 using namespace clang;
@@ -288,6 +289,62 @@ unique_ptr<SymbolicExpr> Path::convertExpr(const Expr *expr)
             UNIMPLEMENT("Unsupported Expr type: " << e->getStmtClassName());
             return nullptr;
         });
+}
+
+string Path::dump() const
+{
+    std::ostringstream oss;
+
+    oss << "Path State: " << [&]() {
+        switch (currentState)
+        {
+        case Path::PathState::Step: return "Step";
+        case Path::PathState::Continue: return "Continue";
+        case Path::PathState::Break: return "Break";
+        case Path::PathState::Return: return "Return";
+        default: return "Unknown";
+        }
+    }() << "\n";
+    oss << "Address Counter: " << addrCounter << "\n";
+
+    oss << "Return Expression: ";
+    if (returnExpr)
+        oss << returnExpr->dump();
+    else
+        oss << "null";
+    oss << "\n";
+
+    oss << "Path Conditions:\n";
+    for (size_t i = 0; i < pathConditions.size(); ++i)
+    {
+        oss << "  [" << i << "]: " << (pathConditions[i] ? pathConditions[i]->dump() : "null")
+            << "\n";
+    }
+
+    oss << "Variable Address Mapping:\n";
+    for (auto const &pair : varAddr)
+    {
+        const clang::VarDecl *vd = pair.first;
+        string name;
+        if (auto opt = GlobalSM::getDeclInfo(vd))
+            tie(name, ignore, ignore, ignore, ignore) = std::move(*opt);
+        oss << "  VarDecl@" << name << " -> " << (pair.second ? pair.second->dump() : "null")
+            << "\n";
+    }
+
+    oss << "Memory State:\n";
+    for (auto const &pair : memoryState)
+    {
+        oss << "  " << pair.first.dump() << " -> " << (pair.second ? pair.second->dump() : "null")
+            << "\n";
+    }
+
+    llvm::StringRef sourceText;
+    if (auto opt = GlobalSM::getStmtInfo(StmtCtx))
+        tie(sourceText, ignore, ignore, ignore) = *opt;
+    oss << "Stmt Context: " << sourceText.str() << "\n";
+
+    return oss.str();
 }
 
 ProgramState::ProgramState(unique_ptr<Path> initialPath)
