@@ -790,7 +790,7 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
             }
             statesForMerge.push_back(newState.release());
         }
-        else if (auto defaultStmt = dyn_cast<DefaultStmt>(stmt))
+        else if (isa<DefaultStmt>(stmt))
         {
             // Use activePS as the state into default branch.
             for (auto &path : activePS->paths)

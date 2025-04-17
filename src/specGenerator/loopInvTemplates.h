@@ -7,13 +7,12 @@
 
 // TODO: some typical loop invariant patterns.
 
-// Placeholders: n, i, array, max, e.
-// Note: need "ghost ${e} = i;" in loop body.
+// Placeholders: n, index, array, max.
 const StringTemplate FIND_MAX_LOOP = R"(
     loop invariant \forall integer j;
         0 <= j < ${index} ==> ${max} >= ${array}[j];
-    loop invariant \valid(${array} + ${index}) && p[${index}] == ${max};
-    loop invariant about_${i}: 0 <= ${i} <= ${n};
+    loop invariant \exists integer j;
+        0 <= j < ${index} ==> (\valid(${array} + j) && ${array}[j] == ${max});
     loop invariant 0 <= ${index} < ${n};
     loop invariant ${array} == \at(${array}, Pre) && ${n} == \at(${n}, Pre);
     loop invariant \valid(${array} + (0..${n}-1));
