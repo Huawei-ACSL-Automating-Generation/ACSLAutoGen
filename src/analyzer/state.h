@@ -93,6 +93,9 @@ class ProgramState
     std::unique_ptr<ProgramState> clone() const;
 
     const clang::Stmt *StmtCtx = nullptr;
+
+    std::string dump() const;
+    void generateFuncACSL();
     void ResetState();
 
   private:

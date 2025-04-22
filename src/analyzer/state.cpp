@@ -290,7 +290,6 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             return EvalResult(std::move(paths), std::move(exprs));
         });
 }
-
 string Path::dump() const
 {
     std::ostringstream oss;
@@ -321,29 +320,56 @@ string Path::dump() const
             << "\n";
     }
 
+    unordered_set<Address, AddressHash> printedAddrs;
+
     oss << "Variable Address Mapping:\n";
     for (auto const &pair : varAddr)
     {
         const clang::VarDecl *vd = pair.first;
         string name;
         if (auto opt = GlobalSM::getDeclInfo(vd))
-            tie(name, ignore, ignore, ignore, ignore) = std::move(*opt);
-        oss << "  VarDecl@" << name << " -> " << (pair.second ? pair.second->dump() : "null")
-            << "\n";
+            tie(name, ignore, ignore, ignore, ignore) = *opt;
+
+        oss << "  @" << name << " -> " << pair.second->dump();
+
+        auto memIt = memoryState.find(*pair.second);
+        if (memIt != memoryState.end() && memIt->second)
+        {
+            oss << " -> " << memIt->second->dump();
+            printedAddrs.insert(memIt->first);
+        }
+        else
+        {
+            oss << " -> null";
+        }
+        oss << "\n";
     }
 
-    oss << "Memory State:\n";
-    for (auto const &pair : memoryState)
+    if (printedAddrs.size() < memoryState.size())
     {
-        oss << "  " << pair.first.dump() << " -> " << (pair.second ? pair.second->dump() : "null")
-            << "\n";
+        oss << "Memory State:\n";
+        for (auto const &pair : memoryState)
+        {
+            if (printedAddrs.count(pair.first) == 0)
+            {
+                oss << "  " << pair.first.dump() << " -> "
+                    << (pair.second ? pair.second->dump() : "null") << "\n";
+            }
+        }
     }
 
-    llvm::StringRef sourceText;
-    if (auto opt = GlobalSM::getStmtInfo(StmtCtx))
-        tie(sourceText, ignore, ignore, ignore) = *opt;
-    oss << "Stmt Context: " << sourceText.str() << "\n";
-
+    if (StmtCtx)
+    {
+        if (auto opt = GlobalSM::getStmtInfo(StmtCtx))
+        {
+            llvm::StringRef sourceText;
+            std::tie(sourceText, std::ignore, std::ignore, std::ignore) = *opt;
+            if (!sourceText.empty())
+            {
+                oss << "Stmt Context: " << sourceText.str() << "\n";
+            }
+        }
+    }
     return oss.str();
 }
 
@@ -424,8 +450,8 @@ void ProgramState::step(const Stmt *stmt)
             stepBranch(branchConds, branchStmts);
         })
         .Case<ReturnStmt>([this](const ReturnStmt *retStmt) {
-            setStates(Path::PathState::Return, NULL);
             setReturnExpr(retStmt->getRetValue());
+            setStates(Path::PathState::Return, NULL);
         })
         .Case<DeclStmt>([this](const DeclStmt *declStmt) {
             vector<const VarDecl *> varDecls;
@@ -434,7 +460,7 @@ void ProgramState::step(const Stmt *stmt)
                 Decl *decl = *it;
                 if (!dyn_cast<VarDecl>(decl))
                 {
-                    WARNING(string("Unhandled Decl type: ") + decl->getDeclKindName());
+                    WARN(string("Unhandled Decl type: ") + decl->getDeclKindName());
                     continue;
                 }
                 varDecls.push_back(dyn_cast<VarDecl>(decl));
@@ -480,8 +506,8 @@ void ProgramState::step(const Stmt *stmt)
             }
             else
             {
-                WARNING("A SwtichStmt without CompoundStmt body (why?) has been ignored: "
-                        << switchStmt);
+                WARN("A SwtichStmt without CompoundStmt body (why?) has been ignored: "
+                     << switchStmt);
             }
 
             ResetState();
@@ -942,4 +968,16 @@ void ProgramState::CollectLoopACSL()
 {
     NameMap map = {{"index", "i"}, {"max", "res"}, {"array", "p"}, {"i", "i"}, {"n", "n"}};
     INFO(FIND_MAX_LOOP(map));
+}
+
+void ProgramState::generateFuncACSL() {}
+
+string ProgramState::dump() const
+{
+    ostringstream oss;
+    for (const auto &p : paths)
+    {
+        oss << p->dump() << "\n";
+    }
+    return oss.str();
 }

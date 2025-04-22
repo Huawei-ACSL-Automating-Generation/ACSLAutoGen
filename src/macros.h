@@ -89,7 +89,7 @@
                   << std::endl;                                                                    \
     } while (0)
 
-#define WARNING(info)                                                                              \
+#define WARN(info)                                                                                 \
     do                                                                                             \
     {                                                                                              \
         std::string file = __FILE__;                                                               \
@@ -98,7 +98,7 @@
         {                                                                                          \
             file = file.substr(pos);                                                               \
         }                                                                                          \
-        std::cout << ANSI_BRIGHT_YELLOW << "[WARNING " << file << ":" << __LINE__ << "]"           \
+        std::cout << ANSI_BRIGHT_YELLOW << "[WARN " << file << ":" << __LINE__ << "]"              \
                   << ANSI_RESET << " " << info << std::endl;                                       \
     } while (0)
 

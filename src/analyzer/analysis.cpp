@@ -21,6 +21,12 @@ void ACSLAnalyzer::analyzeFunctions()
 void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
 {
     const FunctionDecl *FD = func->getFunctionDecl();
+
+    if (FD->getNameAsString() == "main")
+    {
+        WARN("Ignore MAIN Function.");
+        return;
+    }
     INFO("Processing Function " + FD->getNameAsString());
 
     auto acslFunc = new ACSLFunction(FD);
@@ -35,6 +41,8 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
         const CompoundStmt *CS = cast<CompoundStmt>(Body);
         for (const Stmt *stmt : CS->children())
             state->step(stmt);
+        INFO(state->dump());
+        state->generateFuncACSL();
     }
     else
     {
