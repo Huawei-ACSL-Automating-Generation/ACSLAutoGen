@@ -11,6 +11,9 @@
 class Path
 {
   public:
+    using EvalResult =
+        std::pair<std::vector<std::unique_ptr<Path>>, std::vector<std::unique_ptr<SymbolicExpr>>>;
+
     Path() = default;
     ~Path() = default;
 
@@ -30,21 +33,12 @@ class Path
     Address *allocMemory(const clang::VarDecl *);
     Address *allocMemory();
 
-    void insertVarState(Address *addr, const clang::Expr *expr);
     void insertVarState(Address *addr, std::unique_ptr<SymbolicExpr> expr);
-    void insertVarState(const clang::VarDecl *var, const clang::Expr *expr);
     void insertVarState(const clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
+    void insertPathCondition(std::unique_ptr<SymbolicExpr> cond);
 
-    void insertPathCondition(const clang::Expr *cond);
-
-    // ProgramState has no ASTContext to construct new clang::Expr, so Expr must be passed to Path.
-    // However, has param typed BinaryOpExpr::Operator is ugly, may modify it later.
-    void insertPathCondition(
-        const clang::Expr *LHS, const BinaryOpExpr::Operator op, const clang::Expr *RHS);
-    void insertDefaultPathConds(const std::vector<const clang::Expr *> &conds);
-    void setReturnExpr(const clang::Expr *expr) { returnExpr = convertExpr(expr); };
+    void setReturnExpr(std::unique_ptr<SymbolicExpr> expr) { returnExpr = std::move(expr); };
     void setPathState(PathState state) { currentState = state; }
-    void updateVarState(const clang::BinaryOperator *binOp);
 
     bool isActive() const { return currentState == PathState::Step; }
 
@@ -53,9 +47,10 @@ class Path
     const clang::Stmt *StmtCtx = nullptr;
 
     std::string dump() const;
+    friend class ProgramState;
 
   private:
-    std::unique_ptr<SymbolicExpr> convertExpr(const clang::Expr *expr);
+    EvalResult evalExpr(const clang::Expr *expr);
 
     // Map: variable record definition ID -> corresponding symbolic address.
     std::unordered_map<const clang::VarDecl *, std::unique_ptr<Address>> varAddr;

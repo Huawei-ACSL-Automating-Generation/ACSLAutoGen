@@ -36,6 +36,45 @@ BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAss
     default: UNREACHABLE();
     }
 }
+
+// No AssignOp Here.
+BinaryOpExpr::Operator getBinaryOp(BinaryOperatorKind op)
+{
+    switch (op)
+    {
+    case BO_Mul: return BinaryOpExpr::Operator::Multiply;
+    case BO_Div: return BinaryOpExpr::Operator::Divide;
+    case BO_Rem: return BinaryOpExpr::Operator::Remainder;
+    case BO_Add: return BinaryOpExpr::Operator::Add;
+    case BO_Sub: return BinaryOpExpr::Operator::Subtract;
+    case BO_Shl: return BinaryOpExpr::Operator::ShiftLeft;
+    case BO_Shr: return BinaryOpExpr::Operator::ShiftRight;
+    case BO_LT: return BinaryOpExpr::Operator::LessThan;
+    case BO_GT: return BinaryOpExpr::Operator::GreaterThan;
+    case BO_LE: return BinaryOpExpr::Operator::LessEqual;
+    case BO_GE: return BinaryOpExpr::Operator::GreaterEqual;
+    case BO_EQ: return BinaryOpExpr::Operator::Equal;
+    case BO_NE: return BinaryOpExpr::Operator::NotEqual;
+    case BO_And: return BinaryOpExpr::Operator::BitAnd;
+    case BO_Xor: return BinaryOpExpr::Operator::BitXor;
+    case BO_Or: return BinaryOpExpr::Operator::BitOr;
+    case BO_LAnd: return BinaryOpExpr::Operator::LogicalAnd;
+    case BO_LOr: return BinaryOpExpr::Operator::LogicalOr;
+    case BO_Assign:
+    case BO_AddAssign:
+    case BO_SubAssign:
+    case BO_MulAssign:
+    case BO_DivAssign:
+    case BO_RemAssign:
+    case BO_ShlAssign:
+    case BO_ShrAssign:
+    case BO_AndAssign:
+    case BO_XorAssign:
+    case BO_OrAssign: UNREACHABLE();
+    default: UNIMPLEMENT("Unsupported binary operator: " << op); return BinaryOpExpr::Operator::Add;
+    }
+}
+
 bool isAssignOp(const BinaryOperator *binOp)
 {
     if (!binOp)

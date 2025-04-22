@@ -9,6 +9,7 @@
 std::unique_ptr<SymbolicExpr> createLNotExpr(std::unique_ptr<SymbolicExpr> expr);
 
 BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
+BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
 
 bool isAssignOp(const clang::BinaryOperator *binOp);
 
