@@ -3,7 +3,7 @@
 #ifndef UTILITY_TEMPLATES_H
 #define UTILITY_TEMPLATES_H
 
-#include <stringTemplate.h>
+#include "stringTemplate.h"
 
 // TODO: some scaffolds
 

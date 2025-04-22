@@ -13,7 +13,6 @@ add_subdirectory(analyzer)
 add_subdirectory(context)
 add_subdirectory(utils)
 add_subdirectory(specGenerator)
-add_subdirectory(globalSM)
 
 target_link_libraries(ACSLG PRIVATE
   ${llvm_libs}
@@ -23,6 +22,5 @@ target_link_libraries(ACSLG PRIVATE
   AnalyzerLib
   ContextLib
   UtilsLib
-  GlobalSMLib
   SpecGeneratorLib
 )

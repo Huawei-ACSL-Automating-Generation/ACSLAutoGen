@@ -9,7 +9,7 @@
 #include "utils/utils.h"
 #include <llvm/ADT/APSInt.h>
 #include <clang/AST/StmtCXX.h>
-#include "globalSM/globalSM.h"
+#include "context/globalSM.h"
 
 using namespace std;
 using namespace clang;

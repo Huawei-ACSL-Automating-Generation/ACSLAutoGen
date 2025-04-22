@@ -1,4 +1,4 @@
-// src/globalSM/globalSM.h
+// src/context/globalSM.h
 
 #ifndef GLOBAL_SM_H
 #define GLOBAL_SM_H

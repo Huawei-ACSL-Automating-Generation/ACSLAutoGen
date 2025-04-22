@@ -7,7 +7,7 @@
 #include <memory>
 #include "context/context.h"
 #include "analyzer/analysis.h"
-#include "globalSM/globalSM.h"
+#include "context/globalSM.h"
 
 using namespace clang;
 using namespace clang::tooling;
