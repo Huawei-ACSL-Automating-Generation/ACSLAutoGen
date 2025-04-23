@@ -3,6 +3,7 @@
 #include "function.h"
 #include "clang/AST/Stmt.h"
 #include "state.h"
+#include "context/globalSM.h"
 
 using namespace clang;
 using namespace llvm;
@@ -12,6 +13,10 @@ void ACSLAnalyzer::analyzeFunctions()
     PROCESS("Running analysis functions...");
     for (auto *func : this->Context.getFunctions())
     {
+        auto loc = func->getLocation();
+        if (!GlobalSM::getSM().isInMainFile(loc))
+            continue;
+
         auto wrappedFunc = make_unique<ACSLFunction>(func);
         generateFunctionSpec(wrappedFunc.get());
         Functions.push_back(std::move(wrappedFunc));
