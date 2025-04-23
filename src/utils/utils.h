@@ -13,7 +13,7 @@ BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
 
 bool isAssignOp(const clang::BinaryOperator *binOp);
 
-Variable::VarType deriveVarType(clang::QualType type);
+SymbolicExpr::Type deriveVarType(clang::QualType type);
 
 bool ignoreTopBinop(const clang::BinaryOperator *binOp);
 #endif // UTILS_H

@@ -1,19 +1,23 @@
 #include "symbolic.h"
+#include "macros.h"
 #include <memory>
 #include <sstream>
 
 using namespace std;
-unique_ptr<SymbolicExpr> LiteralExpr::clone() const
+std::unique_ptr<SymbolicExpr> LiteralExpr::clone() const
 {
     switch (getLiteralType())
     {
-    case LiteralType::Boolean: return make_unique<LiteralExpr>(data.boolValue);
-    case LiteralType::Int: return make_unique<LiteralExpr>(data.intValue);
-    case LiteralType::UnsignedInt: return make_unique<LiteralExpr>(data.uintValue);
-    case LiteralType::Short: return make_unique<LiteralExpr>(data.shortValue);
-    case LiteralType::UnsignedShort: return make_unique<LiteralExpr>(data.ushortValue);
+    case LiteralType::Boolean: return std::make_unique<LiteralExpr>(data.boolValue);
+    case LiteralType::Int: return std::make_unique<LiteralExpr>(data.intValue);
+    case LiteralType::UnsignedInt: return std::make_unique<LiteralExpr>(data.uintValue);
+    case LiteralType::Short: return std::make_unique<LiteralExpr>(data.shortValue);
+    case LiteralType::UnsignedShort: return std::make_unique<LiteralExpr>(data.ushortValue);
+    case LiteralType::Int64: return std::make_unique<LiteralExpr>(data.int64Value);
+    case LiteralType::UInt64: return std::make_unique<LiteralExpr>(data.uint64Value);
     }
-    return nullptr;
+
+    UNREACHABLE();
 }
 
 unique_ptr<SymbolicExpr> BinaryOpExpr::clone() const
@@ -40,15 +44,17 @@ unique_ptr<SymbolicExpr> Address::clone() const { return make_unique<Address>(id
 std::string LiteralExpr::dump() const
 {
     std::ostringstream oss;
-    switch (type)
+    switch (getLiteralType())
     {
     case LiteralType::Boolean: oss << (data.boolValue ? "true" : "false"); break;
     case LiteralType::Int: oss << data.intValue; break;
     case LiteralType::UnsignedInt: oss << data.uintValue; break;
     case LiteralType::Short: oss << data.shortValue; break;
     case LiteralType::UnsignedShort: oss << data.ushortValue; break;
-    default: oss << "unknown literal"; break;
+    case LiteralType::Int64: oss << data.int64Value; break;
+    case LiteralType::UInt64: oss << data.uint64Value; break;
     }
+
     return oss.str();
 }
 
@@ -116,15 +122,18 @@ std::string NullExpr::dump() const { return "null"; }
 std::string Variable::dump() const
 {
     std::ostringstream oss;
+    const auto &t = getExprType();
+
     oss << "Var(" << name_ << ", ";
-    switch (varType_.kind)
+
+    switch (t.kind)
     {
-    case Kind::Int: oss << "int"; break;
-    case Kind::UInt: oss << "unsigned int"; break;
-    case Kind::Bool: oss << "bool"; break;
+    case ScalarKind::Int: oss << "int"; break;
+    case ScalarKind::UInt: oss << "uint"; break;
+    case ScalarKind::Bool: oss << "bool"; break;
     }
-    oss << varType_.bitWidth;
-    oss << ")";
+
+    oss << t.bitWidth << ")";
     return oss.str();
 }
 

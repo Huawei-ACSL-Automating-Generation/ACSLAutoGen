@@ -30,7 +30,7 @@ void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap
         {
             unique_ptr<SymbolicExpr> origExpr = std::move(memIt->second);
 
-            Variable::VarType derived = deriveVarType(varType);
+            SymbolicExpr::Type derived = deriveVarType(varType);
             unique_ptr<SymbolicExpr> newExpr =
                 make_unique<Variable>(varDecl->getNameAsString(), derived);
 
@@ -53,7 +53,7 @@ void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap
             unique_ptr<SymbolicExpr> pointeeOrigExpr = std::move(memItPointee->second);
 
             QualType baseType = varType->getPointeeType();
-            Variable::VarType baseDerived = deriveVarType(baseType);
+            SymbolicExpr::Type baseDerived = deriveVarType(baseType);
             unique_ptr<SymbolicExpr> newPointeeExpr =
                 make_unique<Variable>("*" + varDecl->getNameAsString(), baseDerived);
             memItPointee->second = std::move(newPointeeExpr);
@@ -155,29 +155,39 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             unique_ptr<SymbolicExpr> result;
 
             if (litType->isBooleanType())
-                result = make_unique<LiteralExpr>(static_cast<bool>(ap.getZExtValue()));
+            {
+                result = std::make_unique<LiteralExpr>(static_cast<bool>(ap.getZExtValue()));
+            }
             else if (litType->isUnsignedIntegerType())
             {
-                if (ap.getBitWidth() <= 16)
-                    result =
-                        make_unique<LiteralExpr>(static_cast<unsigned short>(ap.getZExtValue()));
+                if (ap.getBitWidth() <= 8)
+                    result = std::make_unique<LiteralExpr>(
+                        static_cast<unsigned char>(ap.getZExtValue()));
+                else if (ap.getBitWidth() <= 16)
+                    result = std::make_unique<LiteralExpr>(
+                        static_cast<unsigned short>(ap.getZExtValue()));
                 else if (ap.getBitWidth() <= 32)
                     result =
-                        make_unique<LiteralExpr>(static_cast<unsigned short>(ap.getZExtValue()));
+                        std::make_unique<LiteralExpr>(static_cast<unsigned int>(ap.getZExtValue()));
+                else if (ap.getBitWidth() <= 64)
+                    result =
+                        std::make_unique<LiteralExpr>(static_cast<uint64_t>(ap.getZExtValue()));
                 else
-                    UNIMPLEMENT("Unsupported unsigned integer literal with bit width > 32: "
+                    UNIMPLEMENT("Unsupported unsigned integer literal with bit width > 64: "
                                 << ap.getBitWidth());
             }
             else
             {
-                if (ap.getBitWidth() <= 16)
-                    result =
-                        make_unique<LiteralExpr>(static_cast<unsigned short>(ap.getZExtValue()));
+                if (ap.getBitWidth() <= 8)
+                    result = std::make_unique<LiteralExpr>(static_cast<char>(ap.getSExtValue()));
+                else if (ap.getBitWidth() <= 16)
+                    result = std::make_unique<LiteralExpr>(static_cast<short>(ap.getSExtValue()));
                 else if (ap.getBitWidth() <= 32)
-                    result =
-                        make_unique<LiteralExpr>(static_cast<unsigned short>(ap.getZExtValue()));
+                    result = std::make_unique<LiteralExpr>(static_cast<int>(ap.getSExtValue()));
+                else if (ap.getBitWidth() <= 64)
+                    result = std::make_unique<LiteralExpr>(static_cast<int64_t>(ap.getSExtValue()));
                 else
-                    UNIMPLEMENT("Unsupported signed integer literal with bit width > 32: "
+                    UNIMPLEMENT("Unsupported signed integer literal with bit width > 64: "
                                 << ap.getBitWidth());
             }
 
@@ -360,12 +370,17 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
 
             return {std::move(outPaths), std::move(outExprs)};
         })
+        .Case<CStyleCastExpr>([this](const CStyleCastExpr *castExpr) -> EvalResult {
+            auto sub = evalExpr(castExpr->getSubExpr());
+            auto targetType = deriveVarType(castExpr->getType());
 
+            for (auto &subExpr : sub.second)
+                subExpr->setExprType(targetType);
+
+            return {std::move(sub.first), std::move(sub.second)};
+        })
         .Default([](const Expr *e) -> EvalResult {
             UNIMPLEMENT("Unsupported Expr type: " << e->getStmtClassName());
-            vector<unique_ptr<Path>> paths;
-            vector<unique_ptr<SymbolicExpr>> exprs;
-            return EvalResult(std::move(paths), std::move(exprs));
         });
 }
 string Path::dump() const
@@ -472,7 +487,7 @@ void ProgramState::init()
         {
             Address *addr = paths[0]->allocMemory(param);
 
-            Variable::VarType varType = deriveVarType(paramType);
+            SymbolicExpr::Type varType = deriveVarType(paramType);
             unique_ptr<SymbolicExpr> varExpr =
                 make_unique<Variable>(param->getNameAsString(), varType);
 
@@ -490,7 +505,7 @@ void ProgramState::init()
             unique_ptr<SymbolicExpr> pointerValue = pointeeAddr->clone();
             paths[0]->insertVarState(ptrAddr, std::move(pointerValue));
 
-            Variable::VarType varType = deriveVarType(baseType);
+            SymbolicExpr::Type varType = deriveVarType(baseType);
             unique_ptr<SymbolicExpr> pointeeVarExpr =
                 make_unique<Variable>("*" + param->getNameAsString(), varType);
             paths[0]->insertVarState(pointeeAddr, std::move(pointeeVarExpr));

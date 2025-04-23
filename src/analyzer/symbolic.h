@@ -8,7 +8,7 @@
 class SymbolicExpr
 {
   public:
-    enum class Type
+    enum class ExprType
     {
         Literal,
         Variable,
@@ -19,19 +19,37 @@ class SymbolicExpr
         SNULL
     };
 
-    SymbolicExpr(Type type) : type_(type) {}
+    enum class ScalarKind
+    {
+        Int,
+        UInt,
+        Bool
+    };
+
+    struct Type
+    {
+        ScalarKind kind;
+        unsigned bitWidth;
+    };
+
+    SymbolicExpr(ExprType type, Type valueType) : type_(type), valueType_(valueType) {}
     virtual ~SymbolicExpr() = default;
 
-    Type getType() const { return type_; }
+    ExprType getType() const { return type_; }
+    Type getExprType() const { return valueType_; }
+    void setExprType(Type newType) { valueType_ = newType; }
+
     virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
     virtual std::string dump() const = 0;
+
     friend std::ostream &operator<<(std::ostream &os, const SymbolicExpr &expr)
     {
         return os << expr.dump();
     }
 
   private:
-    Type type_;
+    ExprType type_;
+    Type valueType_;
 };
 
 class LiteralExpr : public SymbolicExpr
@@ -44,32 +62,50 @@ class LiteralExpr : public SymbolicExpr
         UnsignedInt,
         Short,
         UnsignedShort,
+        Int64,
+        UInt64
     };
 
-    LiteralExpr(bool value) : SymbolicExpr(Type::Literal), type(LiteralType::Boolean)
+    LiteralExpr(bool value)
+        : SymbolicExpr(ExprType::Literal, {ScalarKind::Bool, 1}), type(LiteralType::Boolean)
     {
         data.boolValue = value;
     }
 
-    LiteralExpr(int value) : SymbolicExpr(Type::Literal), type(LiteralType::Int)
+    LiteralExpr(int value)
+        : SymbolicExpr(ExprType::Literal, {ScalarKind::Int, 32}), type(LiteralType::Int)
     {
         data.intValue = value;
     }
 
-    LiteralExpr(unsigned int value) : SymbolicExpr(Type::Literal), type(LiteralType::UnsignedInt)
+    LiteralExpr(unsigned int value)
+        : SymbolicExpr(ExprType::Literal, {ScalarKind::UInt, 32}), type(LiteralType::UnsignedInt)
     {
         data.uintValue = value;
     }
 
-    LiteralExpr(short value) : SymbolicExpr(Type::Literal), type(LiteralType::Short)
+    LiteralExpr(short value)
+        : SymbolicExpr(ExprType::Literal, {ScalarKind::Int, 16}), type(LiteralType::Short)
     {
         data.shortValue = value;
     }
 
     LiteralExpr(unsigned short value)
-        : SymbolicExpr(Type::Literal), type(LiteralType::UnsignedShort)
+        : SymbolicExpr(ExprType::Literal, {ScalarKind::UInt, 16}), type(LiteralType::UnsignedShort)
     {
         data.ushortValue = value;
+    }
+
+    LiteralExpr(int64_t value)
+        : SymbolicExpr(ExprType::Literal, {ScalarKind::Int, 64}), type(LiteralType::Int64)
+    {
+        data.int64Value = value;
+    }
+
+    LiteralExpr(uint64_t value)
+        : SymbolicExpr(ExprType::Literal, {ScalarKind::UInt, 64}), type(LiteralType::UInt64)
+    {
+        data.uint64Value = value;
     }
 
     LiteralType getLiteralType() const { return type; }
@@ -86,6 +122,8 @@ class LiteralExpr : public SymbolicExpr
         unsigned int uintValue;
         short shortValue;
         unsigned short ushortValue;
+        int64_t int64Value;
+        uint64_t uint64Value;
 
         Data() {}
         ~Data() {}
@@ -118,14 +156,15 @@ class BinaryOpExpr : public SymbolicExpr
     };
 
     // Constructor accepting unique_ptr for both operands
+
     BinaryOpExpr(
         std::unique_ptr<SymbolicExpr> left, Operator op, std::unique_ptr<SymbolicExpr> right)
-        : SymbolicExpr(Type::BinaryOp), left_(std::move(left)), op_(op), right_(std::move(right))
+        : SymbolicExpr(ExprType::BinaryOp, left->getExprType()), left_(std::move(left)), op_(op),
+          right_(std::move(right))
     {}
 
-    // Constructor accepting raw pointers for both operands
     BinaryOpExpr(SymbolicExpr *left, Operator op, SymbolicExpr *right)
-        : SymbolicExpr(Type::BinaryOp), left_(left), op_(op), right_(right)
+        : SymbolicExpr(ExprType::BinaryOp, left->getExprType()), left_(left), op_(op), right_(right)
     {}
 
     std::unique_ptr<SymbolicExpr> clone() const override;
@@ -154,13 +193,12 @@ class UnaryOpExpr : public SymbolicExpr
         Dereference // *
     };
 
-    // Constructor accepting unique_ptr for the operand.
     UnaryOpExpr(Operator op, std::unique_ptr<SymbolicExpr> expr)
-        : SymbolicExpr(Type::UnaryOp), op_(op), expr_(std::move(expr))
+        : SymbolicExpr(ExprType::UnaryOp, expr->getExprType()), op_(op), expr_(std::move(expr))
     {}
 
-    // Constructor accepting a raw pointer for the operand.
-    UnaryOpExpr(Operator op, SymbolicExpr *expr) : SymbolicExpr(Type::UnaryOp), op_(op), expr_(expr)
+    UnaryOpExpr(Operator op, SymbolicExpr *expr)
+        : SymbolicExpr(ExprType::UnaryOp, expr->getExprType()), op_(op), expr_(expr)
     {}
 
     std::unique_ptr<SymbolicExpr> clone() const override;
@@ -175,11 +213,12 @@ class ArrayExpr : public SymbolicExpr
 {
   public:
     ArrayExpr(std::unique_ptr<SymbolicExpr> array, std::unique_ptr<SymbolicExpr> index)
-        : SymbolicExpr(Type::ArraySubscript), array_(std::move(array)), index_(std::move(index))
+        : SymbolicExpr(ExprType::ArraySubscript, array->getExprType()), array_(std::move(array)),
+          index_(std::move(index))
     {}
 
     ArrayExpr(SymbolicExpr *array, SymbolicExpr *index)
-        : SymbolicExpr(Type::ArraySubscript), array_(array), index_(index)
+        : SymbolicExpr(ExprType::ArraySubscript, array->getExprType()), array_(array), index_(index)
     {}
 
     std::unique_ptr<SymbolicExpr> clone() const override;
@@ -193,7 +232,7 @@ class ArrayExpr : public SymbolicExpr
 class NullExpr : public SymbolicExpr
 {
   public:
-    NullExpr() : SymbolicExpr(Type::SNULL) {}
+    NullExpr() : SymbolicExpr(ExprType::SNULL, {ScalarKind::UInt, 64}) {}
     ~NullExpr() = default;
 
     std::unique_ptr<SymbolicExpr> clone() const override;
@@ -203,42 +242,40 @@ class NullExpr : public SymbolicExpr
 class Variable : public SymbolicExpr
 {
   public:
-    enum class Kind
-    {
-        Int,
-        UInt,
-        Bool
-    };
-
-    struct VarType
-    {
-        Kind kind;
-        unsigned bitWidth;
-    };
-
-    Variable(const std::string &name, VarType varType)
-        : SymbolicExpr(Type::Variable), name_(name), varType_(varType)
+    Variable(const std::string &name, Type varType)
+        : SymbolicExpr(ExprType::Variable, varType), name_(name), varType_(varType)
     {}
 
-    VarType getVarType() const { return varType_; }
-    void setVarType(VarType vt) { varType_ = vt; }
+    Type getVarType() const { return varType_; }
+    void setVarType(Type vt)
+    {
+        varType_ = vt;
+        setExprType(vt); // 同步更新基类中的 valueType
+    }
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
 
   private:
     std::string name_;
-    VarType varType_;
+    Type varType_;
 };
 
 class Address : public SymbolicExpr
 {
   public:
-    Address() : SymbolicExpr(Type::SymbolAddress), id_(0), offset_(false) {}
-    Address(unsigned int id) : SymbolicExpr(Type::SymbolAddress), id_(id) {}
-    Address(unsigned int id, bool offset)
-        : SymbolicExpr(Type::SymbolAddress), id_(id), offset_(offset)
+    Address()
+        : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(0), offset_(false)
     {}
+
+    Address(unsigned int id)
+        : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id), offset_(false)
+    {}
+
+    Address(unsigned int id, bool offset)
+        : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id), offset_(offset)
+    {}
+
     std::unique_ptr<SymbolicExpr> clone() const override;
     bool operator==(const Address &other) const
     {

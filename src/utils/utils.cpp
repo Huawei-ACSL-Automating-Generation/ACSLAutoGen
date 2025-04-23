@@ -1,6 +1,7 @@
 #include "utils.h"
 #include "macros.h"
 
+#include "clang/AST/PrettyPrinter.h"
 #include <clang/AST/Expr.h>
 #include <llvm/ADT/TypeSwitch.h>
 #include <string>
@@ -96,21 +97,39 @@ bool isAssignOp(const BinaryOperator *binOp)
     }
 }
 
-Variable::VarType deriveVarType(QualType type)
+SymbolicExpr::Type deriveVarType(QualType type)
 {
-    return llvm::TypeSwitch<QualType, Variable::VarType>(type.getCanonicalType())
-        .Case([](const BuiltinType *BT) -> Variable::VarType {
+    return llvm::TypeSwitch<QualType, SymbolicExpr::Type>(type.getCanonicalType())
+        .Case([](const BuiltinType *BT) -> SymbolicExpr::Type {
+            using Kind = SymbolicExpr::ScalarKind;
+
             switch (BT->getKind())
             {
-            case BuiltinType::Bool: return {Variable::Kind::Bool, 1};
-            case BuiltinType::Int: return {Variable::Kind::Int, 32};
-            case BuiltinType::UInt: return {Variable::Kind::UInt, 32};
-            case BuiltinType::UChar: return {Variable::Kind::UInt, 8};
-            case BuiltinType::UShort: return {Variable::Kind::UInt, 16};
-            default: UNIMPLEMENT("Unsupported builtin type: " << BT->getKind());
+            case BuiltinType::Bool: return {Kind::Bool, 1};
+            case BuiltinType::Char_S:
+            case BuiltinType::SChar: return {Kind::Int, 8};
+            case BuiltinType::Char_U:
+            case BuiltinType::UChar: return {Kind::UInt, 8};
+
+            case BuiltinType::Short: return {Kind::Int, 16};
+            case BuiltinType::UShort: return {Kind::UInt, 16};
+
+            case BuiltinType::Int: return {Kind::Int, 32};
+            case BuiltinType::UInt: return {Kind::UInt, 32};
+
+            case BuiltinType::Long: return {Kind::Int, 64};
+            case BuiltinType::ULong: return {Kind::UInt, 64};
+
+            case BuiltinType::LongLong: return {Kind::Int, 64};
+            case BuiltinType::ULongLong: return {Kind::UInt, 64};
+
+            default:
+                LangOptions langOpts;
+                PrintingPolicy pp(langOpts);
+                UNIMPLEMENT("Unsupported builtin type: " << BT->getName(pp).str());
             }
         })
-        .Default([&](QualType QT) -> Variable::VarType {
+        .Default([&](QualType QT) -> SymbolicExpr::Type {
             UNIMPLEMENT("Unsupported non-builtin type: " << QT.getAsString());
         });
 }
