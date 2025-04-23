@@ -138,6 +138,7 @@ unique_ptr<Path> Path::clone() const
         cloned->pathConditions.push_back(cond->clone());
     cloned->returnExpr = returnExpr->clone();
     cloned->addrCounter = addrCounter;
+    cloned->StmtCtx = StmtCtx;
     return cloned;
 }
 
@@ -164,13 +165,8 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                     result =
                         make_unique<LiteralExpr>(static_cast<unsigned short>(ap.getZExtValue()));
                 else
-                {
                     UNIMPLEMENT("Unsupported unsigned integer literal with bit width > 32: "
                                 << ap.getBitWidth());
-                    vector<unique_ptr<Path>> paths;
-                    vector<unique_ptr<SymbolicExpr>> exprs;
-                    return EvalResult(std::move(paths), std::move(exprs));
-                }
             }
             else
             {
@@ -181,13 +177,8 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                     result =
                         make_unique<LiteralExpr>(static_cast<unsigned short>(ap.getZExtValue()));
                 else
-                {
                     UNIMPLEMENT("Unsupported signed integer literal with bit width > 32: "
                                 << ap.getBitWidth());
-                    vector<unique_ptr<Path>> paths;
-                    vector<unique_ptr<SymbolicExpr>> exprs;
-                    return EvalResult(std::move(paths), std::move(exprs));
-                }
             }
 
             vector<std::unique_ptr<Path>> paths;
@@ -234,19 +225,26 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
         .Case<ParenExpr>(
             [this](const ParenExpr *paren) -> EvalResult { return evalExpr(paren->getSubExpr()); })
         .Case<DeclRefExpr>([this](const DeclRefExpr *declRef) -> EvalResult {
-            const VarDecl *varDecl = dyn_cast<VarDecl>(declRef->getDecl());
-            if (!varDecl)
+            if (const auto *varDecl = dyn_cast<VarDecl>(declRef->getDecl()))
             {
-                UNIMPLEMENT("Unsupported Decl type: " << declRef->getDecl()->getDeclKindName());
+                auto varExpr = getVarState(varDecl);
                 vector<unique_ptr<Path>> paths;
                 vector<unique_ptr<SymbolicExpr>> exprs;
-                return EvalResult(std::move(paths), std::move(exprs));
+                exprs.push_back(std::move(varExpr));
+                return {std::move(paths), std::move(exprs)};
             }
-            auto varExpr = getVarState(varDecl);
-            vector<unique_ptr<Path>> paths;
-            vector<unique_ptr<SymbolicExpr>> exprs;
-            exprs.push_back(std::move(varExpr));
-            return {std::move(paths), std::move(exprs)};
+
+            if (const auto *enumDecl = dyn_cast<EnumConstantDecl>(declRef->getDecl()))
+            {
+                llvm::APSInt value = enumDecl->getInitVal();
+                auto litExpr = make_unique<LiteralExpr>(static_cast<int>(value.getSExtValue()));
+                vector<unique_ptr<Path>> paths;
+                vector<unique_ptr<SymbolicExpr>> exprs;
+                exprs.push_back(std::move(litExpr));
+                return {std::move(paths), std::move(exprs)};
+            }
+
+            UNIMPLEMENT("Unsupported Decl type: " << declRef->getDecl()->getDeclKindName());
         })
         .Case<ArraySubscriptExpr>([this](const ArraySubscriptExpr *arrSub) -> EvalResult {
             EvalResult base = evalExpr(arrSub->getBase());
@@ -277,12 +275,92 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             }
             return {std::move(outPaths), std::move(outExprs)};
         })
-        .Case<CallExpr>([](const CallExpr *) -> EvalResult {
-            TODO();
-            vector<unique_ptr<Path>> paths;
-            vector<unique_ptr<SymbolicExpr>> exprs;
-            return EvalResult(std::move(paths), std::move(exprs));
+        .Case<CallExpr>([](const CallExpr *) -> EvalResult { TODO(); })
+        .Case<ConditionalOperator>([this](const ConditionalOperator *condOp) -> EvalResult {
+            EvalResult cond = evalExpr(condOp->getCond());
+
+            vector<unique_ptr<Path>> outPaths;
+            vector<unique_ptr<SymbolicExpr>> outExprs;
+
+            for (size_t i = 0; i < cond.second.size(); ++i)
+            {
+                Path *condPath = (i == 0) ? this : cond.first[i - 1].get();
+                auto condExpr = std::move(cond.second[i]);
+
+                // false branch
+                auto falsePath = condPath->clone();
+                auto negatedCond =
+                    make_unique<UnaryOpExpr>(UnaryOpExpr::Operator::LogicalNot, condExpr->clone());
+                falsePath->insertPathCondition(std::move(negatedCond));
+
+                EvalResult falseVal = falsePath->evalExpr(condOp->getFalseExpr());
+
+                // true branch
+                auto truePath = condPath;
+                truePath->insertPathCondition(std::move(condExpr));
+
+                EvalResult trueVal = truePath->evalExpr(condOp->getTrueExpr());
+
+                // merge results
+                for (size_t j = 0; j < trueVal.second.size(); ++j)
+                {
+                    outExprs.emplace_back(std::move(trueVal.second[j]));
+                    if (j > 0)
+                        outPaths.emplace_back(std::move(trueVal.first[j - 1]));
+                }
+                for (size_t j = 0; j < falseVal.second.size(); ++j)
+                {
+                    outExprs.emplace_back(std::move(falseVal.second[j]));
+                    if (j == 0)
+                        outPaths.emplace_back(std::move(falsePath));
+                    else
+                        outPaths.emplace_back(std::move(falseVal.first[j - 1]));
+                }
+            }
+
+            return {std::move(outPaths), std::move(outExprs)};
         })
+        .Case<UnaryOperator>([this](const UnaryOperator *uop) -> EvalResult {
+            auto operand = evalExpr(uop->getSubExpr());
+
+            vector<unique_ptr<Path>> outPaths;
+            vector<unique_ptr<SymbolicExpr>> outExprs;
+
+            // Determine symbolic operator type
+            UnaryOpExpr::Operator op;
+            switch (uop->getOpcode())
+            {
+            case UO_Plus: op = UnaryOpExpr::Operator::Plus; break;
+            case UO_Minus: op = UnaryOpExpr::Operator::Minus; break;
+            case UO_LNot: op = UnaryOpExpr::Operator::LogicalNot; break;
+            case UO_Not: op = UnaryOpExpr::Operator::BitwiseNot; break;
+            case UO_PreInc: op = UnaryOpExpr::Operator::PreInc; break;
+            case UO_PreDec: op = UnaryOpExpr::Operator::PreDec; break;
+            case UO_PostInc: op = UnaryOpExpr::Operator::PostInc; break;
+            case UO_PostDec: op = UnaryOpExpr::Operator::PostDec; break;
+            case UO_AddrOf: op = UnaryOpExpr::Operator::AddrOf; break;
+            case UO_Deref: op = UnaryOpExpr::Operator::Dereference; break;
+            default:
+                UNIMPLEMENT(
+                    "Unsupported UnaryOperator: " << uop->getOpcodeStr(uop->getOpcode()).str());
+                vector<unique_ptr<Path>> paths;
+                vector<unique_ptr<SymbolicExpr>> exprs;
+                return EvalResult(std::move(paths), std::move(exprs));
+            }
+
+            for (size_t i = 0; i < operand.second.size(); ++i)
+            {
+                auto opExpr = std::move(operand.second[i]);
+
+                outExprs.emplace_back(make_unique<UnaryOpExpr>(op, std::move(opExpr)));
+
+                if (i > 0)
+                    outPaths.emplace_back(std::move(operand.first[i - 1]));
+            }
+
+            return {std::move(outPaths), std::move(outExprs)};
+        })
+
         .Default([](const Expr *e) -> EvalResult {
             UNIMPLEMENT("Unsupported Expr type: " << e->getStmtClassName());
             vector<unique_ptr<Path>> paths;
@@ -294,7 +372,7 @@ string Path::dump() const
 {
     std::ostringstream oss;
 
-    oss << "Path State: " << [&]() {
+    oss << "\nPath State: " << [&]() {
         switch (currentState)
         {
         case Path::PathState::Step: return "Step";
@@ -495,7 +573,6 @@ void ProgramState::step(const Stmt *stmt)
             {
                 if (isa_and_present<CaseStmt>(bodyStmt->body_front()))
                 {
-                    // simple SwitchStmt
                     stepSimpleSwitch(switchStmt);
                 }
                 else
@@ -541,7 +618,7 @@ void ProgramState::step(const Stmt *stmt)
             ResetState();
             this->StmtCtx = prevStmtCtx;
         })
-        .Case<BreakStmt>([](const BreakStmt *) { TODO(); })
+        .Case<BreakStmt>([this](const BreakStmt *) { setStates(Path::PathState::Break, StmtCtx); })
         .Case<ContinueStmt>([](const ContinueStmt *) { TODO(); })
         .Default(
             [](const Stmt *s) { UNIMPLEMENT("Unsupported Stmt type: " << s->getStmtClassName()); });
@@ -772,24 +849,18 @@ void ProgramState::updateVarState(const BinaryOperator *binOp)
             for (size_t i = 0; i < lhs.second.size(); ++i)
             {
                 Path *lhsPath = (i == 0) ? path.get() : lhs.first[i - 1].get();
-                auto lhsExpr = std::move(lhs.second[i]);
 
                 Path::EvalResult rhs = lhsPath->evalExpr(binOp->getRHS());
 
                 for (size_t j = 0; j < rhs.second.size(); ++j)
                 {
-                    unique_ptr<SymbolicExpr> rhsExpr = std::move(rhs.second[j]);
-                    outExprs.emplace_back(
-                        make_unique<BinaryOpExpr>(lhsExpr->clone(), op, std::move(rhsExpr)));
+                    outExprs.emplace_back(make_unique<BinaryOpExpr>(
+                        lhs.second[i]->clone(), op, std::move(rhs.second[j])));
 
-                    if (i == 0 && j == 0)
-                        continue;
-
-                    outPaths.emplace_back(
-                        j == 0 ? std::move(lhs.first[i - 1]) : std::move(rhs.first[j - 1]));
+                    if (i != 0 || j != 0)
+                        outPaths.emplace_back(std::move(rhs.first[j - 1]));
                 }
             }
-
             eval = {std::move(outPaths), std::move(outExprs)};
         }
         else
@@ -887,6 +958,7 @@ unique_ptr<ProgramState> ProgramState::clone() const
             newState->paths.push_back(path->clone());
     }
 
+    newState->StmtCtx = StmtCtx;
     newState->loopIndexes = loopIndexes;
     return newState;
 }
@@ -933,7 +1005,7 @@ static void collectCaseBlocks(
             currentCond = cs->getLHS();
             currentBlock.push_back(cs->getSubStmt());
         }
-        else if (auto *ds = dyn_cast<CaseStmt>(stmt))
+        else if (auto *ds = dyn_cast<DefaultStmt>(stmt))
         {
             if (!currentBlock.empty())
             {
@@ -952,7 +1024,8 @@ static void collectCaseBlocks(
     if (!currentBlock.empty())
     {
         blocks.emplace_back(std::move(currentBlock));
-        conds.push_back(currentCond);
+        if (currentCond)
+            conds.push_back(currentCond);
     }
 }
 
@@ -995,7 +1068,6 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
     {
         auto current = std::move(pr.first);
         auto symValue = std::move(pr.second);
-
         for (size_t i = 0; i < blocks.size(); ++i)
         {
             auto &stmts = blocks[i];
@@ -1010,9 +1082,15 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
                 break;
             }
 
+            // TODO: pack a static function in Path.
+            Path tmpPath;
+            auto caseCondEval = tmpPath.evalExpr(caseCond);
+            assert(caseCondEval.second.size() == 1);
+            auto caseSymExpr = std::move(caseCondEval.second[0]);
             auto eqState = current->clone();
+
             auto condExprEq = make_unique<BinaryOpExpr>(
-                symValue->clone(), BinaryOpExpr::Operator::Equal, symValue->clone());
+                symValue->clone(), BinaryOpExpr::Operator::Equal, caseSymExpr->clone());
             for (auto &p : eqState->paths)
                 p->insertPathCondition(condExprEq->clone());
 
@@ -1020,12 +1098,9 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
                 eqState->step(s);
 
             auto condExprNe = make_unique<BinaryOpExpr>(
-                symValue->clone(), BinaryOpExpr::Operator::NotEqual, symValue->clone());
+                symValue->clone(), BinaryOpExpr::Operator::NotEqual, std::move(caseSymExpr));
             for (auto &p : current->paths)
                 p->insertPathCondition(condExprNe->clone());
-
-            for (auto *s : stmts)
-                current->step(s);
 
             if (eqState->isInactive())
             {
