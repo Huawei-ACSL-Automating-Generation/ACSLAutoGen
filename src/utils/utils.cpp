@@ -95,21 +95,23 @@ bool isAssignOp(const BinaryOperator *binOp)
     default: return false;
     }
 }
+
 Variable::VarType deriveVarType(QualType type)
 {
-    return llvm::TypeSwitch<QualType, Variable::VarType>(type)
+    return llvm::TypeSwitch<QualType, Variable::VarType>(type.getCanonicalType())
         .Case([](const BuiltinType *BT) -> Variable::VarType {
-            if (BT->getKind() == BuiltinType::Bool)
-                return Variable::VarType::Bool;
-            else if (BT->getKind() == BuiltinType::Int)
-                return Variable::VarType::Int;
-            else if (BT->getKind() == BuiltinType::UInt)
-                return Variable::VarType::UInt;
-            else
-                UNIMPLEMENT("Unsupported builtin type for pointer base");
+            switch (BT->getKind())
+            {
+            case BuiltinType::Bool: return {Variable::Kind::Bool, 1};
+            case BuiltinType::Int: return {Variable::Kind::Int, 32};
+            case BuiltinType::UInt: return {Variable::Kind::UInt, 32};
+            case BuiltinType::UChar: return {Variable::Kind::UInt, 8};
+            case BuiltinType::UShort: return {Variable::Kind::UInt, 16};
+            default: UNIMPLEMENT("Unsupported builtin type: " << BT->getKind());
+            }
         })
-        .Default([](QualType) -> Variable::VarType {
-            UNIMPLEMENT("Unsupported non-builtin type for pointer base");
+        .Default([&](QualType QT) -> Variable::VarType {
+            UNIMPLEMENT("Unsupported non-builtin type: " << QT.getAsString());
         });
 }
 

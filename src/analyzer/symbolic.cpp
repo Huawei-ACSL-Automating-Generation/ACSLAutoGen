@@ -117,13 +117,13 @@ std::string Variable::dump() const
 {
     std::ostringstream oss;
     oss << "Var(" << name_ << ", ";
-    switch (varType_)
+    switch (varType_.kind)
     {
-    case VarType::Int: oss << "int"; break;
-    case VarType::UInt: oss << "unsigned int"; break;
-    case VarType::Bool: oss << "bool"; break;
-    default: oss << "unknown"; break;
+    case Kind::Int: oss << "int"; break;
+    case Kind::UInt: oss << "unsigned int"; break;
+    case Kind::Bool: oss << "bool"; break;
     }
+    oss << varType_.bitWidth;
     oss << ")";
     return oss.str();
 }

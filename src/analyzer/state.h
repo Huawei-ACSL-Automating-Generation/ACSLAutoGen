@@ -91,6 +91,9 @@ class ProgramState
     std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<ProgramState>> splitActiveInactive();
     std::unique_ptr<ProgramState> Merge(const std::vector<const ProgramState *> &states);
     std::unique_ptr<ProgramState> clone() const;
+    std::unique_ptr<ProgramState>
+    cloneWithPaths(std::vector<std::unique_ptr<Path>> &newPaths) const;
+    bool isInactive() const;
 
     const clang::Stmt *StmtCtx = nullptr;
 
@@ -106,6 +109,8 @@ class ProgramState
     std::unique_ptr<ACSLFunction> Context;
 
     // Only be used in step when processing SwitchStmt, just for a cleaner code.
+    std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<SymbolicExpr>>>
+    splitStateBySwitchCond(const clang::Expr *switchCond);
     void stepSimpleSwitch(const clang::SwitchStmt *switchstmt);
 
     void stepBranch(const std::vector<const clang::Expr *> &branchConds,

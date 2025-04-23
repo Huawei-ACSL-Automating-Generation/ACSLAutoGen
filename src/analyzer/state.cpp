@@ -325,7 +325,7 @@ string Path::dump() const
     oss << "Variable Address Mapping:\n";
     for (auto const &pair : varAddr)
     {
-        const clang::VarDecl *vd = pair.first;
+        const VarDecl *vd = pair.first;
         string name;
         if (auto opt = GlobalSM::getDeclInfo(vd))
             tie(name, ignore, ignore, ignore, ignore) = *opt;
@@ -362,7 +362,7 @@ string Path::dump() const
     {
         if (auto opt = GlobalSM::getStmtInfo(StmtCtx))
         {
-            llvm::StringRef sourceText;
+            StringRef sourceText;
             std::tie(sourceText, std::ignore, std::ignore, std::ignore) = *opt;
             if (!sourceText.empty())
             {
@@ -629,7 +629,6 @@ void ProgramState::stepBranch(
 }
 
 void ProgramState::stepLoop(const Stmt *loopStmt)
-
 {
     const Stmt *init = nullptr;
     const Expr *cond = nullptr;
@@ -869,6 +868,7 @@ pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActi
 
 unique_ptr<ProgramState> ProgramState::Merge(const vector<const ProgramState *> &states)
 {
+    // TODO: Carefully process loop indexes.
     auto merged = make_unique<ProgramState>(Context->clone());
 
     for (const auto *state : states)
@@ -883,11 +883,19 @@ unique_ptr<ProgramState> ProgramState::clone() const
 
     for (const auto &path : paths)
     {
-        newState->paths.push_back(path->clone());
+        if (path)
+            newState->paths.push_back(path->clone());
     }
 
     newState->loopIndexes = loopIndexes;
     return newState;
+}
+
+unique_ptr<ProgramState> ProgramState::cloneWithPaths(vector<unique_ptr<Path>> &newPaths) const
+{
+    auto clone = this->clone();
+    clone->paths = std::move(newPaths);
+    return clone;
 }
 
 void ProgramState::ResetState()
@@ -899,66 +907,163 @@ void ProgramState::ResetState()
     }
 }
 
-void ProgramState::stepSimpleSwitch(const SwitchStmt *)
+static void collectCaseBlocks(
+    const CompoundStmt *body, vector<vector<const Stmt *>> &blocks, vector<const Expr *> &conds)
 {
-    TODO();
-    // auto switchCond = switchStmt->getCond();
-    // unique_ptr<ProgramState> activePS,
-    //     inactivePS; // PS = ProgramState
-    // tie(activePS, inactivePS) = splitActiveInactive();
-    // vector<ProgramState *> statesForMerge; // Every case we meet will emit a new
-    //                                        // ProgramState to statesForMerge.
-    // vector<Expr *> caseConds; // Collect case conds to construct the default branch's cond.
+    if (!body)
+    {
+        ERROR("dyn_cast failed for switch body.");
+    }
+    blocks.clear();
+    conds.clear();
 
-    // // Caller ensures the *Simple* switch has non-empty body typed CompoundStmt.
-    // for (auto stmt : dyn_cast<CompoundStmt>(switchStmt->getBody())->body())
-    // {
-    //     if (auto caseStmt = dyn_cast<CaseStmt>(stmt))
-    //     {
-    //         // Split a new state step into the case.
-    //         auto newState = activePS->clone();
-    //         for (auto &path : newState->paths)
-    //         {
-    //             auto caseCond = caseStmt->getLHS();
-    //             caseConds.push_back(caseCond);
-    //             path->insertPathCondition(switchCond, BinaryOpExpr::Operator::Equal, caseCond);
-    //         }
-    //         statesForMerge.push_back(newState.release());
-    //     }
-    //     else if (isa<DefaultStmt>(stmt))
-    //     {
-    //         // Use activePS as the state into default branch.
-    //         for (auto &path : activePS->paths)
-    //         {
-    //             for (auto &cond : caseConds)
-    //             {
-    //                 path->insertPathCondition(switchCond, BinaryOpExpr::Operator::NotEqual, cond);
-    //             }
-    //         }
-    //         statesForMerge.push_back(activePS.release()); // activePS released
-    //     }
-    //     // Every state existed steps through the whole switch's body together.
-    //     for (auto state : statesForMerge)
-    //     {
-    //         state->step(stmt);
-    //     }
-    // }
-    // if (activePS)
-    // {
-    //     // Switch has no default:, so activePS has not been released.
-    //     statesForMerge.push_back(activePS.release()); // activePS released
-    // }
-    // // Merge all paths in different ProgramStates into one.
-    // auto mergedActive =
-    //     Merge(vector<const ProgramState *>(make_move_iterator(statesForMerge.begin()),
-    //         make_move_iterator(statesForMerge.end()))); // statesForMerge moved
+    vector<const Stmt *> currentBlock;
+    const Expr *currentCond = nullptr;
 
-    // // Merge inactive paths in.
-    // mergedActive->paths.insert(mergedActive->paths.end(),
-    //     make_move_iterator(inactivePS->paths.begin()),
-    //     make_move_iterator(inactivePS->paths.end())); // inactivePS->paths moved
+    for (auto *stmt : body->body())
+    {
+        if (auto *cs = dyn_cast<CaseStmt>(stmt))
+        {
+            if (!currentBlock.empty())
+            {
+                blocks.emplace_back(std::move(currentBlock));
+                conds.push_back(currentCond);
+                currentBlock.clear();
+            }
+            currentCond = cs->getLHS();
+            currentBlock.push_back(cs->getSubStmt());
+        }
+        else if (auto *ds = dyn_cast<CaseStmt>(stmt))
+        {
+            if (!currentBlock.empty())
+            {
+                blocks.emplace_back(std::move(currentBlock));
+                conds.push_back(currentCond);
+                currentBlock.clear();
+            }
+            currentCond = nullptr;
+            currentBlock.push_back(ds->getSubStmt());
+        }
+        else
+        {
+            currentBlock.push_back(stmt);
+        }
+    }
+    if (!currentBlock.empty())
+    {
+        blocks.emplace_back(std::move(currentBlock));
+        conds.push_back(currentCond);
+    }
+}
 
-    // paths = std::move(mergedActive->paths); // mergedActive->paths moved
+vector<pair<unique_ptr<ProgramState>, unique_ptr<SymbolicExpr>>>
+ProgramState::splitStateBySwitchCond(const Expr *switchCond)
+{
+    if (!switchCond)
+    {
+        TODO();
+    }
+    vector<pair<unique_ptr<ProgramState>, unique_ptr<SymbolicExpr>>> result;
+
+    for (auto &path : paths)
+    {
+        auto evalResult = path->evalExpr(switchCond);
+
+        if (evalResult.first.size() != 0)
+        {
+            ERROR("evalExpr produced unexpected side paths");
+        }
+
+        vector<unique_ptr<Path>> onePath;
+        onePath.push_back(std::move(path));
+        auto stateClone = cloneWithPaths(onePath);
+
+        result.emplace_back(std::move(stateClone), std::move(evalResult.second[0]));
+    }
+
+    return result;
+}
+void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
+{
+    auto partitions = splitStateBySwitchCond(switchStmt->getCond());
+    vector<vector<const Stmt *>> blocks;
+    vector<const Expr *> conds;
+    collectCaseBlocks(dyn_cast<CompoundStmt>(switchStmt->getBody()), blocks, conds);
+
+    vector<unique_ptr<ProgramState>> finalStates;
+    for (auto &pr : partitions)
+    {
+        auto current = std::move(pr.first);
+        auto symValue = std::move(pr.second);
+
+        for (size_t i = 0; i < blocks.size(); ++i)
+        {
+            auto &stmts = blocks[i];
+            auto *caseCond = conds[i];
+
+            if (caseCond == nullptr)
+            {
+                for (auto *s : stmts)
+                    current->step(s);
+
+                finalStates.push_back(std::move(current));
+                break;
+            }
+
+            auto eqState = current->clone();
+            auto condExprEq = make_unique<BinaryOpExpr>(
+                symValue->clone(), BinaryOpExpr::Operator::Equal, symValue->clone());
+            for (auto &p : eqState->paths)
+                p->insertPathCondition(condExprEq->clone());
+
+            for (auto *s : stmts)
+                eqState->step(s);
+
+            auto condExprNe = make_unique<BinaryOpExpr>(
+                symValue->clone(), BinaryOpExpr::Operator::NotEqual, symValue->clone());
+            for (auto &p : current->paths)
+                p->insertPathCondition(condExprNe->clone());
+
+            for (auto *s : stmts)
+                current->step(s);
+
+            if (eqState->isInactive())
+            {
+                finalStates.push_back(std::move(eqState));
+            }
+            else
+            {
+                vector<const ProgramState *> mergeInputs;
+                mergeInputs.push_back(eqState.get());
+                mergeInputs.push_back(current.get());
+                auto merged = eqState->Merge(mergeInputs);
+                current = std::move(merged);
+            }
+        }
+
+        if (blocks.size() == conds.size())
+            finalStates.push_back(std::move(current));
+    }
+
+    vector<const ProgramState *> ptrs;
+    ptrs.reserve(finalStates.size());
+    for (auto &st : finalStates)
+        ptrs.push_back(st.get());
+
+    auto merged = Merge(ptrs);
+    paths = std::move(merged->paths);
+}
+
+bool ProgramState::isInactive() const
+{
+    for (const auto &p : paths)
+    {
+        if (p->isActive())
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 #include "specGenerator/stringTemplate.h"

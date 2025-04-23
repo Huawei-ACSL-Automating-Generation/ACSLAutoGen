@@ -203,11 +203,17 @@ class NullExpr : public SymbolicExpr
 class Variable : public SymbolicExpr
 {
   public:
-    enum class VarType
+    enum class Kind
     {
         Int,
         UInt,
-        Bool,
+        Bool
+    };
+
+    struct VarType
+    {
+        Kind kind;
+        unsigned bitWidth;
     };
 
     Variable(const std::string &name, VarType varType)
@@ -215,7 +221,7 @@ class Variable : public SymbolicExpr
     {}
 
     VarType getVarType() const { return varType_; }
-    void setVarType(VarType varType) { varType_ = varType; }
+    void setVarType(VarType vt) { varType_ = vt; }
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
