@@ -7,6 +7,9 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/Expr.h"
+#include <variant>
+
+using LValueTarget = std::variant<const clang::VarDecl *, Address *>;
 
 class Path
 {
@@ -26,6 +29,10 @@ class Path
     };
 
     void LoopInit(std::unordered_map<Variable *, std::unique_ptr<SymbolicExpr>> &initMap);
+
+    LValueTarget extractLValue(const clang::Expr *lhs);
+
+    Address *extractAddress(const clang::Expr *lhs);
 
     std::unique_ptr<SymbolicExpr> getVarState(const clang::VarDecl *var);
     const std::vector<std::unique_ptr<SymbolicExpr>> &getPathConditions() const;
@@ -125,4 +132,5 @@ class ProgramState
 
     void CollectLoopACSL();
 };
+
 #endif

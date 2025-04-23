@@ -2,6 +2,7 @@
 #include "macros.h"
 #include <clang/AST/Expr.h>
 #include "clang/AST/Stmt.h"
+#include "clang/AST/Decl.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include <queue>
 #include <unordered_map>
@@ -10,10 +11,13 @@
 #include <llvm/ADT/APSInt.h>
 #include <clang/AST/StmtCXX.h>
 #include "context/globalSM.h"
+#include <variant>
 
 using namespace std;
 using namespace clang;
 using namespace llvm;
+
+using LValueTarget = std::variant<const VarDecl *, Address *>;
 
 void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap)
 {
@@ -64,6 +68,41 @@ void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap
             memIt->second = std::move(ptrOrigExpr);
         }
     }
+}
+
+LValueTarget Path::extractLValue(const Expr *lhs)
+{
+    const Expr *lexpr = lhs->IgnoreImpCasts();
+    if (auto *declRef = dyn_cast<DeclRefExpr>(lexpr))
+        return dyn_cast<VarDecl>(declRef->getDecl());
+
+    if (auto *uop = dyn_cast<UnaryOperator>(lexpr))
+    {
+        if (uop->getOpcode() == UO_Deref)
+        {
+            auto addrEval = evalExpr(uop->getSubExpr());
+            if (addrEval.second.empty())
+                UNIMPLEMENT("Failed to evaluate address in deref");
+
+            auto *addr = dynamic_cast<Address *>(addrEval.second[0].get());
+            if (!addr)
+                UNIMPLEMENT("Expected Address in deref, got: " << addrEval.second[0]->dump());
+
+            return addr;
+        }
+    }
+
+    UNIMPLEMENT("Unsupported LHS expression: " << lexpr->getStmtClassName());
+}
+
+Address *Path::extractAddress(const Expr *lhs)
+{
+    auto lv = extractLValue(lhs);
+    if (auto varPtr = std::get_if<const clang::VarDecl *>(&lv))
+        return varAddr[*varPtr].get();
+    if (auto addrPtr = std::get_if<Address *>(&lv))
+        return *addrPtr;
+    UNIMPLEMENT("extractAddress: unsupported lvalue for address");
 }
 
 unique_ptr<SymbolicExpr> Path::getVarState(const VarDecl *var)
@@ -332,11 +371,9 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
         })
         .Case<UnaryOperator>([this](const UnaryOperator *uop) -> EvalResult {
             auto operand = evalExpr(uop->getSubExpr());
+            std::vector<std::unique_ptr<Path>> outPaths;
+            std::vector<std::unique_ptr<SymbolicExpr>> outExprs;
 
-            vector<unique_ptr<Path>> outPaths;
-            vector<unique_ptr<SymbolicExpr>> outExprs;
-
-            // Determine symbolic operator type
             UnaryOpExpr::Operator op;
             switch (uop->getOpcode())
             {
@@ -353,16 +390,51 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             default:
                 UNIMPLEMENT(
                     "Unsupported UnaryOperator: " << uop->getOpcodeStr(uop->getOpcode()).str());
-                vector<unique_ptr<Path>> paths;
-                vector<unique_ptr<SymbolicExpr>> exprs;
-                return EvalResult(std::move(paths), std::move(exprs));
             }
 
             for (size_t i = 0; i < operand.second.size(); ++i)
             {
-                auto opExpr = std::move(operand.second[i]);
+                Path *path = (i == 0 ? this : operand.first[i - 1].get());
+                auto unExpr = std::move(operand.second[i]);
 
-                outExprs.emplace_back(make_unique<UnaryOpExpr>(op, std::move(opExpr)));
+                if (op == UnaryOpExpr::Operator::PreInc || op == UnaryOpExpr::Operator::PostInc ||
+                    op == UnaryOpExpr::Operator::PreDec || op == UnaryOpExpr::Operator::PostDec)
+                {
+                    // ++x / x++ / --x / x--
+                    Address *addr = extractAddress(uop->getSubExpr());
+                    // old value
+                    auto oldVal = path->memoryState[*addr]->clone();
+                    // compute new = old +/- 1
+                    auto one = std::make_unique<LiteralExpr>(1);
+                    auto binOp = (op == UnaryOpExpr::Operator::PreInc ||
+                                     op == UnaryOpExpr::Operator::PostInc)
+                                     ? BinaryOpExpr::Operator::Add
+                                     : BinaryOpExpr::Operator::Subtract;
+                    auto newVal =
+                        std::make_unique<BinaryOpExpr>(oldVal->clone(), binOp, std::move(one));
+                    // write back
+                    path->memoryState[*addr] = newVal->clone();
+                    // return pre vs post
+                    if (op == UnaryOpExpr::Operator::PreInc || op == UnaryOpExpr::Operator::PreDec)
+                        outExprs.emplace_back(std::move(newVal));
+                    else
+                        outExprs.emplace_back(std::move(oldVal));
+                }
+                else if (op == UnaryOpExpr::Operator::Dereference)
+                {
+                    // *x
+                    auto se = evalExpr(uop->getSubExpr());
+                    if (!se.first.empty() || se.second.size() != 1)
+                        UNIMPLEMENT("Dereference produced unexpected side paths");
+                    auto *addr = dynamic_cast<Address *>(se.second[0].get());
+                    if (!addr)
+                        UNIMPLEMENT("Expected Address*, got: " << se.second[0]->dump());
+                    outExprs.emplace_back(path->memoryState[*addr]->clone());
+                }
+                else if (op == UnaryOpExpr::Operator::AddrOf)
+                    TODO();
+                else
+                    outExprs.emplace_back(std::make_unique<UnaryOpExpr>(op, std::move(unExpr)));
 
                 if (i > 0)
                     outPaths.emplace_back(std::move(operand.first[i - 1]));
@@ -831,19 +903,12 @@ void ProgramState::setReturnExpr(const Expr *expr)
 
 void ProgramState::updateVarState(const BinaryOperator *binOp)
 {
-    const VarDecl *var = [&]() -> const VarDecl * {
-        if (auto *declRef = dyn_cast<DeclRefExpr>(binOp->getLHS()))
-            return dyn_cast<VarDecl>(declRef->getDecl());
-        return nullptr;
-    }();
-
-    if (!var || var->getType()->isPointerType() || var->getType()->isArrayType())
-        TODO();
-
     vector<unique_ptr<Path>> updatedPaths;
 
     for (auto &path : paths)
     {
+        auto lvalue = path->extractLValue(binOp->getLHS());
+
         if (!path->isActive())
         {
             updatedPaths.push_back(std::move(path));
@@ -888,7 +953,19 @@ void ProgramState::updateVarState(const BinaryOperator *binOp)
         {
             unique_ptr<Path> newPath = (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
 
-            newPath->insertVarState(var, std::move(eval.second[i]));
+            if (holds_alternative<const VarDecl *>(lvalue))
+            {
+                auto *var = get<const VarDecl *>(lvalue);
+                newPath->insertVarState(var, std::move(eval.second[i]));
+            }
+            else if (std::holds_alternative<Address *>(lvalue))
+            {
+                auto *addr = std::get<Address *>(lvalue);
+                newPath->insertVarState(addr, std::move(eval.second[i]));
+            }
+            else
+                UNREACHABLE();
+
             updatedPaths.push_back(std::move(newPath));
         }
     }
