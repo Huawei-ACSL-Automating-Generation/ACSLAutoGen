@@ -40,8 +40,8 @@ class Path
     Address *allocMemory(const clang::VarDecl *);
     Address *allocMemory();
 
-    void insertVarState(Address *addr, std::unique_ptr<SymbolicExpr> expr);
-    void insertVarState(const clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
+    void updateMemory(Address *addr, std::unique_ptr<SymbolicExpr> expr);
+    void updateVarState(const clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
     void insertPathCondition(std::unique_ptr<SymbolicExpr> cond);
 
     void setReturnExpr(std::unique_ptr<SymbolicExpr> expr) { returnExpr = std::move(expr); };
@@ -96,7 +96,7 @@ class ProgramState
     void updateVarState(const clang::BinaryOperator *binOp);
 
     std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<ProgramState>> splitActiveInactive();
-    std::unique_ptr<ProgramState> Merge(const std::vector<const ProgramState *> &states);
+    std::unique_ptr<ProgramState> merge(const std::vector<const ProgramState *> &states);
     std::unique_ptr<ProgramState> clone() const;
     std::unique_ptr<ProgramState>
     cloneWithPaths(std::vector<std::unique_ptr<Path>> &newPaths) const;
@@ -106,7 +106,7 @@ class ProgramState
 
     std::string dump() const;
     void generateFuncACSL();
-    void ResetState();
+    void resetState();
 
   private:
     std::vector<std::unique_ptr<Path>> paths{};

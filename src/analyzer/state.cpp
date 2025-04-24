@@ -21,6 +21,7 @@ using LValueTarget = std::variant<const VarDecl *, Address *>;
 
 void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap)
 {
+    initMap.clear();
     for (auto &entry : varAddr)
     {
         const VarDecl *varDecl = entry.first;
@@ -133,14 +134,14 @@ Address *Path::allocMemory(const VarDecl *var)
 
 Address *Path::allocMemory() { return new Address(addrCounter++); }
 
-void Path::insertVarState(Address *addr, unique_ptr<SymbolicExpr> expr)
+void Path::updateMemory(Address *addr, unique_ptr<SymbolicExpr> expr)
 {
     if (!expr)
         expr = make_unique<NullExpr>();
     memoryState[*addr] = std::move(expr);
 }
 
-void Path::insertVarState(const VarDecl *var, unique_ptr<SymbolicExpr> expr)
+void Path::updateVarState(const VarDecl *var, unique_ptr<SymbolicExpr> expr)
 {
     unique_ptr<SymbolicExpr> exprPtr;
     if (expr)
@@ -563,7 +564,7 @@ void ProgramState::init()
             unique_ptr<SymbolicExpr> varExpr =
                 make_unique<Variable>(param->getNameAsString(), varType);
 
-            paths[0]->insertVarState(addr, std::move(varExpr));
+            paths[0]->updateMemory(addr, std::move(varExpr));
         }
         else if (paramType->isPointerType())
         {
@@ -575,12 +576,12 @@ void ProgramState::init()
             Address *pointeeAddr = paths[0]->allocMemory();
 
             unique_ptr<SymbolicExpr> pointerValue = pointeeAddr->clone();
-            paths[0]->insertVarState(ptrAddr, std::move(pointerValue));
+            paths[0]->updateMemory(ptrAddr, std::move(pointerValue));
 
             SymbolicExpr::Type varType = deriveVarType(baseType);
             unique_ptr<SymbolicExpr> pointeeVarExpr =
                 make_unique<Variable>("*" + param->getNameAsString(), varType);
-            paths[0]->insertVarState(pointeeAddr, std::move(pointeeVarExpr));
+            paths[0]->updateMemory(pointeeAddr, std::move(pointeeVarExpr));
         }
         else if (paramType->isArrayType())
         {
@@ -674,35 +675,35 @@ void ProgramState::step(const Stmt *stmt)
                      << switchStmt);
             }
 
-            ResetState();
+            resetState();
             this->StmtCtx = prevStmtCtx;
         })
         .Case<ForStmt>([this](const ForStmt *forStmt) {
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx = forStmt;
             stepLoop(forStmt);
-            ResetState();
+            resetState();
             this->StmtCtx = prevStmtCtx;
         })
         .Case<WhileStmt>([this](const WhileStmt *whileStmt) {
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx = whileStmt;
             stepLoop(whileStmt);
-            ResetState();
+            resetState();
             this->StmtCtx = prevStmtCtx;
         })
         .Case<DoStmt>([this](const DoStmt *doStmt) {
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx = doStmt;
             stepLoop(doStmt);
-            ResetState();
+            resetState();
             this->StmtCtx = prevStmtCtx;
         })
         .Case<CXXForRangeStmt>([this](const CXXForRangeStmt *rangeStmt) {
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx = rangeStmt;
             stepLoop(rangeStmt);
-            ResetState();
+            resetState();
             this->StmtCtx = prevStmtCtx;
         })
         .Case<BreakStmt>([this](const BreakStmt *) { setStates(Path::PathState::Break, StmtCtx); })
@@ -785,7 +786,7 @@ void ProgramState::stepBranch(
     splitPair.first->step(branchStmts.back());
 
     statesForMerge.push_back(splitPair.first.get());
-    auto mergedActive = Merge(statesForMerge);
+    auto mergedActive = merge(statesForMerge);
     for (auto &path : splitPair.second->paths)
         mergedActive->paths.push_back(std::move(path));
 
@@ -956,12 +957,12 @@ void ProgramState::updateVarState(const BinaryOperator *binOp)
             if (holds_alternative<const VarDecl *>(lvalue))
             {
                 auto *var = get<const VarDecl *>(lvalue);
-                newPath->insertVarState(var, std::move(eval.second[i]));
+                newPath->updateVarState(var, std::move(eval.second[i]));
             }
             else if (std::holds_alternative<Address *>(lvalue))
             {
                 auto *addr = std::get<Address *>(lvalue);
-                newPath->insertVarState(addr, std::move(eval.second[i]));
+                newPath->updateMemory(addr, std::move(eval.second[i]));
             }
             else
                 UNREACHABLE();
@@ -1004,7 +1005,7 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls)
                 unique_ptr<Path> newPath =
                     (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
 
-                newPath->insertVarState(varDecl, std::move(eval.second[i]));
+                newPath->updateVarState(varDecl, std::move(eval.second[i]));
                 updatedPaths.push_back(std::move(newPath));
             }
         }
@@ -1029,7 +1030,7 @@ pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActi
     return {std::move(activeState), std::move(inactiveState)};
 }
 
-unique_ptr<ProgramState> ProgramState::Merge(const vector<const ProgramState *> &states)
+unique_ptr<ProgramState> ProgramState::merge(const vector<const ProgramState *> &states)
 {
     // TODO: Carefully process loop indexes.
     auto merged = make_unique<ProgramState>(Context->clone());
@@ -1062,7 +1063,7 @@ unique_ptr<ProgramState> ProgramState::cloneWithPaths(vector<unique_ptr<Path>> &
     return clone;
 }
 
-void ProgramState::ResetState()
+void ProgramState::resetState()
 {
     for (auto &path : paths)
     {
@@ -1202,7 +1203,7 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
                 vector<const ProgramState *> mergeInputs;
                 mergeInputs.push_back(eqState.get());
                 mergeInputs.push_back(current.get());
-                auto merged = eqState->Merge(mergeInputs);
+                auto merged = eqState->merge(mergeInputs);
                 current = std::move(merged);
             }
         }
@@ -1215,7 +1216,7 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
     for (auto &st : finalStates)
         ptrs.push_back(st.get());
 
-    auto merged = Merge(ptrs);
+    auto merged = merge(ptrs);
     paths = std::move(merged->paths);
 }
 
