@@ -1116,8 +1116,7 @@ static void collectCaseBlocks(
     if (!currentBlock.empty())
     {
         blocks.emplace_back(std::move(currentBlock));
-        if (currentCond)
-            conds.push_back(currentCond);
+        conds.push_back(currentCond);
     }
 }
 
@@ -1169,9 +1168,9 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
             {
                 for (auto *s : stmts)
                     current->step(s);
-
-                finalStates.push_back(std::move(current));
-                break;
+                if (current->isInactive())
+                    break;
+                continue;
             }
 
             // TODO: pack a static function in Path.
@@ -1208,8 +1207,7 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
             }
         }
 
-        if (blocks.size() == conds.size())
-            finalStates.push_back(std::move(current));
+        finalStates.push_back(std::move(current));
     }
 
     vector<const ProgramState *> ptrs;
