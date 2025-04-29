@@ -27,7 +27,8 @@ string emitFunctionContract(const ProgramState &pre,
         auto *fcp = dynamic_cast<FunctionContractPlugin *>(pl);
         if (fcp)
         {
-            spec += "\t" + fcp->generate(pre, post) + "\n";
+            if (auto s = fcp->generate(pre, post); s)
+                spec += "\t" + *s + "\n";
         }
     }
     spec += ACSL_END.to_string();

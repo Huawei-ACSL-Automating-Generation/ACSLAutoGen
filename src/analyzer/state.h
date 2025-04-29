@@ -56,6 +56,12 @@ class Path
     std::string dump() const;
     friend class ProgramState;
 
+    auto getVarAddr() const -> const auto & { return varAddr; };
+    auto getMemoryState() const -> const auto & { return memoryState; }
+    // auto getReturnExpr() const -> const auto & { return returnExpr; }
+    // auto getPathState() const -> const auto & { return currentState; }
+    // auto getAddrCounter() const -> const auto & { return addrCounter; }
+
   private:
     EvalResult evalExpr(const clang::Expr *expr);
 
@@ -107,6 +113,10 @@ class ProgramState
     std::string dump() const;
     void generateFuncACSL();
     void resetState();
+
+    auto getPaths() const -> const auto & { return paths; };
+    // auto getLoopIndexs() const -> const auto & { return loopIndexes; }
+    // auto getContext() const -> const auto & { return Context; }
 
   private:
     std::vector<std::unique_ptr<Path>> paths{};

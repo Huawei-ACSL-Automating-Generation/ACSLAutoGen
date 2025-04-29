@@ -1,6 +1,7 @@
 // src/specGenerator/specGenerators.h
 
 #include <string>
+#include <optional>
 #include "state.h"
 
 std::string emitFunctionContract(const ProgramState &pre,
@@ -38,21 +39,22 @@ class FunctionContractPlugin : public ACSLPlugin
 {
   public:
     Kind kind() const override { return Kind::FunctionContract; }
-    virtual std::string generate(const ProgramState &pre, const ProgramState &post) = 0;
+    virtual std::optional<std::string>
+    generate(const ProgramState &pre, const ProgramState &post) = 0;
 };
 
 class LoopInvariantPlugin : public ACSLPlugin
 {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
-    virtual std::string generate(/* TODO */) = 0;
+    virtual std::optional<std::string> generate(/* TODO */) = 0;
 };
 
 class InlinePlugin : public ACSLPlugin
 {
   public:
     Kind kind() const override { return Kind::InlineAssertion; }
-    virtual std::string generate(const ProgramState &state /* enough? */) = 0;
+    virtual std::optional<std::string> generate(const ProgramState &state /* enough? */) = 0;
 };
 
 class ACSLPluginRegistry
