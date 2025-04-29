@@ -30,6 +30,10 @@ class SymbolicExpr
     {
         ScalarKind kind;
         unsigned bitWidth;
+        friend bool operator==(const Type &LHS, const Type &RHS)
+        {
+            return LHS.kind == RHS.kind && LHS.bitWidth == RHS.bitWidth;
+        }
     };
 
     SymbolicExpr(ExprType type, Type valueType) : type_(type), valueType_(valueType) {}
@@ -41,10 +45,18 @@ class SymbolicExpr
 
     virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
     virtual std::string dump() const = 0;
+    virtual bool equal(const SymbolicExpr &) const = 0;
 
     friend std::ostream &operator<<(std::ostream &os, const SymbolicExpr &expr)
     {
         return os << expr.dump();
+    }
+
+    friend bool operator==(const SymbolicExpr &LHS, const SymbolicExpr &RHS)
+    {
+        if (LHS.type_ != RHS.type_)
+            return false;
+        return LHS.equal(RHS);
     }
 
   private:
@@ -112,6 +124,7 @@ class LiteralExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
+    virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
     LiteralType type;
@@ -169,6 +182,7 @@ class BinaryOpExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
+    virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
     std::unique_ptr<SymbolicExpr> left_;
@@ -203,6 +217,7 @@ class UnaryOpExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
+    virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
     Operator op_;
@@ -223,6 +238,7 @@ class ArrayExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
+    virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
     std::unique_ptr<SymbolicExpr> array_;
@@ -237,6 +253,7 @@ class NullExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
+    virtual bool equal(const SymbolicExpr &expr) const override;
 };
 
 class Variable : public SymbolicExpr
@@ -255,6 +272,7 @@ class Variable : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
+    virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
     std::string name_;
@@ -283,6 +301,7 @@ class Address : public SymbolicExpr
     }
     unsigned int getId() const { return id_; }
     std::string dump() const override;
+    virtual bool equal(const SymbolicExpr &expr) const override;
     bool getOffset() const { return offset_; }
 
   private:

@@ -2,6 +2,7 @@
 #include "macros.h"
 #include <memory>
 #include <sstream>
+#include <cstring>
 
 using namespace std;
 std::unique_ptr<SymbolicExpr> LiteralExpr::clone() const
@@ -142,6 +143,69 @@ std::string Address::dump() const
     std::ostringstream oss;
     oss << "Address(" << id_ << ")" << (getOffset() ? " (Offset)" : "");
     return oss.str();
+}
+
+bool LiteralExpr::equal(const SymbolicExpr &expr) const
+{
+    const auto liter = dynamic_cast<const LiteralExpr *>(&expr);
+    if (!liter)
+        return false;
+
+    return type == liter->type && (std::memcmp(&data, &(liter->data), sizeof(Data)) == 0);
+}
+
+bool BinaryOpExpr::equal(const SymbolicExpr &expr) const
+{
+    const auto binary = dynamic_cast<const BinaryOpExpr *>(&expr);
+    if (!binary)
+        return false;
+
+    return *left_ == *(binary->left_) && op_ == binary->op_ && *right_ == *(binary->right_);
+}
+
+bool UnaryOpExpr::equal(const SymbolicExpr &expr) const
+{
+    const auto unary = dynamic_cast<const UnaryOpExpr *>(&expr);
+    if (!unary)
+        return false;
+
+    return op_ == unary->op_ && *expr_ == *(unary->expr_);
+}
+
+bool ArrayExpr::equal(const SymbolicExpr &expr) const
+{
+    const auto arr = dynamic_cast<const ArrayExpr *>(&expr);
+    if (!arr)
+        return false;
+
+    return *array_ == *(arr->array_) && *index_ == *(arr->index_);
+}
+
+bool NullExpr::equal(const SymbolicExpr &expr) const
+{
+    const auto null = dynamic_cast<const NullExpr *>(&expr);
+    if (!null)
+        return false;
+
+    return true;
+}
+
+bool Variable::equal(const SymbolicExpr &expr) const
+{
+    const auto var = dynamic_cast<const Variable *>(&expr);
+    if (!var)
+        return false;
+
+    return name_ == var->name_ && varType_ == var->varType_;
+}
+
+bool Address::equal(const SymbolicExpr &expr) const
+{
+    const auto addr = dynamic_cast<const Address *>(&expr);
+    if (!addr)
+        return false;
+
+    return id_ == addr->id_ && offset_ == addr->offset_;
 }
 
 namespace std
