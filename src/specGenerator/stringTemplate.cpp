@@ -25,7 +25,7 @@ void StringTemplate::initialize()
     Placeholder curPh; // Ph = placeholder
     bool afterDollor = false;
     bool inBraces = false;
-    for (int i = 0; i < rawText_.size(); ++i)
+    for (size_t i = 0; i < rawText_.size(); ++i)
     {
         char ch = rawText_[i];
 
@@ -107,7 +107,7 @@ void StringTemplate::withPrefix(const string &prefix)
         next_->withPrefix(prefix);
 }
 
-string StringTemplate::operator()(const NameMap &phMap) const
+string StringTemplate::to_string(const NameMap &phMap) const
 {
     string result;
     size_t curPos = 0;
@@ -124,39 +124,14 @@ string StringTemplate::operator()(const NameMap &phMap) const
         result += rawText_.substr(curPos);
 
     if (next_)
-        result += (*next_)(phMap);
+        result += next_->to_string(phMap);
     return result;
 }
 
-string StringTemplate::operator()() const
+string StringTemplate::to_string() const
 {
     NameMap emptyMap;
-    return (*this)(emptyMap);
+    return this->to_string(emptyMap);
 }
 
-void StringTemplate::operator()(ostream &os, const NameMap &phMap) const
-{
-    size_t curPos = 0;
-    for (auto &ph : placeholders_)
-    {
-        os << rawText_.substr(curPos, ph.pos - curPos);
-        if (auto kv = phMap.find(ph.name); kv != phMap.end())
-            os << kv->second;
-        else
-            os << ph.name;
-        curPos = ph.pos + ph.len;
-    }
-    if (curPos < rawText_.length())
-        os << rawText_.substr(curPos);
-
-    if (next_)
-        (*next_)(os, phMap);
-}
-
-void StringTemplate::operator()(ostream &os) const
-{
-    NameMap emptyMap;
-    return (*this)(os, emptyMap);
-}
-
-StringTemplate operator"" _st(const char *str, size_t) { return std::move(StringTemplate(str)); }
+StringTemplate operator"" _st(const char *str, size_t) { return StringTemplate(str); }

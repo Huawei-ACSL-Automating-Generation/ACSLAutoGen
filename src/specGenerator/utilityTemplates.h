@@ -7,7 +7,7 @@
 
 // TODO: some scaffolds
 
-const StringTemplate ACSL_HEAD = "/*@ ";
+const StringTemplate ACSL_HEAD = "/*@\n";
 const StringTemplate ACSL_END = "*/";
 
 #endif

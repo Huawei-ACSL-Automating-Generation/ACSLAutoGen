@@ -1,6 +1,7 @@
 add_executable(ACSLG main.cpp)
 
 target_include_directories(ACSLG SYSTEM PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
   ${LLVM_INCLUDE_DIRS}
   ${Clang_INCLUDE_DIRS}
 )

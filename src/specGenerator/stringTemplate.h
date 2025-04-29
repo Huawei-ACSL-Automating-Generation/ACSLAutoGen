@@ -91,24 +91,12 @@ class StringTemplate
     /// e.g. "Hello, ${name}!" will be "Hello, name!".
     /// @param nameMap Map from placeholders' name to string you want.
     /// @return String with placeholders replaced.
-    string operator()(const NameMap &nameMap) const;
+    string to_string(const NameMap &nameMap) const;
 
     /// @brief Output the rawText_ with placeholders replaced by its name. Override for a simpler
     /// interface.
     /// @return String with placeholders replaced by empty string.
-    string operator()() const;
-
-    /// @brief Output the rawText_ with placeholders replaced, "Hello, ${name}!" will be "Hello,
-    /// Alice!" with NameMap containing {"name": "Alice"}. Unmapped placeholder will hold its name.
-    /// e.g. "Hello, ${name}!" will be "Hello, name!". Stream version.
-    /// @param os
-    /// @param nameMap Map from placeholders' name to string you want.
-    void operator()(ostream &os, const NameMap &nameMap) const;
-
-    /// @brief @brief Output the rawText_ with placeholders replaced by its name. Override for a
-    /// simpler interface.
-    /// @param os
-    void operator()(ostream &os) const;
+    string to_string() const;
 
   private:
     /// @brief Operator +.

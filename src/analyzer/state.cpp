@@ -1238,7 +1238,7 @@ bool ProgramState::isInactive() const
 void ProgramState::CollectLoopACSL()
 {
     NameMap map = {{"index", "i"}, {"max", "res"}, {"array", "p"}, {"i", "i"}, {"n", "n"}};
-    INFO(FIND_MAX_LOOP(map));
+    INFO(FIND_MAX_LOOP.to_string(map));
 }
 
 void ProgramState::generateFuncACSL() {}
