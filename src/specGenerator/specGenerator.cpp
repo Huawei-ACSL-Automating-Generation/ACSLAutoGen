@@ -3,21 +3,39 @@
 #include "specGenerator.h"
 #include "utilityTemplates.h"
 #include "macros.h"
+#include "state.h"
 
 using namespace std;
 
 string emitFunctionContract(const ProgramState &pre,
     const ProgramState &post,
     const string &groupName,
-    const vector<string> &extraPluginIds)
+    optional<reference_wrapper<const vector<string>>> extraPluginIds)
 {
     const ACSLPluginGroup *group = ACSLPluginGroupRegistry::instance().getGroup(groupName);
     if (!group)
-        ERROR("Unknown ACSL group: " + groupName);
+    {
+        auto names = ACSLPluginGroupRegistry::instance().allGroupNames();
+        string allName;
+        allName += "[";
+        for (auto &name : names)
+        {
+            allName += name;
+            allName += ", ";
+        }
+        if (allName.size() > 1)
+        {
+            // No flag!
+            allName.pop_back();
+            allName.pop_back();
+        }
+        allName += "]";
+        ERROR("Unknown ACSL group: " + groupName + ". All registered groups: " + allName);
+    }
 
     vector<string> ids = group->pluginIds;
-    ids.insert(ids.end(), extraPluginIds.begin(), extraPluginIds.end());
-
+    if (extraPluginIds)
+        ids.insert(ids.end(), (*extraPluginIds).get().begin(), (*extraPluginIds).get().end());
     string spec = ACSL_HEAD.to_string();
     for (auto &pid : ids)
     {

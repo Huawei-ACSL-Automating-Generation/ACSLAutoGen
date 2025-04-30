@@ -3,6 +3,7 @@
 #include "specGenerator.h"
 #include "stringTemplate.h"
 #include "macros.h"
+#include "state.h"
 
 using namespace std;
 
@@ -26,7 +27,7 @@ class AssignPlugin : public FunctionContractPlugin
                 {
                     auto preValue = path->getVarState(var), postValue = postPath->getVarState(var);
                     uint depth = 0; // represent how many *(deref) before var;
-                    while (preValue == postValue &&
+                    while (*preValue == *postValue &&
                            preValue->getType() == SymbolicExpr::ExprType::SymbolAddress)
                     {
                         ++depth;
@@ -41,12 +42,12 @@ class AssignPlugin : public FunctionContractPlugin
                         postValue->getType() == SymbolicExpr::ExprType::ArraySubscript)
                         UNIMPLEMENT("ArraySubscript");
 
-                    if (preValue != postValue)
+                    if (*preValue != *postValue)
                         isChangedFlag[var] = depth;
                 }
             }
 
-            string spec = R"(\assigns )";
+            string spec = "assigns ";
             bool haveAssign = false;
             for (auto [var, depth] : isChangedFlag)
             {
@@ -60,11 +61,10 @@ class AssignPlugin : public FunctionContractPlugin
                     spec += "*";
                 spec += var->getName();
             }
+            if (!haveAssign)
+                spec += R"(\nothing)";
             spec += ";";
-            if (haveAssign)
-                return spec;
-            else
-                return nullptr;
+            return spec;
         }
         else
         {

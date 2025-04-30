@@ -1,13 +1,21 @@
 // src/specGenerator/specGenerators.h
 
+#ifndef SPEC_GENERATOR_H
+#define SPEC_GENERATOR_H
+
 #include <string>
 #include <optional>
-#include "state.h"
+#include <vector>
+#include <memory>
+#include <unordered_map>
+
+class ProgramState;
 
 std::string emitFunctionContract(const ProgramState &pre,
     const ProgramState &post,
     const std::string &groupName,
-    const std::vector<std::string> &extraPluginIds);
+    std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
+        std::nullopt);
 
 std::string emitLoopInvariantContract(/* TODO */
     const std::string &groupName,
@@ -96,6 +104,7 @@ class ACSLPluginRegistry
             {                                                                                      \
                 ACSLPluginRegistry::instance().registerPlugin(                                     \
                     std::make_unique<PluginType>(PluginID));                                       \
+                INFO(#PluginType "is registered with id: " #PluginID);                             \
             }                                                                                      \
         } _##PluginType##Reg;                                                                      \
     }
@@ -146,6 +155,9 @@ class ACSLPluginGroupRegistry
                 G.name = #GroupName;                                                               \
                 G.pluginIds = {__VA_ARGS__};                                                       \
                 ACSLPluginGroupRegistry::instance().registerGroup(G);                              \
+                INFO(#GroupName " is registered.");                                                \
             }                                                                                      \
         } _##GroupName##Reg;                                                                       \
     }
+
+#endif

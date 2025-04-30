@@ -59,6 +59,11 @@ class SymbolicExpr
         return LHS.equal(RHS);
     }
 
+    friend bool operator!=(const SymbolicExpr &LHS, const SymbolicExpr &RHS)
+    {
+        return !(LHS == RHS);
+    }
+
   private:
     ExprType type_;
     Type valueType_;

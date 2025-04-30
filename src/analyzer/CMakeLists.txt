@@ -7,6 +7,8 @@ target_include_directories(AnalyzerLib PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(AnalyzerLib PRIVATE
     ACSLG_compiler_flags
     UtilsLib
+    SpecGeneratorLib
+    ContextLib
     clangAST
     clangTooling
     clangFrontend

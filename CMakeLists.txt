@@ -32,6 +32,7 @@ endif()
 add_library(ACSLG_system_includes INTERFACE)
 target_include_directories(ACSLG_system_includes SYSTEM INTERFACE
   ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 add_library(ACSLG_compiler_flags INTERFACE)

@@ -4,6 +4,7 @@
 #include "clang/AST/Stmt.h"
 #include "state.h"
 #include "context/globalSM.h"
+#include "specGenerator/specGenerator.h"
 
 using namespace clang;
 using namespace llvm;
@@ -43,11 +44,15 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
             UNIMPLEMENT("Function body of " + FD->getNameAsString() + " is not a CompoundStmt");
 
         state->init();
+        auto preState = state->clone();
         const CompoundStmt *CS = cast<CompoundStmt>(Body);
         for (const Stmt *stmt : CS->children())
             state->step(stmt);
         INFO(state->dump());
-        state->generateFuncACSL();
+        // state->generateFuncACSL();
+        auto spec = emitFunctionContract(*preState, *state, "DefaultFunctionContract");
+        INFO(spec);
+        // TODO
     }
     else
     {

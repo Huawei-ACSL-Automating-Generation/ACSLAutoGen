@@ -10,6 +10,14 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  foreach(_tgt IN ITEMS gtest gmock gtest_main)
+    target_compile_options(${_tgt} PRIVATE
+      -Wno-deprecated-declarations
+    )
+  endforeach()
+endif()
+
 include(GoogleTest)
 
 # Use 'test_all' instead of 'TestAll' for better distinction.

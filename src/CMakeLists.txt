@@ -1,11 +1,5 @@
 add_executable(ACSLG main.cpp)
 
-target_include_directories(ACSLG SYSTEM PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${LLVM_INCLUDE_DIRS}
-  ${Clang_INCLUDE_DIRS}
-)
-
 target_link_libraries(ACSLG PRIVATE ACSLG_compiler_flags)
 
 llvm_map_components_to_libnames(llvm_libs support core irreader)
