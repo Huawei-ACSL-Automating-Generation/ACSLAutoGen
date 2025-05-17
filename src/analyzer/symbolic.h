@@ -300,10 +300,6 @@ class Address : public SymbolicExpr
     {}
 
     std::unique_ptr<SymbolicExpr> clone() const override;
-    bool operator==(const Address &other) const
-    {
-        return id_ == other.id_ && offset_ == other.offset_;
-    }
     unsigned int getId() const { return id_; }
     std::string dump() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;

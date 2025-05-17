@@ -1,3 +1,6 @@
+#ifndef ACSLAUTOGEN_MACROS_H
+#define ACSLAUTOGEN_MACROS_H
+
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
@@ -135,3 +138,5 @@
 #endif
 
 inline void _noWarn() { PROCESS("unreachable"); }
+
+#endif

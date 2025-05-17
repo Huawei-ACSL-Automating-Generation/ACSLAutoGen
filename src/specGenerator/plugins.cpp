@@ -82,10 +82,10 @@ class ResultPlugin : public FunctionContractPlugin
   public:
     ResultPlugin(const string &ID) : id_(ID) {}
     string id() const override { return id_; }
-    optional<string> generate(const ProgramState &, const ProgramState &) override
+    optional<string> generate(const ProgramState &, const ProgramState &post) override
     {
         // TODO
-        return "//@ ensures ...;\n";
+        return nullopt;
     }
 
   private:

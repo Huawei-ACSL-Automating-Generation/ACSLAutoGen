@@ -4,3 +4,4 @@ build/
 *.list
 *.sh
 .cache/
+**/_*/
