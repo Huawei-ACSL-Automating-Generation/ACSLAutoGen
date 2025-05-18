@@ -38,10 +38,6 @@ class AssignPlugin : public FunctionContractPlugin
                                         .at(*static_cast<Address *>(postValue.get()))
                                         ->clone();
                     }
-                    if (preValue->getType() == SymbolicExpr::ExprType::ArraySubscript ||
-                        postValue->getType() == SymbolicExpr::ExprType::ArraySubscript)
-                        UNIMPLEMENT("ArraySubscript");
-
                     if (*preValue != *postValue)
                         isChangedFlag[var] = depth;
                 }
