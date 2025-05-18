@@ -31,11 +31,6 @@ unique_ptr<SymbolicExpr> UnaryOpExpr::clone() const
     return make_unique<UnaryOpExpr>(op_, expr_->clone());
 }
 
-unique_ptr<SymbolicExpr> ArrayExpr::clone() const
-{
-    return make_unique<ArrayExpr>(array_->clone(), index_->clone());
-}
-
 unique_ptr<SymbolicExpr> NullExpr::clone() const { return make_unique<NullExpr>(); }
 
 unique_ptr<SymbolicExpr> Variable::clone() const { return make_unique<Variable>(name_, varType_); }
@@ -111,13 +106,6 @@ std::string UnaryOpExpr::dump() const
     return oss.str();
 }
 
-std::string ArrayExpr::dump() const
-{
-    std::ostringstream oss;
-    oss << array_->dump() << "[" << index_->dump() << "]";
-    return oss.str();
-}
-
 std::string NullExpr::dump() const { return "null"; }
 
 std::string Variable::dump() const
@@ -170,15 +158,6 @@ bool UnaryOpExpr::equal(const SymbolicExpr &expr) const
         return false;
 
     return op_ == unary->op_ && *expr_ == *(unary->expr_);
-}
-
-bool ArrayExpr::equal(const SymbolicExpr &expr) const
-{
-    const auto arr = dynamic_cast<const ArrayExpr *>(&expr);
-    if (!arr)
-        return false;
-
-    return *array_ == *(arr->array_) && *index_ == *(arr->index_);
 }
 
 bool NullExpr::equal(const SymbolicExpr &expr) const

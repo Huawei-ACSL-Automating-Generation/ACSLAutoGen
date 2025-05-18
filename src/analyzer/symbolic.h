@@ -15,7 +15,6 @@ class SymbolicExpr
         SymbolAddress,
         BinaryOp,
         UnaryOp,
-        ArraySubscript,
         SNULL
     };
 
@@ -227,27 +226,6 @@ class UnaryOpExpr : public SymbolicExpr
   private:
     Operator op_;
     std::unique_ptr<SymbolicExpr> expr_;
-};
-
-class ArrayExpr : public SymbolicExpr
-{
-  public:
-    ArrayExpr(std::unique_ptr<SymbolicExpr> array, std::unique_ptr<SymbolicExpr> index)
-        : SymbolicExpr(ExprType::ArraySubscript, array->getExprType()), array_(std::move(array)),
-          index_(std::move(index))
-    {}
-
-    ArrayExpr(SymbolicExpr *array, SymbolicExpr *index)
-        : SymbolicExpr(ExprType::ArraySubscript, array->getExprType()), array_(array), index_(index)
-    {}
-
-    std::unique_ptr<SymbolicExpr> clone() const override;
-    std::string dump() const override;
-    virtual bool equal(const SymbolicExpr &expr) const override;
-
-  private:
-    std::unique_ptr<SymbolicExpr> array_;
-    std::unique_ptr<SymbolicExpr> index_;
 };
 
 class NullExpr : public SymbolicExpr

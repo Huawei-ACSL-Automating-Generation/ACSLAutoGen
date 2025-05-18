@@ -312,10 +312,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                 for (size_t j = 0; j < idx.second.size(); ++j)
                 {
                     auto idxExpr = std::move(idx.second[j]);
-
-                    outExprs.emplace_back(
-                        make_unique<ArrayExpr>(baseExpr->clone(), std::move(idxExpr)));
-
+                    TODO();
                     if (i == 0 && j == 0)
                         continue;
 
