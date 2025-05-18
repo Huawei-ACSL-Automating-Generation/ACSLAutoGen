@@ -6,8 +6,10 @@
 #include <memory>
 #include <mutex>
 #include <tuple>
+#include "macros.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/Rewrite/Core/Rewriter.h"
 
 class GlobalSM
 {
@@ -18,7 +20,8 @@ class GlobalSM
         return instance;
     }
 
-    static clang::SourceManager &getSM() { return *getInstance().SM; }
+    static clang::SourceManager &getSM() { return *getInstance().SM_; }
+    static clang::Rewriter &getRewriter() { return getInstance().rewriter_; }
 
     // Tuple{name(empty string for unnamed Decl), sourceText, filename, lineNumber, columnNumber}
     static std::optional<
@@ -32,7 +35,8 @@ class GlobalSM
     void initialize(clang::ASTContext &context)
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        SM = &context.getSourceManager();
+        SM_ = &context.getSourceManager();
+        rewriter_.setSourceMgr(*SM_, context.getLangOpts());
     }
 
     GlobalSM(const GlobalSM &)            = delete;
@@ -42,7 +46,8 @@ class GlobalSM
     GlobalSM()  = default;
     ~GlobalSM() = default;
 
-    clang::SourceManager *SM;
+    clang::SourceManager *SM_ = nullptr;
+    clang::Rewriter rewriter_;
     mutable std::mutex mutex_;
 };
 

@@ -35,6 +35,18 @@ class TUASTConsumer : public ASTConsumer
             ACSLContext acslContext(Context);
             ACSLAnalyzer analyzer(acslContext);
             analyzer.analyzeFunctions();
+            auto &SM = GlobalSM::getSM();
+            auto &rewriter = GlobalSM::getRewriter();
+            std::error_code EC;
+
+            // TODO: replace "with_acsl.c" with user-defined relative path.
+            llvm::raw_fd_ostream Out("with_acsl.c", EC, llvm::sys::fs::OF_None);
+            if (EC)
+                ERROR("Error opening file 'with_acsl.c': " + EC.message());
+
+            rewriter.getEditBuffer(SM.getMainFileID()).write(Out);
+            if (Out.has_error())
+                ERROR("Error writing to 'with_acsl.c': " + Out.error().message());
         }
     }
 };

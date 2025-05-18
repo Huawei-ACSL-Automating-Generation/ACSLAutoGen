@@ -5,6 +5,7 @@
 #include "state.h"
 #include "Context/globalSM.h"
 #include "SpecGenerator/specGenerator.h"
+#include "clang/Rewrite/Core/Rewriter.h"
 
 using namespace clang;
 using namespace llvm;
@@ -53,7 +54,10 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
         // state->generateFuncACSL();
         auto spec = emitFunctionContract(*preState, *state, "DefaultFunctionContract");
         INFO(spec);
-        // TODO
+
+        auto beginLoc = FD->getSourceRange().getBegin();
+        GlobalSM::getRewriter().InsertText(
+            beginLoc, spec, /*after*/ false, /*indentNewLines*/ true);
     }
     else
     {
