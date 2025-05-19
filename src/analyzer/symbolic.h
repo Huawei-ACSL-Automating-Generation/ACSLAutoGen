@@ -41,10 +41,11 @@ class SymbolicExpr
     ExprType getType() const { return type_; }
     Type getExprType() const { return valueType_; }
     void setExprType(Type newType) { valueType_ = newType; }
-
+    static std::unique_ptr<SymbolicExpr> makeNull();
     virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
     virtual std::string dump() const = 0;
     virtual bool equal(const SymbolicExpr &) const = 0;
+    virtual std::size_t hash() const = 0;
 
     friend std::ostream &operator<<(std::ostream &os, const SymbolicExpr &expr)
     {
@@ -67,6 +68,8 @@ class SymbolicExpr
     ExprType type_;
     Type valueType_;
 };
+
+std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType t);
 
 class LiteralExpr : public SymbolicExpr
 {
@@ -128,6 +131,7 @@ class LiteralExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
+    std::size_t hash() const;
     virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
@@ -186,6 +190,7 @@ class BinaryOpExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
+    std::size_t hash() const;
     virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
@@ -221,6 +226,7 @@ class UnaryOpExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
+    std::size_t hash() const;
     virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
@@ -236,6 +242,7 @@ class NullExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
+    std::size_t hash() const;
     virtual bool equal(const SymbolicExpr &expr) const override;
 };
 
@@ -250,11 +257,12 @@ class Variable : public SymbolicExpr
     void setVarType(Type vt)
     {
         varType_ = vt;
-        setExprType(vt); // 同步更新基类中的 valueType
+        setExprType(vt);
     }
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
+    std::size_t hash() const;
     virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
@@ -265,36 +273,58 @@ class Variable : public SymbolicExpr
 class Address : public SymbolicExpr
 {
   public:
+    Address(const Address &other)
+        : SymbolicExpr(other), id_(other.id_),
+          offset_(other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull())
+    {}
+
+    Address &operator=(const Address &other)
+    {
+        if (this != &other)
+        {
+            SymbolicExpr::operator=(other);
+            id_ = other.id_;
+            offset_ = other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull();
+        }
+        return *this;
+    }
     Address()
-        : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(0), offset_(false)
+        : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(0),
+          offset_(SymbolicExpr::makeNull())
     {}
 
     Address(unsigned int id)
-        : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id), offset_(false)
+        : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id),
+          offset_(SymbolicExpr::makeNull())
     {}
 
-    Address(unsigned int id, bool offset)
-        : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id), offset_(offset)
+    Address(unsigned int id, std::unique_ptr<SymbolicExpr> offset)
+        : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id),
+          offset_(offset ? std::move(offset) : SymbolicExpr::makeNull())
     {}
+
+    bool operator==(const Address &o) const noexcept
+    {
+        return id_ == o.id_ &&
+               ((offset_ && o.offset_ && offset_->equal(*o.offset_)) || (!offset_ && !o.offset_));
+    }
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     unsigned int getId() const { return id_; }
     std::string dump() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
-    bool getOffset() const { return offset_; }
+    SymbolicExpr *getOffset() const { return offset_.get(); }
+    std::size_t hash() const;
+    void setOffset(std::unique_ptr<SymbolicExpr> offset) { offset_ = std::move(offset); }
 
   private:
     unsigned int id_;
-    bool offset_ = false;
+    std::unique_ptr<SymbolicExpr> offset_;
 };
 
 struct AddressHash
 {
-    std::size_t operator()(const Address &addr) const noexcept
-    {
-        std::size_t h1 = std::hash<unsigned int>{}(addr.getId());
-        std::size_t h2 = std::hash<bool>{}(addr.getOffset());
-        return h1 ^ (h2 << 1);
-    }
+    std::size_t operator()(const Address &addr) const noexcept { return addr.hash(); }
 };
+
 #endif // SYMBOLIC_H

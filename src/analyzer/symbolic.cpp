@@ -5,6 +5,8 @@
 #include <cstring>
 
 using namespace std;
+std::unique_ptr<SymbolicExpr> SymbolicExpr::makeNull() { return std::make_unique<NullExpr>(); }
+
 std::unique_ptr<SymbolicExpr> LiteralExpr::clone() const
 {
     switch (getLiteralType())
@@ -35,7 +37,10 @@ unique_ptr<SymbolicExpr> NullExpr::clone() const { return make_unique<NullExpr>(
 
 unique_ptr<SymbolicExpr> Variable::clone() const { return make_unique<Variable>(name_, varType_); }
 
-unique_ptr<SymbolicExpr> Address::clone() const { return make_unique<Address>(id_); }
+std::unique_ptr<SymbolicExpr> Address::clone() const
+{
+    return std::make_unique<Address>(id_, offset_->clone());
+}
 
 std::string LiteralExpr::dump() const
 {
@@ -53,6 +58,59 @@ std::string LiteralExpr::dump() const
 
     return oss.str();
 }
+
+std::size_t LiteralExpr::hash() const
+{
+    std::size_t seed = static_cast<std::size_t>(getType());
+    seed ^= static_cast<std::size_t>(type) + 0x9e3779b9;
+
+    switch (type)
+    {
+    case LiteralType::Boolean: return seed ^ std::hash<bool>{}(data.boolValue);
+    case LiteralType::Int: return seed ^ std::hash<int>{}(data.intValue);
+    case LiteralType::UnsignedInt: return seed ^ std::hash<unsigned int>{}(data.uintValue);
+    case LiteralType::Short: return seed ^ std::hash<short>{}(data.shortValue);
+    case LiteralType::UnsignedShort: return seed ^ std::hash<unsigned short>{}(data.ushortValue);
+    case LiteralType::Int64: return seed ^ std::hash<int64_t>{}(data.int64Value);
+    case LiteralType::UInt64: return seed ^ std::hash<uint64_t>{}(data.uint64Value);
+    }
+    return seed;
+}
+
+std::size_t Variable::hash() const
+{
+    std::size_t seed = static_cast<std::size_t>(getType());
+    seed ^= std::hash<std::string>{}(name_);
+    seed ^= static_cast<std::size_t>(varType_.kind) + varType_.bitWidth;
+    return seed;
+}
+
+std::size_t UnaryOpExpr::hash() const
+{
+    std::size_t seed = static_cast<std::size_t>(getType());
+    seed ^= static_cast<std::size_t>(op_);
+    seed ^= expr_->hash();
+    return seed;
+}
+
+std::size_t BinaryOpExpr::hash() const
+{
+    std::size_t seed = static_cast<std::size_t>(getType());
+    seed ^= left_->hash();
+    seed ^= static_cast<std::size_t>(op_) + 0x9e3779b9;
+    seed ^= right_->hash();
+    return seed;
+}
+
+std::size_t Address::hash() const
+{
+    std::size_t seed = static_cast<std::size_t>(getType());
+    seed ^= std::hash<unsigned int>{}(id_);
+    seed ^= offset_ ? offset_->hash() : 0;
+    return seed;
+}
+
+std::size_t NullExpr::hash() const { return static_cast<std::size_t>(getType()); }
 
 std::string BinaryOpExpr::dump() const
 {
@@ -129,7 +187,7 @@ std::string Variable::dump() const
 std::string Address::dump() const
 {
     std::ostringstream oss;
-    oss << "Address(" << id_ << ")" << (getOffset() ? " (Offset)" : "");
+    oss << "Address(" << id_ << ")" << getOffset()->dump();
     return oss.str();
 }
 
@@ -197,3 +255,17 @@ namespace std
         }
     };
 } // namespace std
+
+std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType t)
+{
+    switch (t)
+    {
+    case SymbolicExpr::ExprType::Literal: os << "Literal"; break;
+    case SymbolicExpr::ExprType::Variable: os << "Variable"; break;
+    case SymbolicExpr::ExprType::SymbolAddress: os << "SymbolAddress"; break;
+    case SymbolicExpr::ExprType::BinaryOp: os << "BinaryOp"; break;
+    case SymbolicExpr::ExprType::UnaryOp: os << "UnaryOp"; break;
+    case SymbolicExpr::ExprType::SNULL: os << "SNULL"; break;
+    }
+    return os;
+}

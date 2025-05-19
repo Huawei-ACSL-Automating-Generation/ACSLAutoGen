@@ -297,30 +297,9 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             UNIMPLEMENT("Unsupported Decl type: " << declRef->getDecl()->getDeclKindName());
         })
         .Case<ArraySubscriptExpr>([this](const ArraySubscriptExpr *arrSub) -> EvalResult {
-            EvalResult base = evalExpr(arrSub->getBase());
+            Address *addr = extractAddress(arrSub->getBase());
 
-            vector<unique_ptr<Path>> outPaths;
-            vector<unique_ptr<SymbolicExpr>> outExprs;
-
-            for (size_t i = 0; i < base.second.size(); ++i)
-            {
-                Path *path = (i == 0) ? this : base.first[i - 1].get();
-                auto baseExpr = std::move(base.second[i]);
-
-                EvalResult idx = path->evalExpr(arrSub->getIdx());
-
-                for (size_t j = 0; j < idx.second.size(); ++j)
-                {
-                    auto idxExpr = std::move(idx.second[j]);
-                    TODO();
-                    if (i == 0 && j == 0)
-                        continue;
-
-                    outPaths.emplace_back(
-                        j == 0 ? std::move(base.first[i - 1]) : std::move(idx.first[j - 1]));
-                }
-            }
-            return {std::move(outPaths), std::move(outExprs)};
+            TODO();
         })
         .Case<CallExpr>([](const CallExpr *) -> EvalResult { TODO(); })
         .Case<ConditionalOperator>([this](const ConditionalOperator *condOp) -> EvalResult {
