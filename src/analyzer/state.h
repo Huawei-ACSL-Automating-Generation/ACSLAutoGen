@@ -9,8 +9,7 @@
 #include "clang/AST/Expr.h"
 #include <variant>
 
-using LValueTarget = std::variant<const clang::VarDecl *, Address *>;
-
+using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>>;
 class Path
 {
   public:
@@ -70,7 +69,8 @@ class Path
 
     // Map: symbolic address -> value stored at that address, separating variable–address mapping
     // from address–value mapping.
-    std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash> memoryState;
+    std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>
+        memoryState;
 
     // SET: List of symbolic expressions representing the path condition.
     std::vector<std::unique_ptr<SymbolicExpr>> pathConditions;

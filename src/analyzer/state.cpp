@@ -17,7 +17,7 @@ using namespace std;
 using namespace clang;
 using namespace llvm;
 
-using LValueTarget = std::variant<const VarDecl *, Address *>;
+using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>>;
 
 void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap)
 {
@@ -85,11 +85,11 @@ LValueTarget Path::extractLValue(const Expr *lhs)
             if (addrEval.second.empty())
                 UNIMPLEMENT("Failed to evaluate address in deref");
 
-            auto *addr = dynamic_cast<Address *>(addrEval.second[0].get());
+            auto addr = addrEval.second[0]->clone();
             if (!addr)
                 UNIMPLEMENT("Expected Address in deref, got: " << addrEval.second[0]->dump());
-
-            return addr;
+            auto *raw = static_cast<Address *>(addr.release());
+            return std::unique_ptr<Address>(raw);
         }
     }
 
@@ -101,8 +101,8 @@ Address *Path::extractAddress(const Expr *lhs)
     auto lv = extractLValue(lhs);
     if (auto varPtr = std::get_if<const clang::VarDecl *>(&lv))
         return varAddr[*varPtr].get();
-    if (auto addrPtr = std::get_if<Address *>(&lv))
-        return *addrPtr;
+    if (auto addrPtr = std::get_if<std::unique_ptr<Address>>(&lv))
+        return (*addrPtr).get();
     UNIMPLEMENT("extractAddress: unsupported lvalue for address");
 }
 
@@ -129,6 +129,8 @@ Address *Path::allocMemory(const VarDecl *var)
     auto newAddr = make_unique<Address>(addrCounter++);
     Address *rawPtr = newAddr.get();
     varAddr.emplace(canonicalVar, std::move(newAddr));
+
+    memoryState.emplace(*rawPtr, make_unique<NullExpr>());
     return rawPtr;
 }
 
@@ -379,6 +381,8 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                 {
                     // ++x / x++ / --x / x--
                     Address *addr = extractAddress(uop->getSubExpr());
+                    if (!addr)
+                        ERROR("extractAddress returned null");
                     // old value
                     auto oldVal = path->memoryState[*addr]->clone();
                     // compute new = old +/- 1
@@ -885,7 +889,6 @@ void ProgramState::updateVarState(const BinaryOperator *binOp)
     for (auto &path : paths)
     {
         auto lvalue = path->extractLValue(binOp->getLHS());
-
         if (!path->isActive())
         {
             updatedPaths.push_back(std::move(path));
@@ -929,15 +932,15 @@ void ProgramState::updateVarState(const BinaryOperator *binOp)
         for (size_t i = 0; i < n; ++i)
         {
             unique_ptr<Path> newPath = (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
-
             if (holds_alternative<const VarDecl *>(lvalue))
             {
                 auto *var = get<const VarDecl *>(lvalue);
                 newPath->updateVarState(var, std::move(eval.second[i]));
             }
-            else if (std::holds_alternative<Address *>(lvalue))
+            else if (std::holds_alternative<std::unique_ptr<Address>>(lvalue))
             {
-                auto *addr = std::get<Address *>(lvalue);
+                auto &addrUptr = std::get<std::unique_ptr<Address>>(lvalue);
+                Address *addr = addrUptr.get();
                 newPath->updateMemory(addr, std::move(eval.second[i]));
             }
             else

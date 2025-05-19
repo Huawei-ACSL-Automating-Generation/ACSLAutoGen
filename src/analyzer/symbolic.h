@@ -2,6 +2,7 @@
 #define SYMBOLIC_H
 
 #include <string>
+#include "macros.h"
 #include <memory>
 
 // Base class for symbolic expressions.
@@ -288,6 +289,9 @@ class Address : public SymbolicExpr
         }
         return *this;
     }
+    Address(Address &&) = delete;
+    Address &operator=(Address &&) = delete;
+
     Address()
         : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(0),
           offset_(SymbolicExpr::makeNull())
@@ -327,4 +331,8 @@ struct AddressHash
     std::size_t operator()(const Address &addr) const noexcept { return addr.hash(); }
 };
 
+struct AddressEqual
+{
+    bool operator()(const Address &a, const Address &b) const noexcept { return a == b; }
+};
 #endif // SYMBOLIC_H

@@ -187,7 +187,12 @@ std::string Variable::dump() const
 std::string Address::dump() const
 {
     std::ostringstream oss;
-    oss << "Address(" << id_ << ")" << getOffset()->dump();
+    oss << "Address(" << id_ << ")";
+    SymbolicExpr *off = getOffset();
+    if (dynamic_cast<NullExpr *>(off) == nullptr)
+    {
+        oss << "[" << off->dump() << "]";
+    }
     return oss.str();
 }
 
