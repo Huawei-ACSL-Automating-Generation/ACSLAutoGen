@@ -35,11 +35,11 @@ class GlobalSM
         SM = &context.getSourceManager();
     }
 
-    GlobalSM(const GlobalSM &) = delete;
+    GlobalSM(const GlobalSM &)            = delete;
     GlobalSM &operator=(const GlobalSM &) = delete;
 
   private:
-    GlobalSM() = default;
+    GlobalSM()  = default;
     ~GlobalSM() = default;
 
     clang::SourceManager *SM;

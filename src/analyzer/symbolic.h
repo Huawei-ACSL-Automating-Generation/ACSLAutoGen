@@ -44,9 +44,9 @@ class SymbolicExpr
     void setExprType(Type newType) { valueType_ = newType; }
     static std::unique_ptr<SymbolicExpr> makeNull();
     virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
-    virtual std::string dump() const = 0;
-    virtual bool equal(const SymbolicExpr &) const = 0;
-    virtual std::size_t hash() const = 0;
+    virtual std::string dump() const                    = 0;
+    virtual bool equal(const SymbolicExpr &) const      = 0;
+    virtual std::size_t hash() const                    = 0;
 
     friend std::ostream &operator<<(std::ostream &os, const SymbolicExpr &expr)
     {
@@ -284,12 +284,12 @@ class Address : public SymbolicExpr
         if (this != &other)
         {
             SymbolicExpr::operator=(other);
-            id_ = other.id_;
+            id_     = other.id_;
             offset_ = other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull();
         }
         return *this;
     }
-    Address(Address &&) = delete;
+    Address(Address &&)            = delete;
     Address &operator=(Address &&) = delete;
 
     Address()
@@ -317,9 +317,11 @@ class Address : public SymbolicExpr
     unsigned int getId() const { return id_; }
     std::string dump() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
+
     SymbolicExpr *getOffset() const { return offset_.get(); }
     std::size_t hash() const;
     void setOffset(std::unique_ptr<SymbolicExpr> offset) { offset_ = std::move(offset); }
+    std::unique_ptr<Address> addOffset(std::unique_ptr<SymbolicExpr> extra) const;
 
   private:
     unsigned int id_;

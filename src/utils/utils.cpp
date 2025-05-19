@@ -99,6 +99,8 @@ bool isAssignOp(const BinaryOperator *binOp)
 
 SymbolicExpr::Type deriveVarType(QualType type)
 {
+    if (auto ptr = type->getAs<PointerType>())
+        return deriveVarType(ptr->getPointeeType());
     return llvm::TypeSwitch<QualType, SymbolicExpr::Type>(type.getCanonicalType())
         .Case([](const BuiltinType *BT) -> SymbolicExpr::Type {
             using Kind = SymbolicExpr::ScalarKind;

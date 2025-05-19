@@ -16,7 +16,7 @@
     {                                                                                              \
         /* Get relative file path starting with "src/" */                                          \
         std::string file = __FILE__;                                                               \
-        size_t pos = file.rfind("src/");                                                           \
+        size_t pos       = file.rfind("src/");                                                     \
         if (pos != std::string::npos)                                                              \
         {                                                                                          \
             file = file.substr(pos);                                                               \
@@ -32,7 +32,7 @@
     do                                                                                             \
     {                                                                                              \
         std::string _file = __FILE__;                                                              \
-        size_t pos = _file.rfind("src/");                                                          \
+        size_t pos        = _file.rfind("src/");                                                   \
         if (pos != std::string::npos)                                                              \
         {                                                                                          \
             _file = _file.substr(pos);                                                             \
@@ -52,7 +52,7 @@
     do                                                                                             \
     {                                                                                              \
         std::string file = __FILE__;                                                               \
-        size_t pos = file.rfind("src/");                                                           \
+        size_t pos       = file.rfind("src/");                                                     \
         if (pos != std::string::npos)                                                              \
         {                                                                                          \
             file = file.substr(pos);                                                               \
@@ -68,7 +68,7 @@
     {                                                                                              \
         std::ostringstream oss;                                                                    \
         oss << info;                                                                               \
-        std::string s = oss.str();                                                                 \
+        std::string s              = oss.str();                                                    \
         const int SEPARATOR_LENGTH = 80;                                                           \
         int pad = s.size() < SEPARATOR_LENGTH ? (SEPARATOR_LENGTH - s.size()) / 2 : 0;             \
         std::string stars(SEPARATOR_LENGTH, '=');                                                  \
@@ -82,7 +82,7 @@
     do                                                                                             \
     {                                                                                              \
         std::string file = __FILE__;                                                               \
-        size_t pos = file.rfind("src/");                                                           \
+        size_t pos       = file.rfind("src/");                                                     \
         if (pos != std::string::npos)                                                              \
         {                                                                                          \
             file = file.substr(pos);                                                               \
@@ -96,7 +96,7 @@
     do                                                                                             \
     {                                                                                              \
         std::string file = __FILE__;                                                               \
-        size_t pos = file.rfind("src/");                                                           \
+        size_t pos       = file.rfind("src/");                                                     \
         if (pos != std::string::npos)                                                              \
         {                                                                                          \
             file = file.substr(pos);                                                               \
@@ -109,7 +109,7 @@
     do                                                                                             \
     {                                                                                              \
         std::string file = __FILE__;                                                               \
-        size_t pos = file.rfind("src/");                                                           \
+        size_t pos       = file.rfind("src/");                                                     \
         if (pos != std::string::npos)                                                              \
         {                                                                                          \
             file = file.substr(pos);                                                               \
@@ -124,7 +124,7 @@
     do                                                                                             \
     {                                                                                              \
         std::string file = __FILE__;                                                               \
-        size_t pos = file.rfind("src/");                                                           \
+        size_t pos       = file.rfind("src/");                                                     \
         if (pos != std::string::npos)                                                              \
         {                                                                                          \
             file = file.substr(pos);                                                               \

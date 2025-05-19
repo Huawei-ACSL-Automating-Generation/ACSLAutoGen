@@ -43,7 +43,7 @@ class AssignPlugin : public FunctionContractPlugin
                 }
             }
 
-            string spec = "assigns ";
+            string spec     = "assigns ";
             bool haveAssign = false;
             for (auto [var, depth] : isChangedFlag)
             {

@@ -16,7 +16,7 @@ class Path
     using EvalResult =
         std::pair<std::vector<std::unique_ptr<Path>>, std::vector<std::unique_ptr<SymbolicExpr>>>;
 
-    Path() = default;
+    Path()  = default;
     ~Path() = default;
 
     enum class PathState

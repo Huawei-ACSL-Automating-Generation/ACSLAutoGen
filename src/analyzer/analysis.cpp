@@ -36,7 +36,7 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
     INFO("Processing Function " + FD->getNameAsString());
 
     auto acslFunc = new ACSLFunction(FD);
-    auto state = std::make_unique<ProgramState>(acslFunc);
+    auto state    = std::make_unique<ProgramState>(acslFunc);
 
     if (const Stmt *Body = FD->getBody())
     {
@@ -44,8 +44,9 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
             UNIMPLEMENT("Function body of " + FD->getNameAsString() + " is not a CompoundStmt");
 
         state->init();
-        auto preState = state->clone();
         const CompoundStmt *CS = cast<CompoundStmt>(Body);
+        auto preState          = state->clone();
+
         for (const Stmt *stmt : CS->children())
             state->step(stmt);
         INFO(state->dump());

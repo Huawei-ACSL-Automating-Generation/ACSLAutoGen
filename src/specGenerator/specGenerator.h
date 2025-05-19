@@ -32,7 +32,7 @@ std::string emitInlineContract(const ProgramState &state,
 class ACSLPlugin
 {
   public:
-    virtual ~ACSLPlugin() = default;
+    virtual ~ACSLPlugin()          = default;
     virtual std::string id() const = 0;
     enum class Kind
     {
@@ -152,7 +152,7 @@ class ACSLPluginGroupRegistry
             GroupName##Reg()                                                                       \
             {                                                                                      \
                 ACSLPluginGroup G;                                                                 \
-                G.name = #GroupName;                                                               \
+                G.name      = #GroupName;                                                          \
                 G.pluginIds = {__VA_ARGS__};                                                       \
                 ACSLPluginGroupRegistry::instance().registerGroup(G);                              \
                 INFO(#GroupName " is registered.");                                                \

@@ -250,6 +250,17 @@ bool Address::equal(const SymbolicExpr &expr) const
     return id_ == addr->id_ && offset_ == addr->offset_;
 }
 
+std::unique_ptr<Address> Address::addOffset(std::unique_ptr<SymbolicExpr> extra) const
+{
+    auto result = std::make_unique<Address>(*this);
+    if (result->offset_ && dynamic_cast<NullExpr *>(result->offset_.get()) == nullptr)
+        result->offset_ = std::make_unique<BinaryOpExpr>(
+            std::move(result->offset_), BinaryOpExpr::Operator::Add, std::move(extra));
+    else
+        result->offset_ = std::move(extra);
+    return result;
+}
+
 namespace std
 {
     template <> struct hash<Address>

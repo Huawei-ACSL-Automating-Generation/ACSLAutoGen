@@ -25,6 +25,7 @@ BraceWrapping:
   SplitEmptyRecord: false
   SplitEmptyNamespace: false
 ContinuationIndentWidth: 4
+AlignConsecutiveAssignments: true
 Cpp11BracedListStyle: true
 KeepEmptyLinesAtTheStartOfBlocks: false
 Language:        Cpp

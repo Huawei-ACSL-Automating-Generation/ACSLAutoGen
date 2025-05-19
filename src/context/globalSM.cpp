@@ -17,15 +17,15 @@ GlobalSM::getDeclInfo(const Decl *decl)
     if (auto namedDecl = dyn_cast<NamedDecl>(decl); namedDecl)
         get<0>(result) = namedDecl->getNameAsString();
 
-    clang::SourceRange range = decl->getSourceRange();
+    clang::SourceRange range         = decl->getSourceRange();
     clang::CharSourceRange charRange = clang::CharSourceRange::getTokenRange(range);
     clang::LangOptions langOpts;
     get<1>(result) = clang::Lexer::getSourceText(charRange, SM, langOpts);
 
     clang::SourceLocation loc = decl->getBeginLoc();
-    get<2>(result) = SM.getFilename(loc);
-    get<3>(result) = SM.getSpellingLineNumber(loc);
-    get<4>(result) = SM.getSpellingColumnNumber(loc);
+    get<2>(result)            = SM.getFilename(loc);
+    get<3>(result)            = SM.getSpellingLineNumber(loc);
+    get<4>(result)            = SM.getSpellingColumnNumber(loc);
     return result;
 }
 
@@ -37,14 +37,14 @@ GlobalSM::getStmtInfo(const clang::Stmt *stmt)
         return nullopt;
     auto &SM = GlobalSM::getSM();
 
-    clang::SourceRange range = stmt->getSourceRange();
+    clang::SourceRange range         = stmt->getSourceRange();
     clang::CharSourceRange charRange = clang::CharSourceRange::getTokenRange(range);
     clang::LangOptions langOpts;
     get<0>(result) = clang::Lexer::getSourceText(charRange, SM, langOpts);
 
     clang::SourceLocation loc = stmt->getBeginLoc();
-    get<1>(result) = SM.getFilename(loc);
-    get<2>(result) = SM.getSpellingLineNumber(loc);
-    get<3>(result) = SM.getSpellingColumnNumber(loc);
+    get<1>(result)            = SM.getFilename(loc);
+    get<2>(result)            = SM.getSpellingLineNumber(loc);
+    get<3>(result)            = SM.getSpellingColumnNumber(loc);
     return result;
 }

@@ -84,7 +84,7 @@ TEST(StringTemplateTest, Remap)
 
     EXPECT_EQ(st_2.remap(NameMap({{"name", "name_2"}})), 1);
 
-    auto combine = st_1 + st_2;
+    auto combine      = st_1 + st_2;
     mapping["name_2"] = "Rabbit";
 
     EXPECT_EQ(combine.to_string(mapping), "Hello, Alice! and Rabbit!");

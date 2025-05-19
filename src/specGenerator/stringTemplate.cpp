@@ -24,7 +24,7 @@ void StringTemplate::initialize()
 {
     Placeholder curPh; // Ph = placeholder
     bool afterDollor = false;
-    bool inBraces = false;
+    bool inBraces    = false;
     for (size_t i = 0; i < rawText_.size(); ++i)
     {
         char ch = rawText_[i];
@@ -47,10 +47,10 @@ void StringTemplate::initialize()
 
         if (afterDollor && ch == '{')
         {
-            inBraces = true;
+            inBraces   = true;
             curPh.name = "";
-            curPh.pos = i - 1;
-            curPh.len = 2;
+            curPh.pos  = i - 1;
+            curPh.len  = 2;
         }
 
         afterDollor = (ch == '$');
