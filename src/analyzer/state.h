@@ -46,7 +46,7 @@ class Path
     void setPathState(PathState state) { currentState = state; }
 
     bool isActive() const { return currentState == PathState::Step; }
-
+    bool isUnchangedState(Address addr);
     std::unique_ptr<Path> clone() const;
 
     const clang::Stmt *StmtCtx = nullptr;

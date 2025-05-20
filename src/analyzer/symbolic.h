@@ -40,8 +40,8 @@ class SymbolicExpr
     virtual ~SymbolicExpr() = default;
 
     ExprType getType() const { return type_; }
-    Type getExprType() const { return valueType_; }
-    void setExprType(Type newType) { valueType_ = newType; }
+    Type getValType() const { return valueType_; }
+    void setValType(Type newType) { valueType_ = newType; }
     static std::unique_ptr<SymbolicExpr> makeNull();
     virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
     virtual std::string dump() const                    = 0;
@@ -181,12 +181,12 @@ class BinaryOpExpr : public SymbolicExpr
 
     BinaryOpExpr(
         std::unique_ptr<SymbolicExpr> left, Operator op, std::unique_ptr<SymbolicExpr> right)
-        : SymbolicExpr(ExprType::BinaryOp, left->getExprType()), left_(std::move(left)), op_(op),
+        : SymbolicExpr(ExprType::BinaryOp, left->getValType()), left_(std::move(left)), op_(op),
           right_(std::move(right))
     {}
 
     BinaryOpExpr(SymbolicExpr *left, Operator op, SymbolicExpr *right)
-        : SymbolicExpr(ExprType::BinaryOp, left->getExprType()), left_(left), op_(op), right_(right)
+        : SymbolicExpr(ExprType::BinaryOp, left->getValType()), left_(left), op_(op), right_(right)
     {}
 
     std::unique_ptr<SymbolicExpr> clone() const override;
@@ -218,11 +218,11 @@ class UnaryOpExpr : public SymbolicExpr
     };
 
     UnaryOpExpr(Operator op, std::unique_ptr<SymbolicExpr> expr)
-        : SymbolicExpr(ExprType::UnaryOp, expr->getExprType()), op_(op), expr_(std::move(expr))
+        : SymbolicExpr(ExprType::UnaryOp, expr->getValType()), op_(op), expr_(std::move(expr))
     {}
 
     UnaryOpExpr(Operator op, SymbolicExpr *expr)
-        : SymbolicExpr(ExprType::UnaryOp, expr->getExprType()), op_(op), expr_(expr)
+        : SymbolicExpr(ExprType::UnaryOp, expr->getValType()), op_(op), expr_(expr)
     {}
 
     std::unique_ptr<SymbolicExpr> clone() const override;
@@ -258,8 +258,9 @@ class Variable : public SymbolicExpr
     void setVarType(Type vt)
     {
         varType_ = vt;
-        setExprType(vt);
+        setValType(vt);
     }
+    const std::string &getName() const { return name_; }
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
@@ -322,6 +323,7 @@ class Address : public SymbolicExpr
     std::size_t hash() const;
     void setOffset(std::unique_ptr<SymbolicExpr> offset) { offset_ = std::move(offset); }
     std::unique_ptr<Address> addOffset(std::unique_ptr<SymbolicExpr> extra) const;
+    bool isOffseted() const { return offset_ && offset_->getType() != ExprType::SNULL; }
 
   private:
     unsigned int id_;

@@ -468,7 +468,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             auto targetType = deriveVarType(castExpr->getType());
 
             for (auto &subExpr : sub.second)
-                subExpr->setExprType(targetType);
+                subExpr->setValType(targetType);
 
             return {std::move(sub.first), std::move(sub.second)};
         })
@@ -557,6 +557,44 @@ string Path::dump() const
         }
     }
     return oss.str();
+}
+
+bool Path::isUnchangedState(Address addr)
+{
+    auto memIt = memoryState.find(addr);
+    if (memIt == memoryState.end())
+        return false;
+
+    SymbolicExpr *stored = memIt->second.get();
+    if (stored->getType() != SymbolicExpr::ExprType::Variable)
+        return false;
+
+    Variable *var = static_cast<Variable *>(stored);
+
+    // Step 1: extract base name from varAddr by matching id_
+    std::string baseName;
+    for (const auto &[varDecl, varAddrPtr] : varAddr)
+    {
+        if (varAddrPtr->getId() == addr.getId())
+        {
+            baseName = varDecl->getNameAsString();
+            break;
+        }
+    }
+
+    if (baseName.empty())
+        ERROR("Cannot resolve base name from address id");
+
+    // Step 2: compare name
+    if (!addr.isOffseted())
+    {
+        return var->getName() == baseName;
+    }
+    else
+    {
+        std::string expected = baseName + "[" + addr.getOffset()->dump() + "]";
+        return var->getName() == expected;
+    }
 }
 
 ProgramState::ProgramState(unique_ptr<Path> initialPath, ACSLFunction *context)
@@ -853,11 +891,11 @@ void ProgramState::stepLoop(const Stmt *loopStmt)
 
         newState->step(body);
         newState->step(inc);
-
-        newState->CollectLoopACSL();
+        INFO(newState->dump());
     }
     paths.clear();
     // TODO: process loop post state.
+    TODO();
     // for (auto &state : newStates)
     // {
     //     for (auto &p : state->paths)

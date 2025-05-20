@@ -169,7 +169,7 @@ std::string NullExpr::dump() const { return "null"; }
 std::string Variable::dump() const
 {
     std::ostringstream oss;
-    const auto &t = getExprType();
+    const auto &t = getValType();
 
     oss << "Var(" << name_ << ", ";
 
