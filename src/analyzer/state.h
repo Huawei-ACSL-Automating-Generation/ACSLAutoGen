@@ -30,8 +30,7 @@ class Path
     void LoopInit(std::unordered_map<Variable *, std::unique_ptr<SymbolicExpr>> &initMap);
 
     LValueTarget extractLValue(const clang::Expr *lhs);
-
-    Address *extractAddress(const clang::Expr *lhs);
+    std::unique_ptr<Address> extractAddress(const clang::Expr *lhs);
 
     std::unique_ptr<SymbolicExpr> getVarState(const clang::VarDecl *var);
     const std::vector<std::unique_ptr<SymbolicExpr>> &getPathConditions() const;

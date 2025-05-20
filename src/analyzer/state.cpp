@@ -109,13 +109,14 @@ LValueTarget Path::extractLValue(const Expr *lhs)
     UNIMPLEMENT("Unsupported LHS expression: " << lexpr->getStmtClassName());
 }
 
-Address *Path::extractAddress(const Expr *lhs)
+std::unique_ptr<Address> Path::extractAddress(const Expr *lhs)
 {
     auto lv = extractLValue(lhs);
     if (auto varPtr = std::get_if<const clang::VarDecl *>(&lv))
-        return varAddr[*varPtr].get();
+        return std::unique_ptr<Address>(
+            static_cast<Address *>(varAddr[*varPtr]->clone().release()));
     if (auto addrPtr = std::get_if<std::unique_ptr<Address>>(&lv))
-        return (*addrPtr).get();
+        return std::move(*addrPtr);
     UNIMPLEMENT("extractAddress: unsupported lvalue for address");
 }
 
@@ -311,7 +312,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             UNIMPLEMENT("Unsupported Decl type: " << declRef->getDecl()->getDeclKindName());
         })
         .Case<ArraySubscriptExpr>([this](const ArraySubscriptExpr *arrSub) -> EvalResult {
-            Address *addr              = extractAddress(arrSub->getBase());
+            unique_ptr<Address> addr   = extractAddress(arrSub->getBase());
             EvalResult idx             = evalExpr(arrSub->getIdx());
             SymbolicExpr::Type varType = deriveVarType(arrSub->getBase()->getType());
 
@@ -419,7 +420,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                     op == UnaryOpExpr::Operator::PreDec || op == UnaryOpExpr::Operator::PostDec)
                 {
                     // ++x / x++ / --x / x--
-                    Address *addr = extractAddress(uop->getSubExpr());
+                    unique_ptr<Address> addr = extractAddress(uop->getSubExpr());
                     if (!addr)
                         ERROR("extractAddress returned null");
                     // old value
