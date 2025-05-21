@@ -132,7 +132,7 @@ class LiteralExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
-    std::size_t hash() const;
+    std::size_t hash() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
@@ -191,7 +191,7 @@ class BinaryOpExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
-    std::size_t hash() const;
+    std::size_t hash() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
@@ -227,7 +227,7 @@ class UnaryOpExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
-    std::size_t hash() const;
+    std::size_t hash() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
@@ -243,7 +243,7 @@ class NullExpr : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
-    std::size_t hash() const;
+    std::size_t hash() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
 };
 
@@ -264,7 +264,7 @@ class Variable : public SymbolicExpr
 
     std::unique_ptr<SymbolicExpr> clone() const override;
     std::string dump() const override;
-    std::size_t hash() const;
+    std::size_t hash() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
 
   private:
@@ -320,7 +320,7 @@ class Address : public SymbolicExpr
     virtual bool equal(const SymbolicExpr &expr) const override;
 
     SymbolicExpr *getOffset() const { return offset_.get(); }
-    std::size_t hash() const;
+    std::size_t hash() const override;
     void setOffset(std::unique_ptr<SymbolicExpr> offset) { offset_ = std::move(offset); }
     std::unique_ptr<Address> addOffset(std::unique_ptr<SymbolicExpr> extra) const;
     bool isOffseted() const { return offset_ && offset_->getType() != ExprType::SNULL; }
