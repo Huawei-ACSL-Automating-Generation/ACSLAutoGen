@@ -5,7 +5,7 @@ include(FetchContent)
 FetchContent_Declare(
   googletest
   GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG v1.14.0
+  GIT_TAG v1.16.0
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
@@ -25,7 +25,7 @@ add_executable(test_all
   ${CMAKE_CURRENT_SOURCE_DIR}/specGenerator/stringTemplate_test.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/specGenerator/templates_test.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/analyzer/state_test.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/globalSM/globalSM_test.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/context/globalSM_test.cpp
 )
 
 llvm_map_components_to_libnames(llvm_libs support)
@@ -39,13 +39,13 @@ target_link_libraries(test_all PRIVATE
   clangFrontend
   clangAST
   clangBasic
-  Utils
+  TestUtilsLib
   ${llvm_libs}
   AnalyzerLib
   SpecGeneratorLib
-  GlobalSMLib
+  ContextLib
 )
 
 gtest_discover_tests(test_all)
 
-add_subdirectory(utils)
+add_subdirectory(testUtils)

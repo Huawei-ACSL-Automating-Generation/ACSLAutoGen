@@ -63,6 +63,7 @@ class Path
   private:
     EvalResult evalExpr(const clang::Expr *expr);
 
+  private:
     // Map: variable record definition ID -> corresponding symbolic address.
     std::unordered_map<const clang::VarDecl *, std::unique_ptr<Address>> varAddr;
 
@@ -80,6 +81,11 @@ class Path
     std::unique_ptr<SymbolicExpr> returnExpr = std::make_unique<NullExpr>();
 
     unsigned int addrCounter = 0;
+
+  public:
+    auto getReturnExpr() const -> const auto & { return returnExpr; }
+    auto getPathState() const -> const auto & { return currentState; }
+    auto getAddrCounter() const -> const auto & { return addrCounter; }
 };
 
 class ProgramState

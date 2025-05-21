@@ -1,4 +1,4 @@
-// tests/globalSM/globalSM_test.cpp
+// tests/context/globalSM_test.cpp
 
 #include <gtest/gtest.h>
 #include <unordered_map>
@@ -11,7 +11,7 @@ using namespace std;
 
 TEST(GlobalSMTest, testing)
 {
-    utils::ASTExtractor e("");
+    ASTExtractor e("");
     GlobalSM::getInstance().initialize(e.getASTContext());
     auto &SM = GlobalSM::getSM();
     auto fileID = SM.getMainFileID();

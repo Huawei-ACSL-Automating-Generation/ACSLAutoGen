@@ -1,4 +1,4 @@
-// tests/utils/xmock.cpp
+// tests/testUtils/xmock.cpp
 
 // Enables mocking of non-virtual member functions compatible with GoogleMock.
 // This macro leverages GoogleMock and hook techniques to detour non-virtual methods
@@ -11,8 +11,6 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-namespace utils
-{
 #define MOCK_NONVIRTUAL_METHOD(_Ret, _MethodName, _Args, _Spec, _Class)                            \
     GMOCK_INTERNAL_WARNING_PUSH()                                                                  \
     GMOCK_INTERNAL_WARNING_CLANG(ignored, "-Wunused-member-function")                              \
@@ -92,7 +90,6 @@ namespace utils
             mprotect((void *)pgStart, pg, PROT_READ | PROT_EXEC);                                  \
         }                                                                                          \
     } _hook_guard_##_MethodName;
-} // namespace utils
 
 namespace
 {
