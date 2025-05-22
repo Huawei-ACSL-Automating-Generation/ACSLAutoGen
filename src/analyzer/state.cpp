@@ -312,6 +312,13 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             UNIMPLEMENT("Unsupported Decl type: " << declRef->getDecl()->getDeclKindName());
         })
         .Case<ArraySubscriptExpr>([this](const ArraySubscriptExpr *arrSub) -> EvalResult {
+            LValueTarget lval = extractLValue(arrSub->getBase());
+            std::string baseName;
+            if (auto varPtr = std::get_if<const VarDecl *>(&lval))
+                baseName = (*varPtr)->getNameAsString();
+            else
+                UNIMPLEMENT("Array base is not a single Variable");
+
             unique_ptr<Address> addr   = extractAddress(arrSub->getBase());
             EvalResult idx             = evalExpr(arrSub->getIdx());
             SymbolicExpr::Type varType = deriveVarType(arrSub->getBase()->getType());
@@ -327,7 +334,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                 auto it        = memoryState.find(*newAddr);
                 if (it == memoryState.end())
                 {
-                    string varName = "tmp[" + idxDump +
+                    string varName = baseName + "[" + idxDump +
                                      "]"; // TODO: impl function to get pointer/array base name.
                     auto varExpr = std::make_unique<Variable>(varName, varType);
                     it           = memoryState.emplace(*newAddr, varExpr->clone()).first;
