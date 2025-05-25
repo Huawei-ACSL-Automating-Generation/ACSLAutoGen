@@ -1,4 +1,4 @@
-// src/specGenerator/utilityTemplates.h
+// src/SpecGenerator/utilityTemplates.h
 
 #ifndef UTILITY_TEMPLATES_H
 #define UTILITY_TEMPLATES_H

@@ -1,4 +1,4 @@
-// src/specGenerator/groups.cpp
+// src/SpecGenerator/groups.cpp
 
 #include "specGenerator.h"
 #include "macros.h"

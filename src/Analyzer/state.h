@@ -2,7 +2,7 @@
 #define STATE_H
 
 #include <unordered_map>
-#include "symbolic.h"
+#include "Symbolic/expr.h"
 #include "function.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Stmt.h"

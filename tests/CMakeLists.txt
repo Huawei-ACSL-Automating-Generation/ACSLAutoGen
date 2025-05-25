@@ -22,9 +22,9 @@ include(GoogleTest)
 
 # Use 'test_all' instead of 'TestAll' for better distinction.
 add_executable(test_all
-  ${CMAKE_CURRENT_SOURCE_DIR}/specGenerator/stringTemplate_test.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/specGenerator/templates_test.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/analyzer/state_test.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/SpecGenerator/stringTemplate_test.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/SpecGenerator/templates_test.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Analyzer/state_test.cpp
 )
 
 llvm_map_components_to_libnames(llvm_libs support)

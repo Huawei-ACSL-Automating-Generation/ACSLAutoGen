@@ -4,11 +4,11 @@ target_link_libraries(ACSLG PRIVATE ACSLG_compiler_flags)
 
 llvm_map_components_to_libnames(llvm_libs support core irreader)
 
-add_subdirectory(analyzer)
-add_subdirectory(context)
-add_subdirectory(utils)
-add_subdirectory(specGenerator)
-add_subdirectory(stingx)
+add_subdirectory(Analyzer)
+add_subdirectory(Context)
+add_subdirectory(Utils)
+add_subdirectory(SpecGenerator)
+add_subdirectory(Stingx)
 
 target_link_libraries(ACSLG PRIVATE
   ${llvm_libs}

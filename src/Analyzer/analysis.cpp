@@ -3,8 +3,8 @@
 #include "function.h"
 #include "clang/AST/Stmt.h"
 #include "state.h"
-#include "context/globalSM.h"
-#include "specGenerator/specGenerator.h"
+#include "Context/globalSM.h"
+#include "SpecGenerator/specGenerator.h"
 
 using namespace clang;
 using namespace llvm;

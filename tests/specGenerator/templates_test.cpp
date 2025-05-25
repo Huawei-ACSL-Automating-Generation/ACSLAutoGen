@@ -1,4 +1,4 @@
-// tests/specGenerator/templates_test.cpp
+// tests/SpecGenerator/templates_test.cpp
 
 #include <gtest/gtest.h>
 #include <unordered_map>

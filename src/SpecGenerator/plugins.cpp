@@ -1,4 +1,4 @@
-// src/specGenerator/plugins.cpp
+// src/SpecGenerator/plugins.cpp
 
 #include "specGenerator.h"
 #include "stringTemplate.h"

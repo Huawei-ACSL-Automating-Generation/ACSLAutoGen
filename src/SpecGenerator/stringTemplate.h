@@ -1,4 +1,4 @@
-// src/specGenerator/stringTemplate.h
+// src/SpecGenerator/stringTemplate.h
 
 #ifndef STRING_TEMPLATE_H
 #define STRING_TEMPLATE_H

@@ -1,4 +1,4 @@
-# src/utils/CMakeLists.txt
+# src/Utils/CMakeLists.txt
 
 add_library(UtilsLib STATIC utils.cpp)
 

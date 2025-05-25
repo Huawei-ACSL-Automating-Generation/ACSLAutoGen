@@ -1,4 +1,4 @@
-// src/specGenerator/specGenerators.h
+// src/SpecGenerator/specGenerators.h
 
 #ifndef SPEC_GENERATOR_H
 #define SPEC_GENERATOR_H

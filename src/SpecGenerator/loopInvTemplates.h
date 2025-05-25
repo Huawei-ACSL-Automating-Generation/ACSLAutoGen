@@ -1,4 +1,4 @@
-// src/specGenerator/loopInvTemplates.h
+// src/SpecGenerator/loopInvTemplates.h
 
 #ifndef LOOP_INV_TEMPLATES_H
 #define LOOP_INV_TEMPLATES_H

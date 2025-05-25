@@ -7,10 +7,10 @@
 #include <queue>
 #include <unordered_map>
 #include <memory>
-#include "utils/utils.h"
+#include "Utils/utils.h"
 #include <llvm/ADT/APSInt.h>
 #include <clang/AST/StmtCXX.h>
-#include "context/globalSM.h"
+#include "Context/globalSM.h"
 #include <variant>
 
 using namespace std;
@@ -1296,8 +1296,8 @@ bool ProgramState::isInactive() const
     return true;
 }
 
-#include "specGenerator/stringTemplate.h"
-#include "specGenerator/loopInvTemplates.h"
+#include "SpecGenerator/stringTemplate.h"
+#include "SpecGenerator/loopInvTemplates.h"
 
 void ProgramState::CollectLoopACSL()
 {

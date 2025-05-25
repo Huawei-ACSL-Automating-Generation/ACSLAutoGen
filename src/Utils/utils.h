@@ -3,7 +3,7 @@
 
 #include <clang/AST/Expr.h>
 // #include <clang/AST/Stmt.h>
-#include "analyzer/symbolic.h"
+#include "Analyzer/Symbolic/expr.h"
 
 // bool isLoopOrSwitchStmt(const clang::Stmt *stmt);
 std::unique_ptr<SymbolicExpr> createLNotExpr(std::unique_ptr<SymbolicExpr> expr);

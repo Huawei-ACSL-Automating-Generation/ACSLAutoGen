@@ -1,4 +1,4 @@
-// src/specGenerator/funcSpecTemplates.h
+// src/SpecGenerator/funcSpecTemplates.h
 
 #ifndef FUNC_SPEC_TEMPLATES_H
 #define FUNC_SPEC_TEMPLATES_H

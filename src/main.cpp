@@ -5,9 +5,9 @@
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Support/CommandLine.h"
 #include <memory>
-#include "context/context.h"
-#include "analyzer/analysis.h"
-#include "context/globalSM.h"
+#include "Context/context.h"
+#include "Analyzer/analysis.h"
+#include "Context/globalSM.h"
 
 using namespace clang;
 using namespace clang::tooling;

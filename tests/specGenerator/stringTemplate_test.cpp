@@ -1,4 +1,4 @@
-// tests/specGenerator/stringTemplate_test.cpp
+// tests/SpecGenerator/stringTemplate_test.cpp
 
 #include <gtest/gtest.h>
 #include "stringTemplate.h"

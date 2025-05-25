@@ -1,4 +1,4 @@
-// src/specGenerator/specGenerators.cpp
+// src/SpecGenerator/specGenerators.cpp
 
 #include "specGenerator.h"
 #include "utilityTemplates.h"

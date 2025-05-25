@@ -1,4 +1,4 @@
-# src/specGenerator/CMakeLists.txt
+# src/SpecGenerator/CMakeLists.txt
 
 add_library(SpecGeneratorLib STATIC 
     stringTemplate.cpp
