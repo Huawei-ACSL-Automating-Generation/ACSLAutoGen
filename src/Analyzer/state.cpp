@@ -144,6 +144,7 @@ Address *Path::allocMemory(const VarDecl *var)
         ERROR("Variable already has allocated memory");
     auto newAddr    = make_unique<Address>(addrCounter++);
     Address *rawPtr = newAddr.get();
+    rawPtr->setVarDecl(var);
     varAddr.emplace(canonicalVar, std::move(newAddr));
 
     memoryState.emplace(*rawPtr, make_unique<NullExpr>());
@@ -580,36 +581,9 @@ bool Path::isUnchangedState(Address addr)
 
     Symbolic::Variable *var = static_cast<Symbolic::Variable *>(stored);
 
-    // Step 1: extract base name from varAddr by matching id_
-    std::string baseName;
-    for (const auto &[varDecl, varAddrPtr] : varAddr)
-    {
-        Address *curAddr = varAddrPtr.get();
-        while (curAddr)
-        {
-            if (curAddr->getId() == addr.getId())
-            {
-                baseName = varDecl->getNameAsString();
-                break;
-            }
-
-            auto tmpIt = memoryState.find(*curAddr);
-            if (tmpIt == memoryState.end())
-                break;
-
-            SymbolicExpr *innerVar = memIt->second.get();
-            if (innerVar->getType() != SymbolicExpr::ExprType::SymbolAddress)
-                break;
-
-            curAddr = static_cast<Address *>(innerVar);
-        }
-
-        if (!baseName.empty())
-            break;
-    }
-
-    if (baseName.empty())
-        ERROR("Cannot resolve base name from address id");
+    if (!addr.hasVarDecl())
+        ERROR("Cannot resolve base VarDecl from address id");
+    string baseName = addr.getBaseName();
 
     // Step 2: compare name
     if (!addr.isOffseted())
@@ -658,6 +632,7 @@ void ProgramState::init()
 
             Address *ptrAddr     = paths[0]->allocMemory(param);
             Address *pointeeAddr = paths[0]->allocMemory();
+            pointeeAddr->setVarDecl(param);
 
             unique_ptr<SymbolicExpr> pointerValue = pointeeAddr->clone();
             paths[0]->updateMemory(ptrAddr, std::move(pointerValue));

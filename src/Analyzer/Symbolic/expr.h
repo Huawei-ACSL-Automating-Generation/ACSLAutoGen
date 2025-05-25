@@ -5,6 +5,7 @@
 #include "macros.h"
 #include <memory>
 #include "ppl.hh"
+#include <clang/AST/Decl.h>
 
 namespace Symbolic
 {
@@ -372,6 +373,11 @@ namespace Symbolic
 
         SymbolicExpr *getOffset() const { return offset_.get(); }
         std::size_t hash() const override;
+
+        void setVarDecl(const clang::VarDecl *varDecl) { varDecl_ = varDecl; }
+        bool hasVarDecl() const { return varDecl_ != nullptr; }
+        std::string getBaseName() const { return varDecl_ ? varDecl_->getNameAsString() : ""; }
+
         void setOffset(std::unique_ptr<SymbolicExpr> offset) { offset_ = std::move(offset); }
         std::unique_ptr<Address> addOffset(std::unique_ptr<SymbolicExpr> extra) const;
         bool isOffseted() const { return offset_ && offset_->getType() != ExprType::SNULL; }
@@ -383,6 +389,7 @@ namespace Symbolic
       private:
         unsigned int id_;
         std::unique_ptr<SymbolicExpr> offset_;
+        const clang::VarDecl *varDecl_ = nullptr;
     };
 
     struct AddressHash
