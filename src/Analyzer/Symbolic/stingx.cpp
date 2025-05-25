@@ -1,6 +1,8 @@
 #include "expr.h"
-using namespace std;
+#include "ppl.hh"
 
+using namespace std;
+using namespace Symbolic;
 bool UnaryOpExpr::isLinear() const
 {
     switch (op_)
@@ -49,5 +51,20 @@ int BinaryOpExpr::getMaxDegree() const
     case Operator::Subtract: return std::max(ldeg, rdeg);
     case Operator::Multiply: return ldeg + rdeg;
     default: return -1; // invalid in linear context
+    }
+}
+
+Linear_Expression LiteralExpr::toLinearExpr() const
+{
+    switch (type)
+    {
+    case LiteralType::Boolean: return Linear_Expression(data.boolValue ? 1 : 0);
+    case LiteralType::Int: return Linear_Expression(data.intValue);
+    case LiteralType::UnsignedInt: return Linear_Expression(static_cast<int>(data.uintValue));
+    case LiteralType::Short: return Linear_Expression(static_cast<int>(data.shortValue));
+    case LiteralType::UnsignedShort: return Linear_Expression(static_cast<int>(data.ushortValue));
+    case LiteralType::Int64: return Linear_Expression(static_cast<Coefficient>(data.int64Value));
+    case LiteralType::UInt64: return Linear_Expression(static_cast<Coefficient>(data.uint64Value));
+    default: throw std::runtime_error("Unsupported LiteralExpr type in toLinearExpr");
     }
 }

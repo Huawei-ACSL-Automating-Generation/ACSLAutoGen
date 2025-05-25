@@ -16,10 +16,11 @@
 using namespace std;
 using namespace clang;
 using namespace llvm;
+using namespace Symbolic;
 
 using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>>;
 
-void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap)
+void Path::LoopInit(unordered_map<Symbolic::Variable *, unique_ptr<SymbolicExpr>> &initMap)
 {
     initMap.clear();
     for (auto &entry : varAddr)
@@ -37,11 +38,11 @@ void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap
 
             SymbolicExpr::Type derived = deriveVarType(varType);
             unique_ptr<SymbolicExpr> newExpr =
-                make_unique<Variable>(varDecl->getNameAsString(), derived);
+                make_unique<Symbolic::Variable>(varDecl->getNameAsString(), derived);
 
             memIt->second = std::move(newExpr);
 
-            Variable *varPtr = dynamic_cast<Variable *>(memIt->second.get());
+            Symbolic::Variable *varPtr = dynamic_cast<Symbolic::Variable *>(memIt->second.get());
             if (varPtr)
                 initMap[varPtr] = std::move(origExpr);
         }
@@ -60,9 +61,10 @@ void Path::LoopInit(unordered_map<Variable *, unique_ptr<SymbolicExpr>> &initMap
             QualType baseType              = varType->getPointeeType();
             SymbolicExpr::Type baseDerived = deriveVarType(baseType);
             unique_ptr<SymbolicExpr> newPointeeExpr =
-                make_unique<Variable>("*" + varDecl->getNameAsString(), baseDerived);
+                make_unique<Symbolic::Variable>("*" + varDecl->getNameAsString(), baseDerived);
             memItPointee->second = std::move(newPointeeExpr);
-            Variable *varPtr     = dynamic_cast<Variable *>(memItPointee->second.get());
+            Symbolic::Variable *varPtr =
+                dynamic_cast<Symbolic::Variable *>(memItPointee->second.get());
             if (varPtr)
                 initMap[varPtr] = std::move(pointeeOrigExpr);
             // Restore the pointer's memoryState entry.
@@ -336,7 +338,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                 {
                     string varName = baseName + "[" + idxDump +
                                      "]"; // TODO: impl function to get pointer/array base name.
-                    auto varExpr = std::make_unique<Variable>(varName, varType);
+                    auto varExpr = std::make_unique<Symbolic::Variable>(varName, varType);
                     it           = memoryState.emplace(*newAddr, varExpr->clone()).first;
                     outExprs.emplace_back(std::move(varExpr));
                 }
@@ -576,7 +578,7 @@ bool Path::isUnchangedState(Address addr)
     if (stored->getType() != SymbolicExpr::ExprType::Variable)
         return false;
 
-    Variable *var = static_cast<Variable *>(stored);
+    Symbolic::Variable *var = static_cast<Symbolic::Variable *>(stored);
 
     // Step 1: extract base name from varAddr by matching id_
     std::string baseName;
@@ -644,7 +646,7 @@ void ProgramState::init()
 
             SymbolicExpr::Type varType = deriveVarType(paramType);
             unique_ptr<SymbolicExpr> varExpr =
-                make_unique<Variable>(param->getNameAsString(), varType);
+                make_unique<Symbolic::Variable>(param->getNameAsString(), varType);
 
             paths[0]->updateMemory(addr, std::move(varExpr));
         }
@@ -662,7 +664,7 @@ void ProgramState::init()
 
             SymbolicExpr::Type varType = deriveVarType(baseType);
             unique_ptr<SymbolicExpr> pointeeVarExpr =
-                make_unique<Variable>("*" + param->getNameAsString(), varType);
+                make_unique<Symbolic::Variable>("*" + param->getNameAsString(), varType);
             paths[0]->updateMemory(pointeeAddr, std::move(pointeeVarExpr));
         }
         else if (paramType->isArrayType())
@@ -910,7 +912,7 @@ void ProgramState::stepLoop(const Stmt *loopStmt)
 
         newState->step(init);
 
-        unordered_map<Variable *, unique_ptr<SymbolicExpr>> loopInitMap;
+        unordered_map<Symbolic::Variable *, unique_ptr<SymbolicExpr>> loopInitMap;
         newState->paths.back()->LoopInit(loopInitMap);
 
         newState->step(body);

@@ -5,6 +5,7 @@
 // #include <clang/AST/Stmt.h>
 #include "Analyzer/Symbolic/expr.h"
 
+using namespace Symbolic;
 // bool isLoopOrSwitchStmt(const clang::Stmt *stmt);
 std::unique_ptr<SymbolicExpr> createLNotExpr(std::unique_ptr<SymbolicExpr> expr);
 

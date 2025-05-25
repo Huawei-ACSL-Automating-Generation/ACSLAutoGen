@@ -9,6 +9,7 @@
 using namespace clang;
 using namespace llvm;
 using namespace std;
+using namespace Symbolic;
 // bool isLoopOrSwitchStmt(const Stmt *stmt)
 // {
 //     return isa<ForStmt>(stmt) || isa<WhileStmt>(stmt) || isa<DoStmt>(stmt) ||

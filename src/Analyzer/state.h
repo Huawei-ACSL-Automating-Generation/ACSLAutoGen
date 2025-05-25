@@ -9,6 +9,7 @@
 #include "clang/AST/Expr.h"
 #include <variant>
 
+using namespace Symbolic;
 using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>>;
 class Path
 {
@@ -27,7 +28,7 @@ class Path
         Return
     };
 
-    void LoopInit(std::unordered_map<Variable *, std::unique_ptr<SymbolicExpr>> &initMap);
+    void LoopInit(std::unordered_map<Symbolic::Variable *, std::unique_ptr<SymbolicExpr>> &initMap);
 
     LValueTarget extractLValue(const clang::Expr *lhs);
     std::unique_ptr<Address> extractAddress(const clang::Expr *lhs);

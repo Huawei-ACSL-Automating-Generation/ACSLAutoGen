@@ -13,7 +13,6 @@ find_path(PPL_INCLUDE_DIR ppl.hh)
 include_directories(${PPL_INCLUDE_DIR})
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
 # Add source files
 set(SRC_FILES
     ${BISON_LinTSParser_OUTPUTS}

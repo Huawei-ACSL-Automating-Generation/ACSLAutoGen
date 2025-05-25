@@ -5,6 +5,7 @@
 #include <cstring>
 
 using namespace std;
+using namespace Symbolic;
 std::unique_ptr<SymbolicExpr> SymbolicExpr::makeNull() { return std::make_unique<NullExpr>(); }
 
 std::unique_ptr<SymbolicExpr> LiteralExpr::clone() const
@@ -35,7 +36,10 @@ unique_ptr<SymbolicExpr> UnaryOpExpr::clone() const
 
 unique_ptr<SymbolicExpr> NullExpr::clone() const { return make_unique<NullExpr>(); }
 
-unique_ptr<SymbolicExpr> Variable::clone() const { return make_unique<Variable>(name_, varType_); }
+unique_ptr<SymbolicExpr> Symbolic::Variable::clone() const
+{
+    return make_unique<Symbolic::Variable>(name_, varType_);
+}
 
 std::unique_ptr<SymbolicExpr> Address::clone() const
 {
@@ -77,7 +81,7 @@ std::size_t LiteralExpr::hash() const
     return seed;
 }
 
-std::size_t Variable::hash() const
+std::size_t Symbolic::Variable::hash() const
 {
     std::size_t seed = static_cast<std::size_t>(getType());
     seed ^= std::hash<std::string>{}(name_);
@@ -166,7 +170,7 @@ std::string UnaryOpExpr::dump() const
 
 std::string NullExpr::dump() const { return "null"; }
 
-std::string Variable::dump() const
+std::string Symbolic::Variable::dump() const
 {
     std::ostringstream oss;
     const auto &t = getValType();
@@ -232,7 +236,7 @@ bool NullExpr::equal(const SymbolicExpr &expr) const
     return true;
 }
 
-bool Variable::equal(const SymbolicExpr &expr) const
+bool Symbolic::Variable::equal(const SymbolicExpr &expr) const
 {
     const auto var = dynamic_cast<const Variable *>(&expr);
     if (!var)
