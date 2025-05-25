@@ -582,11 +582,28 @@ bool Path::isUnchangedState(Address addr)
     std::string baseName;
     for (const auto &[varDecl, varAddrPtr] : varAddr)
     {
-        if (varAddrPtr->getId() == addr.getId())
+        Address *curAddr = varAddrPtr.get();
+        while (curAddr)
         {
-            baseName = varDecl->getNameAsString();
-            break;
+            if (curAddr->getId() == addr.getId())
+            {
+                baseName = varDecl->getNameAsString();
+                break;
+            }
+
+            auto tmpIt = memoryState.find(*curAddr);
+            if (tmpIt == memoryState.end())
+                break;
+
+            SymbolicExpr *innerVar = memIt->second.get();
+            if (innerVar->getType() != SymbolicExpr::ExprType::SymbolAddress)
+                break;
+
+            curAddr = static_cast<Address *>(innerVar);
         }
+
+        if (!baseName.empty())
+            break;
     }
 
     if (baseName.empty())

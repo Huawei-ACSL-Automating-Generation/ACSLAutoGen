@@ -1,6 +1,6 @@
 # src/Analyzer/CMakeLists.txt
 
-add_library(AnalyzerLib STATIC analysis.cpp state.cpp Symbolic/expr.cpp function.cpp)
+add_library(AnalyzerLib STATIC analysis.cpp state.cpp Symbolic/expr.cpp Symbolic/stingx.cpp function.cpp)
 
 target_include_directories(AnalyzerLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(AnalyzerLib PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/Symbolic)

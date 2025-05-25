@@ -65,6 +65,22 @@ class SymbolicExpr
         return !(LHS == RHS);
     }
 
+    //===----------------------------------------------------------------------===//
+    // StInG Interface Utilities - Symbolic Expression Adapter
+    //
+    // This section defines support for converting internal symbolic expressions
+    // into a form consumable by the StInG (Static Invariant Generator) tool,
+    // which synthesizes affine invariants via constraint solving.
+    //===----------------------------------------------------------------------===//
+
+    // Returns true if the expression is linear (affine).
+    virtual bool isLinear() const = 0;
+
+    // Returns the degree of the polynomial represented by this expression.
+    // Constants and variables are degree 0 and 1 respectively.
+    // Nonlinear terms (e.g., x*y) have degree >= 2.
+    virtual int getMaxDegree() const = 0;
+
   private:
     ExprType type_;
     Type valueType_;
@@ -135,6 +151,10 @@ class LiteralExpr : public SymbolicExpr
     std::size_t hash() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
 
+    // StInG: Support functions for affine invariant analysis
+    bool isLinear() const { return true; }
+    int getMaxDegree() const { return 0; }
+
   private:
     LiteralType type;
     union Data
@@ -194,6 +214,10 @@ class BinaryOpExpr : public SymbolicExpr
     std::size_t hash() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
 
+    // StInG: Support functions for affine invariant analysis
+    bool isLinear() const;
+    int getMaxDegree() const;
+
   private:
     std::unique_ptr<SymbolicExpr> left_;
     Operator op_;
@@ -230,6 +254,10 @@ class UnaryOpExpr : public SymbolicExpr
     std::size_t hash() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
 
+    // StInG: Support functions for affine invariant analysis
+    bool isLinear() const;
+    int getMaxDegree() const;
+
   private:
     Operator op_;
     std::unique_ptr<SymbolicExpr> expr_;
@@ -245,6 +273,10 @@ class NullExpr : public SymbolicExpr
     std::string dump() const override;
     std::size_t hash() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
+
+    // StInG: Support functions for affine invariant analysis
+    bool isLinear() const { return false; }
+    int getMaxDegree() const { return 0; }
 };
 
 class Variable : public SymbolicExpr
@@ -266,6 +298,10 @@ class Variable : public SymbolicExpr
     std::string dump() const override;
     std::size_t hash() const override;
     virtual bool equal(const SymbolicExpr &expr) const override;
+
+    // StInG: Support functions for affine invariant analysis
+    bool isLinear() const { return true; }
+    int getMaxDegree() const { return 1; }
 
   private:
     std::string name_;
@@ -324,6 +360,10 @@ class Address : public SymbolicExpr
     void setOffset(std::unique_ptr<SymbolicExpr> offset) { offset_ = std::move(offset); }
     std::unique_ptr<Address> addOffset(std::unique_ptr<SymbolicExpr> extra) const;
     bool isOffseted() const { return offset_ && offset_->getType() != ExprType::SNULL; }
+
+    // StInG: Support functions for affine invariant analysis
+    bool isLinear() const { return false; }
+    int getMaxDegree() const { return -1; }
 
   private:
     unsigned int id_;
