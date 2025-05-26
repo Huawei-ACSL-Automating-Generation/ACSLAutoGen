@@ -335,16 +335,17 @@ namespace Symbolic
       public:
         Address(const Address &other)
             : SymbolicExpr(other), id_(other.id_),
-              offset_(other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull())
+              offset_(other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull()),
+              varDecl_(other.varDecl_)
         {}
-
         Address &operator=(const Address &other)
         {
             if (this != &other)
             {
                 SymbolicExpr::operator=(other);
-                id_     = other.id_;
-                offset_ = other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull();
+                id_      = other.id_;
+                offset_  = other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull();
+                varDecl_ = other.varDecl_;
             }
             return *this;
         }

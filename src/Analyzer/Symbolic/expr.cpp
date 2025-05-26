@@ -43,7 +43,9 @@ std::unique_ptr<SymbolicExpr> Symbolic::Variable::clone() const
 
 std::unique_ptr<SymbolicExpr> Address::clone() const
 {
-    return std::make_unique<Address>(id_, offset_->clone());
+    auto cloned = std::make_unique<Address>(id_, offset_->clone());
+    cloned->setVarDecl(varDecl_);
+    return cloned;
 }
 
 std::string LiteralExpr::dump() const

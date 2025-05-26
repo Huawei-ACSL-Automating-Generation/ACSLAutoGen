@@ -5,3 +5,5 @@ build/
 *.sh
 .cache/
 **/_*/
+
+test.c
