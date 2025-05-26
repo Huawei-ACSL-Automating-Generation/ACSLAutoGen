@@ -7,6 +7,7 @@
 #include <queue>
 #include <unordered_map>
 #include <memory>
+#include <set>
 #include "Utils/utils.h"
 #include <llvm/ADT/APSInt.h>
 #include <clang/AST/StmtCXX.h>
@@ -316,7 +317,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
         })
         .Case<ArraySubscriptExpr>([this](const ArraySubscriptExpr *arrSub) -> EvalResult {
             LValueTarget lval = extractLValue(arrSub->getBase());
-            std::string baseName;
+            string baseName;
             if (auto varPtr = std::get_if<const VarDecl *>(&lval))
                 baseName = (*varPtr)->getNameAsString();
             else
@@ -354,7 +355,19 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
 
             return {std::move(outPaths), std::move(outExprs)};
         })
-        .Case<CallExpr>([](const CallExpr *) -> EvalResult { TODO(); })
+        .Case<CallExpr>([](const CallExpr *call) -> EvalResult {
+            const FunctionDecl *callee = call->getDirectCallee();
+            if (!callee)
+                return Path::EvalResult{};
+            static const set<string> ignoreNames = {"llvm.dbg.declare", "llvm.lifetime.start",
+                "llvm.lifetime.end", "printf", "__assert_fail"};
+            string name                          = callee->getNameAsString();
+            if (ignoreNames.count(name))
+                return Path::EvalResult{};
+
+            // TODO: complete the logic to call function.
+            UNIMPLEMENT("Unhandled CallExpr to function: " << name);
+        })
         .Case<ConditionalOperator>([this](const ConditionalOperator *condOp) -> EvalResult {
             EvalResult cond = evalExpr(condOp->getCond());
 
@@ -593,7 +606,7 @@ bool Path::isUnchangedState(Address addr)
     }
     else
     {
-        std::string expected = baseName + "[" + addr.getOffset()->dump() + "]";
+        string expected = baseName + "[" + addr.getOffset()->dump() + "]";
         return var->getName() == expected;
     }
 }
@@ -699,6 +712,12 @@ void ProgramState::step(const Stmt *stmt)
             if (!isAssignOp(binOp))
                 UNIMPLEMENT("BinaryOperator not implemented: " << binOp->getOpcode());
             updateVarState(binOp);
+        })
+        .Case<Expr>([this](const Expr *expr) {
+            for (auto &path : paths)
+            {
+                path->evalExpr(expr);
+            }
         })
         .Case<ImplicitCastExpr>(
             [](const ImplicitCastExpr *) -> unique_ptr<SymbolicExpr> { UNREACHABLE(); })

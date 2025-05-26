@@ -27,7 +27,8 @@ namespace Symbolic
         {
             Int,
             UInt,
-            Bool
+            Bool,
+            Void,
         };
 
         struct Type

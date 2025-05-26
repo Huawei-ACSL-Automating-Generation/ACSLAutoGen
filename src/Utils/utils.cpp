@@ -125,6 +125,7 @@ SymbolicExpr::Type deriveVarType(QualType type)
 
             case BuiltinType::LongLong: return {Kind::Int, 64};
             case BuiltinType::ULongLong: return {Kind::UInt, 64};
+            case BuiltinType::Void: return {Kind::Void, 0};
 
             default:
                 LangOptions langOpts;

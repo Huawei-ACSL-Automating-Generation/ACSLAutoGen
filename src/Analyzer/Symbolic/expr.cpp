@@ -184,6 +184,7 @@ std::string Symbolic::Variable::dump() const
     case ScalarKind::Int: oss << "int"; break;
     case ScalarKind::UInt: oss << "uint"; break;
     case ScalarKind::Bool: oss << "bool"; break;
+    case ScalarKind::Void: oss << "void"; break;
     }
 
     oss << t.bitWidth << ")";
