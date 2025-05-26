@@ -54,17 +54,86 @@ int BinaryOpExpr::getMaxDegree() const
     }
 }
 
-Linear_Expression LiteralExpr::toLinearExpr() const
+Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr() const
 {
     switch (type)
     {
-    case LiteralType::Boolean: return Linear_Expression(data.boolValue ? 1 : 0);
-    case LiteralType::Int: return Linear_Expression(data.intValue);
-    case LiteralType::UnsignedInt: return Linear_Expression(static_cast<int>(data.uintValue));
-    case LiteralType::Short: return Linear_Expression(static_cast<int>(data.shortValue));
-    case LiteralType::UnsignedShort: return Linear_Expression(static_cast<int>(data.ushortValue));
-    case LiteralType::Int64: return Linear_Expression(static_cast<Coefficient>(data.int64Value));
-    case LiteralType::UInt64: return Linear_Expression(static_cast<Coefficient>(data.uint64Value));
+    case LiteralType::Boolean:
+        return Parma_Polyhedra_Library::Linear_Expression(data.boolValue ? 1 : 0);
+    case LiteralType::Int: return Parma_Polyhedra_Library::Linear_Expression(data.intValue);
+    case LiteralType::UnsignedInt:
+        return Parma_Polyhedra_Library::Linear_Expression(static_cast<int>(data.uintValue));
+    case LiteralType::Short:
+        return Parma_Polyhedra_Library::Linear_Expression(static_cast<int>(data.shortValue));
+    case LiteralType::UnsignedShort:
+        return Parma_Polyhedra_Library::Linear_Expression(static_cast<int>(data.ushortValue));
+    case LiteralType::Int64:
+        return Parma_Polyhedra_Library::Linear_Expression(
+            static_cast<Parma_Polyhedra_Library::Coefficient>(data.int64Value));
+    case LiteralType::UInt64:
+        return Parma_Polyhedra_Library::Linear_Expression(
+            static_cast<Parma_Polyhedra_Library::Coefficient>(data.uint64Value));
     default: throw std::runtime_error("Unsupported LiteralExpr type in toLinearExpr");
     }
+}
+
+Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr() const
+{
+    auto L = left_->toLinearExpr();
+    auto R = right_->toLinearExpr();
+
+    switch (op_)
+    {
+    case Operator::Add: return L + R;
+    case Operator::Subtract: return L - R;
+    case Operator::Multiply:
+        if (right_->getMaxDegree() == 0)
+            return L * R.inhomogeneous_term();
+        if (left_->getMaxDegree() == 0)
+            return R * L.inhomogeneous_term();
+        break;
+    case Operator::Divide:
+        if (right_->getMaxDegree() == 0)
+        {
+            auto denom = R.inhomogeneous_term();
+            if (denom != 0)
+            {
+                Parma_Polyhedra_Library::Linear_Expression result(0);
+                int maxDim = L.space_dimension(); // total variable dimensions
+                for (int i = 0; i < maxDim; ++i)
+                {
+                    Parma_Polyhedra_Library::Variable v(i);
+                    auto coeff = L.coefficient(v);
+                    if (coeff != 0)
+                        result += (coeff / denom) * v;
+                }
+                result += L.inhomogeneous_term() / denom;
+                return result;
+            }
+        }
+        break;
+    default: break;
+    }
+    ERROR("non-affine or unsupported op");
+}
+
+Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr() const
+{
+    auto E = expr_->toLinearExpr();
+
+    switch (op_)
+    {
+    case Operator::Plus: return E;
+    case Operator::Minus: return -E;
+    default: break;
+    }
+
+    ERROR("non-affine or unsupported op");
+}
+
+Parma_Polyhedra_Library::Linear_Expression Symbolic::Variable::toLinearExpr() const
+{
+    Linear_Expression e(0);
+    e.set_coefficient(Parma_Polyhedra_Library::Variable(id_), 1);
+    return e;
 }

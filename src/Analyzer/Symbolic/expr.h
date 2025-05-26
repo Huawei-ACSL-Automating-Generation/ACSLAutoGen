@@ -233,6 +233,7 @@ namespace Symbolic
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override;
         int getMaxDegree() const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
         std::unique_ptr<SymbolicExpr> left_;
@@ -273,6 +274,7 @@ namespace Symbolic
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override;
         int getMaxDegree() const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
         Operator op_;
@@ -298,8 +300,8 @@ namespace Symbolic
     class Variable : public SymbolicExpr
     {
       public:
-        Variable(const std::string &name, Type varType)
-            : SymbolicExpr(ExprType::Variable, varType), name_(name), varType_(varType)
+        Variable(const std::string &name, Type varType, int id)
+            : SymbolicExpr(ExprType::Variable, varType), name_(name), varType_(varType), id_(id)
         {}
 
         Type getVarType() const { return varType_; }
@@ -308,7 +310,9 @@ namespace Symbolic
             varType_ = vt;
             setValType(vt);
         }
+
         const std::string &getName() const { return name_; }
+        int getId() const { return id_; }
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
@@ -318,10 +322,12 @@ namespace Symbolic
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 1; }
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
         std::string name_;
         Type varType_;
+        int id_; // unique identifier to distinguish between variables with the same name
     };
 
     class Address : public SymbolicExpr

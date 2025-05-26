@@ -57,6 +57,7 @@ class Path
 
     auto getVarAddr() const -> const auto & { return varAddr; };
     auto getMemoryState() const -> const auto & { return memoryState; }
+    int getNextSymVarId() { return symbolVarCounter++; }
     // auto getReturnExpr() const -> const auto & { return returnExpr; }
     // auto getPathState() const -> const auto & { return currentState; }
     // auto getAddrCounter() const -> const auto & { return addrCounter; }
@@ -81,6 +82,8 @@ class Path
     std::unique_ptr<SymbolicExpr> returnExpr = std::make_unique<NullExpr>();
 
     unsigned int addrCounter = 0;
+
+    unsigned int symbolVarCounter = 0;
 };
 
 class ProgramState

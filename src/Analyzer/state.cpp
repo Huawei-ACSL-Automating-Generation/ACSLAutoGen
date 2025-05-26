@@ -36,9 +36,9 @@ void Path::LoopInit(unordered_map<Symbolic::Variable *, unique_ptr<SymbolicExpr>
         {
             unique_ptr<SymbolicExpr> origExpr = std::move(memIt->second);
 
-            SymbolicExpr::Type derived = deriveVarType(varType);
-            unique_ptr<SymbolicExpr> newExpr =
-                make_unique<Symbolic::Variable>(varDecl->getNameAsString(), derived);
+            SymbolicExpr::Type derived       = deriveVarType(varType);
+            unique_ptr<SymbolicExpr> newExpr = make_unique<Symbolic::Variable>(
+                varDecl->getNameAsString(), derived, symbolVarCounter++);
 
             memIt->second = std::move(newExpr);
 
@@ -58,10 +58,10 @@ void Path::LoopInit(unordered_map<Symbolic::Variable *, unique_ptr<SymbolicExpr>
                 ERROR("No memory state entry for pointee");
             unique_ptr<SymbolicExpr> pointeeOrigExpr = std::move(memItPointee->second);
 
-            QualType baseType              = varType->getPointeeType();
-            SymbolicExpr::Type baseDerived = deriveVarType(baseType);
-            unique_ptr<SymbolicExpr> newPointeeExpr =
-                make_unique<Symbolic::Variable>("*" + varDecl->getNameAsString(), baseDerived);
+            QualType baseType                       = varType->getPointeeType();
+            SymbolicExpr::Type baseDerived          = deriveVarType(baseType);
+            unique_ptr<SymbolicExpr> newPointeeExpr = make_unique<Symbolic::Variable>(
+                "*" + varDecl->getNameAsString(), baseDerived, symbolVarCounter++);
             memItPointee->second = std::move(newPointeeExpr);
             Symbolic::Variable *varPtr =
                 dynamic_cast<Symbolic::Variable *>(memItPointee->second.get());
@@ -339,8 +339,9 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                 {
                     string varName = baseName + "[" + idxDump +
                                      "]"; // TODO: impl function to get pointer/array base name.
-                    auto varExpr = std::make_unique<Symbolic::Variable>(varName, varType);
-                    it           = memoryState.emplace(*newAddr, varExpr->clone()).first;
+                    auto varExpr =
+                        std::make_unique<Symbolic::Variable>(varName, varType, symbolVarCounter++);
+                    it = memoryState.emplace(*newAddr, varExpr->clone()).first;
                     outExprs.emplace_back(std::move(varExpr));
                 }
                 else
@@ -618,9 +619,9 @@ void ProgramState::init()
         {
             Address *addr = paths[0]->allocMemory(param);
 
-            SymbolicExpr::Type varType = deriveVarType(paramType);
-            unique_ptr<SymbolicExpr> varExpr =
-                make_unique<Symbolic::Variable>(param->getNameAsString(), varType);
+            SymbolicExpr::Type varType       = deriveVarType(paramType);
+            unique_ptr<SymbolicExpr> varExpr = make_unique<Symbolic::Variable>(
+                param->getNameAsString(), varType, paths[0]->getNextSymVarId());
 
             paths[0]->updateMemory(addr, std::move(varExpr));
         }
@@ -637,9 +638,9 @@ void ProgramState::init()
             unique_ptr<SymbolicExpr> pointerValue = pointeeAddr->clone();
             paths[0]->updateMemory(ptrAddr, std::move(pointerValue));
 
-            SymbolicExpr::Type varType = deriveVarType(baseType);
-            unique_ptr<SymbolicExpr> pointeeVarExpr =
-                make_unique<Symbolic::Variable>("*" + param->getNameAsString(), varType);
+            SymbolicExpr::Type varType              = deriveVarType(baseType);
+            unique_ptr<SymbolicExpr> pointeeVarExpr = make_unique<Symbolic::Variable>(
+                "*" + param->getNameAsString(), varType, paths[0]->getNextSymVarId());
             paths[0]->updateMemory(pointeeAddr, std::move(pointeeVarExpr));
         }
         else if (paramType->isArrayType())

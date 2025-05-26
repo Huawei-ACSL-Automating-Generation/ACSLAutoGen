@@ -36,9 +36,9 @@ unique_ptr<SymbolicExpr> UnaryOpExpr::clone() const
 
 unique_ptr<SymbolicExpr> NullExpr::clone() const { return make_unique<NullExpr>(); }
 
-unique_ptr<SymbolicExpr> Symbolic::Variable::clone() const
+std::unique_ptr<SymbolicExpr> Symbolic::Variable::clone() const
 {
-    return make_unique<Symbolic::Variable>(name_, varType_);
+    return std::make_unique<Symbolic::Variable>(name_, varType_, id_);
 }
 
 std::unique_ptr<SymbolicExpr> Address::clone() const
@@ -84,7 +84,7 @@ std::size_t LiteralExpr::hash() const
 std::size_t Symbolic::Variable::hash() const
 {
     std::size_t seed = static_cast<std::size_t>(getType());
-    seed ^= std::hash<std::string>{}(name_);
+    seed ^= std::hash<int>{}(id_);
     seed ^= static_cast<std::size_t>(varType_.kind) + varType_.bitWidth;
     return seed;
 }
@@ -175,7 +175,7 @@ std::string Symbolic::Variable::dump() const
     std::ostringstream oss;
     const auto &t = getValType();
 
-    oss << "Var(" << name_ << ", ";
+    oss << "Var(" << name_ << "_" << id_ << ", ";
 
     switch (t.kind)
     {
@@ -242,7 +242,7 @@ bool Symbolic::Variable::equal(const SymbolicExpr &expr) const
     if (!var)
         return false;
 
-    return name_ == var->name_ && varType_ == var->varType_;
+    return id_ == var->id_;
 }
 
 bool Address::equal(const SymbolicExpr &expr) const
