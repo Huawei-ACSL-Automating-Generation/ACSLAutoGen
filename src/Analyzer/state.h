@@ -11,6 +11,9 @@
 
 using namespace Symbolic;
 using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>>;
+using TransRel     = std::tuple<int, int, std::vector<std::unique_ptr<SymbolicExpr>>>;
+using InitRel      = std::pair<int, std::vector<std::unique_ptr<SymbolicExpr>>>;
+
 class Path
 {
   public:
@@ -61,6 +64,10 @@ class Path
     // auto getReturnExpr() const -> const auto & { return returnExpr; }
     // auto getPathState() const -> const auto & { return currentState; }
     // auto getAddrCounter() const -> const auto & { return addrCounter; }
+
+    void computeLinearInv(const std::vector<std::string> &locations,
+        const std::vector<TransRel> &transitions,
+        const InitRel &initial);
 
   private:
     EvalResult evalExpr(const clang::Expr *expr);

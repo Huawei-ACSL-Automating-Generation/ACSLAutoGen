@@ -9,6 +9,8 @@
 
 namespace Symbolic
 {
+    class Variable;
+
     // Base class for symbolic expressions.
     class SymbolicExpr
     {
@@ -70,6 +72,8 @@ namespace Symbolic
             return !(LHS == RHS);
         }
 
+        virtual void collectUsedVars(std::vector<Variable *> &) const {}
+
         //===----------------------------------------------------------------------===//
         // StInG Interface Utilities - Symbolic Expression Adapter
         //
@@ -89,7 +93,8 @@ namespace Symbolic
         // Convert this symbolic expression into a PPL Linear_Expression.
         // Only valid for expressions that are affine (i.e., linear w.r.t. variables).
         // Throws or fails if the expression is not representable in linear form.
-        virtual Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const
+        virtual Parma_Polyhedra_Library::Linear_Expression
+        toLinearExpr(const std::unordered_map<std::string, int> &) const
         {
             ERROR("not implemented for expression type: ");
         }
@@ -169,7 +174,8 @@ namespace Symbolic
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 0; }
-        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
+        Parma_Polyhedra_Library::Linear_Expression
+        toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
 
       private:
         LiteralType type;
@@ -226,15 +232,21 @@ namespace Symbolic
               right_(right)
         {}
 
+        const std::unique_ptr<SymbolicExpr> &getLeft() const { return left_; }
+        const std::unique_ptr<SymbolicExpr> &getRight() const { return right_; }
+        Operator getOperator() const { return op_; }
+
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
+        void collectUsedVars(std::vector<Variable *> &vars) const override;
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override;
         int getMaxDegree() const override;
-        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
+        Parma_Polyhedra_Library::Linear_Expression
+        toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
 
       private:
         std::unique_ptr<SymbolicExpr> left_;
@@ -272,10 +284,12 @@ namespace Symbolic
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
+        void collectUsedVars(std::vector<Variable *> &vars) const override;
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override;
         int getMaxDegree() const override;
-        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
+        Parma_Polyhedra_Library::Linear_Expression
+        toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
 
       private:
         Operator op_;
@@ -320,10 +334,12 @@ namespace Symbolic
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
+        void collectUsedVars(std::vector<Variable *> &vars) const override;
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 1; }
-        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
+        Parma_Polyhedra_Library::Linear_Expression
+        toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
 
       private:
         std::string name_;

@@ -1,5 +1,7 @@
 #include "expr.h"
 #include "ppl.hh"
+#include "Analyzer/state.h"
+#include "Stingx/LinTS.h"
 
 using namespace std;
 using namespace Symbolic;
@@ -54,7 +56,8 @@ int BinaryOpExpr::getMaxDegree() const
     }
 }
 
-Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr() const
+Parma_Polyhedra_Library::Linear_Expression
+LiteralExpr::toLinearExpr(const unordered_map<string, int> &) const
 {
     switch (type)
     {
@@ -77,10 +80,11 @@ Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr() const
     }
 }
 
-Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr() const
+Parma_Polyhedra_Library::Linear_Expression
+BinaryOpExpr::toLinearExpr(const unordered_map<string, int> &varIndexMap) const
 {
-    auto L = left_->toLinearExpr();
-    auto R = right_->toLinearExpr();
+    auto L = left_->toLinearExpr(varIndexMap);
+    auto R = right_->toLinearExpr(varIndexMap);
 
     switch (op_)
     {
@@ -117,9 +121,10 @@ Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr() const
     ERROR("non-affine or unsupported op");
 }
 
-Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr() const
+Parma_Polyhedra_Library::Linear_Expression
+UnaryOpExpr::toLinearExpr(const unordered_map<string, int> &varIndexMap) const
 {
-    auto E = expr_->toLinearExpr();
+    auto E = expr_->toLinearExpr(varIndexMap);
 
     switch (op_)
     {
@@ -131,9 +136,141 @@ Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr() const
     ERROR("non-affine or unsupported op");
 }
 
-Parma_Polyhedra_Library::Linear_Expression Symbolic::Variable::toLinearExpr() const
+Parma_Polyhedra_Library::Linear_Expression
+Symbolic::Variable::toLinearExpr(const unordered_map<string, int> &varIndexMap) const
 {
     Linear_Expression e(0);
-    e.set_coefficient(Parma_Polyhedra_Library::Variable(id_), 1);
+    auto it = varIndexMap.find(name_);
+    if (it == varIndexMap.end())
+    {
+        ERROR("Variable '" + name_ + "' not found in varIndexMap.");
+    }
+
+    int index = it->second;
+    e.set_coefficient(Parma_Polyhedra_Library::Variable(index), 1);
     return e;
+}
+Parma_Polyhedra_Library::Constraint toConstraint(
+    const Symbolic::SymbolicExpr *expr, const std::unordered_map<std::string, int> &varIndexMap)
+{
+    if (!expr || expr->getType() != Symbolic::SymbolicExpr::ExprType::BinaryOp)
+    {
+        ERROR("toConstraint: expression must be a BinaryOpExpr.");
+    }
+
+    const Symbolic::BinaryOpExpr *bin = static_cast<const Symbolic::BinaryOpExpr *>(expr);
+    const auto &op                    = bin->getOperator();
+
+    Parma_Polyhedra_Library::Linear_Expression lhs = bin->getLeft()->toLinearExpr(varIndexMap);
+    Parma_Polyhedra_Library::Linear_Expression rhs = bin->getRight()->toLinearExpr(varIndexMap);
+    Parma_Polyhedra_Library::Linear_Expression le  = lhs - rhs;
+
+    switch (op)
+    {
+    case Symbolic::BinaryOpExpr::Operator::LessEqual:
+        return Parma_Polyhedra_Library::Constraint(le <= 0);
+    case Symbolic::BinaryOpExpr::Operator::GreaterEqual:
+        return Parma_Polyhedra_Library::Constraint(-le <= 0);
+    case Symbolic::BinaryOpExpr::Operator::Equal:
+        return Parma_Polyhedra_Library::Constraint(le == 0);
+    default: ERROR("toConstraint: unsupported binary operator in assertion (must be <=, >=, ==).");
+    }
+}
+
+Parma_Polyhedra_Library::C_Polyhedron *
+convertAssertionsToPoly(const vector<unique_ptr<Symbolic::SymbolicExpr>> &assertions,
+    const unordered_map<string, int> &varIndexMap)
+{
+    if (varIndexMap.empty())
+    {
+        ERROR("convertAssertionsToPoly: empty variable map");
+    }
+
+    int dimension = static_cast<int>(varIndexMap.size());
+    auto *poly =
+        new Parma_Polyhedra_Library::C_Polyhedron(dimension, Parma_Polyhedra_Library::UNIVERSE);
+
+    for (const auto &assertion : assertions)
+    {
+        if (!assertion)
+        {
+            ERROR("convertAssertionsToPoly: null assertion expression encountered");
+        }
+
+        const Symbolic::SymbolicExpr *rawExpr          = assertion.get();
+        Parma_Polyhedra_Library::Constraint constraint = toConstraint(rawExpr, varIndexMap);
+        poly->add_constraint(constraint);
+    }
+
+    return poly;
+}
+
+void Path::computeLinearInv(
+    const vector<string> &locations, const vector<TransRel> &transitions, const InitRel &initial)
+{
+    // Step 1: Collect all unique Variable names from transitions and initial
+    set<string> varNames;
+    unordered_map<string, int> varIndexMap;
+    int varCounter = 0;
+
+    auto collectVars = [&](const vector<unique_ptr<SymbolicExpr>> &exprs) {
+        for (const auto &expr : exprs)
+        {
+            vector<Symbolic::Variable *> vars;
+            expr->collectUsedVars(vars);
+            for (auto *var : vars)
+            {
+                const string &name = var->getName();
+                if (varNames.insert(name).second)
+                {
+                    varIndexMap[name] = varCounter++;
+                }
+            }
+        }
+    };
+
+    for (const auto &[src, dst, exprs] : transitions)
+    {
+        collectVars(exprs);
+    }
+
+    collectVars(initial.second);
+
+    // Step 2: Initialize LinTS and add variables
+    auto linTS = std::make_unique<LinTS>();
+
+    for (const auto &name : varNames)
+    {
+        linTS->addVariable(
+            const_cast<char *>(name.c_str())); // Assume external handles const correctly
+    }
+
+    // Step 3: Add locations and initial state
+    for (size_t i = 0; i < locations.size(); ++i)
+    {
+        const string &locName = locations[i];
+        if (static_cast<int>(i) == initial.first && initial.first != -1)
+        {
+            C_Polyhedron *initPoly = convertAssertionsToPoly(initial.second, varIndexMap);
+            linTS->addLocInit(const_cast<char *>(locName.c_str()), initPoly);
+        }
+        else
+        {
+            linTS->addLocInit(const_cast<char *>(locName.c_str()), nullptr);
+        }
+    }
+
+    // Step 4: Add transition relations
+    for (size_t i = 0; i < transitions.size(); ++i)
+    {
+        const auto &[src, dst, exprs] = transitions[i];
+        string transName              = "t" + std::to_string(i);
+        C_Polyhedron *transPoly       = convertAssertionsToPoly(exprs, varIndexMap);
+        linTS->addTransRel(const_cast<char *>(transName.c_str()),
+            const_cast<char *>(locations[src].c_str()), const_cast<char *>(locations[dst].c_str()),
+            transPoly);
+    }
+
+    // Step 5: Run invariant computation
+    linTS->ComputeLinTSInv();
 }

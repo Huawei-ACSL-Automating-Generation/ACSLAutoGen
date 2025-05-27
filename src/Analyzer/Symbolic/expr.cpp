@@ -257,6 +257,22 @@ bool Address::equal(const SymbolicExpr &expr) const
     return id_ == addr->id_ && offset_ == addr->offset_;
 }
 
+void Symbolic::Variable::collectUsedVars(std::vector<Symbolic::Variable *> &vars) const
+{
+    vars.push_back(const_cast<Symbolic::Variable *>(this));
+}
+
+void BinaryOpExpr::collectUsedVars(std::vector<Symbolic::Variable *> &vars) const
+{
+    left_->collectUsedVars(vars);
+    right_->collectUsedVars(vars);
+}
+
+void UnaryOpExpr::collectUsedVars(std::vector<Symbolic::Variable *> &vars) const
+{
+    expr_->collectUsedVars(vars);
+}
+
 std::unique_ptr<Address> Address::addOffset(std::unique_ptr<SymbolicExpr> extra) const
 {
     auto result = std::make_unique<Address>(*this);
