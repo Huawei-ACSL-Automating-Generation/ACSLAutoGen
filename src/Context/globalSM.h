@@ -4,7 +4,6 @@
 #define GLOBAL_SM_H
 
 #include <memory>
-#include <mutex>
 #include <tuple>
 #include "macros.h"
 #include "clang/Basic/SourceManager.h"
@@ -32,11 +31,10 @@ class GlobalSM
     static std::optional<std::tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned>>
     getStmtInfo(const clang::Stmt *stmt);
 
-    void initialize(clang::ASTContext &context)
+    void initialize(clang::SourceManager &SM, const clang::LangOptions &LO)
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        SM_ = &context.getSourceManager();
-        rewriter_.setSourceMgr(*SM_, context.getLangOpts());
+        SM_ = &SM;
+        rewriter_.setSourceMgr(*SM_, LO);
     }
 
     GlobalSM(const GlobalSM &)            = delete;
@@ -48,7 +46,6 @@ class GlobalSM
 
     clang::SourceManager *SM_ = nullptr;
     clang::Rewriter rewriter_;
-    mutable std::mutex mutex_;
 };
 
 #endif // SIMPLE_SM_H

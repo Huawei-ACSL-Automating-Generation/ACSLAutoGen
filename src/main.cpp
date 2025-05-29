@@ -24,7 +24,6 @@ class TUASTConsumer : public ASTConsumer
   public:
     void HandleTranslationUnit(ASTContext &Context) override
     {
-        GlobalSM::getInstance().initialize(Context);
         if (ASTOnly)
         {
             TranslationUnitDecl *TUDecl = Context.getTranslationUnitDecl();
@@ -35,7 +34,7 @@ class TUASTConsumer : public ASTConsumer
             ACSLContext acslContext(Context);
             ACSLAnalyzer analyzer(acslContext);
             analyzer.analyzeFunctions();
-            auto &SM = GlobalSM::getSM();
+            auto &SM       = GlobalSM::getSM();
             auto &rewriter = GlobalSM::getRewriter();
             std::error_code EC;
 
@@ -51,13 +50,86 @@ class TUASTConsumer : public ASTConsumer
     }
 };
 
+class ACSLCommentHandler : public CommentHandler
+{
+    Rewriter &TheRewriter;
+
+  public:
+    ACSLCommentHandler(Rewriter &R) : TheRewriter(R) {}
+
+    bool HandleComment(Preprocessor &PP, SourceRange CommentRange) override
+    {
+        SourceManager &SM = PP.getSourceManager();
+        if (!SM.isInMainFile(CommentRange.getBegin()))
+            return false;
+
+        // Grab the raw text of the comment
+        StringRef text =
+            Lexer::getSourceText(CharSourceRange::getCharRange(CommentRange), SM, PP.getLangOpts());
+
+        // Only care about ACSL-style comments: /*@ ... */ or //@ ...
+        if (text.starts_with("/*@") || text.starts_with("//@"))
+        {
+            //-------------------------------
+            // remove all ACSL now
+            //-------------------------------
+            // TODO(requires): impl this dealing with 'requires'.
+            TheRewriter.RemoveText(CharSourceRange::getCharRange(CommentRange));
+            return false;
+            // If it contains a 'requires', extract only those lines
+            if (text.contains("requires"))
+            {
+                SmallVector<StringRef, 8> lines;
+                text.split(lines, '\n');
+
+                std::string newComment;
+                // Reconstruct as a /*@ ... */ block
+                if (text.starts_with("/*@"))
+                    newComment = "/*@\n";
+                else
+                    newComment = "//@\n";
+
+                for (auto &line : lines)
+                {
+                    if (auto pos = line.find("requires"); pos != StringRef::npos)
+                    {
+                        newComment += line.substr(pos);
+                        newComment += "\n";
+                    }
+                }
+
+                if (text.starts_with("/*@"))
+                    newComment += "*/";
+
+                // TODO: store 'requires'.
+                TheRewriter.ReplaceText(CharSourceRange::getCharRange(CommentRange), newComment);
+            }
+            else
+            {
+                // Remove all ACSL
+                TheRewriter.RemoveText(CharSourceRange::getCharRange(CommentRange));
+            }
+            // TODO: return true causes segfault, why?
+            return false;
+        }
+
+        return false; // leave other comments alone
+    }
+};
+
 class TUFrontendAction : public ASTFrontendAction
 {
   public:
-    std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &, StringRef) override
+    std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef) override
     {
+        GlobalSM::getInstance().initialize(CI.getSourceManager(), CI.getLangOpts());
+        commentHandler_ = std::make_unique<ACSLCommentHandler>(GlobalSM::getRewriter());
+        CI.getPreprocessor().addCommentHandler(commentHandler_.get());
         return std::make_unique<TUASTConsumer>();
     }
+
+  private:
+    std::unique_ptr<ACSLCommentHandler> commentHandler_;
 };
 
 int main(int argc, const char **argv)
