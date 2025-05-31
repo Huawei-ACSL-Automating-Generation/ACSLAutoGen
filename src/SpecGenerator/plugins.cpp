@@ -1,78 +1,85 @@
 // src/SpecGenerator/plugins.cpp
 
+#include <unordered_set>
 #include "specGenerator.h"
 #include "stringTemplate.h"
 #include "macros.h"
 #include "state.h"
+#include "utils.h"
 
 using namespace std;
 using namespace clang;
 
-class AssignPlugin : public FunctionContractPlugin
+class AssignsPlugin : public FunctionContractPlugin
 {
   public:
-    AssignPlugin(const string &ID) : id_(ID) {}
+    AssignsPlugin(const string &ID) : id_(ID) {}
     string id() const override { return id_; }
     optional<string> generate(const ProgramState &pre, const ProgramState &post) override
     {
+        typedef pair<const clang::VarDecl *const, optional<string>> AssignedAddr;
+
+        string spec;
+        unordered_set<AssignedAddr, acslg::pair_hash> assignedMap;
         // Function's pre-state should have exactly one path.
         if (auto &paths = pre.getPaths(); paths.size() == 1)
         {
-            auto &path = paths[0];
-            unordered_map<VarDecl const *, optional<uint>> isChangedFlag;
-            // for every var in pre-state
-            for (auto &[var, _] : path->getVarAddr())
+            auto &prePath = paths[0];
+
+            auto isFromPointerParam = [&](const Address &addr) {
+                auto &varAddrMap = prePath->getVarAddr();
+                if (auto it = varAddrMap.find(addr.getVarDecl());
+                    it == varAddrMap.end() /* from local parameter */ ||
+                    *(it->second) == addr /* function parameter's address */)
+                    return false;
+                else
+                    return true;
+            };
+            // For every post-state path
+            for (auto &postPath : post.getPaths())
             {
-                // Is there any post-path that var's value is changed?
-                for (auto &postPath : post.getPaths())
+                // and every Address in the path's memoryState.
+                for (auto &[addr, _] : postPath->getMemoryState())
                 {
-                    auto preValue = path->getVarState(var), postValue = postPath->getVarState(var);
-                    uint depth = 0; // represent how many *(deref) before var;
-                    while (*preValue == *postValue &&
-                           preValue->getType() == SymbolicExpr::ExprType::SymbolAddress)
+                    if (!addr.hasVarDecl() /* Just for safety */
+                        || !isFromPointerParam(addr) || postPath->isUnchangedState(addr))
+                        continue;
+
+                    // TODO(Multiple pointer): only support one dimension now.
+                    if (!addr.isOffseted())
                     {
-                        ++depth;
-                        preValue = path->getMemoryState()
-                                       .at(*static_cast<Address *>(preValue.get()))
-                                       ->clone();
-                        postValue = postPath->getMemoryState()
-                                        .at(*static_cast<Address *>(postValue.get()))
-                                        ->clone();
+                        assignedMap.insert(AssignedAddr{addr.getVarDecl(), nullopt});
+                        continue;
                     }
-                    if (*preValue != *postValue)
-                        isChangedFlag[var] = depth;
+
+                    auto offset = addr.getOffset();
+                    assignedMap.insert(AssignedAddr{addr.getVarDecl(),
+                        offset == nullptr ? optional<string>{nullopt}
+                                          : optional<string>{offset->regularForm()}});
                 }
             }
-
-            string spec     = "assigns ";
-            bool haveAssign = false;
-            for (auto [var, depth] : isChangedFlag)
-            {
-                if (!depth)
-                    continue; // never happen
-
-                if (haveAssign)
-                    spec += ", ";
-                haveAssign = true;
-                for (uint i = 0; i < *depth; i++)
-                    spec += "*";
-                spec += var->getName();
-            }
-            if (!haveAssign)
-                spec += R"(\nothing)";
-            spec += ";";
-            return spec;
         }
-        else
+
+        for (auto &[var, offset] : assignedMap)
         {
-            ERROR("The number of paths to the function's pre-state isn't exactly one.");
+            auto varName = var->getNameAsString();
+            if (offset)
+                spec += "*(" + varName + "+" + *offset + ")";
+            else
+                spec += "*" + varName;
+            spec += ", ";
         }
+
+        if (spec.empty())
+            return R"(assigns \nothing;)";
+        else
+            return "assigns " + spec.substr(0, spec.length() - 2) + ";";
     }
 
   private:
     string id_;
 };
-REGISTER_ACSL_PLUGIN(AssignPlugin, "assign");
+REGISTER_ACSL_PLUGIN(AssignsPlugin, "assigns");
 
 class ResultPlugin : public FunctionContractPlugin
 {

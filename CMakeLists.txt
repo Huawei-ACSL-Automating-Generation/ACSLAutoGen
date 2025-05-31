@@ -7,6 +7,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(LLVM REQUIRED CONFIG)
 find_package(Clang REQUIRED CONFIG)
+find_package(PkgConfig REQUIRED)
+
+pkg_check_modules(GMP REQUIRED gmpxx)  
+
+find_path( PPL_INCLUDE_DIR
+  NAMES     ppl.hh
+  HINTS     /usr/include /usr/local/include
+)
+
+find_library( PPL_LIBRARY
+  NAMES     ppl
+  HINTS     /usr/lib /usr/local/lib
+)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")

@@ -3,4 +3,4 @@
 #include "specGenerator.h"
 #include "macros.h"
 
-REGISTER_ACSL_GROUP(DefaultFunctionContract, "assign", "result");
+REGISTER_ACSL_GROUP(DefaultFunctionContract, "assigns", "result");

@@ -48,23 +48,6 @@ std::unique_ptr<SymbolicExpr> Address::clone() const
     return cloned;
 }
 
-std::string LiteralExpr::dump() const
-{
-    std::ostringstream oss;
-    switch (getLiteralType())
-    {
-    case LiteralType::Boolean: oss << (data.boolValue ? "true" : "false"); break;
-    case LiteralType::Int: oss << data.intValue; break;
-    case LiteralType::UnsignedInt: oss << data.uintValue; break;
-    case LiteralType::Short: oss << data.shortValue; break;
-    case LiteralType::UnsignedShort: oss << data.ushortValue; break;
-    case LiteralType::Int64: oss << data.int64Value; break;
-    case LiteralType::UInt64: oss << data.uint64Value; break;
-    }
-
-    return oss.str();
-}
-
 std::size_t LiteralExpr::hash() const
 {
     std::size_t seed = static_cast<std::size_t>(getType());
@@ -81,6 +64,20 @@ std::size_t LiteralExpr::hash() const
     case LiteralType::UInt64: return seed ^ std::hash<uint64_t>{}(data.uint64Value);
     }
     return seed;
+}
+
+int64_t LiteralExpr::getLiteralValue() const
+{
+    switch (getLiteralType())
+    {
+    case LiteralType::Boolean: return data.boolValue;
+    case LiteralType::Int: return data.intValue;
+    case LiteralType::UnsignedInt: return data.uintValue;
+    case LiteralType::Short: return data.shortValue;
+    case LiteralType::UnsignedShort: return data.ushortValue;
+    case LiteralType::Int64: return data.int64Value;
+    case LiteralType::UInt64: return data.uint64Value;
+    }
 }
 
 std::size_t Symbolic::Variable::hash() const
@@ -117,6 +114,23 @@ std::size_t Address::hash() const
 }
 
 std::size_t NullExpr::hash() const { return static_cast<std::size_t>(getType()); }
+
+std::string LiteralExpr::dump() const
+{
+    std::ostringstream oss;
+    switch (getLiteralType())
+    {
+    case LiteralType::Boolean: oss << (data.boolValue ? "true" : "false"); break;
+    case LiteralType::Int: oss << data.intValue; break;
+    case LiteralType::UnsignedInt: oss << data.uintValue; break;
+    case LiteralType::Short: oss << data.shortValue; break;
+    case LiteralType::UnsignedShort: oss << data.ushortValue; break;
+    case LiteralType::Int64: oss << data.int64Value; break;
+    case LiteralType::UInt64: oss << data.uint64Value; break;
+    }
+
+    return oss.str();
+}
 
 std::string BinaryOpExpr::dump() const
 {
@@ -203,6 +217,88 @@ std::string Address::dump() const
     return oss.str();
 }
 
+std::string LiteralExpr::regularForm() const
+{
+    std::ostringstream oss;
+    switch (getLiteralType())
+    {
+    case LiteralType::Boolean: oss << (data.boolValue ? "true" : "false"); break;
+    case LiteralType::Int: oss << data.intValue; break;
+    case LiteralType::UnsignedInt: oss << data.uintValue; break;
+    case LiteralType::Short: oss << data.shortValue; break;
+    case LiteralType::UnsignedShort: oss << data.ushortValue; break;
+    case LiteralType::Int64: oss << data.int64Value; break;
+    case LiteralType::UInt64: oss << data.uint64Value; break;
+    }
+    return oss.str();
+}
+
+std::string BinaryOpExpr::regularForm() const
+{
+    std::ostringstream oss;
+    std::string opStr;
+    switch (op_)
+    {
+    case Operator::Multiply: opStr = "*"; break;
+    case Operator::Divide: opStr = "/"; break;
+    case Operator::Remainder: opStr = "%"; break;
+    case Operator::Add: opStr = "+"; break;
+    case Operator::Subtract: opStr = "-"; break;
+    case Operator::ShiftLeft: opStr = "<<"; break;
+    case Operator::ShiftRight: opStr = ">>"; break;
+    case Operator::LessThan: opStr = "<"; break;
+    case Operator::GreaterThan: opStr = ">"; break;
+    case Operator::LessEqual: opStr = "<="; break;
+    case Operator::GreaterEqual: opStr = ">="; break;
+    case Operator::Equal: opStr = "=="; break;
+    case Operator::NotEqual: opStr = "!="; break;
+    case Operator::BitAnd: opStr = "&"; break;
+    case Operator::BitXor: opStr = "^"; break;
+    case Operator::BitOr: opStr = "|"; break;
+    case Operator::LogicalAnd: opStr = "&&"; break;
+    case Operator::LogicalOr: opStr = "||"; break;
+    default: opStr = "?"; break;
+    }
+    oss << "(" << left_->dump() << " " << opStr << " " << right_->dump() << ")";
+    return oss.str();
+}
+
+std::string UnaryOpExpr::regularForm() const
+{
+    std::ostringstream oss;
+    std::string opStr;
+    switch (op_)
+    {
+    case Operator::Plus: opStr = "+"; break;
+    case Operator::Minus: opStr = "-"; break;
+    case Operator::LogicalNot: opStr = "!"; break;
+    case Operator::BitwiseNot: opStr = "~"; break;
+    case Operator::PreInc: opStr = "++"; break;
+    case Operator::PreDec: opStr = "--"; break;
+    case Operator::PostInc: opStr = "++"; break;
+    case Operator::PostDec: opStr = "--"; break;
+    case Operator::AddrOf: opStr = "&"; break;
+    case Operator::Dereference: opStr = "*"; break;
+    default: opStr = "?"; break;
+    }
+    oss << opStr << "(" << expr_->dump() << ")";
+    return oss.str();
+}
+
+std::string NullExpr::regularForm() const
+{
+    WARN("Output NullExpr's regular form, something may go wrong.");
+    return "";
+}
+
+std::string Symbolic::Variable::regularForm() const { return name_; }
+
+std::string Address::regularForm() const
+{
+    // TODO(Multiple pointer): only support one dimension now.
+    return "&" + varDecl_->getNameAsString();
+}
+
 bool LiteralExpr::equal(const SymbolicExpr &expr) const
 {
     const auto liter = dynamic_cast<const LiteralExpr *>(&expr);
@@ -273,6 +369,7 @@ void UnaryOpExpr::collectUsedVars(std::vector<Symbolic::Variable *> &vars) const
     expr_->collectUsedVars(vars);
 }
 
+// *add*Offset but const func. WithOffset may be better.
 std::unique_ptr<Address> Address::addOffset(std::unique_ptr<SymbolicExpr> extra) const
 {
     auto result = std::make_unique<Address>(*this);

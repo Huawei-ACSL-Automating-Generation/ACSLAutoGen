@@ -52,6 +52,7 @@ namespace Symbolic
         static std::unique_ptr<SymbolicExpr> makeNull();
         virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
         virtual std::string dump() const                    = 0;
+        virtual std::string regularForm() const             = 0;
         virtual bool equal(const SymbolicExpr &) const      = 0;
         virtual std::size_t hash() const                    = 0;
 
@@ -168,6 +169,7 @@ namespace Symbolic
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
+        virtual std::string regularForm() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -176,6 +178,7 @@ namespace Symbolic
         int getMaxDegree() const override { return 0; }
         Parma_Polyhedra_Library::Linear_Expression
         toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
+        int64_t getLiteralValue() const;
 
       private:
         LiteralType type;
@@ -238,6 +241,7 @@ namespace Symbolic
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
+        std::string regularForm() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -281,6 +285,7 @@ namespace Symbolic
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
+        std::string regularForm() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -304,6 +309,7 @@ namespace Symbolic
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
+        std::string regularForm() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -331,6 +337,7 @@ namespace Symbolic
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
+        std::string regularForm() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -393,6 +400,7 @@ namespace Symbolic
         std::unique_ptr<SymbolicExpr> clone() const override;
         unsigned int getId() const { return id_; }
         std::string dump() const override;
+        std::string regularForm() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
         SymbolicExpr *getOffset() const { return offset_.get(); }
@@ -400,6 +408,7 @@ namespace Symbolic
 
         void setVarDecl(const clang::VarDecl *varDecl) { varDecl_ = varDecl; }
         bool hasVarDecl() const { return varDecl_ != nullptr; }
+        auto getVarDecl() const -> const auto & { return varDecl_; }
         std::string getBaseName() const { return varDecl_ ? varDecl_->getNameAsString() : ""; }
 
         void setOffset(std::unique_ptr<SymbolicExpr> offset) { offset_ = std::move(offset); }

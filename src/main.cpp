@@ -37,9 +37,15 @@ class TUASTConsumer : public ASTConsumer
             auto &SM       = GlobalSM::getSM();
             auto &rewriter = GlobalSM::getRewriter();
             std::error_code EC;
-
             // TODO: replace "with_acsl.c" with user-defined relative path.
-            llvm::raw_fd_ostream Out("with_acsl.c", EC, llvm::sys::fs::OF_None);
+
+            auto getFileName = [&]() {
+                auto name   = SM.getFilename(SM.getLocForStartOfFile(SM.getMainFileID()));
+                auto dotPos = name.find('.');
+                return name.substr(0, dotPos ? dotPos - 1 : name.size()).str();
+            };
+
+            llvm::raw_fd_ostream Out(getFileName() + "with_acsl.c", EC, llvm::sys::fs::OF_None);
             if (EC)
                 ERROR("Error opening file 'with_acsl.c': " + EC.message());
 

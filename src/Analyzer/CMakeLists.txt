@@ -16,4 +16,6 @@ target_link_libraries(AnalyzerLib PRIVATE
     clangAST
     clangTooling
     clangFrontend
+    ${PPL_LIBRARY}
+    ${GMP_LIBRARY}
 )

@@ -8,7 +8,7 @@ add_subdirectory(Analyzer)
 add_subdirectory(Context)
 add_subdirectory(Utils)
 add_subdirectory(SpecGenerator)
-add_subdirectory(Stingx)
+# add_subdirectory(Stingx)
 
 target_link_libraries(ACSLG PRIVATE
   ${llvm_libs}
@@ -19,5 +19,5 @@ target_link_libraries(ACSLG PRIVATE
   ContextLib
   UtilsLib
   SpecGeneratorLib
-  lstingx
+  # lstingx
 )

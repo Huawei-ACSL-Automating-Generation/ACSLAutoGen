@@ -467,10 +467,27 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                     auto se = evalExpr(uop->getSubExpr());
                     if (!se.first.empty() || se.second.size() != 1)
                         UNIMPLEMENT("Dereference produced unexpected side paths");
-                    auto *addr = dynamic_cast<Address *>(se.second[0].get());
+                    auto addr = dynamic_cast<Address *>(se.second[0].get());
                     if (!addr)
                         UNIMPLEMENT("Expected Address*, got: " << se.second[0]->dump());
-                    outExprs.emplace_back(path->memoryState[*addr]->clone());
+
+                    auto writedAddr = addr->addOffset(make_unique<LiteralExpr>(0U));
+
+                    if (auto it = memoryState.find(*writedAddr); it == memoryState.end())
+                    {
+                        SymbolicExpr::Type varType = deriveVarType(uop->getSubExpr()->getType());
+                        string varName             = writedAddr->getBaseName() + "[" +
+                                         writedAddr->getOffset()->dump() +
+                                         "]"; // TODO: impl function to get pointer/array base name.
+                        auto varExpr = std::make_unique<Symbolic::Variable>(
+                            varName, varType, symbolVarCounter++);
+                        it = memoryState.emplace(*writedAddr, varExpr->clone()).first;
+                        outExprs.emplace_back(std::move(varExpr));
+                    }
+                    else
+                    {
+                        outExprs.emplace_back(it->second->clone());
+                    }
                 }
                 else if (op == UnaryOpExpr::Operator::AddrOf)
                     TODO();
@@ -647,10 +664,10 @@ void ProgramState::init()
             unique_ptr<SymbolicExpr> pointerValue = pointeeAddr->clone();
             paths[0]->updateMemory(ptrAddr, std::move(pointerValue));
 
-            SymbolicExpr::Type varType              = deriveVarType(baseType);
-            unique_ptr<SymbolicExpr> pointeeVarExpr = make_unique<Symbolic::Variable>(
-                "*" + param->getNameAsString(), varType, paths[0]->getNextSymVarId());
-            paths[0]->updateMemory(pointeeAddr, std::move(pointeeVarExpr));
+            // SymbolicExpr::Type varType              = deriveVarType(baseType);
+            // unique_ptr<SymbolicExpr> pointeeVarExpr = make_unique<Symbolic::Variable>(
+            //     "*" + param->getNameAsString(), varType, paths[0]->getNextSymVarId());
+            // paths[0]->updateMemory(pointeeAddr, std::move(pointeeVarExpr));
         }
         else if (paramType->isArrayType())
         {
