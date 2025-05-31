@@ -9,7 +9,7 @@ find_package(LLVM REQUIRED CONFIG)
 find_package(Clang REQUIRED CONFIG)
 find_package(PkgConfig REQUIRED)
 
-pkg_check_modules(GMP REQUIRED gmpxx)  
+pkg_check_modules(GMP REQUIRED IMPORTED_TARGET gmpxx)  
 
 find_path( PPL_INCLUDE_DIR
   NAMES     ppl.hh

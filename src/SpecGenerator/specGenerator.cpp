@@ -52,3 +52,21 @@ string emitFunctionContract(const ProgramState &pre,
     spec += ACSL_END.to_string();
     return spec;
 }
+
+std::optional<LoopPattern> getLoopPattern(const clang::Stmt *init,
+    const clang::Expr *cond,
+    const clang::Stmt *inc,
+    const clang::Stmt *body)
+{
+    return nullopt;
+}
+
+std::string emitLoopInvariantContract(const ProgramState &concretePre,
+    const ProgramState &symbolicPre,
+    const ProgramState &symbolicPost,
+    const LoopPattern &pattern,
+    const std::string &groupName,
+    std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds)
+{
+    return "";
+}

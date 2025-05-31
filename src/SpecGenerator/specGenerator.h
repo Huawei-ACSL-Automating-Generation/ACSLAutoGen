@@ -8,6 +8,9 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <clang/AST/Expr.h>
+#include <clang/AST/Stmt.h>
+#include <clang/AST/StmtCXX.h>
 
 class ProgramState;
 
@@ -17,9 +20,21 @@ std::string emitFunctionContract(const ProgramState &pre,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
 
-std::string emitLoopInvariantContract(/* TODO */
+struct LoopPattern
+{};
+
+std::optional<LoopPattern> getLoopPattern(const clang::Stmt *init,
+    const clang::Expr *cond,
+    const clang::Stmt *inc,
+    const clang::Stmt *body);
+
+std::string emitLoopInvariantContract(const ProgramState &concretePre,
+    const ProgramState &symbolicPre,
+    const ProgramState &symbolicPost,
+    const LoopPattern &pattern,
     const std::string &groupName,
-    const std::vector<std::string> &extraPluginIds);
+    std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
+        std::nullopt);
 
 std::string emitInlineContract(const ProgramState &state,
     const std::string &groupName,
@@ -38,7 +53,8 @@ class ACSLPlugin
     {
         FunctionContract,
         LoopInvariant,
-        InlineAssertion
+        InlineAssertion,
+        LoopPattern
     };
     virtual Kind kind() const = 0;
 };
@@ -49,6 +65,14 @@ class FunctionContractPlugin : public ACSLPlugin
     Kind kind() const override { return Kind::FunctionContract; }
     virtual std::optional<std::string>
     generate(const ProgramState &pre, const ProgramState &post) = 0;
+};
+
+class LoopPatternPlugin : public ACSLPlugin
+{
+  public:
+    Kind kind() const override { return Kind::LoopPattern; }
+    virtual std::optional<LoopPattern>
+    parse(clang::Stmt *init, clang::Expr *cond, clang::Stmt *inc, clang::Stmt *body) = 0;
 };
 
 class LoopInvariantPlugin : public ACSLPlugin

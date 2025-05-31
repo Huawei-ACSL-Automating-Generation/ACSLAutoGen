@@ -23,4 +23,7 @@ target_link_libraries(SpecGeneratorLib PRIVATE
     ACSLG_compiler_flags
     $<TARGET_OBJECTS:plugins_obj>
     AnalyzerLib
+    clangAST
+    clangTooling
+    clangFrontend
 )

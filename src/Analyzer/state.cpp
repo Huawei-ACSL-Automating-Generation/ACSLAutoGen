@@ -1,18 +1,19 @@
-#include "state.h"
-#include "macros.h"
-#include <clang/AST/Expr.h>
-#include "clang/AST/Stmt.h"
-#include "clang/AST/Decl.h"
-#include "llvm/ADT/TypeSwitch.h"
 #include <queue>
 #include <unordered_map>
 #include <memory>
 #include <set>
-#include "Utils/utils.h"
-#include <llvm/ADT/APSInt.h>
-#include <clang/AST/StmtCXX.h>
-#include "Context/globalSM.h"
 #include <variant>
+#include <llvm/ADT/TypeSwitch.h>
+#include <llvm/ADT/APSInt.h>
+#include <clang/AST/Expr.h>
+#include <clang/AST/Stmt.h>
+#include <clang/AST/Decl.h>
+#include <clang/AST/StmtCXX.h>
+#include "state.h"
+#include "macros.h"
+#include "Utils/utils.h"
+#include "Context/globalSM.h"
+#include "SpecGenerator/specGenerator.h"
 
 using namespace std;
 using namespace clang;
@@ -21,9 +22,9 @@ using namespace Symbolic;
 
 using LValueTarget = variant<const VarDecl *, unique_ptr<Address>>;
 
-void Path::LoopInit(unordered_map<Symbolic::Variable *, unique_ptr<SymbolicExpr>> &initMap)
+void Path::LoopSymbolize()
 {
-    initMap.clear();
+    // TODO
     for (auto &entry : varAddr)
     {
         const VarDecl *varDecl = entry.first;
@@ -44,8 +45,6 @@ void Path::LoopInit(unordered_map<Symbolic::Variable *, unique_ptr<SymbolicExpr>
             memIt->second = std::move(newExpr);
 
             Symbolic::Variable *varPtr = dynamic_cast<Symbolic::Variable *>(memIt->second.get());
-            if (varPtr)
-                initMap[varPtr] = std::move(origExpr);
         }
         else if (varType->isPointerType())
         {
@@ -66,8 +65,6 @@ void Path::LoopInit(unordered_map<Symbolic::Variable *, unique_ptr<SymbolicExpr>
             memItPointee->second = std::move(newPointeeExpr);
             Symbolic::Variable *varPtr =
                 dynamic_cast<Symbolic::Variable *>(memItPointee->second.get());
-            if (varPtr)
-                initMap[varPtr] = std::move(pointeeOrigExpr);
             // Restore the pointer's memoryState entry.
             memIt->second = std::move(ptrOrigExpr);
         }
@@ -928,23 +925,30 @@ void ProgramState::stepLoop(const Stmt *loopStmt)
         return;
     }
 
-    vector<const VarDecl *> indexVars = determineIndexVars(init, cond, body, inc);
-    vector<unique_ptr<ProgramState>> newStates;
+    auto pattern = getLoopPattern(init, cond, inc, body);
+    if (!pattern)
+    {
+        // TODO(complex loop)
+        UNIMPLEMENT("Loop is too complex!");
+    }
+    vector<unique_ptr<ProgramState>> preStates, postStates;
     for (auto &p : paths)
     {
-        unique_ptr<ProgramState> newState =
-            make_unique<ProgramState>(std::move(p), Context->clone());
-        newState->loopIndexes = indexVars;
+        auto newState = make_unique<ProgramState>(p->clone(), Context->clone());
 
         newState->step(init);
-
-        unordered_map<Symbolic::Variable *, unique_ptr<SymbolicExpr>> loopInitMap;
-        newState->paths.back()->LoopInit(loopInitMap);
+        newState->paths.back()->LoopSymbolize();
+        preStates.emplace_back(newState->clone());
 
         newState->step(body);
         newState->step(inc);
         INFO(newState->dump());
+        postStates.emplace_back(newState->clone());
     }
+    auto preState  = merge(preStates);
+    auto postState = merge(postStates);
+    emitLoopInvariantContract(*this, *preState, *postState, *pattern, "DefaultLoopInvariant");
+
     paths.clear();
 
     for (auto &state : newStates)
@@ -957,12 +961,6 @@ void ProgramState::stepLoop(const Stmt *loopStmt)
 
     // @WindOctober: process loop post state.
     TODO();
-}
-
-vector<const VarDecl *>
-ProgramState::determineIndexVars(const Stmt *, const Expr *, const Stmt *, const Stmt *)
-{
-    return vector<const VarDecl *>{};
 }
 
 void ProgramState::setStates(Path::PathState state, const Stmt *stmt)
@@ -1143,12 +1141,33 @@ pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActi
 
 unique_ptr<ProgramState> ProgramState::merge(const vector<const ProgramState *> &states)
 {
-    // TODO: Carefully process loop indexes.
-    auto merged = make_unique<ProgramState>(Context->clone());
+    if (states.size() == 0)
+        ERROR("Nothing to be merged.");
+    auto merged = make_unique<ProgramState>(states[0]->getContext()->clone());
 
-    for (const auto *state : states)
+    for (auto &state : states)
+    {
+        if (*state->getContext() != *merged->getContext())
+            ERROR("States to be merged have different context.");
         for (const auto &path : state->paths)
             merged->paths.push_back(path->clone());
+    }
+    return merged;
+}
+
+unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramState>> &states)
+{
+    if (states.size() == 0)
+        ERROR("Nothing to be merged.");
+    auto merged = make_unique<ProgramState>(states[0]->getContext()->clone());
+
+    for (auto &state : states)
+    {
+        if (*state->getContext() != *merged->getContext())
+            ERROR("States to be merged have different context.");
+        for (const auto &path : state->paths)
+            merged->paths.push_back(path->clone());
+    }
     return merged;
 }
 
@@ -1162,8 +1181,7 @@ unique_ptr<ProgramState> ProgramState::clone() const
             newState->paths.push_back(path->clone());
     }
 
-    newState->StmtCtx     = StmtCtx;
-    newState->loopIndexes = loopIndexes;
+    newState->StmtCtx = StmtCtx;
     return newState;
 }
 
@@ -1314,7 +1332,7 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
                 vector<const ProgramState *> mergeInputs;
                 mergeInputs.push_back(eqState.get());
                 mergeInputs.push_back(current.get());
-                auto merged = eqState->merge(mergeInputs);
+                auto merged = merge(mergeInputs);
                 current     = std::move(merged);
             }
         }

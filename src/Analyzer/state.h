@@ -2,12 +2,12 @@
 #define STATE_H
 
 #include <unordered_map>
+#include <variant>
+#include <clang/AST/Decl.h>
+#include <clang/AST/Stmt.h>
+#include <clang/AST/Expr.h>
 #include "Symbolic/expr.h"
 #include "function.h"
-#include "clang/AST/Decl.h"
-#include "clang/AST/Stmt.h"
-#include "clang/AST/Expr.h"
-#include <variant>
 
 using namespace Symbolic;
 using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>>;
@@ -31,7 +31,7 @@ class Path
         Return
     };
 
-    void LoopInit(std::unordered_map<Symbolic::Variable *, std::unique_ptr<SymbolicExpr>> &initMap);
+    void LoopSymbolize();
 
     LValueTarget extractLValue(const clang::Expr *lhs);
     std::unique_ptr<Address> extractAddress(const clang::Expr *lhs);
@@ -109,7 +109,9 @@ class ProgramState
     void updateVarState(const clang::BinaryOperator *binOp);
 
     std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<ProgramState>> splitActiveInactive();
-    std::unique_ptr<ProgramState> merge(const std::vector<const ProgramState *> &states);
+    static std::unique_ptr<ProgramState> merge(const std::vector<const ProgramState *> &states);
+    static std::unique_ptr<ProgramState>
+    merge(const std::vector<std::unique_ptr<ProgramState>> &states);
     std::unique_ptr<ProgramState> clone() const;
     std::unique_ptr<ProgramState>
     cloneWithPaths(std::vector<std::unique_ptr<Path>> &newPaths) const;
@@ -122,13 +124,10 @@ class ProgramState
     void resetState();
 
     auto getPaths() const -> const auto & { return paths; };
-    // auto getLoopIndexs() const -> const auto & { return loopIndexes; }
-    // auto getContext() const -> const auto & { return Context; }
+    auto getContext() const -> const auto & { return Context; }
 
   private:
     std::vector<std::unique_ptr<Path>> paths{};
-
-    std::vector<const clang::VarDecl *> loopIndexes{};
 
     std::unique_ptr<ACSLFunction> Context;
 
@@ -141,11 +140,6 @@ class ProgramState
         const std::vector<const clang::Stmt *> &branchStmts);
 
     void stepLoop(const clang::Stmt *loopStmt);
-
-    std::vector<const clang::VarDecl *> determineIndexVars(const clang::Stmt *init,
-        const clang::Expr *cond,
-        const clang::Stmt *body,
-        const clang::Stmt *step);
 
     void CollectLoopACSL();
 };
