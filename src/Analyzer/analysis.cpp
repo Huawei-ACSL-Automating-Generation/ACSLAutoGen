@@ -52,7 +52,7 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
             state->step(stmt);
         INFO(state->dump());
         // state->generateFuncACSL();
-        auto spec = emitFunctionContract(*preState, *state, "DefaultFunctionContract");
+        auto spec = emitFunctionContract(*preState, *state);
         INFO(spec);
 
         auto beginLoc = FD->getSourceRange().getBegin();

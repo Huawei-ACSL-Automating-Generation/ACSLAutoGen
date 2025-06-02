@@ -11,28 +11,39 @@
 #include <clang/AST/Expr.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/StmtCXX.h>
+#include "groups.h"
 
 class ProgramState;
 
 std::string emitFunctionContract(const ProgramState &pre,
     const ProgramState &post,
-    const std::string &groupName,
+    const std::string &groupName = DEFAULT_FUNC_CONTRACT_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
 
-struct LoopPattern
-{};
+struct LoopInfo
+{
+    const clang::VarDecl *index;
+    struct VarPattern
+    {
+        clang::VarDecl *index;
+        int64_t initialValue;
+        int64_t step;
+        int64_t bound;
+    };
+    std::vector<VarPattern> varPatterns;
+    // TODO(more info to be added)
+};
 
-std::optional<LoopPattern> getLoopPattern(const clang::Stmt *init,
-    const clang::Expr *cond,
-    const clang::Stmt *inc,
-    const clang::Stmt *body);
+std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
+    const clang::Stmt *loopStmt,
+    const std::string &groupName = DEFAULT_LOOP_INFO_PLUGINS,
+    std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
+        std::nullopt);
 
-std::string emitLoopInvariantContract(const ProgramState &concretePre,
-    const ProgramState &symbolicPre,
-    const ProgramState &symbolicPost,
-    const LoopPattern &pattern,
-    const std::string &groupName,
+std::string emitLoopInvariantContract(const ProgramState &preState,
+    const LoopInfo &loopInfo,
+    const std::string &groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
 
@@ -54,7 +65,7 @@ class ACSLPlugin
         FunctionContract,
         LoopInvariant,
         InlineAssertion,
-        LoopPattern
+        LoopInfo
     };
     virtual Kind kind() const = 0;
 };
@@ -64,22 +75,36 @@ class FunctionContractPlugin : public ACSLPlugin
   public:
     Kind kind() const override { return Kind::FunctionContract; }
     virtual std::optional<std::string>
-    generate(const ProgramState &pre, const ProgramState &post) = 0;
+    generate(const ProgramState &pre, const ProgramState &post) const = 0;
 };
 
-class LoopPatternPlugin : public ACSLPlugin
+class LoopInfoPlugin : public ACSLPlugin
 {
   public:
-    Kind kind() const override { return Kind::LoopPattern; }
-    virtual std::optional<LoopPattern>
-    parse(clang::Stmt *init, clang::Expr *cond, clang::Stmt *inc, clang::Stmt *body) = 0;
+    Kind kind() const override { return Kind::LoopInfo; }
+
+    /// @brief Parse the given loop and fill in loopInfo.
+    /// @param preState loop's pre state before 'init'
+    /// @param init
+    /// @param cond
+    /// @param inc
+    /// @param body
+    /// @param loopInfo info to be filled in
+    /// @return return false means this loop is too complex and will abort whole parsing!
+    virtual bool parse(const ProgramState &preState,
+        const clang::Stmt *init,
+        const clang::Expr *cond,
+        const clang::Stmt *inc,
+        const clang::Stmt *body,
+        LoopInfo &loopInfo) const = 0;
 };
 
 class LoopInvariantPlugin : public ACSLPlugin
 {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
-    virtual std::optional<std::string> generate(/* TODO */) = 0;
+    virtual std::optional<std::string>
+    generate(const ProgramState &preState, const LoopInfo &loopInfo) const = 0;
 };
 
 class InlinePlugin : public ACSLPlugin
