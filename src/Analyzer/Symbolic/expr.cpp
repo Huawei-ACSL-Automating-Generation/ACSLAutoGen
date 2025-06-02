@@ -1,8 +1,9 @@
-#include "expr.h"
-#include "macros.h"
 #include <memory>
 #include <sstream>
 #include <cstring>
+#include <variant>
+#include "expr.h"
+#include "macros.h"
 
 using namespace std;
 using namespace Symbolic;
@@ -38,13 +39,26 @@ unique_ptr<SymbolicExpr> NullExpr::clone() const { return make_unique<NullExpr>(
 
 std::unique_ptr<SymbolicExpr> Symbolic::Variable::clone() const
 {
-    return std::make_unique<Symbolic::Variable>(name_, varType_, id_);
+    return std::make_unique<Symbolic::Variable>(name_, varType_, id_,
+        std::unique_ptr<Address>(static_cast<Address *>(from_->clone().release())));
 }
 
 std::unique_ptr<SymbolicExpr> Address::clone() const
 {
-    auto cloned = std::make_unique<Address>(id_, offset_->clone());
-    cloned->setVarDecl(varDecl_);
+    variant<const clang::VarDecl *, unique_ptr<Address>> from;
+    if (auto decl = std::get_if<const clang::VarDecl *>(&from_))
+    {
+        from = *decl;
+    }
+    else if (auto addr = std::get_if<unique_ptr<Address>>(&from_))
+    {
+        from = std::unique_ptr<Address>(static_cast<Address *>((*addr)->clone().release()));
+    }
+    else
+    {
+        from = nullptr;
+    }
+    auto cloned = std::make_unique<Address>(id_, offset_->clone(), std::move(from));
     return cloned;
 }
 
@@ -217,7 +231,7 @@ std::string Address::dump() const
     return oss.str();
 }
 
-std::string LiteralExpr::regularForm() const
+std::string LiteralExpr::regularForm(bool) const
 {
     std::ostringstream oss;
     switch (getLiteralType())
@@ -233,7 +247,7 @@ std::string LiteralExpr::regularForm() const
     return oss.str();
 }
 
-std::string BinaryOpExpr::regularForm() const
+std::string BinaryOpExpr::regularForm(bool isOld) const
 {
     std::ostringstream oss;
     std::string opStr;
@@ -259,11 +273,12 @@ std::string BinaryOpExpr::regularForm() const
     case Operator::LogicalOr: opStr = "||"; break;
     default: opStr = "?"; break;
     }
-    oss << "(" << left_->dump() << " " << opStr << " " << right_->dump() << ")";
+    oss << "(" << left_->regularForm(isOld) << " " << opStr << " " << right_->regularForm(isOld)
+        << ")";
     return oss.str();
 }
 
-std::string UnaryOpExpr::regularForm() const
+std::string UnaryOpExpr::regularForm(bool isOld) const
 {
     std::ostringstream oss;
     std::string opStr;
@@ -281,22 +296,53 @@ std::string UnaryOpExpr::regularForm() const
     case Operator::Dereference: opStr = "*"; break;
     default: opStr = "?"; break;
     }
-    oss << opStr << "(" << expr_->dump() << ")";
+    oss << opStr << "(" << expr_->regularForm(isOld) << ")";
     return oss.str();
 }
 
-std::string NullExpr::regularForm() const
+std::string NullExpr::regularForm(bool) const
 {
     WARN("Output NullExpr's regular form, something may go wrong.");
     return "";
 }
 
-std::string Symbolic::Variable::regularForm() const { return name_; }
-
-std::string Address::regularForm() const
+std::string Symbolic::Variable::regularForm(bool isOld) const
 {
-    // TODO(Multiple pointer): only support one dimension now.
-    return "&" + varDecl_->getNameAsString();
+    auto addr = from_->regularForm(isOld);
+    if (addr.length() == 0)
+        ERROR("Empty regular from.");
+
+    if (addr[0] == '&')
+        return addr.substr(1);
+    return "(*" + addr + ")";
+}
+
+std::string Address::regularForm(bool isOld) const
+{
+    if (const auto varDeclPtr = std::get_if<const clang::VarDecl *>(&from_))
+    {
+        if (offset_ && *offset_ != *SymbolicExpr::makeNull())
+            ERROR("Address from varDecl should not be offseted.");
+        return "&" + (isOld ? (std::string) R"(\old()" : "") + (*varDeclPtr)->getNameAsString() +
+               (isOld ? ")" : "");
+    }
+    else
+    {
+        auto prefix = std::get<std::unique_ptr<Address>>(from_)->getBaseName();
+        auto suffix = (offset_ && *offset_ == *makeNull() ? offset_->regularForm(isOld) : "");
+        if (prefix.length() == 0)
+            ERROR("Empty regular from.");
+
+        if (prefix[0] == '&')
+            prefix = prefix.substr(1);
+        else
+            prefix = "*" + prefix;
+
+        if (suffix.length())
+            return "(" + prefix.substr(1) + "+" + suffix + ")";
+        else
+            return prefix;
+    }
 }
 
 bool LiteralExpr::equal(const SymbolicExpr &expr) const
@@ -341,7 +387,7 @@ bool Symbolic::Variable::equal(const SymbolicExpr &expr) const
     if (!var)
         return false;
 
-    return id_ == var->id_;
+    return *from_ == *var->from_;
 }
 
 bool Address::equal(const SymbolicExpr &expr) const
@@ -350,7 +396,13 @@ bool Address::equal(const SymbolicExpr &expr) const
     if (!addr)
         return false;
 
-    return id_ == addr->id_ && offset_ == addr->offset_;
+    return (std::get_if<std::unique_ptr<Address>>(&from_) &&
+                       std::get_if<std::unique_ptr<Address>>(&addr->from_)
+                   ? *std::get<std::unique_ptr<Address>>(from_) ==
+                         *std::get<std::unique_ptr<Address>>(addr->from_)
+                   : from_ == addr->from_) &&
+           ((offset_ && addr->offset_ && offset_->equal(*addr->offset_)) ||
+               (!offset_ && !addr->offset_));
 }
 
 void Symbolic::Variable::collectUsedVars(std::vector<Symbolic::Variable *> &vars) const
@@ -379,6 +431,33 @@ std::unique_ptr<Address> Address::addOffset(std::unique_ptr<SymbolicExpr> extra)
     else
         result->offset_ = std::move(extra);
     return result;
+}
+
+std::string Address::getBaseName() const
+{
+    if (const auto varDeclPtr = std::get_if<const clang::VarDecl *>(&from_))
+    {
+        if (offset_ && *offset_ != *SymbolicExpr::makeNull())
+            ERROR("Address from varDecl should not be offseted.");
+        return "&" + (*varDeclPtr)->getNameAsString();
+    }
+    else
+    {
+        auto prefix = std::get<std::unique_ptr<Address>>(from_)->getBaseName();
+        auto suffix = (offset_ && *offset_ == *makeNull() ? offset_->dump() : "");
+        if (prefix.length() == 0)
+            ERROR("Empty name.");
+
+        if (prefix[0] == '&')
+            prefix = prefix.substr(1);
+        else
+            prefix = "*" + prefix;
+
+        if (suffix.length())
+            return "(" + prefix.substr(1) + "+" + suffix + ")";
+        else
+            return prefix;
+    }
 }
 
 namespace std

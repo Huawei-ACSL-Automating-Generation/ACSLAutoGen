@@ -40,7 +40,7 @@ class Path
     const std::vector<std::unique_ptr<SymbolicExpr>> &getPathConditions() const;
 
     Address *allocMemory(const clang::VarDecl *);
-    Address *allocMemory();
+    std::unique_ptr<Address> allocMemory(Address *from);
 
     void updateMemory(Address *addr, std::unique_ptr<SymbolicExpr> expr);
     void updateVarState(const clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
@@ -50,7 +50,7 @@ class Path
     void setPathState(PathState state) { currentState = state; }
 
     bool isActive() const { return currentState == PathState::Step; }
-    bool isUnchangedState(Address addr);
+    // bool isUnchangedState(Address addr);
     std::unique_ptr<Path> clone() const;
 
     const clang::Stmt *StmtCtx = nullptr;

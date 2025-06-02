@@ -6,6 +6,7 @@
 #include <memory>
 #include "ppl.hh"
 #include <clang/AST/Decl.h>
+#include <variant>
 
 namespace Symbolic
 {
@@ -52,7 +53,7 @@ namespace Symbolic
         static std::unique_ptr<SymbolicExpr> makeNull();
         virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
         virtual std::string dump() const                    = 0;
-        virtual std::string regularForm() const             = 0;
+        virtual std::string regularForm(bool isOld) const   = 0;
         virtual bool equal(const SymbolicExpr &) const      = 0;
         virtual std::size_t hash() const                    = 0;
 
@@ -169,7 +170,7 @@ namespace Symbolic
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        virtual std::string regularForm() const override;
+        virtual std::string regularForm(bool isOld) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -241,7 +242,7 @@ namespace Symbolic
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        std::string regularForm() const override;
+        std::string regularForm(bool isOld) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -285,7 +286,7 @@ namespace Symbolic
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        std::string regularForm() const override;
+        std::string regularForm(bool isOld) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -309,7 +310,7 @@ namespace Symbolic
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        std::string regularForm() const override;
+        std::string regularForm(bool isOld) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -318,11 +319,13 @@ namespace Symbolic
         int getMaxDegree() const override { return 0; }
     };
 
+    class Address;
     class Variable : public SymbolicExpr
     {
       public:
-        Variable(const std::string &name, Type varType, int id)
-            : SymbolicExpr(ExprType::Variable, varType), name_(name), varType_(varType), id_(id)
+        Variable(const std::string &name, Type varType, int id, std::unique_ptr<Address> from)
+            : SymbolicExpr(ExprType::Variable, varType), name_(name), varType_(varType), id_(id),
+              from_(std::move(from))
         {}
 
         Type getVarType() const { return varType_; }
@@ -337,7 +340,7 @@ namespace Symbolic
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        std::string regularForm() const override;
+        std::string regularForm(bool isOld) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -352,6 +355,7 @@ namespace Symbolic
         std::string name_;
         Type varType_;
         int id_; // unique identifier to distinguish between variables with the same name
+        std::unique_ptr<Address> from_;
     };
 
     class Address : public SymbolicExpr
@@ -359,57 +363,69 @@ namespace Symbolic
       public:
         Address(const Address &other)
             : SymbolicExpr(other), id_(other.id_),
-              offset_(other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull()),
-              varDecl_(other.varDecl_)
-        {}
+              offset_(other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull())
+        {
+            if (auto decl = std::get_if<const clang::VarDecl *>(&other.from_))
+                from_ = *decl;
+            else if (auto addr = std::get_if<std::unique_ptr<Address>>(&other.from_))
+            {
+                from_ =
+                    std::unique_ptr<Address>((static_cast<Address *>((*addr)->clone().release())));
+            }
+            else
+            {
+                from_ = nullptr;
+            }
+        }
         Address &operator=(const Address &other)
         {
             if (this != &other)
             {
                 SymbolicExpr::operator=(other);
-                id_      = other.id_;
-                offset_  = other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull();
-                varDecl_ = other.varDecl_;
+                id_     = other.id_;
+                offset_ = other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull();
+                if (auto decl = std::get_if<const clang::VarDecl *>(&other.from_))
+                    from_ = *decl;
+                else if (auto addr = std::get_if<std::unique_ptr<Address>>(&other.from_))
+                {
+                    from_ = std::unique_ptr<Address>(
+                        (static_cast<Address *>((*addr)->clone().release())));
+                }
+                else
+                {
+                    from_ = nullptr;
+                }
             }
             return *this;
         }
         Address(Address &&)            = delete;
         Address &operator=(Address &&) = delete;
 
-        Address()
-            : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(0),
-              offset_(SymbolicExpr::makeNull())
-        {}
+        Address() = delete;
 
-        Address(unsigned int id)
+        Address(
+            unsigned int id, std::variant<const clang::VarDecl *, std::unique_ptr<Address>> from)
             : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id),
-              offset_(SymbolicExpr::makeNull())
+              offset_(SymbolicExpr::makeNull()), from_(std::move(from))
         {}
 
-        Address(unsigned int id, std::unique_ptr<SymbolicExpr> offset)
+        Address(unsigned int id,
+            std::unique_ptr<SymbolicExpr> offset,
+            std::variant<const clang::VarDecl *, std::unique_ptr<Address>> from)
             : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id),
-              offset_(offset ? std::move(offset) : SymbolicExpr::makeNull())
+              offset_(offset ? std::move(offset) : SymbolicExpr::makeNull()), from_(std::move(from))
         {}
-
-        bool operator==(const Address &o) const noexcept
-        {
-            return id_ == o.id_ && ((offset_ && o.offset_ && offset_->equal(*o.offset_)) ||
-                                       (!offset_ && !o.offset_));
-        }
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         unsigned int getId() const { return id_; }
         std::string dump() const override;
-        std::string regularForm() const override;
+        std::string regularForm(bool isOld) const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
         SymbolicExpr *getOffset() const { return offset_.get(); }
         std::size_t hash() const override;
 
-        void setVarDecl(const clang::VarDecl *varDecl) { varDecl_ = varDecl; }
-        bool hasVarDecl() const { return varDecl_ != nullptr; }
-        auto getVarDecl() const -> const auto & { return varDecl_; }
-        std::string getBaseName() const { return varDecl_ ? varDecl_->getNameAsString() : ""; }
+        std::string getBaseName() const;
 
         void setOffset(std::unique_ptr<SymbolicExpr> offset) { offset_ = std::move(offset); }
         std::unique_ptr<Address> addOffset(std::unique_ptr<SymbolicExpr> extra) const;
@@ -422,7 +438,7 @@ namespace Symbolic
       private:
         unsigned int id_;
         std::unique_ptr<SymbolicExpr> offset_;
-        const clang::VarDecl *varDecl_ = nullptr;
+        std::variant<const clang::VarDecl *, std::unique_ptr<Address>> from_;
     };
 
     struct AddressHash
