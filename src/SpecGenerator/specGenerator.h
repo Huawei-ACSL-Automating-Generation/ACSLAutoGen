@@ -91,7 +91,7 @@ class LoopInfoPlugin : public ACSLPlugin
     /// @param body
     /// @param loopInfo info to be filled in
     /// @return return false means this loop is too complex and will abort whole parsing!
-    virtual bool parse(const ProgramState &preState,
+    virtual bool parse(const ProgramState &pre,
         const clang::Stmt *init,
         const clang::Expr *cond,
         const clang::Stmt *inc,

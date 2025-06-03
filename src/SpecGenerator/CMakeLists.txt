@@ -6,7 +6,9 @@ add_library(SpecGeneratorLib STATIC
 )
 
 add_library(plugins_obj OBJECT
-    plugins.cpp
+    functionContractPlugins.cpp
+    loopInfoPlugins.cpp
+    loopInvariantPlugins.cpp
     groups.cpp
 )
 

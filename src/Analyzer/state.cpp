@@ -82,7 +82,31 @@ LValueTarget Path::extractLValue(const Expr *lhs)
         auto baseLVal = extractLValue(arr->getBase());
         Address *addr;
         if (auto declPtr = get_if<const VarDecl *>(&baseLVal))
-            addr = varAddr[*declPtr].get();
+        {
+            Address *variableAddr;
+            if (auto it = varAddr.find(*declPtr); it != varAddr.end())
+            {
+                variableAddr = it->second.get();
+            }
+            else
+            {
+                ERROR("varState has no ArraySubscriptExpr's base, undefined variable?");
+            }
+            if (auto symbol = memoryState.find(*variableAddr); symbol != memoryState.end())
+            {
+                auto ptr = dynamic_cast<Address *>(symbol->second.get());
+                if (ptr == nullptr)
+                    ERROR("Value of ArraySubscriptExpr's base is not 'Address', base is neither "
+                          "pointer nor "
+                          "array?");
+                addr = ptr;
+            }
+            else
+            {
+                ERROR("memoryState has no ArraySubscriptExpr's base, base is neither pointer nor "
+                      "array?");
+            }
+        }
         else
             addr = get<unique_ptr<Address>>(baseLVal).get();
         auto idxEval = evalExpr(arr->getIdx());
@@ -320,7 +344,22 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             else
                 UNIMPLEMENT("Array base is not a single Variable");
 
-            unique_ptr<Address> addr   = extractAddress(arrSub->getBase());
+            unique_ptr<Address> variableAddr = extractAddress(arrSub->getBase());
+            unique_ptr<Address> addr;
+            if (auto symbol = memoryState.find(*variableAddr); symbol != memoryState.end())
+            {
+                auto ptr = dynamic_cast<Address *>(symbol->second.get());
+                if (ptr == nullptr)
+                    ERROR("Value of ArraySubscriptExpr's base is not 'Address', base is neither "
+                          "pointer nor "
+                          "array?");
+                addr = unique_ptr<Address>(static_cast<Address *>(ptr->clone().release()));
+            }
+            else
+            {
+                ERROR("MemoryState has no ArraySubscriptExpr's base, base is neither pointer nor "
+                      "array?");
+            }
             EvalResult idx             = evalExpr(arrSub->getIdx());
             SymbolicExpr::Type varType = deriveVarType(arrSub->getBase()->getType());
 
@@ -483,7 +522,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                         auto varExpr = std::make_unique<Symbolic::Variable>(varName, varType,
                             symbolVarCounter++,
                             std::unique_ptr<Address>(
-                                static_cast<Address *>(addr->clone().release())));
+                                static_cast<Address *>(writedAddr->clone().release())));
                         it           = memoryState.emplace(*writedAddr, varExpr->clone()).first;
                         outExprs.emplace_back(std::move(varExpr));
                     }
@@ -682,9 +721,9 @@ void ProgramState::step(const Stmt *stmt)
 {
     if (!stmt)
         return;
-
     TypeSwitch<const Stmt *, void>(stmt)
         .Case<CompoundStmt>([this](const CompoundStmt *cs) {
+            DEBUG("stepping CompoundStmt...");
             for (const Stmt *child : cs->children())
             {
                 if (child)
@@ -692,6 +731,7 @@ void ProgramState::step(const Stmt *stmt)
             }
         })
         .Case<IfStmt>([this](const IfStmt *ifStmt) {
+            DEBUG("stepping IfStmt...");
             vector<const Expr *> branchConds;
             vector<const Stmt *> branchStmts;
             branchConds.push_back(ifStmt->getCond());
@@ -704,10 +744,12 @@ void ProgramState::step(const Stmt *stmt)
             stepBranch(branchConds, branchStmts);
         })
         .Case<ReturnStmt>([this](const ReturnStmt *retStmt) {
+            DEBUG("stepping ReturnStmt...");
             setReturnExpr(retStmt->getRetValue());
             setStates(Path::PathState::Return, NULL);
         })
         .Case<DeclStmt>([this](const DeclStmt *declStmt) {
+            DEBUG("stepping DeclStmt...");
             vector<const VarDecl *> varDecls;
             for (auto it = declStmt->decl_begin(); it != declStmt->decl_end(); ++it)
             {
@@ -722,6 +764,7 @@ void ProgramState::step(const Stmt *stmt)
             addNewDecls(varDecls);
         })
         .Case<BinaryOperator>([this](const BinaryOperator *binOp) {
+            DEBUG("stepping BinaryOperator...");
             if (ignoreTopBinop(binOp))
                 return;
             if (!isAssignOp(binOp))
@@ -732,14 +775,17 @@ void ProgramState::step(const Stmt *stmt)
         .Case<ImplicitCastExpr>(
             [](const ImplicitCastExpr *) -> unique_ptr<SymbolicExpr> { UNREACHABLE(); })
         .Case<CaseStmt>([this](const CaseStmt *caseStmt) {
+            DEBUG("stepping CaseStmt...");
             // Can only be met during step(SwitchStmt), just ignore it.
             step(caseStmt->getSubStmt());
         })
         .Case<DefaultStmt>([this](const DefaultStmt *defaultStmt) {
+            DEBUG("stepping DefaultStmt...");
             // Can only be met during step(SwitchStmt), just ignore it.
             step(defaultStmt->getSubStmt());
         })
         .Case<SwitchStmt>([this](const SwitchStmt *switchStmt) {
+            DEBUG("stepping SwitchStmt...");
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx    = switchStmt;
 
@@ -768,6 +814,7 @@ void ProgramState::step(const Stmt *stmt)
             this->StmtCtx = prevStmtCtx;
         })
         .Case<ForStmt>([this](const ForStmt *forStmt) {
+            DEBUG("stepping ForStmt...");
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx    = forStmt;
             stepLoop(forStmt);
@@ -775,6 +822,7 @@ void ProgramState::step(const Stmt *stmt)
             this->StmtCtx = prevStmtCtx;
         })
         .Case<WhileStmt>([this](const WhileStmt *whileStmt) {
+            DEBUG("stepping WhileStmt...");
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx    = whileStmt;
             stepLoop(whileStmt);
@@ -782,6 +830,7 @@ void ProgramState::step(const Stmt *stmt)
             this->StmtCtx = prevStmtCtx;
         })
         .Case<DoStmt>([this](const DoStmt *doStmt) {
+            DEBUG("stepping DoStmt...");
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx    = doStmt;
             stepLoop(doStmt);
@@ -789,14 +838,21 @@ void ProgramState::step(const Stmt *stmt)
             this->StmtCtx = prevStmtCtx;
         })
         .Case<CXXForRangeStmt>([this](const CXXForRangeStmt *rangeStmt) {
+            DEBUG("stepping CXXForRangeStmt...");
             auto prevStmtCtx = this->StmtCtx;
             this->StmtCtx    = rangeStmt;
             stepLoop(rangeStmt);
             resetState();
             this->StmtCtx = prevStmtCtx;
         })
-        .Case<BreakStmt>([this](const BreakStmt *) { setStates(Path::PathState::Break, StmtCtx); })
-        .Case<ContinueStmt>([](const ContinueStmt *) { TODO(); })
+        .Case<BreakStmt>([this](const BreakStmt *) {
+            DEBUG("stepping BreakStmt...");
+            setStates(Path::PathState::Break, StmtCtx);
+        })
+        .Case<ContinueStmt>([](const ContinueStmt *) {
+            DEBUG("stepping ContinueStmt...");
+            TODO();
+        })
         .Default(
             [](const Stmt *s) { UNIMPLEMENT("Unsupported Stmt type: " << s->getStmtClassName()); });
     return;

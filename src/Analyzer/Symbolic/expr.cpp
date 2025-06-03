@@ -247,7 +247,7 @@ std::string LiteralExpr::regularForm(bool) const
     return oss.str();
 }
 
-std::string BinaryOpExpr::regularForm(bool isOld) const
+std::string BinaryOpExpr::regularForm(bool old) const
 {
     std::ostringstream oss;
     std::string opStr;
@@ -273,12 +273,11 @@ std::string BinaryOpExpr::regularForm(bool isOld) const
     case Operator::LogicalOr: opStr = "||"; break;
     default: opStr = "?"; break;
     }
-    oss << "(" << left_->regularForm(isOld) << " " << opStr << " " << right_->regularForm(isOld)
-        << ")";
+    oss << "(" << left_->regularForm(old) << " " << opStr << " " << right_->regularForm(old) << ")";
     return oss.str();
 }
 
-std::string UnaryOpExpr::regularForm(bool isOld) const
+std::string UnaryOpExpr::regularForm(bool old) const
 {
     std::ostringstream oss;
     std::string opStr;
@@ -296,7 +295,7 @@ std::string UnaryOpExpr::regularForm(bool isOld) const
     case Operator::Dereference: opStr = "*"; break;
     default: opStr = "?"; break;
     }
-    oss << opStr << "(" << expr_->regularForm(isOld) << ")";
+    oss << opStr << "(" << expr_->regularForm(old) << ")";
     return oss.str();
 }
 
@@ -306,9 +305,9 @@ std::string NullExpr::regularForm(bool) const
     return "";
 }
 
-std::string Symbolic::Variable::regularForm(bool isOld) const
+std::string Symbolic::Variable::regularForm(bool old) const
 {
-    auto addr = from_->regularForm(isOld);
+    auto addr = from_->regularForm(old);
     if (addr.length() == 0)
         ERROR("Empty regular from.");
 
@@ -317,19 +316,21 @@ std::string Symbolic::Variable::regularForm(bool isOld) const
     return "(*" + addr + ")";
 }
 
-std::string Address::regularForm(bool isOld) const
+std::string Address::regularForm(bool old) const
 {
     if (const auto varDeclPtr = std::get_if<const clang::VarDecl *>(&from_))
     {
-        if (offset_ && *offset_ != *SymbolicExpr::makeNull())
+        if (isOffseted())
             ERROR("Address from varDecl should not be offseted.");
-        return "&" + (isOld ? (std::string) R"(\old()" : "") + (*varDeclPtr)->getNameAsString() +
-               (isOld ? ")" : "");
+        return "&" + (old ? (std::string) R"(\old()" : "") + (*varDeclPtr)->getNameAsString() +
+               (old ? ")" : "");
     }
     else
     {
-        auto prefix = std::get<std::unique_ptr<Address>>(from_)->getBaseName();
-        auto suffix = (offset_ && *offset_ == *makeNull() ? offset_->regularForm(isOld) : "");
+        auto prefix = std::get<std::unique_ptr<Address>>(from_)->regularForm(old);
+        auto suffix = ((isOffseted()) ? offset_->regularForm(old) : "");
+        if (suffix == "0")
+            suffix = "";
         if (prefix.length() == 0)
             ERROR("Empty regular from.");
 
@@ -339,7 +340,7 @@ std::string Address::regularForm(bool isOld) const
             prefix = "*" + prefix;
 
         if (suffix.length())
-            return "(" + prefix.substr(1) + "+" + suffix + ")";
+            return "(" + prefix + "+" + suffix + ")";
         else
             return prefix;
     }
@@ -396,13 +397,36 @@ bool Address::equal(const SymbolicExpr &expr) const
     if (!addr)
         return false;
 
-    return (std::get_if<std::unique_ptr<Address>>(&from_) &&
-                       std::get_if<std::unique_ptr<Address>>(&addr->from_)
-                   ? *std::get<std::unique_ptr<Address>>(from_) ==
-                         *std::get<std::unique_ptr<Address>>(addr->from_)
-                   : from_ == addr->from_) &&
-           ((offset_ && addr->offset_ && offset_->equal(*addr->offset_)) ||
-               (!offset_ && !addr->offset_));
+    // compare base
+    if (std::get_if<std::unique_ptr<Address>>(&from_) &&
+        std::get_if<std::unique_ptr<Address>>(&addr->from_))
+    {
+        auto &from     = *std::get<std::unique_ptr<Address>>(from_);
+        auto &addrFrom = *std::get<std::unique_ptr<Address>>(addr->from_);
+        if (from != addrFrom)
+        {
+            return false;
+        }
+    }
+    else if (from_ != addr->from_)
+    {
+        return false;
+    }
+
+    // compare offset
+    if (isOffseted() && addr->isOffseted())
+    {
+        if (*offset_ != *addr->getOffset())
+        {
+            return false;
+        }
+    }
+    else if (isOffseted() ^ addr->isOffseted())
+    {
+        return false;
+    }
+
+    return true;
 }
 
 void Symbolic::Variable::collectUsedVars(std::vector<Symbolic::Variable *> &vars) const

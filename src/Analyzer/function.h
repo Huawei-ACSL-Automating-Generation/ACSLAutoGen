@@ -15,7 +15,7 @@ class ACSLFunction
     ACSLFunction *clone() const;
 
     bool operator==(const ACSLFunction &RHS) { return FuncDecl == RHS.getFunctionDecl(); }
-    bool operator!=(const ACSLFunction &RHS) { return (*this == RHS); }
+    bool operator!=(const ACSLFunction &RHS) { return !(*this == RHS); }
 
   private:
     const clang::FunctionDecl *FuncDecl;

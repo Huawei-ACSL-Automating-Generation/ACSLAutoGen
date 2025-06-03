@@ -123,7 +123,7 @@ class ProgramState
     void generateFuncACSL();
     void resetState();
 
-    auto getPaths() const -> const auto & { return paths; };
+    auto getPaths() const -> const auto & { return paths; }
     auto getContext() const -> const auto & { return Context; }
 
   private:
