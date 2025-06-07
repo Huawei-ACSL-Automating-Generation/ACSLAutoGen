@@ -8,10 +8,12 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <variant>
 #include <clang/AST/Expr.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/StmtCXX.h>
 #include "groups.h"
+#include "Analyzer/Symbolic/expr.h"
 
 class ProgramState;
 
@@ -23,15 +25,25 @@ std::string emitFunctionContract(const ProgramState &pre,
 
 struct LoopInfo
 {
-    const clang::VarDecl *index;
-    struct VarPattern
+    // SetLoopEntryPlugin
+    std::unique_ptr<ProgramState> symbolicLoopEntry_;
+
+    // SetIndexPlugin
+    std::unique_ptr<Symbolic::Address> index_;
+    std::unique_ptr<Symbolic::SymbolicExpr> indexBound_; ///< The bound is inclusive.
+
+    // SetPatternsPlugin
+    struct pattern
     {
-        clang::VarDecl *index;
-        int64_t initialValue;
-        int64_t step;
-        int64_t bound;
+        std::unique_ptr<Symbolic::SymbolicExpr> initialValue_;
+        int64_t step_;
     };
-    std::vector<VarPattern> varPatterns;
+
+    // Address with pattern has constant step.
+    // Address with nullopt means too complex.
+    // Other addresses' values hold through loop.
+    std::unordered_map<Symbolic::Address, std::optional<pattern>, Symbolic::AddressHash>
+        patternsMap_;
     // TODO(more info to be added)
 };
 

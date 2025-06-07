@@ -283,10 +283,6 @@ namespace Symbolic
             : SymbolicExpr(ExprType::UnaryOp, expr->getValType()), op_(op), expr_(std::move(expr))
         {}
 
-        UnaryOpExpr(Operator op, SymbolicExpr *expr)
-            : SymbolicExpr(ExprType::UnaryOp, expr->getValType()), op_(op), expr_(expr)
-        {}
-
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
         std::string regularForm(bool old) const override;

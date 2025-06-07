@@ -22,58 +22,58 @@ using namespace Symbolic;
 
 using LValueTarget = variant<const VarDecl *, unique_ptr<Address>>;
 
-void Path::LoopSymbolize()
+void Path::resymbolize()
 {
-    // TODO
-    // for (auto &entry : varAddr)
-    // {
-    //     const VarDecl *varDecl = entry.first;
-    //     QualType varType       = varDecl->getType();
-    //     Address *addr          = entry.second.get();
-    //     auto memIt             = memoryState.find(*addr);
-    //     if (memIt == memoryState.end())
-    //         ERROR("No memory state entry for allocated address");
+    memoryState.clear();
 
-    //     if (!varType->isPointerType() && !varType->isArrayType())
-    //     {
-    //         unique_ptr<SymbolicExpr> origExpr = std::move(memIt->second);
+    for (auto &entry : varAddr)
+    {
+        const VarDecl *varDecl = entry.first;
+        QualType varType       = varDecl->getType();
+        Address *addr          = entry.second.get();
 
-    //         SymbolicExpr::Type derived       = deriveVarType(varType);
-    //         unique_ptr<SymbolicExpr> newExpr = make_unique<Symbolic::Variable>(
-    //             varDecl->getNameAsString(), derived, symbolVarCounter++);
+        if (!varType->isPointerType() && !varType->isArrayType())
+        {
+            SymbolicExpr::Type derived       = deriveVarType(varType);
+            unique_ptr<SymbolicExpr> newExpr = make_unique<Symbolic::Variable>(
+                varDecl->getNameAsString(), derived, symbolVarCounter++,
+                std::unique_ptr<Address>(static_cast<Address *>(addr->clone().release())));
 
-    //         memIt->second = std::move(newExpr);
+            memoryState[*addr] = std::move(newExpr);
+        }
+        else if (varType->isPointerType())
+        {
+            auto pointeeAddr   = allocMemory(*addr);
+            memoryState[*addr] = std::move(pointeeAddr);
+            // if (!pointeeAddr)
+            //     ERROR("Pointer stored value is not an Address");
 
-    //         Symbolic::Variable *varPtr = dynamic_cast<Symbolic::Variable *>(memIt->second.get());
-    //     }
-    //     else if (varType->isPointerType())
-    //     {
-    //         unique_ptr<SymbolicExpr> ptrOrigExpr = std::move(memIt->second);
-    //         Address *pointeeAddr                 = dynamic_cast<Address *>(ptrOrigExpr.get());
-    //         if (!pointeeAddr)
-    //             ERROR("Pointer stored value is not an Address");
+            // auto memItPointee = memoryState.find(*pointeeAddr);
+            // if (memItPointee == memoryState.end())
+            //     ERROR("No memory state entry for pointee");
+            // unique_ptr<SymbolicExpr> pointeeOrigExpr = std::move(memItPointee->second);
 
-    //         auto memItPointee = memoryState.find(*pointeeAddr);
-    //         if (memItPointee == memoryState.end())
-    //             ERROR("No memory state entry for pointee");
-    //         unique_ptr<SymbolicExpr> pointeeOrigExpr = std::move(memItPointee->second);
-
-    //         QualType baseType                       = varType->getPointeeType();
-    //         SymbolicExpr::Type baseDerived          = deriveVarType(baseType);
-    //         unique_ptr<SymbolicExpr> newPointeeExpr = make_unique<Symbolic::Variable>(
-    //             "*" + varDecl->getNameAsString(), baseDerived, symbolVarCounter++);
-    //         memItPointee->second = std::move(newPointeeExpr);
-    //         Symbolic::Variable *varPtr =
-    //             dynamic_cast<Symbolic::Variable *>(memItPointee->second.get());
-    //         // Restore the pointer's memoryState entry.
-    //         memIt->second = std::move(ptrOrigExpr);
-    //     }
-    // }
+            // QualType baseType                       = varType->getPointeeType();
+            // SymbolicExpr::Type baseDerived          = deriveVarType(baseType);
+            // unique_ptr<SymbolicExpr> newPointeeExpr = make_unique<Symbolic::Variable>(
+            //     "*" + varDecl->getNameAsString(), baseDerived, symbolVarCounter++);
+            // memItPointee->second = std::move(newPointeeExpr);
+            // Symbolic::Variable *varPtr =
+            //     dynamic_cast<Symbolic::Variable *>(memItPointee->second.get());
+            // // Restore the pointer's memoryState entry.
+            // memIt->second = std::move(ptrOrigExpr);
+        }
+        else
+        {
+            TODO();
+        }
+    }
 }
 
+// Why not always return unique_ptr<Address>?
 LValueTarget Path::extractLValue(const Expr *lhs)
 {
-    const Expr *lexpr = lhs->IgnoreImpCasts();
+    const Expr *lexpr = lhs->IgnoreParenImpCasts();
     if (auto *declRef = dyn_cast<DeclRefExpr>(lexpr))
         return dyn_cast<VarDecl>(declRef->getDecl());
 
@@ -171,10 +171,10 @@ Address *Path::allocMemory(const VarDecl *var)
     return rawPtr;
 }
 
-unique_ptr<Address> Path::allocMemory(Address *from)
+unique_ptr<Address> Path::allocMemory(const Address &from)
 {
     return make_unique<Address>(
-        addrCounter++, std::unique_ptr<Address>(static_cast<Address *>(from->clone().release())));
+        addrCounter++, std::unique_ptr<Address>(static_cast<Address *>(from.clone().release())));
 }
 
 void Path::updateMemory(Address *addr, unique_ptr<SymbolicExpr> expr)
@@ -701,7 +701,7 @@ void ProgramState::init()
                 UNIMPLEMENT("Unsupported pointer to pointer/array");
 
             Address *ptrAddr = paths[0]->allocMemory(param);
-            auto pointeeAddr = paths[0]->allocMemory(ptrAddr);
+            auto pointeeAddr = paths[0]->allocMemory(*ptrAddr);
 
             paths[0]->updateMemory(ptrAddr, std::move(pointeeAddr));
 
@@ -1372,6 +1372,21 @@ bool ProgramState::isInactive() const
         }
     }
     return true;
+}
+
+void ProgramState::resymbolize()
+{
+    for (auto &path : paths)
+    {
+        if (path->isActive())
+        {
+            auto temp = std::move(path);
+            temp->resymbolize();
+            paths.clear();
+            paths.push_back(std::move(temp));
+            return;
+        }
+    }
 }
 
 #include "SpecGenerator/stringTemplate.h"

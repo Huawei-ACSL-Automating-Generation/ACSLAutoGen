@@ -109,7 +109,7 @@ std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
     {
         if (plugin == nullptr)
             continue;
-        if (auto s = plugin->parse(preState, init, cond, inc, body, loopInfo); !s)
+        if (!plugin->parse(preState, init, cond, inc, body, loopInfo))
             return nullopt;
     }
     return loopInfo;

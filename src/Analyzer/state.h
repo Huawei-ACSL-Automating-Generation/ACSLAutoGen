@@ -31,7 +31,7 @@ class Path
         Return
     };
 
-    void LoopSymbolize();
+    void resymbolize();
 
     LValueTarget extractLValue(const clang::Expr *lhs);
     std::unique_ptr<Address> extractAddress(const clang::Expr *lhs);
@@ -40,7 +40,7 @@ class Path
     const std::vector<std::unique_ptr<SymbolicExpr>> &getPathConditions() const;
 
     Address *allocMemory(const clang::VarDecl *);
-    std::unique_ptr<Address> allocMemory(Address *from);
+    std::unique_ptr<Address> allocMemory(const Address &from);
 
     void updateMemory(Address *addr, std::unique_ptr<SymbolicExpr> expr);
     void updateVarState(const clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
@@ -56,6 +56,7 @@ class Path
     const clang::Stmt *StmtCtx = nullptr;
 
     std::string dump() const;
+    EvalResult evalExpr(const clang::Expr *expr);
     friend class ProgramState;
 
     auto getVarAddr() const -> const auto & { return varAddr; };
@@ -66,8 +67,6 @@ class Path
     // auto getAddrCounter() const -> const auto & { return addrCounter; }
 
   private:
-    EvalResult evalExpr(const clang::Expr *expr);
-
     // Map: variable record definition ID -> corresponding symbolic address.
     std::unordered_map<const clang::VarDecl *, std::unique_ptr<Address>> varAddr;
 
@@ -122,6 +121,7 @@ class ProgramState
     std::string dump() const;
     void generateFuncACSL();
     void resetState();
+    void resymbolize();
 
     auto getPaths() const -> const auto & { return paths; }
     auto getContext() const -> const auto & { return Context; }
