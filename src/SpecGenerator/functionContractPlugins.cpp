@@ -14,7 +14,7 @@ class AssignsPlugin : public FunctionContractPlugin
 {
   public:
     AssignsPlugin(const string &ID) : id_(ID) {}
-    string id() const override { return id_; }
+    string_view id() const override { return id_; }
     optional<string> generate(const ProgramState &pre, const ProgramState &post) const override
     {
         string spec;
@@ -90,7 +90,7 @@ class ResultPlugin : public FunctionContractPlugin
 {
   public:
     ResultPlugin(const string &ID) : id_(ID) {}
-    string id() const override { return id_; }
+    string_view id() const override { return id_; }
     optional<string> generate(const ProgramState &, const ProgramState &post) const override
     {
         // TODO

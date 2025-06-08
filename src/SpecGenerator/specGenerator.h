@@ -29,13 +29,13 @@ struct LoopInfo
     std::unique_ptr<ProgramState> symbolicLoopEntry_;
 
     // SetIndexPlugin
-    std::unique_ptr<Symbolic::Address> index_;
-    std::unique_ptr<Symbolic::SymbolicExpr> indexBound_; ///< The bound is inclusive.
+    std::unique_ptr<Symbolic::Address> index_{nullptr};
+    std::unique_ptr<Symbolic::SymbolicExpr> indexBound_{nullptr}; ///< The bound is inclusive.
 
     // SetPatternsPlugin
     struct pattern
     {
-        std::unique_ptr<Symbolic::SymbolicExpr> initialValue_;
+        std::unique_ptr<Symbolic::SymbolicExpr> initialValue_{nullptr};
         int64_t step_;
     };
 
@@ -70,8 +70,8 @@ std::string emitInlineContract(const ProgramState &state,
 class ACSLPlugin
 {
   public:
-    virtual ~ACSLPlugin()          = default;
-    virtual std::string id() const = 0;
+    virtual ~ACSLPlugin()               = default;
+    virtual std::string_view id() const = 0;
     enum class Kind
     {
         FunctionContract,
@@ -165,7 +165,7 @@ class ACSLPluginRegistry
             {                                                                                      \
                 ACSLPluginRegistry::instance().registerPlugin(                                     \
                     std::make_unique<PluginType>(PluginID));                                       \
-                INFO(#PluginType "is registered with id: " #PluginID);                             \
+                INFO(#PluginType " is registered with id: " #PluginID);                            \
             }                                                                                      \
         } _##PluginType##Reg;                                                                      \
     }
@@ -193,11 +193,11 @@ class ACSLPluginGroupRegistry
         return it == groups_.end() ? nullptr : &it->second;
     }
 
-    std::vector<std::string> allGroupNames() const
+    std::vector<std::string_view> allGroupNames() const
     {
-        std::vector<std::string> v;
-        for (auto &kv : groups_)
-            v.push_back(kv.first);
+        std::vector<std::string_view> v;
+        for (auto &[name, _] : groups_)
+            v.push_back(name);
         return v;
     }
 
@@ -216,6 +216,13 @@ class ACSLPluginGroupRegistry
                 G.name      = #GroupName;                                                          \
                 G.pluginIds = {__VA_ARGS__};                                                       \
                 ACSLPluginGroupRegistry::instance().registerGroup(G);                              \
+                for (auto &id : G.pluginIds)                                                       \
+                {                                                                                  \
+                    if (ACSLPluginRegistry::instance().get(id) == nullptr)                         \
+                    {                                                                              \
+                        ERROR("Plugin with id " + id + " does not exist.");                        \
+                    }                                                                              \
+                }                                                                                  \
                 INFO(#GroupName " is registered.");                                                \
             }                                                                                      \
         } _##GroupName##Reg;                                                                       \

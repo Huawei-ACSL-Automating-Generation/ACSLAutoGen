@@ -11,7 +11,8 @@ using namespace clang;
 class SetLoopEntryPlugin : public LoopInfoPlugin
 {
   public:
-    string id() const override { return id_; }
+    SetLoopEntryPlugin(const string &ID) : id_(ID) {}
+    string_view id() const override { return id_; }
     bool parse(const ProgramState &pre,
         const Stmt *init,
         const Expr *cond,
@@ -33,11 +34,13 @@ class SetLoopEntryPlugin : public LoopInfoPlugin
   private:
     string id_;
 };
+REGISTER_ACSL_PLUGIN(SetLoopEntryPlugin, "setLoopEntry");
 
 class SetPatternsPlugin : public LoopInfoPlugin
 {
   public:
-    string id() const override { return id_; }
+    SetPatternsPlugin(const string &ID) : id_(ID) {}
+    string_view id() const override { return id_; }
     bool parse(const ProgramState &preState,
         const Stmt *init,
         const Expr *cond,
@@ -64,7 +67,7 @@ class SetPatternsPlugin : public LoopInfoPlugin
             TODO();
         }
 
-        auto &preMS        = loopEntry->getPaths()[0]->getMemoryState();
+        auto &preMS        = loopInfo.symbolicLoopEntry_->getPaths()[0]->getMemoryState();
         auto &currentEntry = loopEntry->getPaths()[0];
         for (auto &[addr, value] : currentEntry->getMemoryState())
         {
@@ -84,19 +87,23 @@ class SetPatternsPlugin : public LoopInfoPlugin
 
                 if (auto diff = currentExpr - entryExpr; diff.all_homogeneous_terms_are_zero())
                 {
-                    auto step = diff.inhomogeneous_term().get_si();
-                    unique_ptr<SymbolicExpr> initValue;
+                    auto step                          = diff.inhomogeneous_term().get_si();
+                    unique_ptr<SymbolicExpr> initValue = nullptr;
+
+                    // Get the only initial value.
                     bool isTooComplex = false;
                     for (auto &path : preState.getPaths())
                     {
                         if (isTooComplex)
                             break;
                         // Bad complexity, may need a wrapper to wrap the symbolicExpr completely.
-                        for (auto &[_, symbolValue] : path->getMemoryState())
+                        for (auto &[addrInPre, valueInPre] : path->getMemoryState())
                         {
+                            if (addrInPre != addr)
+                                continue;
                             if (initValue)
                             {
-                                if (*initValue != *symbolValue)
+                                if (*initValue != *valueInPre)
                                 {
                                     isTooComplex = true;
                                     break;
@@ -104,7 +111,7 @@ class SetPatternsPlugin : public LoopInfoPlugin
                             }
                             else
                             {
-                                initValue = symbolValue->clone();
+                                initValue = valueInPre->clone();
                             }
                         }
                     }
@@ -127,17 +134,21 @@ class SetPatternsPlugin : public LoopInfoPlugin
                 patterns.emplace(addr, nullopt);
             }
         }
+
+        loopInfo.patternsMap_ = std::move(patterns);
         return true;
     }
 
   private:
     string id_;
 };
+REGISTER_ACSL_PLUGIN(SetPatternsPlugin, "setPatterns");
 
 class SetIndexPlugin : public LoopInfoPlugin
 {
   public:
-    string id() const override { return id_; }
+    SetIndexPlugin(const string &ID) : id_(ID) {}
+    string_view id() const override { return id_; }
     bool parse(const ProgramState &preState,
         const Stmt *init,
         const Expr *cond,
@@ -194,6 +205,15 @@ class SetIndexPlugin : public LoopInfoPlugin
             }
         }; // sameAddressBetweenEveryPaths end
 
+        auto hasPattern = [&](const Address &addr) {
+            for (auto &[a, _] : loopInfo.patternsMap_)
+            {
+                if (addr == a)
+                    return true;
+            }
+            return false;
+        }; // hasPattern end
+
         if (auto binExpr = dyn_cast<BinaryOperator>(cond->IgnoreParenImpCasts()))
         {
             auto sameValueBetweenEveryPaths =
@@ -228,14 +248,29 @@ class SetIndexPlugin : public LoopInfoPlugin
             unique_ptr<SymbolicExpr> boundValue;
 
             if (auto addr = sameAddressBetweenEveryPaths(indexExpr))
+            {
+                if (!hasPattern(**addr))
+                {
+                    INFO("Index has no parseable pattern.");
+                    return false;
+                }
                 indexAddr = std::move(*addr);
+            }
             else
+            {
+                INFO("Same expr in different path points to different location!");
                 return false;
+            }
 
             if (auto value = sameValueBetweenEveryPaths(boundExpr))
+            {
                 boundValue = std::move(*value);
+            }
             else
+            {
+                INFO("Same expr in different path is evaluated to different value!");
                 return false;
+            }
 
             // TODO: more operators
             switch (binExpr->getOpcode())
@@ -250,9 +285,11 @@ class SetIndexPlugin : public LoopInfoPlugin
                 break;
 
             case BinaryOperator::Opcode::BO_LE:
-            case BinaryOperator::Opcode::BO_GE: break;
+            case BinaryOperator::Opcode::BO_GE:
+            case BinaryOperator::Opcode::BO_NE: break;
             default:
                 // too complex
+                INFO("Loop's condition expr is too complex! Unimplemented binary operator.");
                 return false;
             }
 
@@ -264,13 +301,26 @@ class SetIndexPlugin : public LoopInfoPlugin
         {
             // TODO: more operators
             if (unaryExpr->getOpcode() != UnaryOperatorKind::UO_Deref)
+            {
+                INFO("Loop's condition expr is too complex! Unimplemented unary operator.");
                 return false;
+            }
 
             unique_ptr<Address> indexAddr;
             if (auto addr = sameAddressBetweenEveryPaths(unaryExpr))
+            {
+                if (!hasPattern(**addr))
+                {
+                    INFO("Index has no parseable pattern.");
+                    return false;
+                }
                 indexAddr = std::move(*addr);
+            }
             else
+            {
+                INFO("Same expr in different path points to different location!");
                 return false;
+            }
 
             loopInfo.index_      = std::move(indexAddr);
             loopInfo.indexBound_ = make_unique<LiteralExpr>((int64_t)0);
@@ -288,12 +338,21 @@ class SetIndexPlugin : public LoopInfoPlugin
                                : nullptr;
 
             if (varDecl == nullptr)
+            {
+                INFO("Parsing loop's index vaibale has failed. Does loop's condition expr have a "
+                     "variable?");
                 return false;
+            }
 
             unique_ptr<Address> indexAddr;
             if (auto it = preState.getPaths()[0]->getVarAddr().find(varDecl);
                 it != preState.getPaths()[0]->getVarAddr().end())
             {
+                if (!hasPattern(*it->second))
+                {
+                    INFO("Index has no parseable pattern.");
+                    return false;
+                }
                 indexAddr =
                     unique_ptr<Address>(static_cast<Address *>(it->second->clone().release()));
             }
@@ -307,9 +366,11 @@ class SetIndexPlugin : public LoopInfoPlugin
             return true;
         }
 
+        INFO("Loop's condition expr is too complex.");
         return false;
     }
 
   private:
     string id_;
 };
+REGISTER_ACSL_PLUGIN(SetIndexPlugin, "setIndex");

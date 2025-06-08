@@ -147,7 +147,8 @@ Symbolic::Variable::toLinearExpr(const unordered_map<string, int> &varIndexMap) 
     }
 
     int index = it->second;
-    e.set_coefficient(Parma_Polyhedra_Library::Variable(index), 1);
+    auto var  = Parma_Polyhedra_Library::Variable(index);
+    e += var;
     return e;
 }
 Parma_Polyhedra_Library::Constraint toConstraint(

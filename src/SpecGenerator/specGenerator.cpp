@@ -45,7 +45,7 @@ namespace
         {
             auto *pl = ACSLPluginRegistry::instance().get(pid);
             if (!pl)
-                continue;
+                ERROR("Plugin with id " + pid + " does not exist!");
             auto *fcp = dynamic_cast<const T *>(pl);
             if (fcp)
             {
@@ -126,7 +126,7 @@ std::string emitLoopInvariantContract(const ProgramState &preState,
     for (auto &plugin : plugins)
     {
         if (plugin == nullptr)
-            continue;
+            UNREACHABLE();
         if (auto s = plugin->generate(preState, loopInfo); s)
             spec += "\t" + *s + "\n";
     }
