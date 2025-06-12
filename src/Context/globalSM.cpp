@@ -6,6 +6,7 @@
 
 using namespace std;
 using namespace clang;
+using namespace llvm;
 
 optional<tuple<string, llvm::StringRef, llvm::StringRef, unsigned, unsigned>>
 GlobalSM::getDeclInfo(const Decl *decl)

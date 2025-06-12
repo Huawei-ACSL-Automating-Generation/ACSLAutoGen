@@ -21,20 +21,20 @@ unique_ptr<SymbolicExpr> createLNotExpr(unique_ptr<SymbolicExpr> expr)
     return make_unique<UnaryOpExpr>(UnaryOpExpr::Operator::LogicalNot, std::move(expr));
 }
 
-BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp)
+BinaryOpExpr::Operator getCompoundAssignOp(BinaryOperatorKind compoundAssignOp)
 {
     switch (compoundAssignOp)
     {
-    case clang::BO_MulAssign: return BinaryOpExpr::Operator::Multiply;
-    case clang::BO_DivAssign: return BinaryOpExpr::Operator::Divide;
-    case clang::BO_RemAssign: return BinaryOpExpr::Operator::Remainder;
-    case clang::BO_AddAssign: return BinaryOpExpr::Operator::Add;
-    case clang::BO_SubAssign: return BinaryOpExpr::Operator::Subtract;
-    case clang::BO_ShlAssign: return BinaryOpExpr::Operator::ShiftLeft;
-    case clang::BO_ShrAssign: return BinaryOpExpr::Operator::ShiftRight;
-    case clang::BO_AndAssign: return BinaryOpExpr::Operator::BitAnd;
-    case clang::BO_XorAssign: return BinaryOpExpr::Operator::BitXor;
-    case clang::BO_OrAssign: return BinaryOpExpr::Operator::BitOr;
+    case BO_MulAssign: return BinaryOpExpr::Operator::Multiply;
+    case BO_DivAssign: return BinaryOpExpr::Operator::Divide;
+    case BO_RemAssign: return BinaryOpExpr::Operator::Remainder;
+    case BO_AddAssign: return BinaryOpExpr::Operator::Add;
+    case BO_SubAssign: return BinaryOpExpr::Operator::Subtract;
+    case BO_ShlAssign: return BinaryOpExpr::Operator::ShiftLeft;
+    case BO_ShrAssign: return BinaryOpExpr::Operator::ShiftRight;
+    case BO_AndAssign: return BinaryOpExpr::Operator::BitAnd;
+    case BO_XorAssign: return BinaryOpExpr::Operator::BitXor;
+    case BO_OrAssign: return BinaryOpExpr::Operator::BitOr;
     default: UNREACHABLE();
     }
 }
@@ -102,7 +102,7 @@ SymbolicExpr::Type deriveVarType(QualType type)
 {
     if (auto ptr = type->getAs<PointerType>())
         return deriveVarType(ptr->getPointeeType());
-    return llvm::TypeSwitch<QualType, SymbolicExpr::Type>(type.getCanonicalType())
+    return TypeSwitch<QualType, SymbolicExpr::Type>(type.getCanonicalType())
         .Case([](const BuiltinType *BT) -> SymbolicExpr::Type {
             using Kind = SymbolicExpr::ScalarKind;
 

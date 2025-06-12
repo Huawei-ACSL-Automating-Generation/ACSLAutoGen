@@ -65,10 +65,6 @@ class Path
     // auto getPathState() const -> const auto & { return currentState; }
     // auto getAddrCounter() const -> const auto & { return addrCounter; }
 
-    void computeLinearInv(const std::vector<std::string> &locations,
-        const std::vector<TransRel> &transitions,
-        const InitRel &initial);
-
   private:
     EvalResult evalExpr(const clang::Expr *expr);
 
@@ -103,6 +99,7 @@ class ProgramState
     void init();
 
     void step(const clang::Stmt *stmt);
+    std::vector<std::unique_ptr<SymbolicExpr>> stepExpr(const clang::Expr *expr);
 
     void addNewDecls(const std::vector<const clang::VarDecl *> &varDecls);
 
@@ -152,5 +149,9 @@ class ProgramState
 
     void CollectLoopACSL();
 };
+
+void computeLinearInv(const std::vector<std::string> &locations,
+    const std::vector<TransRel> &transitions,
+    const InitRel &initial);
 
 #endif

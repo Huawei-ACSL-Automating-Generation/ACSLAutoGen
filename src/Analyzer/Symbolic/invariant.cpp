@@ -205,7 +205,7 @@ convertAssertionsToPoly(const vector<unique_ptr<Symbolic::SymbolicExpr>> &assert
     return poly;
 }
 
-void Path::computeLinearInv(
+void computeLinearInv(
     const vector<string> &locations, const vector<TransRel> &transitions, const InitRel &initial)
 {
     // Step 1: Collect all unique Variable names from transitions and initial

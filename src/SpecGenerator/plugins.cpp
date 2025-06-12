@@ -6,6 +6,7 @@
 #include "state.h"
 
 using namespace std;
+using namespace clang;
 
 class AssignPlugin : public FunctionContractPlugin
 {
@@ -18,7 +19,7 @@ class AssignPlugin : public FunctionContractPlugin
         if (auto &paths = pre.getPaths(); paths.size() == 1)
         {
             auto &path = paths[0];
-            unordered_map<clang::VarDecl const *, optional<uint>> isChangedFlag;
+            unordered_map<VarDecl const *, optional<uint>> isChangedFlag;
             // for every var in pre-state
             for (auto &[var, _] : path->getVarAddr())
             {
