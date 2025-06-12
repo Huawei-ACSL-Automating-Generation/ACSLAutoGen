@@ -104,6 +104,11 @@ namespace Symbolic
             ERROR("not implemented for expression type: ");
         }
 
+        virtual Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const
+        {
+            ERROR("not implemented for expression type: ");
+        }
+
       private:
         ExprType type_;
         Type valueType_;
@@ -182,6 +187,7 @@ namespace Symbolic
         int getMaxDegree() const override { return 0; }
         Parma_Polyhedra_Library::Linear_Expression
         toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
         int64_t getLiteralValue() const;
 
       private:
@@ -255,6 +261,7 @@ namespace Symbolic
         int getMaxDegree() const override;
         Parma_Polyhedra_Library::Linear_Expression
         toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
         std::unique_ptr<SymbolicExpr> left_;
@@ -295,6 +302,7 @@ namespace Symbolic
         int getMaxDegree() const override;
         Parma_Polyhedra_Library::Linear_Expression
         toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
         Operator op_;
@@ -350,6 +358,7 @@ namespace Symbolic
         int getMaxDegree() const override { return 1; }
         Parma_Polyhedra_Library::Linear_Expression
         toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
         std::string name_;

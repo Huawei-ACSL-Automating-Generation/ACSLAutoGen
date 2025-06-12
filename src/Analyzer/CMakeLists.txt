@@ -13,6 +13,7 @@ target_link_libraries(AnalyzerLib PRIVATE
     UtilsLib
     SpecGeneratorLib
     ContextLib
+    lstingx
     clangAST
     clangTooling
     clangFrontend

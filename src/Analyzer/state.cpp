@@ -654,17 +654,13 @@ string Path::dump() const
 //         ERROR("Cannot resolve base VarDecl from address id");
 //     string baseName = addr.getBaseName();
 
-// Step 2: compare name
-if (!addr.isOffseted())
-{
-    return var->getName() == baseName;
-}
-else
-{
-    std::string expected = baseName + "[" + addr.getOffset()->dump() + "]";
-    return var->getName() == expected;
-}
-}
+//     Step 2 : compare name if (!addr.isOffseted()) { return var->getName() == baseName; }
+//     else
+//     {
+//         std::string expected = baseName + "[" + addr.getOffset()->dump() + "]";
+//         return var->getName() == expected;
+//     }
+// }
 
 ProgramState::ProgramState(unique_ptr<Path> initialPath, ACSLFunction *context)
 {
