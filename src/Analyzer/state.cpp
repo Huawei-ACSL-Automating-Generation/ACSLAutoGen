@@ -157,7 +157,7 @@ unique_ptr<SymbolicExpr> Path::getVarState(const VarDecl *var)
     return memIt->second->clone();
 }
 
-const vector<unique_ptr<SymbolicExpr>> &Path::getPathConditions() const { return pathConditions; }
+const Formulas &Path::getPathConditions() const { return pathConditions; }
 
 Address *Path::allocMemory(const VarDecl *var)
 {
@@ -274,7 +274,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             }
 
             vector<unique_ptr<Path>> paths;
-            vector<unique_ptr<SymbolicExpr>> exprs;
+            Formulas exprs;
             exprs.reserve(1);
             exprs.push_back(std::move(result));
 
@@ -286,7 +286,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             BinaryOpExpr::Operator op = getBinaryOp(binOp->getOpcode());
 
             vector<unique_ptr<Path>> outPaths;
-            vector<unique_ptr<SymbolicExpr>> outExprs;
+            Formulas outExprs;
 
             size_t lhsCount = lhs.second.size();
             for (size_t i = 0; i < lhsCount; ++i)
@@ -320,7 +320,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             {
                 auto varExpr = getVarState(varDecl);
                 vector<unique_ptr<Path>> paths;
-                vector<unique_ptr<SymbolicExpr>> exprs;
+                Formulas exprs;
                 exprs.push_back(std::move(varExpr));
                 return {std::move(paths), std::move(exprs)};
             }
@@ -330,7 +330,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                 APSInt value = enumDecl->getInitVal();
                 auto litExpr = make_unique<LiteralExpr>(static_cast<int>(value.getSExtValue()));
                 vector<unique_ptr<Path>> paths;
-                vector<unique_ptr<SymbolicExpr>> exprs;
+                Formulas exprs;
                 exprs.push_back(std::move(litExpr));
                 return {std::move(paths), std::move(exprs)};
             }
@@ -365,7 +365,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             SymbolicExpr::Type varType = deriveVarType(arrSub->getBase()->getType());
 
             vector<unique_ptr<Path>> outPaths;
-            vector<unique_ptr<SymbolicExpr>> outExprs;
+            Formulas outExprs;
 
             for (size_t i = 0; i < idx.second.size(); ++i)
             {
@@ -410,7 +410,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             EvalResult cond = evalExpr(condOp->getCond());
 
             vector<unique_ptr<Path>> outPaths;
-            vector<unique_ptr<SymbolicExpr>> outExprs;
+            Formulas outExprs;
 
             for (size_t i = 0; i < cond.second.size(); ++i)
             {
@@ -453,7 +453,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
         .Case<UnaryOperator>([this](const UnaryOperator *uop) -> EvalResult {
             auto operand = evalExpr(uop->getSubExpr());
             vector<unique_ptr<Path>> outPaths;
-            vector<unique_ptr<SymbolicExpr>> outExprs;
+            Formulas outExprs;
 
             UnaryOpExpr::Operator op;
             switch (uop->getOpcode())
@@ -855,10 +855,10 @@ void ProgramState::step(const Stmt *stmt)
     return;
 }
 
-std::vector<std::unique_ptr<SymbolicExpr>> ProgramState::stepExpr(const Expr *expr)
+Formulas ProgramState::stepExpr(const Expr *expr)
 {
     std::vector<std::unique_ptr<Path>> updatedPaths;
-    std::vector<std::unique_ptr<SymbolicExpr>> evaluated;
+    Formulas evaluated;
 
     for (auto &path : paths)
     {
@@ -1024,9 +1024,9 @@ void ProgramState::setReturnExpr(const Expr *expr)
             continue;
         }
 
-        Path::EvalResult eval                     = pathPtr->evalExpr(expr);
-        vector<unique_ptr<Path>> &generatedPaths  = eval.first;
-        vector<unique_ptr<SymbolicExpr>> &results = eval.second;
+        Path::EvalResult eval                    = pathPtr->evalExpr(expr);
+        vector<unique_ptr<Path>> &generatedPaths = eval.first;
+        Formulas &results                        = eval.second;
 
         size_t n = results.size();
         for (size_t i = 0; i < n; ++i)
@@ -1071,7 +1071,7 @@ void ProgramState::updateVarState(const BinaryOperator *binOp)
             Path::EvalResult lhs = path->evalExpr(binOp->getLHS());
 
             vector<unique_ptr<Path>> outPaths;
-            vector<unique_ptr<SymbolicExpr>> outExprs;
+            Formulas outExprs;
 
             for (size_t i = 0; i < lhs.second.size(); ++i)
             {

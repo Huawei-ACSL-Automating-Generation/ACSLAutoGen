@@ -8,6 +8,48 @@
 #include <clang/AST/Decl.h>
 #include <variant>
 
+struct VarManager
+{
+    int numVars = 0;
+    std::unordered_map<std::string, int> varIndexMap;
+    std::vector<std::string> orderedVars;
+
+    static VarManager fromPaths(const std::vector<std::unique_ptr<Path>> &paths)
+    {
+        VarManager vm;
+        int varCounter = 0;
+
+        for (const auto &path : paths)
+        {
+            const auto &varAddrMap = path->getVarAddr();
+            for (const auto &[varDecl, addrPtr] : varAddrMap)
+            {
+                if (!varDecl)
+                    continue;
+                std::string name = varDecl->getNameAsString();
+                if (vm.varIndexMap.insert({name, varCounter}).second)
+                {
+                    vm.orderedVars.push_back(name);
+                    ++varCounter;
+                }
+            }
+        }
+
+        vm.numVars = varCounter;
+        return vm;
+    }
+
+    int getIndex(const Symbolic::Variable &var) const
+    {
+        auto it = varIndexMap.find(var.getName());
+        if (it == varIndexMap.end())
+        {
+            ERROR("VarManager: Variable name '" + var.getName() + "' not found in index map.");
+        }
+        return it->second;
+    }
+};
+
 namespace Symbolic
 {
     class Variable;
@@ -98,8 +140,7 @@ namespace Symbolic
         // Convert this symbolic expression into a PPL Linear_Expression.
         // Only valid for expressions that are affine (i.e., linear w.r.t. variables).
         // Throws or fails if the expression is not representable in linear form.
-        virtual Parma_Polyhedra_Library::Linear_Expression
-        toLinearExpr(const std::unordered_map<std::string, int> &) const
+        virtual Parma_Polyhedra_Library::Linear_Expression toLinearExpr(const VarManager &vm) const
         {
             ERROR("not implemented for expression type: ");
         }
@@ -185,8 +226,7 @@ namespace Symbolic
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 0; }
-        Parma_Polyhedra_Library::Linear_Expression
-        toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(const VarManager &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
         int64_t getLiteralValue() const;
 
@@ -238,12 +278,14 @@ namespace Symbolic
             std::unique_ptr<SymbolicExpr> left, Operator op, std::unique_ptr<SymbolicExpr> right)
             : SymbolicExpr(ExprType::BinaryOp, left->getValType()), left_(std::move(left)), op_(op),
               right_(std::move(right))
-        {}
+        {
+        }
 
         BinaryOpExpr(SymbolicExpr *left, Operator op, SymbolicExpr *right)
             : SymbolicExpr(ExprType::BinaryOp, left->getValType()), left_(left), op_(op),
               right_(right)
-        {}
+        {
+        }
 
         const std::unique_ptr<SymbolicExpr> &getLeft() const { return left_; }
         const std::unique_ptr<SymbolicExpr> &getRight() const { return right_; }
@@ -259,8 +301,7 @@ namespace Symbolic
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override;
         int getMaxDegree() const override;
-        Parma_Polyhedra_Library::Linear_Expression
-        toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(const VarManager &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
@@ -288,7 +329,8 @@ namespace Symbolic
 
         UnaryOpExpr(Operator op, std::unique_ptr<SymbolicExpr> expr)
             : SymbolicExpr(ExprType::UnaryOp, expr->getValType()), op_(op), expr_(std::move(expr))
-        {}
+        {
+        }
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
@@ -300,8 +342,7 @@ namespace Symbolic
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override;
         int getMaxDegree() const override;
-        Parma_Polyhedra_Library::Linear_Expression
-        toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(const VarManager &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
@@ -333,7 +374,8 @@ namespace Symbolic
         Variable(const std::string &name, Type varType, int id, std::unique_ptr<Address> from)
             : SymbolicExpr(ExprType::Variable, varType), name_(name), varType_(varType), id_(id),
               from_(std::move(from))
-        {}
+        {
+        }
 
         Type getVarType() const { return varType_; }
         void setVarType(Type vt)
@@ -356,8 +398,7 @@ namespace Symbolic
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 1; }
-        Parma_Polyhedra_Library::Linear_Expression
-        toLinearExpr(const std::unordered_map<std::string, int> &varIndexMap) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(const VarManager &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
@@ -416,14 +457,16 @@ namespace Symbolic
             unsigned int id, std::variant<const clang::VarDecl *, std::unique_ptr<Address>> from)
             : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id),
               offset_(SymbolicExpr::makeNull()), from_(std::move(from))
-        {}
+        {
+        }
 
         Address(unsigned int id,
             std::unique_ptr<SymbolicExpr> offset,
             std::variant<const clang::VarDecl *, std::unique_ptr<Address>> from)
             : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id),
               offset_(offset ? std::move(offset) : SymbolicExpr::makeNull()), from_(std::move(from))
-        {}
+        {
+        }
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         unsigned int getId() const { return id_; }

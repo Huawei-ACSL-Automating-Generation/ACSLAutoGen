@@ -11,14 +11,14 @@
 
 using namespace Symbolic;
 using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>>;
-using TransRel     = std::tuple<int, int, std::vector<std::unique_ptr<SymbolicExpr>>>;
-using InitRel      = std::pair<int, std::vector<std::unique_ptr<SymbolicExpr>>>;
+using Formulas     = std::vector<std::unique_ptr<SymbolicExpr>>;
+using TransRel     = std::tuple<int, int, Formulas>;
+using InitRel      = std::pair<int, Formulas>;
 
 class Path
 {
   public:
-    using EvalResult =
-        std::pair<std::vector<std::unique_ptr<Path>>, std::vector<std::unique_ptr<SymbolicExpr>>>;
+    using EvalResult = std::pair<std::vector<std::unique_ptr<Path>>, Formulas>;
 
     Path()  = default;
     ~Path() = default;
@@ -37,7 +37,7 @@ class Path
     std::unique_ptr<Address> extractAddress(const clang::Expr *lhs);
 
     std::unique_ptr<SymbolicExpr> getVarState(const clang::VarDecl *var);
-    const std::vector<std::unique_ptr<SymbolicExpr>> &getPathConditions() const;
+    const Formulas &getPathConditions() const;
 
     Address *allocMemory(const clang::VarDecl *);
     std::unique_ptr<Address> allocMemory(const Address &from);
@@ -76,7 +76,7 @@ class Path
         memoryState;
 
     // SET: List of symbolic expressions representing the path condition.
-    std::vector<std::unique_ptr<SymbolicExpr>> pathConditions;
+    Formulas pathConditions;
 
     // Holds the current path state. Default is set to Step
     PathState currentState = PathState::Step;
@@ -98,7 +98,7 @@ class ProgramState
     void init();
 
     void step(const clang::Stmt *stmt);
-    std::vector<std::unique_ptr<SymbolicExpr>> stepExpr(const clang::Expr *expr);
+    Formulas stepExpr(const clang::Expr *expr);
 
     void addNewDecls(const std::vector<const clang::VarDecl *> &varDecls);
 
@@ -144,7 +144,6 @@ class ProgramState
     void CollectLoopACSL();
 };
 
-std::vector<std::unique_ptr<SymbolicExpr>>
-buildLoopInvariant(const std::vector<std::unique_ptr<SymbolicExpr>> &conds,
-    const std::vector<std::unique_ptr<Path>> &paths);
+Formulas buildLoopInvariant(
+    const Formulas &conds, const std::vector<std::unique_ptr<Path>> &paths, const VarManager &vm);
 #endif
