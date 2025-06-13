@@ -50,7 +50,7 @@ int BinaryOpExpr::getMaxDegree() const
     switch (op_)
     {
     case Operator::Add:
-    case Operator::Subtract: return std::max(ldeg, rdeg);
+    case Operator::Subtract: return max(ldeg, rdeg);
     case Operator::Multiply: return ldeg + rdeg;
     default: return -1; // invalid in linear context
     }
@@ -76,7 +76,7 @@ LiteralExpr::toLinearExpr(const unordered_map<string, int> &) const
     case LiteralType::UInt64:
         return Parma_Polyhedra_Library::Linear_Expression(
             static_cast<Parma_Polyhedra_Library::Coefficient>(data.uint64Value));
-    default: throw std::runtime_error("Unsupported LiteralExpr type in toLinearExpr");
+    default: throw runtime_error("Unsupported LiteralExpr type in toLinearExpr");
     }
 }
 
@@ -324,7 +324,7 @@ void computeLinearInv(
     collectVars(initial.second);
 
     // Step 2: Initialize LinTS and add variables
-    auto linTS = std::make_unique<LinTS>();
+    auto linTS = make_unique<LinTS>();
 
     for (const auto &name : varNames)
     {
@@ -351,7 +351,7 @@ void computeLinearInv(
     for (size_t i = 0; i < transitions.size(); ++i)
     {
         const auto &[src, dst, exprs] = transitions[i];
-        string transName              = "t" + std::to_string(i);
+        string transName              = "t" + to_string(i);
         C_Polyhedron *transPoly       = convertAssertionsToPoly(exprs, varIndexMap);
         linTS->addTransRel(const_cast<char *>(transName.c_str()),
             const_cast<char *>(locations[src].c_str()), const_cast<char *>(locations[dst].c_str()),
@@ -360,4 +360,19 @@ void computeLinearInv(
 
     // Step 5: Run invariant computation
     linTS->ComputeLinTSInv();
+}
+
+/******************************************************************************\
+ *                              Path Preprocessing                            *
+ *  This section handles symbolic path condition construction and transition  *
+ *  constraint setup for downstream invariant analysis.                       *
+\******************************************************************************/
+
+// TODO: optimize to one cond, condition won't get multi cases.
+vector<unique_ptr<SymbolicExpr>> buildLoopInvariant(
+    const vector<unique_ptr<SymbolicExpr>> &loopCond, const vector<unique_ptr<Path>> &paths)
+{
+    vector<unique_ptr<SymbolicExpr>> invariants;
+
+    return invariants;
 }

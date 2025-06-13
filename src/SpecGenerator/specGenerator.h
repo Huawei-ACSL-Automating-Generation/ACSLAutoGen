@@ -47,7 +47,7 @@ struct LoopInfo
     // TODO(more info to be added)
 };
 
-std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
+std::optional<LoopInfo> parseLoopInfo(ProgramState &preState,
     const clang::Stmt *loopStmt,
     const std::string &groupName = DEFAULT_LOOP_INFO_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =

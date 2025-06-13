@@ -21,10 +21,6 @@ class SetLoopEntryPlugin : public LoopInfoPlugin
         LoopInfo &loopInfo) const override
     {
         auto symbolicState = pre.clone();
-        if (init)
-        {
-            symbolicState->step(init);
-        }
 
         symbolicState->resymbolize();
         loopInfo.symbolicLoopEntry_ = std::move(symbolicState);

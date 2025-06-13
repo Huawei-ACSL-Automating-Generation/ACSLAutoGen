@@ -45,4 +45,20 @@ class DumpLoopInfoPlugin : public LoopInvariantPlugin
   private:
     string id_;
 };
+
+class LinearInvariantPlugin : public LoopInvariantPlugin
+{
+  public:
+    LinearInvariantPlugin(const string &ID) : id_(ID) {}
+    string_view id() const override { return id_; }
+    optional<string> generate(const ProgramState &preState, const LoopInfo &loopInfo) const override
+    {
+        INFO(preState.dump());
+    }
+
+  private:
+    string id_;
+};
+
 REGISTER_ACSL_PLUGIN(DumpLoopInfoPlugin, "dumpLoopInfo");
+REGISTER_ACSL_PLUGIN(LinearInvariantPlugin, "StingxPlugin");

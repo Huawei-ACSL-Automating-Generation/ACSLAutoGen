@@ -144,8 +144,7 @@ class ProgramState
     void CollectLoopACSL();
 };
 
-void computeLinearInv(const std::vector<std::string> &locations,
-    const std::vector<TransRel> &transitions,
-    const InitRel &initial);
-
+std::vector<std::unique_ptr<SymbolicExpr>>
+buildLoopInvariant(const std::vector<std::unique_ptr<SymbolicExpr>> &conds,
+    const std::vector<std::unique_ptr<Path>> &paths);
 #endif
