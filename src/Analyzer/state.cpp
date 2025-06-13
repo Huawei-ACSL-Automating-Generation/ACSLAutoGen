@@ -993,7 +993,7 @@ void ProgramState::stepLoop(const Stmt *loopStmt)
         UNIMPLEMENT("Loop is too complex!");
     }
 
-    emitLoopInvariant(*this, cond, body, inc, *loopInfo);
+    emitLoopInvariant(*preState, cond, body, inc, *loopInfo);
 
     // @WindOctober: process loop post state.
     TODO();
