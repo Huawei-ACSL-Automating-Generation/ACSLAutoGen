@@ -115,7 +115,7 @@ std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
     return loopInfo;
 }
 
-std::string emitLoopInvariantContract(const ProgramState &preState,
+std::string emitLoopInvariant(const ProgramState &preState,
     const LoopInfo &loopInfo,
     const std::string &groupName,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds)
