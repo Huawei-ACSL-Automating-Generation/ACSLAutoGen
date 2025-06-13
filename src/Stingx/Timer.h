@@ -39,34 +39,34 @@ class Timer {
     // This could of course measure the amount of time doing different things
     // Alarm timers are not being used in this implementation.
 
-   private:
-    long int start_time;    // when did  I start
-    long int time_elapsed;  // in clock ticks
-    long int nclticks;      // how many clockticks maketh a second
+  private:
+    long int start_time;   // when did  I start
+    long int time_elapsed; // in clock ticks
+    long int nclticks;     // how many clockticks maketh a second
 
-    long int time_alarmed;  // the amount of time I am alarmed
+    long int time_alarmed; // the amount of time I am alarmed
 
     // state variables for the timer.
 
-    bool alarm;  // Is this an alarm timer with a time_up or simply a timer for
-                 // computing time elapsed?
-    bool time_up;  // has the timer gone off
-    bool running;  // is the timer running .. ie parameters set
-    bool frozen;   // if the timer is running, has it been frozen?
+    bool alarm;   // Is this an alarm timer with a time_up or simply a timer for
+                  // computing time elapsed?
+    bool time_up; // has the timer gone off
+    bool running; // is the timer running .. ie parameters set
+    bool frozen;  // if the timer is running, has it been frozen?
 
     void initialize(bool frozen, int time_alarmed);
 
-   public:
-    Timer();                  // start the timer .. no alarm
-    Timer(int time_alarmed);  // the amount of time in mS
+  public:
+    Timer();                 // start the timer .. no alarm
+    Timer(int time_alarmed); // the amount of time in mS
 
     void start(int how_much);
 
-    void stop();  // stop the timer
+    void stop(); // stop the timer
 
     long int getElapsedTime();
 
-    void restart();     // restart the timer
-    bool is_time_up();  // is the time up
+    void restart();    // restart the timer
+    bool is_time_up(); // is the time up
 };
 #endif

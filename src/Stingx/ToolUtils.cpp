@@ -32,25 +32,18 @@ void DepthCounter::init_depth_size(int tree_size) {
     }
 }
 
-void DepthCounter::set_pbc_at_depth(int depth) {
-    pbc_in_depth[depth]++;
-}
+void DepthCounter::set_pbc_at_depth(int depth) { pbc_in_depth[depth]++; }
 
-int DepthCounter::get_pbc_at_depth(int depth) {
-    return pbc_in_depth[depth];
-}
+int DepthCounter::get_pbc_at_depth(int depth) { return pbc_in_depth[depth]; }
 
-void DepthCounter::clearall() {
-    vector<int>().swap(pbc_in_depth);
-}
+void DepthCounter::clearall() { vector<int>().swap(pbc_in_depth); }
 
 /*
  * Class::Counter
  */
 
 int Counter::get_location_size() {
-    if (pre_pbc_at_location_in_depth.size() ==
-        pst_pbc_at_location_in_depth.size()) {
+    if (pre_pbc_at_location_in_depth.size() == pst_pbc_at_location_in_depth.size()) {
         return pre_pbc_at_location_in_depth.size();
     } else {
         cout << endl << "Error: pre_pbc_at_location_in_depth != pst";
@@ -58,8 +51,7 @@ int Counter::get_location_size() {
     }
 }
 
-void Counter::set_location_index_and_init_depth(int curId,
-                                                int tree_size) {
+void Counter::set_location_index_and_init_depth(int curId, int tree_size) {
     int gap;
     if (get_location_size() != -1) {
         gap = curId - get_location_size();
@@ -89,11 +81,11 @@ void Counter::set_location_index_and_init_depth(int curId,
     get_location_pst_counter(curId).init_depth_size(tree_size);
 }
 
-DepthCounter& Counter::get_location_pre_counter(int curId) {
+DepthCounter &Counter::get_location_pre_counter(int curId) {
     return pre_pbc_at_location_in_depth[curId];
 }
 
-DepthCounter& Counter::get_location_pst_counter(int curId) {
+DepthCounter &Counter::get_location_pst_counter(int curId) {
     return pst_pbc_at_location_in_depth[curId];
 }
 

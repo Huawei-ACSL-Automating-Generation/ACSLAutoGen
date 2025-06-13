@@ -27,41 +27,31 @@
 extern int clump_prune_count;
 extern int totalPrunedCnt;
 
-void Clump::initialize() {
-    iter = 0;
-}
-void Clump::initialize(var_info* coefInfo) {
-    coefNum = coefInfo->getDim();
+void Clump::initialize() { iter = 0; }
+void Clump::initialize(var_info *coefInfo) {
+    coefNum        = coefInfo->getDim();
     this->coefInfo = coefInfo;
-    iter = 0;
+    iter           = 0;
 }
-void Clump::initialize(var_info* coefInfo, string name, string category) {
-    coefNum = coefInfo->getDim();
+void Clump::initialize(var_info *coefInfo, string name, string category) {
+    coefNum        = coefInfo->getDim();
     this->coefInfo = coefInfo;
-    iter = 0;
-    this->name = name;
+    iter           = 0;
+    this->name     = name;
     this->category = category;
 }
 
-void Clump::replace_vp(vector<C_Polyhedron> new_vp) {
-    vecPolys = new_vp;
-}
+void Clump::replace_vp(vector<C_Polyhedron> new_vp) { vecPolys = new_vp; }
 
-Clump::Clump() {
-    initialize();
-}
-Clump::Clump(var_info* coefInfo) {
-    initialize(coefInfo);
-}
-Clump::Clump(var_info* coefInfo, string name, string category) {
+Clump::Clump() { initialize(); }
+Clump::Clump(var_info *coefInfo) { initialize(coefInfo); }
+Clump::Clump(var_info *coefInfo, string name, string category) {
     initialize(coefInfo, name, category);
 }
 
-int Clump::getCount() {
-    return vecPolys.size();
-}
+int Clump::getCount() { return vecPolys.size(); }
 
-void Clump::insert(C_Polyhedron const& p) {
+void Clump::insert(C_Polyhedron const &p) {
     vector<C_Polyhedron>::iterator vi;
 
     for (vi = vecPolys.begin(); vi < vecPolys.end(); ++vi) {
@@ -79,7 +69,7 @@ void Clump::insert(C_Polyhedron const& p) {
     return;
 }
 
-vector<int> Clump::insert_with_erase_index(C_Polyhedron const& p) {
+vector<int> Clump::insert_with_erase_index(C_Polyhedron const &p) {
     vector<int> erase_index;
     vector<int>::reverse_iterator vi;
     int i;
@@ -104,7 +94,7 @@ vector<int> Clump::insert_with_erase_index(C_Polyhedron const& p) {
     return erase_index;
 }
 
-vector<int> Clump::prune_all(C_Polyhedron& p) {
+vector<int> Clump::prune_all(C_Polyhedron &p) {
     vector<int> node_gli;
     vector<int>::iterator vi;
     // cout << endl << "prune";
@@ -127,7 +117,7 @@ vector<int> Clump::prune_all(C_Polyhedron& p) {
     return node_gli;
 }
 
-vector<int> Clump::prune_target(C_Polyhedron& p, int target_gli) {
+vector<int> Clump::prune_target(C_Polyhedron &p, int target_gli) {
     vector<int> node_gli;
     vector<int>::iterator vi;
     // cout << endl << "prune";
@@ -150,7 +140,7 @@ vector<int> Clump::prune_target(C_Polyhedron& p, int target_gli) {
     return node_gli;
 }
 
-bool Clump::contains(C_Polyhedron& poly) {
+bool Clump::contains(C_Polyhedron &poly) {
     for (auto vi = vecPolys.begin(); vi < vecPolys.end(); ++vi) {
         if ((*vi).contains(poly))
             return true;

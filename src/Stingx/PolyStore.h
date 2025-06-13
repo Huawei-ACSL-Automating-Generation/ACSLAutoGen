@@ -47,56 +47,56 @@ using namespace Parma_Polyhedra_Library;
 using namespace Parma_Polyhedra_Library::IO_Operators;
 
 class PolyStore {
-   private:
+  private:
     // Post-Comments: I am no longer sure what trivial_poly is doing here.
     // Post-Post-Comments: Keep trivial_poly. It is necessary.
     // p = The polyhedron central to the constraint store
     C_Polyhedron *p, *trivial_poly;
 
     // printing information
-    var_info* info;
+    var_info *info;
     // vector<Variable *> * v;
-    int varsNum;  // The dimensions
+    int varsNum; // The dimensions
 
-    void initialize(int varsNum, var_info* info);
+    void initialize(int varsNum, var_info *info);
     void make_trivial_polyhedron();
 
-   public:
-    PolyStore(int varsNum, var_info* info);
+  public:
+    PolyStore(int varsNum, var_info *info);
     ~PolyStore();
 
     // add constraints
 
-    void add_constraint(SparseLinExpr const& p, int ineqType);
-    void add_constraint(Constraint const& cc);
+    void add_constraint(SparseLinExpr const &p, int ineqType);
+    void add_constraint(Constraint const &cc);
 
-    bool isConsistent() const;  // Check if the system is satisfiable
+    bool isConsistent() const; // Check if the system is satisfiable
 
     // push the linear equalities
     // part of the store into the Matrix Store m
-    void extract_linear_part(MatrixStore& m) const;
+    void extract_linear_part(MatrixStore &m) const;
 
     // push the
     // constraints in the linear store into the polyhedron
-    void add_linear_store(MatrixStore const& m);
+    void add_linear_store(MatrixStore const &m);
 
     // access stuff
-    const C_Polyhedron& get_nnc_poly_reference() const;
-    C_Polyhedron& getPolyRef();
-    var_info* getInfo() const;
+    const C_Polyhedron &get_nnc_poly_reference() const;
+    C_Polyhedron &getPolyRef();
+    var_info *getInfo() const;
     int getDim() const;
 
     // test containment
-    bool contained(C_Polyhedron* pp);
+    bool contained(C_Polyhedron *pp);
 
     // clone
-    PolyStore* clone() const;
+    PolyStore *clone() const;
 
     // This line of research was abandoned. But keep it anyway.
-    void collect_generators(Generator_System& g);
+    void collect_generators(Generator_System &g);
     Generator_System minimized_generators();
 };
 
-ostream& operator<<(ostream& info, PolyStore const& p);
+ostream &operator<<(ostream &info, PolyStore const &p);
 
 #endif

@@ -55,7 +55,7 @@ class System {
     // rather than the messy thing in the .y file
     //
 
-   private:
+  private:
     // members are
     //  varInfo, coefInfo, lambdaInfo // the var-infos
 
@@ -63,56 +63,53 @@ class System {
     int varNum, coefNum, lamdaNum;
     long int propagation_time, widening_time;
 
-    Context* glc_;
+    Context *glc_;
     // one for each location
-    vector<Location*> vecLocs;
+    vector<Location *> vecLocs;
 
-    vector<TransitionRelation*> vecTrans;
-
+    vector<TransitionRelation *> vecTrans;
 
     void compute_initial_context();
     bool context_computed_;
 
-    void get_location_info(System& s, Context& cc);
+    void get_location_info(System &s, Context &cc);
 
-    void get_transition_info(System& s, Context& cc);
+    void get_transition_info(System &s, Context &cc);
 
+  public:
+    System(var_info *varInfo, var_info *coefInfo, var_info *lambdaInfo);
+    System(System &s, Context &cc);
 
-   public:
-    System(var_info* varInfo, var_info* coefInfo, var_info* lambdaInfo);
-    System(System& s, Context& cc);
-
-    void addLoc(Location* loc);
-    void addTrans(TransitionRelation* trans);
+    void addLoc(Location *loc);
+    void addTrans(TransitionRelation *trans);
 
     int getLocNum() const { return vecLocs.size(); }
     int getTransNum() const { return vecTrans.size(); }
 
-    var_info* getInfo() const { return varInfo; }
-    var_info* getCoefInfo() const { return coefInfo; }
-    var_info* getLambdaInfo() const { return lambdaInfo; }
+    var_info *getInfo() const { return varInfo; }
+    var_info *getCoefInfo() const { return coefInfo; }
+    var_info *getLambdaInfo() const { return lambdaInfo; }
     int getVarNum() const { return varNum; }
     int getCoefNum() const { return coefNum; }
     int getLambdaNum() const { return lamdaNum; }
 
     // the non-inlines
-    void update_dimensions();  // recompute the lamdaNum and coefNum based on the information
+    void update_dimensions(); // recompute the lamdaNum and coefNum based on the information
     // void populateMultipliers();
 
-    Location const& get_location(int i) const;
+    Location const &get_location(int i) const;
 
-    Location* get_matching_location(string name);
+    Location *get_matching_location(string name);
     bool location_matches(string name);
 
-    TransitionRelation const& get_transition_relation(int i) const;
+    TransitionRelation const &get_transition_relation(int i) const;
 
-    void print(ostream& os) const;
-    Context* getContext();
+    void print(ostream &os) const;
+    Context *getContext();
 
-    void add_invariants_and_update(C_Polyhedron& pp, C_Polyhedron& dualp);
-
+    void add_invariants_and_update(C_Polyhedron &pp, C_Polyhedron &dualp);
 };
 
-ostream& operator<<(ostream& out, System const& sys);
+ostream &operator<<(ostream &out, System const &sys);
 
 #endif

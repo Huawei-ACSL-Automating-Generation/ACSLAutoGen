@@ -22,28 +22,23 @@ using namespace Symbolic;
 
 using LValueTarget = variant<const VarDecl *, unique_ptr<Address>>;
 
-void Path::resymbolize()
-{
+void Path::resymbolize() {
     memoryState.clear();
     pathConditions.clear();
 
-    for (auto &entry : varAddr)
-    {
+    for (auto &entry : varAddr) {
         const VarDecl *varDecl = entry.first;
         QualType varType       = varDecl->getType();
         Address *addr          = entry.second.get();
 
-        if (!varType->isPointerType() && !varType->isArrayType())
-        {
+        if (!varType->isPointerType() && !varType->isArrayType()) {
             SymbolicExpr::Type derived       = deriveVarType(varType);
             unique_ptr<SymbolicExpr> newExpr = make_unique<Symbolic::Variable>(
                 varDecl->getNameAsString(), derived, symbolVarCounter++,
                 std::unique_ptr<Address>(static_cast<Address *>(addr->clone().release())));
 
             memoryState[*addr] = std::move(newExpr);
-        }
-        else if (varType->isPointerType())
-        {
+        } else if (varType->isPointerType()) {
             auto pointeeAddr   = allocMemory(*addr);
             memoryState[*addr] = std::move(pointeeAddr);
             // if (!pointeeAddr)
@@ -63,62 +58,48 @@ void Path::resymbolize()
             //     dynamic_cast<Symbolic::Variable *>(memItPointee->second.get());
             // // Restore the pointer's memoryState entry.
             // memIt->second = std::move(ptrOrigExpr);
-        }
-        else
-        {
+        } else {
             TODO();
         }
     }
 }
 
 // Why not always return unique_ptr<Address>?
-LValueTarget Path::extractLValue(const Expr *lhs)
-{
+LValueTarget Path::extractLValue(const Expr *lhs) {
     const Expr *lexpr = lhs->IgnoreParenImpCasts();
     if (auto *declRef = dyn_cast<DeclRefExpr>(lexpr))
         return dyn_cast<VarDecl>(declRef->getDecl());
 
-    if (auto *arr = dyn_cast<ArraySubscriptExpr>(lexpr))
-    {
+    if (auto *arr = dyn_cast<ArraySubscriptExpr>(lexpr)) {
         auto baseLVal = extractLValue(arr->getBase());
         Address *addr;
-        if (auto declPtr = get_if<const VarDecl *>(&baseLVal))
-        {
+        if (auto declPtr = get_if<const VarDecl *>(&baseLVal)) {
             Address *variableAddr;
-            if (auto it = varAddr.find(*declPtr); it != varAddr.end())
-            {
+            if (auto it = varAddr.find(*declPtr); it != varAddr.end()) {
                 variableAddr = it->second.get();
-            }
-            else
-            {
+            } else {
                 ERROR("varState has no ArraySubscriptExpr's base, undefined variable?");
             }
-            if (auto symbol = memoryState.find(*variableAddr); symbol != memoryState.end())
-            {
+            if (auto symbol = memoryState.find(*variableAddr); symbol != memoryState.end()) {
                 auto ptr = dynamic_cast<Address *>(symbol->second.get());
                 if (ptr == nullptr)
                     ERROR("Value of ArraySubscriptExpr's base is not 'Address', base is neither "
                           "pointer nor "
                           "array?");
                 addr = ptr;
-            }
-            else
-            {
+            } else {
                 ERROR("memoryState has no ArraySubscriptExpr's base, base is neither pointer nor "
                       "array?");
             }
-        }
-        else
+        } else
             addr = get<unique_ptr<Address>>(baseLVal).get();
         auto idxEval = evalExpr(arr->getIdx());
         auto idxExpr = std::move(idxEval.second[0]);
         return addr->addOffset(std::move(idxExpr));
     }
 
-    if (auto *uop = dyn_cast<UnaryOperator>(lexpr))
-    {
-        if (uop->getOpcode() == UO_Deref)
-        {
+    if (auto *uop = dyn_cast<UnaryOperator>(lexpr)) {
+        if (uop->getOpcode() == UO_Deref) {
             auto addrEval = evalExpr(uop->getSubExpr());
             if (addrEval.second.empty())
                 UNIMPLEMENT("Failed to evaluate address in deref");
@@ -134,8 +115,7 @@ LValueTarget Path::extractLValue(const Expr *lhs)
     UNIMPLEMENT("Unsupported LHS expression: " << lexpr->getStmtClassName());
 }
 
-unique_ptr<Address> Path::extractAddress(const Expr *lhs)
-{
+unique_ptr<Address> Path::extractAddress(const Expr *lhs) {
     auto lv = extractLValue(lhs);
     if (auto varPtr = get_if<const VarDecl *>(&lv))
         return unique_ptr<Address>(static_cast<Address *>(varAddr[*varPtr]->clone().release()));
@@ -144,8 +124,7 @@ unique_ptr<Address> Path::extractAddress(const Expr *lhs)
     UNIMPLEMENT("extractAddress: unsupported lvalue for address");
 }
 
-unique_ptr<SymbolicExpr> Path::getVarState(const VarDecl *var)
-{
+unique_ptr<SymbolicExpr> Path::getVarState(const VarDecl *var) {
     auto canonicalVar = var->getCanonicalDecl();
     auto varIt        = varAddr.find(canonicalVar);
     if (varIt == varAddr.end())
@@ -159,8 +138,7 @@ unique_ptr<SymbolicExpr> Path::getVarState(const VarDecl *var)
 
 const Formulas &Path::getPathConditions() const { return pathConditions; }
 
-Address *Path::allocMemory(const VarDecl *var)
-{
+Address *Path::allocMemory(const VarDecl *var) {
     auto canonicalVar = var->getCanonicalDecl();
     if (varAddr.find(canonicalVar) != varAddr.end())
         ERROR("Variable already has allocated memory");
@@ -172,21 +150,18 @@ Address *Path::allocMemory(const VarDecl *var)
     return rawPtr;
 }
 
-unique_ptr<Address> Path::allocMemory(const Address &from)
-{
+unique_ptr<Address> Path::allocMemory(const Address &from) {
     return make_unique<Address>(
         addrCounter++, std::unique_ptr<Address>(static_cast<Address *>(from.clone().release())));
 }
 
-void Path::updateMemory(Address *addr, unique_ptr<SymbolicExpr> expr)
-{
+void Path::updateMemory(Address *addr, unique_ptr<SymbolicExpr> expr) {
     if (!expr)
         expr = make_unique<NullExpr>();
     memoryState[*addr] = std::move(expr);
 }
 
-void Path::updateVarState(const VarDecl *var, unique_ptr<SymbolicExpr> expr)
-{
+void Path::updateVarState(const VarDecl *var, unique_ptr<SymbolicExpr> expr) {
     unique_ptr<SymbolicExpr> exprPtr;
     if (expr)
         exprPtr = std::move(expr);
@@ -202,20 +177,18 @@ void Path::updateVarState(const VarDecl *var, unique_ptr<SymbolicExpr> expr)
     memoryState[*addr] = std::move(exprPtr);
 }
 
-void Path::insertPathCondition(unique_ptr<SymbolicExpr> cond)
-{
+void Path::insertPathCondition(unique_ptr<SymbolicExpr> cond) {
     if (!cond)
         return;
     pathConditions.push_back(std::move(cond));
 }
 
-unique_ptr<Path> Path::clone() const
-{
+unique_ptr<Path> Path::clone() const {
     auto cloned          = make_unique<Path>();
     cloned->currentState = currentState;
     for (const auto &entry : varAddr)
-        cloned->varAddr.emplace(entry.first,
-            unique_ptr<Address>(static_cast<Address *>(entry.second->clone().release())));
+        cloned->varAddr.emplace(entry.first, unique_ptr<Address>(static_cast<Address *>(
+                                                 entry.second->clone().release())));
     for (const auto &entry : memoryState)
         cloned->memoryState.emplace(entry.first, entry.second->clone());
     for (const auto &cond : pathConditions)
@@ -226,8 +199,7 @@ unique_ptr<Path> Path::clone() const
     return cloned;
 }
 
-Path::EvalResult Path::evalExpr(const Expr *expr)
-{
+Path::EvalResult Path::evalExpr(const Expr *expr) {
     if (!expr)
         ERROR("Fail to convert an empty Expr");
 
@@ -238,12 +210,9 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             QualType litType = lit->getType();
             unique_ptr<SymbolicExpr> result;
 
-            if (litType->isBooleanType())
-            {
+            if (litType->isBooleanType()) {
                 result = make_unique<LiteralExpr>(static_cast<bool>(ap.getZExtValue()));
-            }
-            else if (litType->isUnsignedIntegerType())
-            {
+            } else if (litType->isUnsignedIntegerType()) {
                 if (ap.getBitWidth() <= 8)
                     result =
                         make_unique<LiteralExpr>(static_cast<unsigned char>(ap.getZExtValue()));
@@ -257,9 +226,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                 else
                     UNIMPLEMENT("Unsupported unsigned integer literal with bit width > 64: "
                                 << ap.getBitWidth());
-            }
-            else
-            {
+            } else {
                 if (ap.getBitWidth() <= 8)
                     result = make_unique<LiteralExpr>(static_cast<char>(ap.getSExtValue()));
                 else if (ap.getBitWidth() <= 16)
@@ -289,15 +256,13 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             Formulas outExprs;
 
             size_t lhsCount = lhs.second.size();
-            for (size_t i = 0; i < lhsCount; ++i)
-            {
+            for (size_t i = 0; i < lhsCount; ++i) {
                 auto lhsExpr    = std::move(lhs.second[i]);
                 Path *path      = (i == 0) ? this : lhs.first[i - 1].get();
                 EvalResult rhs  = path->evalExpr(binOp->getRHS());
                 size_t rhsCount = rhs.second.size();
 
-                for (size_t j = 0; j < rhsCount; ++j)
-                {
+                for (size_t j = 0; j < rhsCount; ++j) {
                     unique_ptr<SymbolicExpr> rhsExpr = std::move(rhs.second[j]);
 
                     outExprs.emplace_back(
@@ -306,8 +271,8 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                     if (i == 0 && j == 0)
                         continue;
 
-                    outPaths.emplace_back(
-                        j == 0 ? std::move(lhs.first[i - 1]) : std::move(rhs.first[j - 1]));
+                    outPaths.emplace_back(j == 0 ? std::move(lhs.first[i - 1])
+                                                 : std::move(rhs.first[j - 1]));
                 }
             }
 
@@ -316,8 +281,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
         .Case<ParenExpr>(
             [this](const ParenExpr *paren) -> EvalResult { return evalExpr(paren->getSubExpr()); })
         .Case<DeclRefExpr>([this](const DeclRefExpr *declRef) -> EvalResult {
-            if (const auto *varDecl = dyn_cast<VarDecl>(declRef->getDecl()))
-            {
+            if (const auto *varDecl = dyn_cast<VarDecl>(declRef->getDecl())) {
                 auto varExpr = getVarState(varDecl);
                 vector<unique_ptr<Path>> paths;
                 Formulas exprs;
@@ -325,8 +289,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                 return {std::move(paths), std::move(exprs)};
             }
 
-            if (const auto *enumDecl = dyn_cast<EnumConstantDecl>(declRef->getDecl()))
-            {
+            if (const auto *enumDecl = dyn_cast<EnumConstantDecl>(declRef->getDecl())) {
                 APSInt value = enumDecl->getInitVal();
                 auto litExpr = make_unique<LiteralExpr>(static_cast<int>(value.getSExtValue()));
                 vector<unique_ptr<Path>> paths;
@@ -347,17 +310,14 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
 
             unique_ptr<Address> variableAddr = extractAddress(arrSub->getBase());
             unique_ptr<Address> addr;
-            if (auto symbol = memoryState.find(*variableAddr); symbol != memoryState.end())
-            {
+            if (auto symbol = memoryState.find(*variableAddr); symbol != memoryState.end()) {
                 auto ptr = dynamic_cast<Address *>(symbol->second.get());
                 if (ptr == nullptr)
                     ERROR("Value of ArraySubscriptExpr's base is not 'Address', base is neither "
                           "pointer nor "
                           "array?");
                 addr = unique_ptr<Address>(static_cast<Address *>(ptr->clone().release()));
-            }
-            else
-            {
+            } else {
                 ERROR("MemoryState has no ArraySubscriptExpr's base, base is neither pointer nor "
                       "array?");
             }
@@ -367,24 +327,20 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             vector<unique_ptr<Path>> outPaths;
             Formulas outExprs;
 
-            for (size_t i = 0; i < idx.second.size(); ++i)
-            {
+            for (size_t i = 0; i < idx.second.size(); ++i) {
                 auto idxExpr   = std::move(idx.second[i]);
                 string idxDump = idxExpr->dump();
                 auto newAddr   = addr->addOffset(std::move(idxExpr));
                 auto it        = memoryState.find(*newAddr);
-                if (it == memoryState.end())
-                {
+                if (it == memoryState.end()) {
                     string varName = baseName + "[" + idxDump +
                                      "]"; // TODO: impl function to get pointer/array base name.
-                    auto varExpr = make_unique<Symbolic::Variable>(varName, varType,
-                        symbolVarCounter++,
+                    auto varExpr = make_unique<Symbolic::Variable>(
+                        varName, varType, symbolVarCounter++,
                         unique_ptr<Address>(static_cast<Address *>(newAddr->clone().release())));
-                    it           = memoryState.emplace(*newAddr, varExpr->clone()).first;
+                    it = memoryState.emplace(*newAddr, varExpr->clone()).first;
                     outExprs.emplace_back(std::move(varExpr));
-                }
-                else
-                {
+                } else {
                     outExprs.emplace_back(it->second->clone());
                 }
                 if (i > 0)
@@ -398,7 +354,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             if (!callee)
                 return Path::EvalResult{};
             static const set<string> ignoreNames = {"llvm.dbg.declare", "llvm.lifetime.start",
-                "llvm.lifetime.end", "printf", "__assert_fail"};
+                                                    "llvm.lifetime.end", "printf", "__assert_fail"};
             string name                          = callee->getNameAsString();
             if (ignoreNames.contains(name))
                 return Path::EvalResult{};
@@ -412,8 +368,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             vector<unique_ptr<Path>> outPaths;
             Formulas outExprs;
 
-            for (size_t i = 0; i < cond.second.size(); ++i)
-            {
+            for (size_t i = 0; i < cond.second.size(); ++i) {
                 Path *condPath = (i == 0) ? this : cond.first[i - 1].get();
                 auto condExpr  = std::move(cond.second[i]);
 
@@ -432,14 +387,12 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                 EvalResult trueVal = truePath->evalExpr(condOp->getTrueExpr());
 
                 // merge results
-                for (size_t j = 0; j < trueVal.second.size(); ++j)
-                {
+                for (size_t j = 0; j < trueVal.second.size(); ++j) {
                     outExprs.emplace_back(std::move(trueVal.second[j]));
                     if (j > 0)
                         outPaths.emplace_back(std::move(trueVal.first[j - 1]));
                 }
-                for (size_t j = 0; j < falseVal.second.size(); ++j)
-                {
+                for (size_t j = 0; j < falseVal.second.size(); ++j) {
                     outExprs.emplace_back(std::move(falseVal.second[j]));
                     if (j == 0)
                         outPaths.emplace_back(std::move(falsePath));
@@ -456,31 +409,28 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             Formulas outExprs;
 
             UnaryOpExpr::Operator op;
-            switch (uop->getOpcode())
-            {
-            case UO_Plus: op = UnaryOpExpr::Operator::Plus; break;
-            case UO_Minus: op = UnaryOpExpr::Operator::Minus; break;
-            case UO_LNot: op = UnaryOpExpr::Operator::LogicalNot; break;
-            case UO_Not: op = UnaryOpExpr::Operator::BitwiseNot; break;
-            case UO_PreInc: op = UnaryOpExpr::Operator::PreInc; break;
-            case UO_PreDec: op = UnaryOpExpr::Operator::PreDec; break;
-            case UO_PostInc: op = UnaryOpExpr::Operator::PostInc; break;
-            case UO_PostDec: op = UnaryOpExpr::Operator::PostDec; break;
-            case UO_AddrOf: op = UnaryOpExpr::Operator::AddrOf; break;
-            case UO_Deref: op = UnaryOpExpr::Operator::Dereference; break;
-            default:
-                UNIMPLEMENT(
-                    "Unsupported UnaryOperator: " << uop->getOpcodeStr(uop->getOpcode()).str());
+            switch (uop->getOpcode()) {
+                case UO_Plus: op = UnaryOpExpr::Operator::Plus; break;
+                case UO_Minus: op = UnaryOpExpr::Operator::Minus; break;
+                case UO_LNot: op = UnaryOpExpr::Operator::LogicalNot; break;
+                case UO_Not: op = UnaryOpExpr::Operator::BitwiseNot; break;
+                case UO_PreInc: op = UnaryOpExpr::Operator::PreInc; break;
+                case UO_PreDec: op = UnaryOpExpr::Operator::PreDec; break;
+                case UO_PostInc: op = UnaryOpExpr::Operator::PostInc; break;
+                case UO_PostDec: op = UnaryOpExpr::Operator::PostDec; break;
+                case UO_AddrOf: op = UnaryOpExpr::Operator::AddrOf; break;
+                case UO_Deref: op = UnaryOpExpr::Operator::Dereference; break;
+                default:
+                    UNIMPLEMENT(
+                        "Unsupported UnaryOperator: " << uop->getOpcodeStr(uop->getOpcode()).str());
             }
 
-            for (size_t i = 0; i < operand.second.size(); ++i)
-            {
+            for (size_t i = 0; i < operand.second.size(); ++i) {
                 Path *path  = (i == 0 ? this : operand.first[i - 1].get());
                 auto unExpr = std::move(operand.second[i]);
 
                 if (op == UnaryOpExpr::Operator::PreInc || op == UnaryOpExpr::Operator::PostInc ||
-                    op == UnaryOpExpr::Operator::PreDec || op == UnaryOpExpr::Operator::PostDec)
-                {
+                    op == UnaryOpExpr::Operator::PreDec || op == UnaryOpExpr::Operator::PostDec) {
                     // ++x / x++ / --x / x--
                     unique_ptr<Address> addr = extractAddress(uop->getSubExpr());
                     if (!addr)
@@ -490,7 +440,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                     // compute new = old +/- 1
                     auto one    = make_unique<LiteralExpr>(1);
                     auto binOp  = (op == UnaryOpExpr::Operator::PreInc ||
-                                     op == UnaryOpExpr::Operator::PostInc)
+                                  op == UnaryOpExpr::Operator::PostInc)
                                       ? BinaryOpExpr::Operator::Add
                                       : BinaryOpExpr::Operator::Subtract;
                     auto newVal = make_unique<BinaryOpExpr>(oldVal->clone(), binOp, std::move(one));
@@ -501,9 +451,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
                         outExprs.emplace_back(std::move(newVal));
                     else
                         outExprs.emplace_back(std::move(oldVal));
-                }
-                else if (op == UnaryOpExpr::Operator::Dereference)
-                {
+                } else if (op == UnaryOpExpr::Operator::Dereference) {
                     // *x
                     auto se = evalExpr(uop->getSubExpr());
                     if (!se.first.empty() || se.second.size() != 1)
@@ -514,25 +462,21 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
 
                     auto writedAddr = addr->addOffset(make_unique<LiteralExpr>(0U));
 
-                    if (auto it = memoryState.find(*writedAddr); it == memoryState.end())
-                    {
+                    if (auto it = memoryState.find(*writedAddr); it == memoryState.end()) {
                         SymbolicExpr::Type varType = deriveVarType(uop->getSubExpr()->getType());
                         string varName             = writedAddr->getBaseName() + "[" +
                                          writedAddr->getOffset()->dump() +
                                          "]"; // TODO: impl function to get pointer/array base name.
-                        auto varExpr = std::make_unique<Symbolic::Variable>(varName, varType,
-                            symbolVarCounter++,
+                        auto varExpr = std::make_unique<Symbolic::Variable>(
+                            varName, varType, symbolVarCounter++,
                             std::unique_ptr<Address>(
                                 static_cast<Address *>(writedAddr->clone().release())));
-                        it           = memoryState.emplace(*writedAddr, varExpr->clone()).first;
+                        it = memoryState.emplace(*writedAddr, varExpr->clone()).first;
                         outExprs.emplace_back(std::move(varExpr));
-                    }
-                    else
-                    {
+                    } else {
                         outExprs.emplace_back(it->second->clone());
                     }
-                }
-                else if (op == UnaryOpExpr::Operator::AddrOf)
+                } else if (op == UnaryOpExpr::Operator::AddrOf)
                     TODO();
                 else
                     outExprs.emplace_back(make_unique<UnaryOpExpr>(op, std::move(unExpr)));
@@ -556,18 +500,16 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             UNIMPLEMENT("Unsupported Expr type: " << e->getStmtClassName());
         });
 }
-string Path::dump() const
-{
+string Path::dump() const {
     ostringstream oss;
 
     oss << "\nPath State: " << [&]() {
-        switch (currentState)
-        {
-        case Path::PathState::Step: return "Step";
-        case Path::PathState::Continue: return "Continue";
-        case Path::PathState::Break: return "Break";
-        case Path::PathState::Return: return "Return";
-        default: return "Unknown";
+        switch (currentState) {
+            case Path::PathState::Step: return "Step";
+            case Path::PathState::Continue: return "Continue";
+            case Path::PathState::Break: return "Break";
+            case Path::PathState::Return: return "Return";
+            default: return "Unknown";
         }
     }() << "\n";
     oss << "Address Counter: " << addrCounter << "\n";
@@ -580,8 +522,7 @@ string Path::dump() const
     oss << "\n";
 
     oss << "Path Conditions:\n";
-    for (size_t i = 0; i < pathConditions.size(); ++i)
-    {
+    for (size_t i = 0; i < pathConditions.size(); ++i) {
         oss << "  [" << i << "]: " << (pathConditions[i] ? pathConditions[i]->dump() : "null")
             << "\n";
     }
@@ -589,8 +530,7 @@ string Path::dump() const
     unordered_set<Address, AddressHash> printedAddrs;
 
     oss << "Variable Address Mapping:\n";
-    for (auto const &pair : varAddr)
-    {
+    for (auto const &pair : varAddr) {
         const VarDecl *vd = pair.first;
         string name;
         if (auto opt = GlobalSM::getDeclInfo(vd))
@@ -599,39 +539,30 @@ string Path::dump() const
         oss << "  @" << name << " -> " << pair.second->dump();
 
         auto memIt = memoryState.find(*pair.second);
-        if (memIt != memoryState.end() && memIt->second)
-        {
+        if (memIt != memoryState.end() && memIt->second) {
             oss << " -> " << memIt->second->dump();
             printedAddrs.insert(memIt->first);
-        }
-        else
-        {
+        } else {
             oss << " -> null";
         }
         oss << "\n";
     }
 
-    if (printedAddrs.size() < memoryState.size())
-    {
+    if (printedAddrs.size() < memoryState.size()) {
         oss << "Memory State:\n";
-        for (auto const &pair : memoryState)
-        {
-            if (!printedAddrs.contains(pair.first))
-            {
+        for (auto const &pair : memoryState) {
+            if (!printedAddrs.contains(pair.first)) {
                 oss << "  " << pair.first.dump() << " -> "
                     << (pair.second ? pair.second->dump() : "null") << "\n";
             }
         }
     }
 
-    if (StmtCtx)
-    {
-        if (auto opt = GlobalSM::getStmtInfo(StmtCtx))
-        {
+    if (StmtCtx) {
+        if (auto opt = GlobalSM::getStmtInfo(StmtCtx)) {
             StringRef sourceText;
             tie(sourceText, ignore, ignore, ignore) = *opt;
-            if (!sourceText.empty())
-            {
+            if (!sourceText.empty()) {
                 oss << "Stmt Context: " << sourceText.str() << "\n";
             }
         }
@@ -663,25 +594,21 @@ string Path::dump() const
 //     }
 // }
 
-ProgramState::ProgramState(unique_ptr<Path> initialPath, ACSLFunction *context)
-{
+ProgramState::ProgramState(unique_ptr<Path> initialPath, ACSLFunction *context) {
     paths.push_back(std::move(initialPath));
     Context = unique_ptr<ACSLFunction>(context);
 }
 
 ProgramState::ProgramState(ACSLFunction *context) { Context = unique_ptr<ACSLFunction>(context); }
 
-void ProgramState::init()
-{
+void ProgramState::init() {
     auto FD = Context->getFunctionDecl();
     paths.clear();
     paths.push_back(make_unique<Path>());
 
-    for (const ParmVarDecl *param : FD->parameters())
-    {
+    for (const ParmVarDecl *param : FD->parameters()) {
         QualType paramType = param->getType();
-        if (!paramType->isPointerType() && !paramType->isArrayType())
-        {
+        if (!paramType->isPointerType() && !paramType->isArrayType()) {
             Address *addr = paths[0]->allocMemory(param);
 
             SymbolicExpr::Type varType       = deriveVarType(paramType);
@@ -690,9 +617,7 @@ void ProgramState::init()
                 std::unique_ptr<Address>(static_cast<Address *>(addr->clone().release())));
 
             paths[0]->updateMemory(addr, std::move(varExpr));
-        }
-        else if (paramType->isPointerType())
-        {
+        } else if (paramType->isPointerType()) {
             QualType baseType = paramType->getPointeeType();
             if (baseType->isPointerType() || baseType->isArrayType())
                 UNIMPLEMENT("Unsupported pointer to pointer/array");
@@ -706,23 +631,19 @@ void ProgramState::init()
             // unique_ptr<SymbolicExpr> pointeeVarExpr = make_unique<Symbolic::Variable>(
             //     "*" + param->getNameAsString(), varType, paths[0]->getNextSymVarId());
             // paths[0]->updateMemory(pointeeAddr, std::move(pointeeVarExpr));
-        }
-        else if (paramType->isArrayType())
-        {
+        } else if (paramType->isArrayType()) {
             TODO();
         }
     }
 }
 
-void ProgramState::step(const Stmt *stmt)
-{
+void ProgramState::step(const Stmt *stmt) {
     if (!stmt)
         return;
     TypeSwitch<const Stmt *, void>(stmt)
         .Case<CompoundStmt>([this](const CompoundStmt *cs) {
             DEBUG("stepping CompoundStmt...");
-            for (const Stmt *child : cs->children())
-            {
+            for (const Stmt *child : cs->children()) {
                 if (child)
                     step(child);
             }
@@ -748,11 +669,9 @@ void ProgramState::step(const Stmt *stmt)
         .Case<DeclStmt>([this](const DeclStmt *declStmt) {
             DEBUG("stepping DeclStmt...");
             vector<const VarDecl *> varDecls;
-            for (auto it = declStmt->decl_begin(); it != declStmt->decl_end(); ++it)
-            {
+            for (auto it = declStmt->decl_begin(); it != declStmt->decl_end(); ++it) {
                 Decl *decl = *it;
-                if (!dyn_cast<VarDecl>(decl))
-                {
+                if (!dyn_cast<VarDecl>(decl)) {
                     WARN(string("Unhandled Decl type: ") + decl->getDeclKindName());
                     continue;
                 }
@@ -789,20 +708,14 @@ void ProgramState::step(const Stmt *stmt)
             if (switchStmt->hasInitStorage())
                 UNIMPLEMENT(
                     "Unsupported Switch type, Cond has init statement: " << switchStmt->getCond());
-            if (auto bodyStmt = dyn_cast_if_present<CompoundStmt>(switchStmt->getBody()))
-            {
-                if (isa_and_present<CaseStmt>(bodyStmt->body_front()))
-                {
+            if (auto bodyStmt = dyn_cast_if_present<CompoundStmt>(switchStmt->getBody())) {
+                if (isa_and_present<CaseStmt>(bodyStmt->body_front())) {
                     stepSimpleSwitch(switchStmt);
-                }
-                else
-                {
+                } else {
                     UNIMPLEMENT("Unsupported Switch type, body's first Stmt is not CaseStmt: "
                                 << switchStmt->getBody());
                 }
-            }
-            else
-            {
+            } else {
                 WARN("A SwtichStmt without CompoundStmt body (why?) has been ignored: "
                      << switchStmt);
             }
@@ -855,20 +768,17 @@ void ProgramState::step(const Stmt *stmt)
     return;
 }
 
-Formulas ProgramState::stepExpr(const Expr *expr)
-{
+Formulas ProgramState::stepExpr(const Expr *expr) {
     std::vector<std::unique_ptr<Path>> updatedPaths;
     Formulas evaluated;
 
-    for (auto &path : paths)
-    {
+    for (auto &path : paths) {
         auto [newPathGroup, exprGroup] = path->evalExpr(expr);
 
         updatedPaths.push_back(std::move(path));
         evaluated.push_back(std::move(exprGroup[0]));
 
-        for (size_t i = 0; i < newPathGroup.size(); ++i)
-        {
+        for (size_t i = 0; i < newPathGroup.size(); ++i) {
             updatedPaths.push_back(std::move(newPathGroup[i]));
             evaluated.push_back(std::move(exprGroup[i + 1]));
         }
@@ -878,9 +788,8 @@ Formulas ProgramState::stepExpr(const Expr *expr)
     return evaluated;
 }
 
-void ProgramState::stepBranch(
-    const vector<const Expr *> &branchConds, const vector<const Stmt *> &branchStmts)
-{
+void ProgramState::stepBranch(const vector<const Expr *> &branchConds,
+                              const vector<const Stmt *> &branchStmts) {
     assert(branchStmts.size() == branchConds.size() + 1);
 
     vector<unique_ptr<ProgramState>> clones;
@@ -888,19 +797,16 @@ void ProgramState::stepBranch(
 
     auto splitPair = splitActiveInactive();
     size_t n       = branchConds.size();
-    for (size_t i = 0; i < n; ++i)
-    {
+    for (size_t i = 0; i < n; ++i) {
         auto newState = splitPair.first->clone();
 
         vector<unique_ptr<Path>> updatedPaths;
 
-        for (auto &path : newState->paths)
-        {
+        for (auto &path : newState->paths) {
             Path::EvalResult eval = path->evalExpr(branchConds[i]);
 
             size_t m = eval.second.size();
-            for (size_t j = 0; j < m; ++j)
-            {
+            for (size_t j = 0; j < m; ++j) {
                 unique_ptr<Path> newPath =
                     (j == 0) ? std::move(path) : std::move(eval.first[j - 1]);
 
@@ -920,26 +826,22 @@ void ProgramState::stepBranch(
     queue<pair<unique_ptr<Path>, size_t>> worklist;
     vector<unique_ptr<Path>> finalPaths;
 
-    for (auto &path : splitPair.first->paths)
-    {
+    for (auto &path : splitPair.first->paths) {
         worklist.emplace(std::move(path), 0);
     }
 
-    while (!worklist.empty())
-    {
+    while (!worklist.empty()) {
         auto [path, idx] = std::move(worklist.front());
         worklist.pop();
 
-        if (idx == branchConds.size())
-        {
+        if (idx == branchConds.size()) {
             finalPaths.push_back(std::move(path));
             continue;
         }
 
         Path::EvalResult eval = path->evalExpr(branchConds[idx]);
 
-        for (size_t j = 0; j < eval.second.size(); ++j)
-        {
+        for (size_t j = 0; j < eval.second.size(); ++j) {
             unique_ptr<Path> newPath = (j == 0) ? std::move(path) : std::move(eval.first[j - 1]);
 
             newPath->insertPathCondition(createLNotExpr(std::move(eval.second[j])));
@@ -958,12 +860,10 @@ void ProgramState::stepBranch(
     paths = std::move(mergedActive->paths);
 }
 
-void ProgramState::stepLoop(const Stmt *loopStmt)
-{
+void ProgramState::stepLoop(const Stmt *loopStmt) {
     auto preState = this->clone();
 
-    if (auto forLoop = dyn_cast<ForStmt>(loopStmt); forLoop && forLoop->getInit())
-    {
+    if (auto forLoop = dyn_cast<ForStmt>(loopStmt); forLoop && forLoop->getInit()) {
         preState->step(forLoop->getInit());
     }
 
@@ -971,25 +871,19 @@ void ProgramState::stepLoop(const Stmt *loopStmt)
     const Stmt *body = nullptr;
     const Stmt *inc  = nullptr;
 
-    if (const auto *forStmt = dyn_cast<ForStmt>(loopStmt))
-    {
+    if (const auto *forStmt = dyn_cast<ForStmt>(loopStmt)) {
         cond = forStmt->getCond();
         body = forStmt->getBody();
         inc  = forStmt->getInc();
-    }
-    else if (const auto *whileStmt = dyn_cast<WhileStmt>(loopStmt))
-    {
+    } else if (const auto *whileStmt = dyn_cast<WhileStmt>(loopStmt)) {
         cond = whileStmt->getCond();
         body = whileStmt->getBody();
-    }
-    else
-    {
+    } else {
         UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
     }
 
     auto loopInfo = parseLoopInfo(*preState, cond, body, inc);
-    if (!loopInfo)
-    {
+    if (!loopInfo) {
         // TODO(complex loop)
         UNIMPLEMENT("Loop is too complex!");
     }
@@ -1000,26 +894,20 @@ void ProgramState::stepLoop(const Stmt *loopStmt)
     TODO();
 }
 
-void ProgramState::setStates(Path::PathState state, const Stmt *stmt)
-{
-    for (auto &pathPtr : paths)
-    {
-        if (pathPtr->isActive())
-        {
+void ProgramState::setStates(Path::PathState state, const Stmt *stmt) {
+    for (auto &pathPtr : paths) {
+        if (pathPtr->isActive()) {
             pathPtr->setPathState(state);
             pathPtr->StmtCtx = stmt;
         }
     }
 }
 
-void ProgramState::setReturnExpr(const Expr *expr)
-{
+void ProgramState::setReturnExpr(const Expr *expr) {
     vector<unique_ptr<Path>> updatedPaths;
 
-    for (auto &pathPtr : paths)
-    {
-        if (!pathPtr->isActive())
-        {
+    for (auto &pathPtr : paths) {
+        if (!pathPtr->isActive()) {
             updatedPaths.emplace_back(std::move(pathPtr));
             continue;
         }
@@ -1029,15 +917,11 @@ void ProgramState::setReturnExpr(const Expr *expr)
         Formulas &results                        = eval.second;
 
         size_t n = results.size();
-        for (size_t i = 0; i < n; ++i)
-        {
+        for (size_t i = 0; i < n; ++i) {
             unique_ptr<Path> newPath;
-            if (i == 0)
-            {
+            if (i == 0) {
                 newPath = std::move(pathPtr);
-            }
-            else
-            {
+            } else {
                 newPath = std::move(generatedPaths[i - 1]);
             }
 
@@ -1049,23 +933,19 @@ void ProgramState::setReturnExpr(const Expr *expr)
     paths = std::move(updatedPaths);
 }
 
-void ProgramState::updateVarState(const BinaryOperator *binOp)
-{
+void ProgramState::updateVarState(const BinaryOperator *binOp) {
     vector<unique_ptr<Path>> updatedPaths;
 
-    for (auto &path : paths)
-    {
+    for (auto &path : paths) {
         auto lvalue = path->extractLValue(binOp->getLHS());
-        if (!path->isActive())
-        {
+        if (!path->isActive()) {
             updatedPaths.push_back(std::move(path));
             continue;
         }
 
         Path::EvalResult eval;
 
-        if (binOp->isCompoundAssignmentOp())
-        {
+        if (binOp->isCompoundAssignmentOp()) {
             BinaryOpExpr::Operator op = getCompoundAssignOp(binOp->getOpcode());
 
             Path::EvalResult lhs = path->evalExpr(binOp->getLHS());
@@ -1073,44 +953,35 @@ void ProgramState::updateVarState(const BinaryOperator *binOp)
             vector<unique_ptr<Path>> outPaths;
             Formulas outExprs;
 
-            for (size_t i = 0; i < lhs.second.size(); ++i)
-            {
+            for (size_t i = 0; i < lhs.second.size(); ++i) {
                 Path *lhsPath = (i == 0) ? path.get() : lhs.first[i - 1].get();
 
                 Path::EvalResult rhs = lhsPath->evalExpr(binOp->getRHS());
 
-                for (size_t j = 0; j < rhs.second.size(); ++j)
-                {
-                    outExprs.emplace_back(make_unique<BinaryOpExpr>(
-                        lhs.second[i]->clone(), op, std::move(rhs.second[j])));
+                for (size_t j = 0; j < rhs.second.size(); ++j) {
+                    outExprs.emplace_back(make_unique<BinaryOpExpr>(lhs.second[i]->clone(), op,
+                                                                    std::move(rhs.second[j])));
 
                     if (i != 0 || j != 0)
                         outPaths.emplace_back(std::move(rhs.first[j - 1]));
                 }
             }
             eval = {std::move(outPaths), std::move(outExprs)};
-        }
-        else
-        {
+        } else {
             eval = path->evalExpr(binOp->getRHS());
         }
 
         size_t n = eval.second.size();
-        for (size_t i = 0; i < n; ++i)
-        {
+        for (size_t i = 0; i < n; ++i) {
             unique_ptr<Path> newPath = (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
-            if (holds_alternative<const VarDecl *>(lvalue))
-            {
+            if (holds_alternative<const VarDecl *>(lvalue)) {
                 auto *var = get<const VarDecl *>(lvalue);
                 newPath->updateVarState(var, std::move(eval.second[i]));
-            }
-            else if (holds_alternative<unique_ptr<Address>>(lvalue))
-            {
+            } else if (holds_alternative<unique_ptr<Address>>(lvalue)) {
                 auto &addrUptr = get<unique_ptr<Address>>(lvalue);
                 Address *addr  = addrUptr.get();
                 newPath->updateMemory(addr, std::move(eval.second[i]));
-            }
-            else
+            } else
                 UNREACHABLE();
 
             updatedPaths.push_back(std::move(newPath));
@@ -1120,25 +991,20 @@ void ProgramState::updateVarState(const BinaryOperator *binOp)
     paths = std::move(updatedPaths);
 }
 
-void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls)
-{
-    for (const VarDecl *varDecl : varDecls)
-    {
+void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
+    for (const VarDecl *varDecl : varDecls) {
         const Expr *initExpr = varDecl->getInit();
         vector<unique_ptr<Path>> updatedPaths;
 
-        for (auto &path : paths)
-        {
-            if (!path->isActive())
-            {
+        for (auto &path : paths) {
+            if (!path->isActive()) {
                 updatedPaths.push_back(std::move(path));
                 continue;
             }
 
             path->allocMemory(varDecl);
 
-            if (!initExpr)
-            {
+            if (!initExpr) {
                 updatedPaths.push_back(std::move(path));
                 continue;
             }
@@ -1146,8 +1012,7 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls)
             Path::EvalResult eval = path->evalExpr(initExpr);
 
             size_t n = eval.second.size();
-            for (size_t i = 0; i < n; ++i)
-            {
+            for (size_t i = 0; i < n; ++i) {
                 unique_ptr<Path> newPath =
                     (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
 
@@ -1160,13 +1025,11 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls)
     }
 }
 
-pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActiveInactive()
-{
+pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActiveInactive() {
     auto activeState   = make_unique<ProgramState>(Context->clone());
     auto inactiveState = make_unique<ProgramState>(Context->clone());
 
-    for (auto &path : paths)
-    {
+    for (auto &path : paths) {
         if (path->isActive())
             activeState->paths.push_back(std::move(path));
         else
@@ -1176,14 +1039,12 @@ pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActi
     return {std::move(activeState), std::move(inactiveState)};
 }
 
-unique_ptr<ProgramState> ProgramState::merge(const vector<const ProgramState *> &states)
-{
+unique_ptr<ProgramState> ProgramState::merge(const vector<const ProgramState *> &states) {
     if (states.size() == 0)
         ERROR("Nothing to be merged.");
     auto merged = make_unique<ProgramState>(states[0]->getContext()->clone());
 
-    for (auto &state : states)
-    {
+    for (auto &state : states) {
         if (*state->getContext() != *merged->getContext())
             ERROR("States to be merged have different context.");
         for (const auto &path : state->paths)
@@ -1192,14 +1053,12 @@ unique_ptr<ProgramState> ProgramState::merge(const vector<const ProgramState *> 
     return merged;
 }
 
-unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramState>> &states)
-{
+unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramState>> &states) {
     if (states.size() == 0)
         ERROR("Nothing to be merged.");
     auto merged = make_unique<ProgramState>(states[0]->getContext()->clone());
 
-    for (auto &state : states)
-    {
+    for (auto &state : states) {
         if (*state->getContext() != *merged->getContext())
             ERROR("States to be merged have different context.");
         for (const auto &path : state->paths)
@@ -1208,12 +1067,10 @@ unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramStat
     return merged;
 }
 
-unique_ptr<ProgramState> ProgramState::clone() const
-{
+unique_ptr<ProgramState> ProgramState::clone() const {
     auto newState = make_unique<ProgramState>(Context->clone());
 
-    for (const auto &path : paths)
-    {
+    for (const auto &path : paths) {
         if (path)
             newState->paths.push_back(path->clone());
     }
@@ -1222,27 +1079,23 @@ unique_ptr<ProgramState> ProgramState::clone() const
     return newState;
 }
 
-unique_ptr<ProgramState> ProgramState::cloneWithPaths(vector<unique_ptr<Path>> &newPaths) const
-{
+unique_ptr<ProgramState> ProgramState::cloneWithPaths(vector<unique_ptr<Path>> &newPaths) const {
     auto clone   = this->clone();
     clone->paths = std::move(newPaths);
     return clone;
 }
 
-void ProgramState::resetState()
-{
-    for (auto &path : paths)
-    {
+void ProgramState::resetState() {
+    for (auto &path : paths) {
         if (!path->isActive() && (path->StmtCtx && path->StmtCtx == this->StmtCtx))
             path->setPathState(Path::PathState::Step);
     }
 }
 
-static void collectCaseBlocks(
-    const CompoundStmt *body, vector<vector<const Stmt *>> &blocks, vector<const Expr *> &conds)
-{
-    if (!body)
-    {
+static void collectCaseBlocks(const CompoundStmt *body,
+                              vector<vector<const Stmt *>> &blocks,
+                              vector<const Expr *> &conds) {
+    if (!body) {
         ERROR("dyn_cast failed for switch body.");
     }
     blocks.clear();
@@ -1251,57 +1104,44 @@ static void collectCaseBlocks(
     vector<const Stmt *> currentBlock;
     const Expr *currentCond = nullptr;
 
-    for (auto *stmt : body->body())
-    {
-        if (auto *cs = dyn_cast<CaseStmt>(stmt))
-        {
-            if (!currentBlock.empty())
-            {
+    for (auto *stmt : body->body()) {
+        if (auto *cs = dyn_cast<CaseStmt>(stmt)) {
+            if (!currentBlock.empty()) {
                 blocks.emplace_back(std::move(currentBlock));
                 conds.push_back(currentCond);
                 currentBlock.clear();
             }
             currentCond = cs->getLHS();
             currentBlock.push_back(cs->getSubStmt());
-        }
-        else if (auto *ds = dyn_cast<DefaultStmt>(stmt))
-        {
-            if (!currentBlock.empty())
-            {
+        } else if (auto *ds = dyn_cast<DefaultStmt>(stmt)) {
+            if (!currentBlock.empty()) {
                 blocks.emplace_back(std::move(currentBlock));
                 conds.push_back(currentCond);
                 currentBlock.clear();
             }
             currentCond = nullptr;
             currentBlock.push_back(ds->getSubStmt());
-        }
-        else
-        {
+        } else {
             currentBlock.push_back(stmt);
         }
     }
-    if (!currentBlock.empty())
-    {
+    if (!currentBlock.empty()) {
         blocks.emplace_back(std::move(currentBlock));
         conds.push_back(currentCond);
     }
 }
 
-vector<pair<unique_ptr<ProgramState>, unique_ptr<SymbolicExpr>>>
-ProgramState::splitStateBySwitchCond(const Expr *switchCond)
-{
-    if (!switchCond)
-    {
+vector<pair<unique_ptr<ProgramState>, unique_ptr<SymbolicExpr>>> ProgramState::splitStateBySwitchCond(
+    const Expr *switchCond) {
+    if (!switchCond) {
         TODO();
     }
     vector<pair<unique_ptr<ProgramState>, unique_ptr<SymbolicExpr>>> result;
 
-    for (auto &path : paths)
-    {
+    for (auto &path : paths) {
         auto evalResult = path->evalExpr(switchCond);
 
-        if (evalResult.first.size() != 0)
-        {
+        if (evalResult.first.size() != 0) {
             ERROR("evalExpr produced unexpected side paths");
         }
 
@@ -1314,25 +1154,21 @@ ProgramState::splitStateBySwitchCond(const Expr *switchCond)
 
     return result;
 }
-void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
-{
+void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt) {
     auto partitions = splitStateBySwitchCond(switchStmt->getCond());
     vector<vector<const Stmt *>> blocks;
     vector<const Expr *> conds;
     collectCaseBlocks(dyn_cast<CompoundStmt>(switchStmt->getBody()), blocks, conds);
 
     vector<unique_ptr<ProgramState>> finalStates;
-    for (auto &pr : partitions)
-    {
+    for (auto &pr : partitions) {
         auto current  = std::move(pr.first);
         auto symValue = std::move(pr.second);
-        for (size_t i = 0; i < blocks.size(); ++i)
-        {
+        for (size_t i = 0; i < blocks.size(); ++i) {
             auto &stmts    = blocks[i];
             auto *caseCond = conds[i];
 
-            if (caseCond == nullptr)
-            {
+            if (caseCond == nullptr) {
                 for (auto *s : stmts)
                     current->step(s);
                 if (current->isInactive())
@@ -1360,12 +1196,9 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
             for (auto &p : current->paths)
                 p->insertPathCondition(condExprNe->clone());
 
-            if (eqState->isInactive())
-            {
+            if (eqState->isInactive()) {
                 finalStates.push_back(std::move(eqState));
-            }
-            else
-            {
+            } else {
                 vector<const ProgramState *> mergeInputs;
                 mergeInputs.push_back(eqState.get());
                 mergeInputs.push_back(current.get());
@@ -1386,24 +1219,18 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt)
     paths       = std::move(merged->paths);
 }
 
-bool ProgramState::isInactive() const
-{
-    for (const auto &p : paths)
-    {
-        if (p->isActive())
-        {
+bool ProgramState::isInactive() const {
+    for (const auto &p : paths) {
+        if (p->isActive()) {
             return false;
         }
     }
     return true;
 }
 
-void ProgramState::resymbolize()
-{
-    for (auto &path : paths)
-    {
-        if (path->isActive())
-        {
+void ProgramState::resymbolize() {
+    for (auto &path : paths) {
+        if (path->isActive()) {
             auto temp = std::move(path);
             temp->resymbolize();
             paths.clear();
@@ -1416,19 +1243,16 @@ void ProgramState::resymbolize()
 #include "SpecGenerator/stringTemplate.h"
 #include "SpecGenerator/loopInvTemplates.h"
 
-void ProgramState::CollectLoopACSL()
-{
+void ProgramState::CollectLoopACSL() {
     NameMap map = {{"index", "i"}, {"max", "res"}, {"array", "p"}, {"i", "i"}, {"n", "n"}};
     INFO(FIND_MAX_LOOP.to_string(map));
 }
 
 void ProgramState::generateFuncACSL() {}
 
-string ProgramState::dump() const
-{
+string ProgramState::dump() const {
     ostringstream oss;
-    for (const auto &p : paths)
-    {
+    for (const auto &p : paths) {
         oss << p->dump() << "\n";
     }
     return oss.str();

@@ -41,36 +41,30 @@ using namespace std;
 using namespace Parma_Polyhedra_Library;
 using namespace Parma_Polyhedra_Library::IO_Operators;
 
-
-void outputPolyhedron(C_Polyhedron* poly,const var_info* info);
-ostream& printPolyhedron(ostream& in,
-                          C_Polyhedron const& np,
-                          const var_info* info);
+void outputPolyhedron(C_Polyhedron *poly, const var_info *info);
+ostream &printPolyhedron(ostream &in, C_Polyhedron const &np, const var_info *info);
 // print only poly without prefix-symbol
-void print_pure_polyhedron(C_Polyhedron const& np, const var_info* info);
+void print_pure_polyhedron(C_Polyhedron const &np, const var_info *info);
 // print only poly without prefix-symbol in cout instead of cout
 
-ostream& print_clump(ostream& in, Clump const& cl, const var_info* info);
+ostream &print_clump(ostream &in, Clump const &cl, const var_info *info);
 
-ostream& print_lin_expression(ostream& in,
-                              Linear_Expression const& lp,
-                              const var_info* info);
-void print_pure_lin_expression(Linear_Expression const& lp, const var_info* info);
+ostream &print_lin_expression(ostream &in, Linear_Expression const &lp, const var_info *info);
+void print_pure_lin_expression(Linear_Expression const &lp, const var_info *info);
 
-int handleInt(Coefficient const& t);
-bool handleInt(Coefficient const& t, int& result);
-C_Polyhedron* add_dimensions_initial(
-    C_Polyhedron* p,
-    int what);  // add what dimensions to p at the beginning
-void dualize(C_Polyhedron const& what, C_Polyhedron& result);
-void primal(C_Polyhedron const& what, C_Polyhedron& result);
+int handleInt(Coefficient const &t);
+bool handleInt(Coefficient const &t, int &result);
+C_Polyhedron *add_dimensions_initial(C_Polyhedron *p,
+                                     int what); // add what dimensions to p at the beginning
+void dualize(C_Polyhedron const &what, C_Polyhedron &result);
+void primal(C_Polyhedron const &what, C_Polyhedron &result);
 void set_up_affine_transform(int n,
-                             Constraint const& cc,
-                             Linear_Expression& left,
-                             Linear_Expression& right);
+                             Constraint const &cc,
+                             Linear_Expression &left,
+                             Linear_Expression &right);
 void test_and_add_generator(int n,
-                            Generator const& a,
-                            C_Polyhedron const& test,
-                            C_Polyhedron& result);
+                            Generator const &a,
+                            C_Polyhedron const &test,
+                            C_Polyhedron &result);
 // result is assumed to be narrower than what
 #endif

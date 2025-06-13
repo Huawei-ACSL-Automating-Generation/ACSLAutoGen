@@ -43,7 +43,7 @@
 using namespace std;
 
 class ExpressionStore {
-   private:
+  private:
     // A set of expressions.
     // Basic Operations include
     //                  1. Creation of a store
@@ -59,27 +59,25 @@ class ExpressionStore {
      *  coefInfo, lambdaInfo = printing information for varsNum, lambdaNum variables.
      */
 
-    vector<Expression>* vl;
+    vector<Expression> *vl;
     int varsNum, lambdaNum;
     var_info *coefInfo, *lambdaInfo;
 
-    vector<LinTransform>* lt_list;
-    vector<SparseLinExpr>* le_list;
+    vector<LinTransform> *lt_list;
+    vector<SparseLinExpr> *le_list;
 
-    void initialize(int varsNum, int lambdaNum, var_info* coefInfo, var_info* lambdaInfo);
-    vector<SparseLinExpr>::iterator lin_expr_collected(
-        SparseLinExpr const& l) const;
-    vector<LinTransform>::iterator lin_transform_collected(
-        LinTransform const& l) const;
+    void initialize(int varsNum, int lambdaNum, var_info *coefInfo, var_info *lambdaInfo);
+    vector<SparseLinExpr>::iterator lin_expr_collected(SparseLinExpr const &l) const;
+    vector<LinTransform>::iterator lin_transform_collected(LinTransform const &l) const;
 
     // vector<ExpressionStore *> * children;
 
     // vector<LinTransform> * split_seq;
 
-   public:
-    ExpressionStore(int varsNum, int lambdaNum, var_info* coefInfo, var_info* lambdaInfo);
+  public:
+    ExpressionStore(int varsNum, int lambdaNum, var_info *coefInfo, var_info *lambdaInfo);
 
-    bool AddExpression(Expression& exp);
+    bool AddExpression(Expression &exp);
 
     void addTransform(LinTransform lt);
 
@@ -91,26 +89,26 @@ class ExpressionStore {
 
     // void set_store(MatrixStore & s);
 
-    void simplify(MatrixStore const& s);
+    void simplify(MatrixStore const &s);
 
-    void set_split_seq(vector<LinTransform>* split);
+    void set_split_seq(vector<LinTransform> *split);
 
-    bool already_split(LinTransform const& lt);
+    bool already_split(LinTransform const &lt);
 
-    void add_to_split(LinTransform const& lt);
+    void add_to_split(LinTransform const &lt);
 
     bool collect_factors();
 
     // MatrixStore & get_m();
 
-    vector<Expression>* get_vl();
+    vector<Expression> *get_vl();
 
-    void split_on_transform(LinTransform const& lt);
-    void split_on_transform_already_split(LinTransform const& lt);
+    void split_on_transform(LinTransform const &lt);
+    void split_on_transform_already_split(LinTransform const &lt);
 
     void strategize();
 };
 
-ostream& operator<<(ostream& os, ExpressionStore& es);
+ostream &operator<<(ostream &os, ExpressionStore &es);
 
 #endif

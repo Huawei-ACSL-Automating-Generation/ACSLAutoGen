@@ -52,14 +52,11 @@ Counter counter;
 void addPreInvtoTrans();
 void check_invariant_ok();
 
-bool searchLoc(char *name, Location **what)
-{
+bool searchLoc(char *name, Location **what) {
     vector<Location *>::iterator it;
     string nstr(name);
-    for (it = locList.begin(); it < locList.end(); it++)
-    {
-        if ((*it)->matches(nstr))
-        {
+    for (it = locList.begin(); it < locList.end(); it++) {
+        if ((*it)->matches(nstr)) {
             *what = (*it);
             return true;
         }
@@ -68,8 +65,7 @@ bool searchLoc(char *name, Location **what)
     return false;
 }
 
-void Initialize()
-{
+void Initialize() {
     cout << endl << "- Initialize doing...?...";
 
     merge_count       = 0;
@@ -83,8 +79,7 @@ void Initialize()
     cout << "Done!" << endl;
 }
 
-void Print_Status_after_Solver()
-{
+void Print_Status_after_Solver() {
     cout << endl;
     cout << "/----------------------------- " << endl;
     cout << "| Status after Solver: " << endl;
@@ -114,32 +109,26 @@ void Print_Status_after_Solver()
 
 void ComputeProgramInv() { return; }
 
-void collect_generators(vector<Context *> *children, Generator_System &g)
-{
+void collect_generators(vector<Context *> *children, Generator_System &g) {
     vector<Context *>::iterator vk;
-    for (vk = children->begin(); vk < children->end(); vk++)
-    {
+    for (vk = children->begin(); vk < children->end(); vk++) {
         (*vk)->collect_generators(g);
     }
 }
 
-void addPreInvtoTrans()
-{
+void addPreInvtoTrans() {
     vector<TransitionRelation *>::iterator it;
-    for (it = transList.begin(); it < transList.end(); ++it)
-    {
+    for (it = transList.begin(); it < transList.end(); ++it) {
         (*it)->addPreInv();
     }
     return;
 }
 
-void check_invariant_ok()
-{
+void check_invariant_ok() {
     cout << endl << "> > > In check_invariant_ok()";
     cerr << "Checking for invariant..." << endl;
     vector<TransitionRelation *>::iterator it;
-    for (it = transList.begin(); it != transList.end(); ++it)
-    {
+    for (it = transList.begin(); it != transList.end(); ++it) {
         (*it)->check_map();
     }
     cerr << "Done!" << endl;

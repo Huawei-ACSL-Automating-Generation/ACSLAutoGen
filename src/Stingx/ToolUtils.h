@@ -59,11 +59,8 @@ inline void autoprint(int max_index, int index) {
     cout << index;
 }
 
-inline string& replace_all(string& src,
-                           const string& old_value,
-                           const string& new_value) {
-    for (string::size_type pos(0); pos != string::npos;
-         pos += new_value.length()) {
+inline string &replace_all(string &src, const string &old_value, const string &new_value) {
+    for (string::size_type pos(0); pos != string::npos; pos += new_value.length()) {
         if ((pos = src.find(old_value, pos)) != string::npos) {
             src.replace(pos, old_value.length(), new_value);
         } else
@@ -73,13 +70,13 @@ inline string& replace_all(string& src,
 }
 
 class DepthCounter {
-   private:
+  private:
     /*
      * pbc = prune bang count
      */
     vector<int> pbc_in_depth;
 
-   public:
+  public:
     void init_depth_size(int tree_size);
     void set_pbc_at_depth(int depth);
     int get_pbc_at_depth(int depth);
@@ -87,15 +84,15 @@ class DepthCounter {
 };
 
 class Counter {
-   private:
+  private:
     vector<DepthCounter> pre_pbc_at_location_in_depth;
     vector<DepthCounter> pst_pbc_at_location_in_depth;
 
-   public:
+  public:
     int get_location_size();
     void set_location_index_and_init_depth(int curId, int tree_size);
-    DepthCounter& get_location_pre_counter(int curId);
-    DepthCounter& get_location_pst_counter(int curId);
+    DepthCounter &get_location_pre_counter(int curId);
+    DepthCounter &get_location_pst_counter(int curId);
     void set_pre_pbc_at_location_and_depth(int curId, int depth);
     void set_pst_pbc_at_location_and_depth(int curId, int depth);
     int get_pre_pbc_about_location_and_depth(int curId, int depth);

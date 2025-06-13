@@ -1,6 +1,6 @@
 BasedOnStyle:  Microsoft
-AlignAfterOpenBracket: DontAlign
-AllowAllParametersOfDeclarationOnNextLine: true
+AlignAfterOpenBracket: Align
+AllowAllParametersOfDeclarationOnNextLine: false
 BinPackParameters: false
 ColumnLimit: 100
 AllowShortBlocksOnASingleLine: true
@@ -8,7 +8,8 @@ AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: All
 AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: None
-BreakBeforeBraces: Allman
+BreakBeforeBraces: Attach
+IndentCaseLabels: true
 BraceWrapping:
   AfterClass:      true
   AfterControlStatement: true
@@ -32,7 +33,7 @@ Language:        Cpp
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: All
 PenaltyExcessCharacter: 100
-PenaltyReturnTypeOnItsOwnLine: 1
+PenaltyReturnTypeOnItsOwnLine: 1000000
 PointerAlignment: Right
 SortIncludes: false
 SpaceBeforeParens: ControlStatements

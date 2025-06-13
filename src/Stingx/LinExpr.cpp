@@ -32,9 +32,9 @@
 #include "var-info.h"
 using namespace std;
 
-void LinExpr::initialize(int n, var_info* info) {
+void LinExpr::initialize(int n, var_info *info) {
     // initialize
-    this->n = n;
+    this->n    = n;
     this->info = info;
     lin.resize(n + 1, Rational(0, 0));
     count = 1;
@@ -46,7 +46,7 @@ void LinExpr::clear_out() {
         lin[i] = 0;
 }
 
-LinExpr::LinExpr(LinExpr const& ll) {
+LinExpr::LinExpr(LinExpr const &ll) {
     initialize(ll.getDim(), ll.getInfo());
     for (int i = 0; i < n + 1; i++)
         lin[i] = ll(i);
@@ -79,64 +79,56 @@ LinExpr::LinExpr() {
     n = 0;
 }
 
-LinExpr::LinExpr(int n, var_info* info) {
-    initialize(n, info);
-}
+LinExpr::LinExpr(int n, var_info *info) { initialize(n, info); }
 
-void LinExpr::init_set(int n, var_info* info) {
-    initialize(n, info);
-}
+void LinExpr::init_set(int n, var_info *info) { initialize(n, info); }
 
-inline Rational& LinExpr::operator[](int i) {
-    return lin[i];
-}
+inline Rational &LinExpr::operator[](int i) { return lin[i]; }
 
-Rational LinExpr::operator()(int i) const {
-    return lin[i];
-}
+Rational LinExpr::operator()(int i) const { return lin[i]; }
 
-LinExpr LinExpr::operator+(LinExpr const& p1) const {
+LinExpr LinExpr::operator+(LinExpr const &p1) const {
     LinExpr tmp(n, info);
     for (int i = 0; i < n + 1; i++)
         tmp[i] = lin[i] + p1(i);
-    return tmp;  // A reference to tmp.lin will be copied.. so this is not all
-                 // that costly
+    return tmp; // A reference to tmp.lin will be copied.. so this is not all
+                // that costly
 }
 
-LinExpr& LinExpr::operator+=(LinExpr const& p1) {
+LinExpr &LinExpr::operator+=(LinExpr const &p1) {
     for (int i = 0; i < n + 1; i++)
         lin[i] += p1(i);
 
     return *(this);
 }
 
-LinExpr LinExpr::operator-(LinExpr const& p1) const {
+LinExpr LinExpr::operator-(LinExpr const &p1) const {
     LinExpr tmp(n, info);
     for (int i = 0; i < n + 1; i++)
         tmp[i] = lin[i] - p1(i);
-    return tmp;  // A reference to tmp.lin will be copied.. so this is not all
-                 // that costly
+    return tmp; // A reference to tmp.lin will be copied.. so this is not all
+                // that costly
 }
 
-LinExpr& LinExpr::operator-=(LinExpr const& p1) {
+LinExpr &LinExpr::operator-=(LinExpr const &p1) {
     for (int i = 0; i < n + 1; i++)
         lin[i] -= p1(i);
 
     return *(this);
 }
 
-bool LinExpr::operator==(LinExpr const& p1) const {
+bool LinExpr::operator==(LinExpr const &p1) const {
     // note this is an equivalence check.
     Rational factor;
     bool ret = equiv(p1, factor);
     return ret && (factor != 0);
 }
 
-LinExpr& LinExpr::operator=(LinExpr const& p1) {
+LinExpr &LinExpr::operator=(LinExpr const &p1) {
     // erase lin
     lin.erase(lin.begin(), lin.end());
     // reset
-    initialize(p1.getDim(), p1.getInfo());  // reinitialize
+    initialize(p1.getDim(), p1.getInfo()); // reinitialize
     // assign
     for (int i = 0; i < n + 1; i++)
         lin[i] = p1(i);
@@ -144,49 +136,49 @@ LinExpr& LinExpr::operator=(LinExpr const& p1) {
     return *this;
 }
 
-LinExpr operator*(int j, LinExpr const& p1) {
-    int n = p1.getDim();
-    var_info* info = p1.getInfo();
+LinExpr operator*(int j, LinExpr const &p1) {
+    int n          = p1.getDim();
+    var_info *info = p1.getInfo();
     LinExpr tmp(n, info);
     for (int i = 0; i < n + 1; i++)
         tmp[i] = p1(i) * j;
-    return tmp;  // A reference to tmp.lin will be copied.. so this is not all
-                 // that costly
+    return tmp; // A reference to tmp.lin will be copied.. so this is not all
+                // that costly
 }
 
-LinExpr operator*(LinExpr const& p1, Rational const& i) {
-    int n = p1.getDim();
-    var_info* info = p1.getInfo();
+LinExpr operator*(LinExpr const &p1, Rational const &i) {
+    int n          = p1.getDim();
+    var_info *info = p1.getInfo();
     LinExpr tmp(n, info);
     for (int j = 0; j < n + 1; j++)
         tmp[j] = i * p1(j);
-    return tmp;  // A reference to tmp.lin will be copied.. so this is not all
-                 // that costly
+    return tmp; // A reference to tmp.lin will be copied.. so this is not all
+                // that costly
 }
 
-LinExpr operator*(Rational const& i, LinExpr const& p1) {
-    int n = p1.getDim();
-    var_info* info = p1.getInfo();
+LinExpr operator*(Rational const &i, LinExpr const &p1) {
+    int n          = p1.getDim();
+    var_info *info = p1.getInfo();
     LinExpr tmp(n, info);
     for (int j = 0; j < n + 1; j++)
         tmp[j] = i * p1(j);
     return tmp;
 }
 
-LinExpr& LinExpr::operator*=(Rational const& j) {
+LinExpr &LinExpr::operator*=(Rational const &j) {
     for (int i = 0; i < n + 1; i++)
         lin[i] *= j;
     return *this;
 }
 
-LinExpr& LinExpr::operator*=(int j) {
+LinExpr &LinExpr::operator*=(int j) {
     Rational r1(j, 1);
     for (int i = 0; i < n + 1; i++)
         lin[i] *= r1;
     return *this;
 }
 
-void LinExpr::print(ostream& os) const {
+void LinExpr::print(ostream &os) const {
     //
     // print the contents into os
     //
@@ -223,22 +215,18 @@ void LinExpr::print(ostream& os) const {
     return;
 }
 
-ostream& operator<<(ostream& os, LinExpr const& expr) {
+ostream &operator<<(ostream &os, LinExpr const &expr) {
     expr.print(os);
     return os;
 }
 
-int LinExpr::getDim() const {
-    return n;
-}
-var_info* LinExpr::getInfo() const {
-    return info;
-}
+int LinExpr::getDim() const { return n; }
+var_info *LinExpr::getInfo() const { return info; }
 
 int LinExpr::getDenLcm() const {
     int run = 1, j;
     for (int i = 0; i < n + 1; i++) {
-        if ((j = lin[i].den()) != 0)  // Zero denominators are catastrophical..
+        if ((j = lin[i].den()) != 0) // Zero denominators are catastrophical..
             run = lcm(run, j);
     }
     return run;
@@ -254,14 +242,14 @@ int LinExpr::getNumGcd() const {
                 run = gcd(run, j);
             else {
                 first_number_seen = true;
-                run = j;
+                run               = j;
             }
         }
     }
     return run;
 }
 
-bool LinExpr::equiv(LinExpr const& tempExpr, Rational& factor) const {
+bool LinExpr::equiv(LinExpr const &tempExpr, Rational &factor) const {
     // Check if there is a multiplying factor such that  c * this =  l_2
     // Assert tempExpr!=0
 
@@ -289,24 +277,20 @@ int LinExpr::resetCounter() {
     return t;
 }
 
-int LinExpr::count_up() {
-    return count++;
-}
+int LinExpr::count_up() { return count++; }
 
-int LinExpr::count_down() {
-    return count--;
-}
+int LinExpr::count_down() { return count--; }
 
 Linear_Expression LinExpr::toLinExpression() const {
     int j = getDenLcm();
     int num, den;
     num = lin[n].num();
     den = lin[n].den();
-    Linear_Expression l(num * j / den);  // set the constant term
+    Linear_Expression l(num * j / den); // set the constant term
     for (int i = 0; i < n; i++) {
         num = lin[i].num();
         den = lin[i].den();
-        l = l + (num * j / den) * Variable(i);
+        l   = l + (num * j / den) * Variable(i);
     }
     return l;
 }
@@ -314,18 +298,13 @@ Linear_Expression LinExpr::toLinExpression() const {
 Constraint LinExpr::get_constraint(int ineqType) const {
     Linear_Expression l = toLinExpression();
     switch (ineqType) {
-        case TYPE_LEQ:
-            return l <= 0;
-        case TYPE_EQ:
-            return l == 0;
-        case TYPE_GEQ:
-            return l >= 0;
-        case TYPE_GE:
-            return l > 0;
-        case TYPE_LE:
-            return l < 0;
+        case TYPE_LEQ: return l <= 0;
+        case TYPE_EQ: return l == 0;
+        case TYPE_GEQ: return l >= 0;
+        case TYPE_GE: return l > 0;
+        case TYPE_LE: return l < 0;
     }
-    return l == 0;  // by default
+    return l == 0; // by default
 }
 
 // ***
@@ -351,8 +330,8 @@ Rational LinExpr::evaluate(Generator const & g){
 // New version, StInG compling under PPL 1.2 (05/11/2021),
 // updates by Hongming Liu, in Shanghai Jiao Tong University.
 // ***
-Rational LinExpr::evaluate(Generator const& g) {
-    Rational ret;  // always initializes to 0
+Rational LinExpr::evaluate(Generator const &g) {
+    Rational ret; // always initializes to 0
     Linear_Expression l1;
     for (dimension_type i = g.space_dimension(); i-- > 0;) {
         l1 += g.coefficient(Variable(i)) * Variable(i);
@@ -360,7 +339,7 @@ Rational LinExpr::evaluate(Generator const& g) {
 
     int m;
     for (int i = 0; i < n; i++) {
-        m = handleInt(l1.coefficient(Variable(i)));
+        m   = handleInt(l1.coefficient(Variable(i)));
         ret = ret + m * lin[i];
     }
     ret = ret + lin[n];

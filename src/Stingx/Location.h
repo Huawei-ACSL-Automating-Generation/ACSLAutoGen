@@ -49,26 +49,26 @@ using namespace Parma_Polyhedra_Library;
 using namespace Parma_Polyhedra_Library::IO_Operators;
 
 class Location {
-   private:
-    int varsNum;  // the number of variables in the location
-    var_info *info, *coefInfo, *lambdaInfo;  // the primal and coef var-infos
-    bool initFlag = false;  // has the initial condition been set
-    string locName;         // name
-    Context* context;       // the solver for intra-location transitions
-    C_Polyhedron* poly;     // the initial condition
+  private:
+    int varsNum;                            // the number of variables in the location
+    var_info *info, *coefInfo, *lambdaInfo; // the primal and coef var-infos
+    bool initFlag = false;                  // has the initial condition been set
+    string locName;                         // name
+    Context *context;                       // the solver for intra-location transitions
+    C_Polyhedron *poly;                     // the initial condition
     // If there is none, then initialized to false
 
     // the final invariant that I will compute for the location
     // Post-comments: To do.. change this into an invariant map. I did this
     // initially so that I could run auto-strengthening. But this is to
     // cumbersome.
-    C_Polyhedron* invariant;
-    vector<C_Polyhedron*> assertions;
+    C_Polyhedron *invariant;
+    vector<C_Polyhedron *> assertions;
     // A pre-assigned invariant that i will use to strengthen transitions.
-    C_Polyhedron* preInv;
+    C_Polyhedron *preInv;
 
     // A vector of polyhedra stores the disabled-path condition
-    Clump* disableClump;
+    Clump *disableClump;
 
     // has context been made
     bool contextReady;
@@ -79,88 +79,82 @@ class Location {
 
     // Initialize and form parametric coefficients for the invariant
     void initialize(int varsNum,
-                    var_info* info,
-                    var_info* coefInfo,
-                    var_info* lambdaInfo,
-                    C_Polyhedron* p,
+                    var_info *info,
+                    var_info *coefInfo,
+                    var_info *lambdaInfo,
+                    C_Polyhedron *p,
                     string name);
     // Initialize but do not form new coefficients
     void InitWithoutPopulating(int varsNum,
-                               var_info* info,
-                               var_info* coefInfo,
-                               var_info* lambdaInfo,
-                               C_Polyhedron* p,
+                               var_info *info,
+                               var_info *coefInfo,
+                               var_info *lambdaInfo,
+                               C_Polyhedron *p,
                                string name,
                                int left);
 
     // added by Hongming, 2022/10/11, Shanghai Jiao Tong University
 
-   public:
+  public:
     Location(int varsNum,
-             var_info* info,
-             var_info* coefInfo,
-             var_info* lambdaInfo,
-             C_Polyhedron* p,
+             var_info *info,
+             var_info *coefInfo,
+             var_info *lambdaInfo,
+             C_Polyhedron *p,
              string name);
 
-    Location(int varsNum,
-             var_info* info,
-             var_info* coefInfo,
-             var_info* lambdaInfo,
-             string name);
+    Location(int varsNum, var_info *info, var_info *coefInfo, var_info *lambdaInfo, string name);
 
     // A location with preset var-infos and a given starting point
 
     Location(int varsNum,
-             var_info* info,
-             var_info* coefInfo,
-             var_info* lambdaInfo,
+             var_info *info,
+             var_info *coefInfo,
+             var_info *lambdaInfo,
              string name,
              int left);
 
     Location(int varsNum,
-             var_info* info,
-             var_info* coefInfo,
-             var_info* lambdaInfo,
-             C_Polyhedron* p,
+             var_info *info,
+             var_info *coefInfo,
+             var_info *lambdaInfo,
+             C_Polyhedron *p,
              string name,
              int left);
 
     // set the initial polyhedron from q into p
-    void setPoly(C_Polyhedron* q);
+    void setPoly(C_Polyhedron *q);
     // set the initial-value polyhedron from q to this
-    void setInitPoly(C_Polyhedron& q);
+    void setInitPoly(C_Polyhedron &q);
     bool isInitLoc();
 
-    void addClump(vector<Clump>& clumps);
+    void addClump(vector<Clump> &clumps);
     void makeContext();
 
     void ComputeCoefConstraints();
-    void ComputeCoefConstraints(Context& cc);       // the coef constraints
-    void ComputeCoefConstraints(C_Polyhedron& cc);  // the coef constraints
+    void ComputeCoefConstraints(Context &cc);      // the coef constraints
+    void ComputeCoefConstraints(C_Polyhedron &cc); // the coef constraints
 
     int getDim() const;
-    const var_info* getInfo() const;
-    const var_info* getCoefInfo() const;
+    const var_info *getInfo() const;
+    const var_info *getCoefInfo() const;
     int getLIndex() const;
 
     bool matches(string name) const;
 
-    C_Polyhedron const& getPolyRef() const {
+    C_Polyhedron const &getPolyRef() const {
         if (initFlag)
             return (*poly);
         cerr << " asked reference when poly is not set " << endl;
         abort();
     }
 
-    C_Polyhedron& getInvRef() { return (*invariant); }
-    C_Polyhedron const& GetInv() const { return *invariant; }
-    void invariant_intersected_with(C_Polyhedron& what) {
-        invariant->intersection_assign(what);
-    }
-    C_Polyhedron* get_initial();
+    C_Polyhedron &getInvRef() { return (*invariant); }
+    C_Polyhedron const &GetInv() const { return *invariant; }
+    void invariant_intersected_with(C_Polyhedron &what) { invariant->intersection_assign(what); }
+    C_Polyhedron *get_initial();
 
-    Context* getContext();
+    Context *getContext();
 
     bool getInitFlag() const { return initFlag; }
 
@@ -170,44 +164,42 @@ class Location {
         initFlag = true;
     }
 
-    C_Polyhedron& get_non_const_poly_reference() { return *poly; }
+    C_Polyhedron &get_non_const_poly_reference() { return *poly; }
 
-    void setPreInvPoly(C_Polyhedron* what) {
+    void setPreInvPoly(C_Polyhedron *what) {
         preInv->intersection_assign((*what));
         return;
     }
-    void setAssertion(vector<C_Polyhedron*> polys) {
+    void setAssertion(vector<C_Polyhedron *> polys) {
         assertions = polys;
         return;
     }
 
-    C_Polyhedron const& getPreInvRef() const { return (*preInv); }
+    C_Polyhedron const &getPreInvRef() const { return (*preInv); }
 
-    Clump* getDisClump() { return disableClump; }
-    Clump const& getDisClumpRef() const { return (*disableClump); }
+    Clump *getDisClump() { return disableClump; }
+    Clump const &getDisClumpRef() const { return (*disableClump); }
 
-    void ExtractAndUpdateInvOrigin(C_Polyhedron& pp, C_Polyhedron& dualp);
-    void ExtractAndUpdateInv(C_Polyhedron& pp, C_Polyhedron& dualp);
-    void contains_test(C_Polyhedron& pp,
-                       C_Polyhedron& preInv,
-                       C_Polyhedron& trans_rel);
+    void ExtractAndUpdateInvOrigin(C_Polyhedron &pp, C_Polyhedron &dualp);
+    void ExtractAndUpdateInv(C_Polyhedron &pp, C_Polyhedron &dualp);
+    void contains_test(C_Polyhedron &pp, C_Polyhedron &preInv, C_Polyhedron &trans_rel);
 
-    string const& getName() const;
+    string const &getName() const;
 
-    void setCoefInfo();  // compute the coefficients required and add
-                         // them to the constraint store
-    void addTrivial(C_Polyhedron* trivial);
-    void addTrivial(C_Polyhedron& trivial);
+    void setCoefInfo(); // compute the coefficients required and add
+                        // them to the constraint store
+    void addTrivial(C_Polyhedron *trivial);
+    void addTrivial(C_Polyhedron &trivial);
 
     void initInv();
-    void ExtractInvfromGenerator(Generator_System const& g);
-    void ExtractInvfromGenerator(Generator const& g);
-    void ExtractInv(Constraint_System const& c);
-    void computeInvFromGenerator(Generator_System const& g);
-    void computeInvFromGenerator(Generator const& g);
-    void UpdateCoefCS(C_Polyhedron& dualp);
+    void ExtractInvfromGenerator(Generator_System const &g);
+    void ExtractInvfromGenerator(Generator const &g);
+    void ExtractInv(Constraint_System const &c);
+    void computeInvFromGenerator(Generator_System const &g);
+    void computeInvFromGenerator(Generator const &g);
+    void UpdateCoefCS(C_Polyhedron &dualp);
 };
 
-ostream& operator<<(ostream& in, Location const& l);  // print the location
+ostream &operator<<(ostream &in, Location const &l); // print the location
 
 #endif

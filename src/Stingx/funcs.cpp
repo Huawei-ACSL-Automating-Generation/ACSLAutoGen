@@ -26,13 +26,12 @@ int gcd(int a, int b) {
     b = std::abs(b);
     while (b != 0) {
         int temp = b;
-        b = a % b;
-        a = temp;
+        b        = a % b;
+        a        = temp;
     }
 
     return a;
 }
-
 
 long gcd(long a, long b) {
     if (a < 0)
@@ -43,8 +42,8 @@ long gcd(long a, long b) {
 
     while (b != 0) {
         long temp = b;
-        b = a % b;
-        a = temp;
+        b         = a % b;
+        a         = temp;
     }
 
     return a;
@@ -68,7 +67,6 @@ int lcm(int a, int b) {
     return gcd;
 }
 
-
 /*
 WORD listify(int * t, int n){
 
@@ -89,12 +87,12 @@ string int_to_str(int i) {
     bool neg = false;
     string ret;
     if (i < 0) {
-        i = -i;
+        i   = -i;
         neg = true;
     }
     char c;
     while (i > 0) {
-        c = '0' + (i % 10);
+        c   = '0' + (i % 10);
         ret = c + ret;
         i /= 10;
     }

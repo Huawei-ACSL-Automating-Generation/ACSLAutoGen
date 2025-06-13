@@ -12,13 +12,11 @@
 #define ANSI_BRIGHT_RED "\033[1;31m"
 
 #define TODO()                                                                                     \
-    do                                                                                             \
-    {                                                                                              \
+    do {                                                                                           \
         /* Get relative file path starting with "src/" */                                          \
         std::string file = __FILE__;                                                               \
         size_t pos       = file.rfind("src/");                                                     \
-        if (pos != std::string::npos)                                                              \
-        {                                                                                          \
+        if (pos != std::string::npos) {                                                            \
             file = file.substr(pos);                                                               \
         }                                                                                          \
                                                                                                    \
@@ -29,12 +27,10 @@
     } while (0)
 
 #define UNIMPLEMENT(info)                                                                          \
-    do                                                                                             \
-    {                                                                                              \
+    do {                                                                                           \
         std::string _file = __FILE__;                                                              \
         size_t pos        = _file.rfind("src/");                                                   \
-        if (pos != std::string::npos)                                                              \
-        {                                                                                          \
+        if (pos != std::string::npos) {                                                            \
             _file = _file.substr(pos);                                                             \
         }                                                                                          \
                                                                                                    \
@@ -49,12 +45,10 @@
     } while (0)
 
 #define UNREACHABLE()                                                                              \
-    do                                                                                             \
-    {                                                                                              \
+    do {                                                                                           \
         std::string file = __FILE__;                                                               \
         size_t pos       = file.rfind("src/");                                                     \
-        if (pos != std::string::npos)                                                              \
-        {                                                                                          \
+        if (pos != std::string::npos) {                                                            \
             file = file.substr(pos);                                                               \
         }                                                                                          \
                                                                                                    \
@@ -64,8 +58,7 @@
     } while (0)
 
 #define PROCESS(info)                                                                              \
-    do                                                                                             \
-    {                                                                                              \
+    do {                                                                                           \
         std::ostringstream oss;                                                                    \
         oss << info;                                                                               \
         std::string s              = oss.str();                                                    \
@@ -79,12 +72,10 @@
     } while (0)
 
 #define INFO(info)                                                                                 \
-    do                                                                                             \
-    {                                                                                              \
+    do {                                                                                           \
         std::string file = __FILE__;                                                               \
         size_t pos       = file.rfind("src/");                                                     \
-        if (pos != std::string::npos)                                                              \
-        {                                                                                          \
+        if (pos != std::string::npos) {                                                            \
             file = file.substr(pos);                                                               \
         }                                                                                          \
         std::cout << ANSI_BRIGHT_GREEN << "[INFO " << ANSI_BRIGHT_YELLOW << file << ":"            \
@@ -93,12 +84,10 @@
     } while (0)
 
 #define WARN(info)                                                                                 \
-    do                                                                                             \
-    {                                                                                              \
+    do {                                                                                           \
         std::string file = __FILE__;                                                               \
         size_t pos       = file.rfind("src/");                                                     \
-        if (pos != std::string::npos)                                                              \
-        {                                                                                          \
+        if (pos != std::string::npos) {                                                            \
             file = file.substr(pos);                                                               \
         }                                                                                          \
         std::cout << ANSI_BRIGHT_YELLOW << "[WARN " << file << ":" << __LINE__ << "]"              \
@@ -106,12 +95,10 @@
     } while (0)
 
 #define ERROR(info)                                                                                \
-    do                                                                                             \
-    {                                                                                              \
+    do {                                                                                           \
         std::string file = __FILE__;                                                               \
         size_t pos       = file.rfind("src/");                                                     \
-        if (pos != std::string::npos)                                                              \
-        {                                                                                          \
+        if (pos != std::string::npos) {                                                            \
             file = file.substr(pos);                                                               \
         }                                                                                          \
         std::cout << ANSI_BRIGHT_RED << "[ERROR " << ANSI_BRIGHT_YELLOW << file << ":" << __LINE__ \
@@ -121,12 +108,10 @@
 
 #ifdef DEBUG_MODE
 #define DEBUG(info)                                                                                \
-    do                                                                                             \
-    {                                                                                              \
+    do {                                                                                           \
         std::string file = __FILE__;                                                               \
         size_t pos       = file.rfind("src/");                                                     \
-        if (pos != std::string::npos)                                                              \
-        {                                                                                          \
+        if (pos != std::string::npos) {                                                            \
             file = file.substr(pos);                                                               \
         }                                                                                          \
         std::cout << ANSI_BRIGHT_GREEN << "[DEBUG " << ANSI_BRIGHT_YELLOW << file << ":"           \

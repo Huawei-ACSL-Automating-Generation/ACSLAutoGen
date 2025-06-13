@@ -52,7 +52,7 @@ using namespace Parma_Polyhedra_Library;
 using namespace Parma_Polyhedra_Library::IO_Operators;
 
 class DisequalityStore {
-   private:
+  private:
     /*
      * Class Members:
      *    disEquals = a vector of disequalities.
@@ -62,34 +62,35 @@ class DisequalityStore {
      *   InConsistency = flag signifying inconsistent
      */
 
-    vector<Linear_Expression>* disEquals;  // The vector of linear expressions  treated as disequalities
+    vector<Linear_Expression>
+        *disEquals; // The vector of linear expressions  treated as disequalities
 
-    C_Polyhedron* ineqExprs;  // The inequalities of the system
+    C_Polyhedron *ineqExprs; // The inequalities of the system
 
-    int varsNum;        // the dimensionality  of the system
-    var_info* info;  // The information about variables
+    int varsNum;    // the dimensionality  of the system
+    var_info *info; // The information about variables
 
     bool InConsistency;
 
-    void initialize(int varsNum, var_info* info);
+    void initialize(int varsNum, var_info *info);
     // check for consistency
     void checkConsistent();
 
-   public:
-    DisequalityStore(int varsNum, var_info* info);
+  public:
+    DisequalityStore(int varsNum, var_info *info);
     ~DisequalityStore();
 
     // add a constraint
     // ineqType has been #defined in global_types.h
 
-    void addConstraint(SparseLinExpr const& p, int ineqType);
+    void addConstraint(SparseLinExpr const &p, int ineqType);
 
     // force set the inequalities to p
-    void setIneqPoly(C_Polyhedron const* p);
+    void setIneqPoly(C_Polyhedron const *p);
     // force set the disequalities to those in disEquals
-    void setDisEquals(vector<SparseLinExpr>* disEquals);
+    void setDisEquals(vector<SparseLinExpr> *disEquals);
     // same as above support different format for expressions
-    void setDisEquals(vector<Linear_Expression> const* disEquals);
+    void setDisEquals(vector<Linear_Expression> const *disEquals);
 
     bool isConsistent() const;
 
@@ -99,30 +100,30 @@ class DisequalityStore {
     // if this happens then t is inconsistent. else t /\ disequalities here
     // are consistent.
 
-    bool checkConsistent(C_Polyhedron& t);
+    bool checkConsistent(C_Polyhedron &t);
 
     // the dimension
     int getDim() const;
     // the var_info
-    const var_info* getInfo() const;
+    const var_info *getInfo() const;
     // cover function for print
-    void printConstraints(ostream& in) const;
+    void printConstraints(ostream &in) const;
 
     // some utility functions for making life easier
     // add l == 0 with l in the transform representation
-    bool addTransform(LinTransform const& l);
+    bool addTransform(LinTransform const &l);
     // add l>=0
-    bool addIneqTransform(LinTransform const& l);
+    bool addIneqTransform(LinTransform const &l);
     // add l<> 0
-    bool addNegTransform(LinTransform const& l);
+    bool addNegTransform(LinTransform const &l);
     // Check if adding l==0 will create an inconsistent store.
-    bool check_status_equalities(LinTransform& l);
+    bool check_status_equalities(LinTransform &l);
 
     // clone this store completely
     // Post comment- I suck. Should have avoided pointers.
-    DisequalityStore* clone() const;
+    DisequalityStore *clone() const;
 };
 
-ostream& operator<<(ostream& in, DisequalityStore const& LambdaStore);
+ostream &operator<<(ostream &in, DisequalityStore const &LambdaStore);
 
 #endif

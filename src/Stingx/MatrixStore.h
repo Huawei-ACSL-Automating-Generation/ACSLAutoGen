@@ -36,13 +36,13 @@
 #include "funcs.h"
 #include "global_types.h"
 #include "ppl.hh"
-#include "var-info.h"  // The information on variable names
+#include "var-info.h" // The information on variable names
 using namespace std;
 using namespace Parma_Polyhedra_Library;
 using namespace Parma_Polyhedra_Library::IO_Operators;
 
 class MatrixStore {
-   private:
+  private:
     // Represent the system $A x =b$, where A is a rational m x varsNum matrix and
     //  b is a mx 1 vector
     //
@@ -58,30 +58,30 @@ class MatrixStore {
     // It means Ax -b =0
     // no need to have more than varsNum rows!
 
-    Rational** mat;
+    Rational **mat;
     int varsNum;
-    var_info* info;
+    var_info *info;
     bool consistent;
-    void initialize(int varsNum, var_info* info);
+    void initialize(int varsNum, var_info *info);
     void zero_out();
 
-   public:
+  public:
     MatrixStore();
 
-    MatrixStore(int varsNum, var_info* info);  // initialize the store
+    MatrixStore(int varsNum, var_info *info); // initialize the store
 
-    void init_set(int varsNum, var_info* info);
+    void init_set(int varsNum, var_info *info);
 
-    int simplify(SparseLinExpr& expression) const;  // Simplify an expression
+    int simplify(SparseLinExpr &expression) const; // Simplify an expression
 
     // add a constraint from a SparseLinExpr
-    bool add_constraint(SparseLinExpr& expression);
+    bool add_constraint(SparseLinExpr &expression);
 
     int getDim() const;
-    var_info* getInfo() const;
-    Rational** get_matrix() const;
+    var_info *getInfo() const;
+    Rational **get_matrix() const;
     void print() const;
-    Rational& operator()(int i, int j);
+    Rational &operator()(int i, int j);
     // some basic gaussian elimination routines
     void back_substitute(int l);
 
@@ -94,8 +94,8 @@ class MatrixStore {
     // Convert to PPL representation
     Constraint_System to_constraint_system() const;
     // clone
-    MatrixStore* clone() const;
+    MatrixStore *clone() const;
 };
 
-ostream& operator<<(ostream& os, MatrixStore const& m);
+ostream &operator<<(ostream &os, MatrixStore const &m);
 #endif

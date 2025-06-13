@@ -27,39 +27,38 @@
 #include "PolyUtils.h"
 #include "myassertions.h"
 
-
 void TransitionRelation::initialize(int varsNum,
-                                    var_info* info,
-                                    var_info* coefInfo,
-                                    var_info* lambdaInfo,
-                                    Location* preLoc,
-                                    Location* postLoc,
-                                    C_Polyhedron* rel,
+                                    var_info *info,
+                                    var_info *coefInfo,
+                                    var_info *lambdaInfo,
+                                    Location *preLoc,
+                                    Location *postLoc,
+                                    C_Polyhedron *rel,
                                     string name) {
-    this->varsNum = varsNum;
-    this->info = info;
-    primedInfo = info->prime();
+    this->varsNum  = varsNum;
+    this->info     = info;
+    primedInfo     = info->prime();
     this->coefInfo = coefInfo;
 
     this->lambdaInfo = lambdaInfo;
-    this->preLoc = preLoc;
-    this->postLoc = postLoc;
-    this->transPoly = rel;
-    this->name = name;
+    this->preLoc     = preLoc;
+    this->postLoc    = postLoc;
+    this->transPoly  = rel;
+    this->name       = name;
     populateMultipliers();
 
-    guard = new C_Polyhedron(varsNum, UNIVERSE);
+    guard  = new C_Polyhedron(varsNum, UNIVERSE);
     update = new C_Polyhedron(2 * varsNum, UNIVERSE);
 }
 
 void TransitionRelation::initialize(int varsNum,
-                                    var_info* info,
-                                    var_info* coefInfo,
-                                    var_info* lambdaInfo,
+                                    var_info *info,
+                                    var_info *coefInfo,
+                                    var_info *lambdaInfo,
                                     string name) {
-    this->varsNum = varsNum;
-    this->info = info;
-    primedInfo = info->prime();
+    this->varsNum  = varsNum;
+    this->info     = info;
+    primedInfo     = info->prime();
     this->coefInfo = coefInfo;
 
     this->lambdaInfo = lambdaInfo;
@@ -67,57 +66,57 @@ void TransitionRelation::initialize(int varsNum,
     this->name = name;
     populateMultipliers();
 
-    guard = new C_Polyhedron(varsNum, UNIVERSE);
+    guard  = new C_Polyhedron(varsNum, UNIVERSE);
     update = new C_Polyhedron(2 * varsNum, UNIVERSE);
 }
 
 void TransitionRelation::InitWithoutPopulating(int varsNum,
-                                               var_info* info,
-                                               var_info* coefInfo,
-                                               var_info* lambdaInfo,
-                                               Location* preLoc,
-                                               Location* postLoc,
-                                               C_Polyhedron* rel,
+                                               var_info *info,
+                                               var_info *coefInfo,
+                                               var_info *lambdaInfo,
+                                               Location *preLoc,
+                                               Location *postLoc,
+                                               C_Polyhedron *rel,
                                                string name,
                                                int index) {
-    this->varsNum = varsNum;
-    this->info = info;
-    primedInfo = info->prime();
+    this->varsNum  = varsNum;
+    this->info     = info;
+    primedInfo     = info->prime();
     this->coefInfo = coefInfo;
 
     this->lambdaInfo = lambdaInfo;
-    this->preLoc = preLoc;
-    this->postLoc = postLoc;
-    this->transPoly = rel;
-    this->name = name;
-    this->index = index;
+    this->preLoc     = preLoc;
+    this->postLoc    = postLoc;
+    this->transPoly  = rel;
+    this->name       = name;
+    this->index      = index;
 
-    guard = new C_Polyhedron(varsNum, UNIVERSE);
+    guard  = new C_Polyhedron(varsNum, UNIVERSE);
     update = new C_Polyhedron(2 * varsNum, UNIVERSE);
 }
 
 void TransitionRelation::InitWithoutPopulating(int varsNum,
-                                               var_info* info,
-                                               var_info* coefInfo,
-                                               var_info* lambdaInfo,
+                                               var_info *info,
+                                               var_info *coefInfo,
+                                               var_info *lambdaInfo,
                                                string name,
                                                int index) {
-    this->varsNum = varsNum;
-    this->info = info;
-    primedInfo = info->prime();
+    this->varsNum  = varsNum;
+    this->info     = info;
+    primedInfo     = info->prime();
     this->coefInfo = coefInfo;
 
     this->lambdaInfo = lambdaInfo;
-    this->index = index;
-    this->name = name;
+    this->index      = index;
+    this->name       = name;
 
-    guard = new C_Polyhedron(varsNum, UNIVERSE);
+    guard  = new C_Polyhedron(varsNum, UNIVERSE);
     update = new C_Polyhedron(2 * varsNum, UNIVERSE);
 }
 
 // The function checks whether the constraint includes primed variables. If it
 // does not include primed variables, it is considered as a guard.
-bool TransitionRelation::add_guard(Constraint const& constraint) {
+bool TransitionRelation::add_guard(Constraint const &constraint) {
     int res;
     bool flag = true;
     // make sure the coefficients of primed part is zero.
@@ -149,7 +148,7 @@ bool TransitionRelation::add_guard(Constraint const& constraint) {
 
 // The function checks whether a specific constraint is in the form of x' = x
 // and records the variables in this form.
-bool TransitionRelation::add_preservation_relation(Constraint const& cc) {
+bool TransitionRelation::add_preservation_relation(Constraint const &cc) {
     int pres = -1;
     int coef, primed_coef;
     bool flag = true;
@@ -200,8 +199,7 @@ bool TransitionRelation::is_preserved(int i) const {
     return true;
 }
 
-void TransitionRelation::compute_post_new(const C_Polyhedron* p,
-                                          C_Polyhedron& q) const {
+void TransitionRelation::compute_post_new(const C_Polyhedron *p, C_Polyhedron &q) const {
     q = *p;
 
     //
@@ -222,8 +220,8 @@ void TransitionRelation::compute_post_new(const C_Polyhedron* p,
     for (it = preserved.begin(); it != preserved.end(); ++it) {
         Linear_Expression ll = Variable((*it));
         q.affine_image(Variable((*it) + varsNum),
-                       ll);  // transforming
-                             // each preserved relation
+                       ll); // transforming
+                            // each preserved relation
     }
 
     q.intersection_assign((*update));
@@ -237,11 +235,11 @@ void TransitionRelation::compute_post_new(const C_Polyhedron* p,
     q.remove_space_dimensions(vs);
 }
 
-void TransitionRelation::setLocs(Location* preLoc, Location* postLoc) {
-    this->preLoc = preLoc;
+void TransitionRelation::setLocs(Location *preLoc, Location *postLoc) {
+    this->preLoc  = preLoc;
     this->postLoc = postLoc;
 }
-void TransitionRelation::setRel(C_Polyhedron* rel) {
+void TransitionRelation::setRel(C_Polyhedron *rel) {
     this->transPoly = rel;
     ResetConstraintsNum();
     split_relation();
@@ -258,50 +256,49 @@ void TransitionRelation::ResetConstraintsNum() {
 }
 
 TransitionRelation::TransitionRelation(int varsNum,
-                                       var_info* info,
-                                       var_info* coefInfo,
-                                       var_info* lambdaInfo,
+                                       var_info *info,
+                                       var_info *coefInfo,
+                                       var_info *lambdaInfo,
                                        string name) {
     initialize(varsNum, info, coefInfo, lambdaInfo, name);
 }
 
 TransitionRelation::TransitionRelation(int varsNum,
-                                       var_info* info,
-                                       var_info* coefInfo,
-                                       var_info* lambdaInfo,
-                                       Location* preLoc,
-                                       Location* postLoc,
-                                       C_Polyhedron* rel,
+                                       var_info *info,
+                                       var_info *coefInfo,
+                                       var_info *lambdaInfo,
+                                       Location *preLoc,
+                                       Location *postLoc,
+                                       C_Polyhedron *rel,
                                        string name) {
     initialize(varsNum, info, coefInfo, lambdaInfo, preLoc, postLoc, rel, name);
 }
 
 TransitionRelation::TransitionRelation(int varsNum,
-                                       var_info* info,
-                                       var_info* coefInfo,
-                                       var_info* lambdaInfo,
+                                       var_info *info,
+                                       var_info *coefInfo,
+                                       var_info *lambdaInfo,
                                        string name,
                                        int index) {
     InitWithoutPopulating(varsNum, info, coefInfo, lambdaInfo, name, index);
 }
 
 TransitionRelation::TransitionRelation(int varsNum,
-                                       var_info* info,
-                                       var_info* coefInfo,
-                                       var_info* lambdaInfo,
-                                       Location* preLoc,
-                                       Location* postLoc,
-                                       C_Polyhedron* rel,
+                                       var_info *info,
+                                       var_info *coefInfo,
+                                       var_info *lambdaInfo,
+                                       Location *preLoc,
+                                       Location *postLoc,
+                                       C_Polyhedron *rel,
                                        string name,
                                        int index) {
-    InitWithoutPopulating(varsNum, info, coefInfo, lambdaInfo, preLoc, postLoc,
-                          rel, name, index);
+    InitWithoutPopulating(varsNum, info, coefInfo, lambdaInfo, preLoc, postLoc, rel, name, index);
 }
 
-void TransitionRelation::strengthen(const C_Polyhedron* p) {
-    guard->intersection_assign(*p);  // update the guard
+void TransitionRelation::strengthen(const C_Polyhedron *p) {
+    guard->intersection_assign(*p); // update the guard
 
-    C_Polyhedron* q = new C_Polyhedron(*p);
+    C_Polyhedron *q = new C_Polyhedron(*p);
     q->add_space_dimensions_and_embed(varsNum);
     transPoly->intersection_assign(*q);
     delete (q);
@@ -310,8 +307,7 @@ void TransitionRelation::strengthen(const C_Polyhedron* p) {
     split_relation();
 }
 
-void TransitionRelation::compute_post(const C_Polyhedron* p,
-                                      C_Polyhedron& q) const {
+void TransitionRelation::compute_post(const C_Polyhedron *p, C_Polyhedron &q) const {
     // assume that q=*p
     q = *p;
 
@@ -335,7 +331,7 @@ TransitionRelation * TransitionRelation::compose(TransitionRelation * t){
 
 */
 
-void TransitionRelation::ComputeIntraConsecConstraints(Context& context) {
+void TransitionRelation::ComputeIntraConsecConstraints(Context &context) {
     // Use two expression stores. One for the equations and
     // the other for the inequations
     // cout << endl;
@@ -343,16 +339,16 @@ void TransitionRelation::ComputeIntraConsecConstraints(Context& context) {
     //      << "> > > (intra transition) In ComputeIntraConsecConstraints(), "
     //         "TransitionRelation : "
     //      << name;
-    Clump* disableClump = preLoc->getDisClump();
-    bool legalFlag = true;
+    Clump *disableClump = preLoc->getDisClump();
+    bool legalFlag      = true;
 
     if (transPoly->is_empty()) {
         legalFlag = false;
     }
 
     if (legalFlag) {
-        int lambdaNum = lambdaInfo->getDim();
-        int coefNum = coefInfo->getDim();
+        int lambdaNum                 = lambdaInfo->getDim();
+        int coefNum                   = coefInfo->getDim();
         Constraint_System constraints = transPoly->minimized_constraints();
         Constraint_System disableCS;
         Constraint_System::const_iterator it;
@@ -365,11 +361,10 @@ void TransitionRelation::ComputeIntraConsecConstraints(Context& context) {
         Linear_Expression expr(0);
         // (1) first the constraints on the unprimed variables
         for (i = 0; i < varsNum; i++) {
-            expr = Variable(i);  //\mu=1 to eliminate the secondary constraint.
-            j = 0;
+            expr = Variable(i); //\mu=1 to eliminate the secondary constraint.
+            j    = 0;
             for (it = constraints.begin(); it != constraints.end(); it++) {
-                expr += handleInt((*it).coefficient(Variable(i))) *
-                        Variable(lambdaLStart + j);
+                expr += handleInt((*it).coefficient(Variable(i))) * Variable(lambdaLStart + j);
                 j++;
             }
             enablePoly.add_constraint(expr == 0);
@@ -378,8 +373,8 @@ void TransitionRelation::ComputeIntraConsecConstraints(Context& context) {
 
         // (2) constraints on the primed variable
         for (i = 0; i < varsNum; i++) {
-            expr = -1 * Variable(postLStart + i);  // - c_postloc_i
-            j = 0;
+            expr = -1 * Variable(postLStart + i); // - c_postloc_i
+            j    = 0;
             for (it = constraints.begin(); it != constraints.end(); it++) {
                 expr += handleInt((*it).coefficient(Variable(varsNum + i))) *
                         Variable(lambdaLStart + j);
@@ -390,7 +385,7 @@ void TransitionRelation::ComputeIntraConsecConstraints(Context& context) {
 
         for (i = 0; i < varsNum; i++) {
             expr = Linear_Expression(0);
-            j = 0;
+            j    = 0;
             for (it = constraints.begin(); it != constraints.end(); it++) {
                 expr += handleInt((*it).coefficient(Variable(varsNum + i))) *
                         Variable(lambdaLStart + j);
@@ -401,10 +396,9 @@ void TransitionRelation::ComputeIntraConsecConstraints(Context& context) {
 
         // (3) Constraints on the constant variable
         expr = Variable(varsNum);
-        j = 0;
+        j    = 0;
         for (it = constraints.begin(); it != constraints.end(); it++) {
-            expr += handleInt((*it).inhomogeneous_term()) *
-                    Variable(lambdaLStart + j);
+            expr += handleInt((*it).inhomogeneous_term()) * Variable(lambdaLStart + j);
             j++;
         }
         disablePoly.add_constraint(expr <= -1);
@@ -434,20 +428,18 @@ void TransitionRelation::ComputeIntraConsecConstraints(Context& context) {
         disablePoly.remove_higher_space_dimensions(2 * varsNum + 2);
         // now populate the context
         constraints = enablePoly.minimized_constraints();
-        disableCS = disablePoly.minimized_constraints();
+        disableCS   = disablePoly.minimized_constraints();
 
         Expression e(coefNum, lambdaNum, coefInfo, lambdaInfo);
         C_Polyhedron dispoly(coefNum, UNIVERSE);
         LinExpr lexpr(coefNum, coefInfo);
         for (it = constraints.begin(); it != constraints.end(); ++it) {
             for (i = 0; i <= varsNum; i++)
-                e[index].setCoefficient(
-                    preLIndex + i, handleInt((*it).coefficient(Variable(i))));
+                e[index].setCoefficient(preLIndex + i, handleInt((*it).coefficient(Variable(i))));
 
             for (i = 0; i <= varsNum; i++)
-                e[lambdaNum].setCoefficient(
-                    postLIndex + i,
-                    handleInt((*it).coefficient(Variable(postLStart + i))));
+                e[lambdaNum].setCoefficient(postLIndex + i,
+                                            handleInt((*it).coefficient(Variable(postLStart + i))));
 
             if ((*it).is_inequality())
                 context.addIneqExpr(Expression(e));
@@ -460,8 +452,7 @@ void TransitionRelation::ComputeIntraConsecConstraints(Context& context) {
         for (it = disableCS.begin(); it != disableCS.end(); ++it) {
             lexpr *= 0;
             for (i = 0; i <= varsNum; i++)
-                lexpr[preLIndex + i] =
-                    handleInt((*it).coefficient(Variable(i)));
+                lexpr[preLIndex + i] = handleInt((*it).coefficient(Variable(i)));
             lexpr[coefNum] = handleInt((*it).inhomogeneous_term());
             if ((*it).is_inequality())
                 dispoly.add_constraint((lexpr.toLinExpression()) >= 0);
@@ -477,7 +468,7 @@ void TransitionRelation::ComputeIntraConsecConstraints(Context& context) {
     //      << " Polyhedra";
 }
 
-void TransitionRelation::ComputeInterConsecConstraints(vector<Clump>& clumps) {
+void TransitionRelation::ComputeInterConsecConstraints(vector<Clump> &clumps) {
     Clump clump(coefInfo, name, "Transition");
     bool transFlag = true;
     if (transPoly->is_empty()) {
@@ -487,8 +478,8 @@ void TransitionRelation::ComputeInterConsecConstraints(vector<Clump>& clumps) {
     if (transFlag) {
         Constraint_System constraints, disableCS;
         Constraint_System::const_iterator it;
-        int coefNum = coefInfo->getDim();
-        constraints = transPoly->minimized_constraints();
+        int coefNum   = coefInfo->getDim();
+        constraints   = transPoly->minimized_constraints();
         int preLIndex = preLoc->getLIndex(), postLIndex = postLoc->getLIndex();
         int i, j;
         C_Polyhedron enablePoly(2 * varsNum + 2 + constraints_num, UNIVERSE);
@@ -497,11 +488,11 @@ void TransitionRelation::ComputeInterConsecConstraints(vector<Clump>& clumps) {
         Linear_Expression expr(0);
         // (1) first the constraints on the unprimed variables
         for (i = 0; i < varsNum; i++) {
-            expr = Variable(i);  // place holder for \mu * c_i
-            j = 0;
+            expr = Variable(i); // place holder for \mu * c_i
+            j    = 0;
             for (it = constraints.begin(); it != constraints.end(); it++) {
                 expr += handleInt((*it).coefficient(Variable(i))) *
-                        Variable(lambdaIndex + j);  // coefficient for \lambda_j
+                        Variable(lambdaIndex + j); // coefficient for \lambda_j
                 j++;
             }
             enablePoly.add_constraint(expr == 0);
@@ -510,21 +501,21 @@ void TransitionRelation::ComputeInterConsecConstraints(vector<Clump>& clumps) {
 
         // (2) constraints on the primed variable
         for (i = 0; i < varsNum; i++) {
-            expr = -1 * Variable(primedIndex + i);  // - c_postloc_i
-            j = 0;
+            expr = -1 * Variable(primedIndex + i); // - c_postloc_i
+            j    = 0;
             for (it = constraints.begin(); it != constraints.end(); it++) {
-                expr += handleInt((*it).coefficient(Variable(varsNum + i))) *
-                        Variable(lambdaIndex + j);
+                expr +=
+                    handleInt((*it).coefficient(Variable(varsNum + i))) * Variable(lambdaIndex + j);
                 j++;
             }
             enablePoly.add_constraint(expr == 0);
         }
         for (i = 0; i < varsNum; i++) {
             expr = Linear_Expression(0);
-            j = 0;
+            j    = 0;
             for (it = constraints.begin(); it != constraints.end(); it++) {
                 expr += handleInt((*it).coefficient(Variable(varsNum + i))) *
-                        Variable(lambdaIndex + j);  // coefficient for \lambda_j
+                        Variable(lambdaIndex + j); // coefficient for \lambda_j
                 j++;
             }
             disablePoly.add_constraint(expr == 0);
@@ -532,10 +523,9 @@ void TransitionRelation::ComputeInterConsecConstraints(vector<Clump>& clumps) {
 
         // (3) Constraints on the constant variable
         expr = Variable(varsNum);
-        j = 0;
+        j    = 0;
         for (it = constraints.begin(); it != constraints.end(); it++) {
-            expr += handleInt((*it).inhomogeneous_term()) *
-                    Variable(lambdaIndex + j);
+            expr += handleInt((*it).inhomogeneous_term()) * Variable(lambdaIndex + j);
             j++;
         }
         disablePoly.add_constraint(expr <= -1);
@@ -566,7 +556,7 @@ void TransitionRelation::ComputeInterConsecConstraints(vector<Clump>& clumps) {
 
         // now create two input polyhedra
         constraints = enablePoly.minimized_constraints();
-        disableCS = disablePoly.minimized_constraints();
+        disableCS   = disablePoly.minimized_constraints();
         LinExpr templateExpr(coefNum, coefInfo);
         // This section corresponds to the case when \mu=1 in terms of
         // increments. For details, please refer to the optimization in the
@@ -574,17 +564,14 @@ void TransitionRelation::ComputeInterConsecConstraints(vector<Clump>& clumps) {
         C_Polyhedron IncreasingPoly(coefNum, UNIVERSE);
         for (it = constraints.begin(); it != constraints.end(); ++it) {
             for (i = 0; i <= varsNum; i++) {
-                templateExpr[preLIndex + i] =
-                    handleInt((*it).coefficient(Variable(i)));
+                templateExpr[preLIndex + i] = handleInt((*it).coefficient(Variable(i)));
                 templateExpr[postLIndex + i] =
                     handleInt((*it).coefficient(Variable(primedIndex + i)));
             }
             if ((*it).is_inequality())
-                IncreasingPoly.add_constraint((templateExpr.toLinExpression()) >=
-                                          0);
+                IncreasingPoly.add_constraint((templateExpr.toLinExpression()) >= 0);
             else if ((*it).is_equality())
-                IncreasingPoly.add_constraint((templateExpr.toLinExpression()) ==
-                                          0);
+                IncreasingPoly.add_constraint((templateExpr.toLinExpression()) == 0);
         }
         clump.insert(IncreasingPoly);
         // This section corresponds to the local case when \mu=0. For details,
@@ -596,11 +583,9 @@ void TransitionRelation::ComputeInterConsecConstraints(vector<Clump>& clumps) {
                 templateExpr[postLIndex + i] =
                     handleInt((*it).coefficient(Variable(primedIndex + i)));
             if ((*it).is_inequality())
-                LocalPoly.add_constraint((templateExpr.toLinExpression()) >=
-                                          0);
+                LocalPoly.add_constraint((templateExpr.toLinExpression()) >= 0);
             else if ((*it).is_equality())
-                LocalPoly.add_constraint((templateExpr.toLinExpression()) ==
-                                          0);
+                LocalPoly.add_constraint((templateExpr.toLinExpression()) == 0);
         }
         clump.insert(LocalPoly);
         // This section corresponds to the false scenario, namely the -1>=0 case
@@ -610,18 +595,15 @@ void TransitionRelation::ComputeInterConsecConstraints(vector<Clump>& clumps) {
         for (it = disableCS.begin(); it != disableCS.end(); ++it) {
             templateExpr *= 0;
             for (i = 0; i <= varsNum; i++) {
-                templateExpr[preLIndex + i] =
-                    handleInt((*it).coefficient(Variable(i)));
+                templateExpr[preLIndex + i] = handleInt((*it).coefficient(Variable(i)));
                 templateExpr[postLIndex + i] =
                     handleInt((*it).coefficient(Variable(primedIndex + i)));
             }
             templateExpr[coefNum] = handleInt((*it).inhomogeneous_term());
             if ((*it).is_inequality())
-                FalsePoly.add_constraint((templateExpr.toLinExpression()) >=
-                                          0);
+                FalsePoly.add_constraint((templateExpr.toLinExpression()) >= 0);
             else if ((*it).is_equality())
-                FalsePoly.add_constraint((templateExpr.toLinExpression()) ==
-                                          0);
+                FalsePoly.add_constraint((templateExpr.toLinExpression()) == 0);
         }
         clump.insert(FalsePoly);
     }
@@ -632,51 +614,39 @@ void TransitionRelation::ComputeInterConsecConstraints(vector<Clump>& clumps) {
     return;
 }
 
-void TransitionRelation::ComputeIntraConsecConstraints(vector<Clump>& clumps) {
+void TransitionRelation::ComputeIntraConsecConstraints(vector<Clump> &clumps) {
     // First make up a context and add the initiation constraints to it
     if (preLoc->getName() != postLoc->getName()) {
         ComputeInterConsecConstraints(clumps);
         return;
     } else {
-        Context* context = preLoc->getContext();
+        Context *context = preLoc->getContext();
         ComputeIntraConsecConstraints(*context);
     }
     return;
 }
 
 void TransitionRelation::populateMultipliers() {
-    index = lambdaInfo->getDim();
+    index      = lambdaInfo->getDim();
     string str = "M_" + name;
     lambdaInfo->insert(str.c_str());
 }
 
-const string& TransitionRelation::getName() const {
-    return name;
-}
+const string &TransitionRelation::getName() const { return name; }
 
-const string& TransitionRelation::getPreLocName() const {
-    return preLoc->getName();
-}
+const string &TransitionRelation::getPreLocName() const { return preLoc->getName(); }
 
-const string& TransitionRelation::getPostLocName() const {
-    return postLoc->getName();
-}
+const string &TransitionRelation::getPostLocName() const { return postLoc->getName(); }
 
-const C_Polyhedron& TransitionRelation::getTransRel() const {
-    return *transPoly;
-}
+const C_Polyhedron &TransitionRelation::getTransRel() const { return *transPoly; }
 
-C_Polyhedron* TransitionRelation::getTransRelRef() const {
-    return transPoly;
-}
+C_Polyhedron *TransitionRelation::getTransRelRef() const { return transPoly; }
 
-const var_info* TransitionRelation::getInfo() const {
-    return primedInfo;
-}
+const var_info *TransitionRelation::getInfo() const { return primedInfo; }
 
-ostream& operator<<(ostream& in, TransitionRelation const& t) {
+ostream &operator<<(ostream &in, TransitionRelation const &t) {
     // Just print the transition relation
-    var_info const* ff = t.getInfo();
+    var_info const *ff = t.getInfo();
 
     in << "Transition Relation: " << t.getName() << endl;
     in << "Pre-Location:" << t.getPreLocName() << "  "
@@ -698,7 +668,7 @@ ostream& operator<<(ostream& in, TransitionRelation const& t) {
     in << "]]" << endl;
     in << "Preserved: [[" << endl;
     in << "| " << endl;
-    set<int> const& st = t.get_preserved_set();
+    set<int> const &st = t.get_preserved_set();
     set<int>::iterator vxx;
     for (vxx = st.begin(); vxx != st.end(); ++vxx) {
         in << "├ ";
@@ -712,9 +682,7 @@ ostream& operator<<(ostream& in, TransitionRelation const& t) {
     return in;
 }
 
-bool TransitionRelation::matches(string& nam) const {
-    return (name == nam);
-}
+bool TransitionRelation::matches(string &nam) const { return (name == nam); }
 
 void TransitionRelation::addPreInv() {
     C_Polyhedron temp(preLoc->getPreInvRef());
@@ -726,8 +694,8 @@ void TransitionRelation::addPreInv() {
 }
 
 void TransitionRelation::check_map() {
-    C_Polyhedron& preInv = preLoc->getInvRef();
-    C_Polyhedron& postInv = postLoc->getInvRef();
+    C_Polyhedron &preInv  = preLoc->getInvRef();
+    C_Polyhedron &postInv = postLoc->getInvRef();
 
     C_Polyhedron temp(varsNum, UNIVERSE);
 

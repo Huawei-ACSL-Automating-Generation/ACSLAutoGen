@@ -8,9 +8,8 @@ using namespace std;
 using namespace clang;
 using namespace llvm;
 
-optional<tuple<string, llvm::StringRef, llvm::StringRef, unsigned, unsigned>>
-GlobalSM::getDeclInfo(const Decl *decl)
-{
+optional<tuple<string, llvm::StringRef, llvm::StringRef, unsigned, unsigned>> GlobalSM::getDeclInfo(
+    const Decl *decl) {
     tuple<string, llvm::StringRef, llvm::StringRef, unsigned, unsigned> result;
     if (!decl)
         return nullopt;
@@ -30,9 +29,8 @@ GlobalSM::getDeclInfo(const Decl *decl)
     return result;
 }
 
-optional<tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned>>
-GlobalSM::getStmtInfo(const clang::Stmt *stmt)
-{
+optional<tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned>> GlobalSM::getStmtInfo(
+    const clang::Stmt *stmt) {
     tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned> result;
     if (!stmt)
         return nullopt;

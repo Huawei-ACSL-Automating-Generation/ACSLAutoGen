@@ -30,12 +30,12 @@ using namespace std;
 #define SOMETHING_LONG 10000
 
 void Timer::initialize(bool alarm, int time_alarmed) {
-    nclticks = sysconf(_SC_CLK_TCK);  // the number of clock ticks per second
+    nclticks = sysconf(_SC_CLK_TCK); // the number of clock ticks per second
 
     if (alarm) {
         this->running = true;
-        alarm = true;
-        this->frozen = false;
+        alarm         = true;
+        this->frozen  = false;
         this->time_up = (time_alarmed < 0);
 
         // now obtain the start time
@@ -44,37 +44,37 @@ void Timer::initialize(bool alarm, int time_alarmed) {
         start_time = buf.tms_utime;
 
         // now set the remaining parameters
-        time_elapsed = 0;
+        time_elapsed       = 0;
         this->time_alarmed = (long)((time_alarmed * nclticks) / 1000);
     } else {
         this->running = true;
 
-        this->alarm = false;
+        this->alarm  = false;
         this->frozen = this->time_up = false;
-        time_elapsed = 0;
+        time_elapsed                 = 0;
         struct tms buf;
         times(&buf);
         start_time = buf.tms_utime;
         // now set the remaining parameters
 
-        time_elapsed = 0;
-        time_alarmed = SOMETHING_LONG;
+        time_elapsed       = 0;
+        time_alarmed       = SOMETHING_LONG;
         this->time_alarmed = (long)((time_alarmed * nclticks) / 1000);
     }
 }
 
 Timer::Timer() {
     initialize(false,
-               SOMETHING_LONG);  // some dummy parameter for time alarmed.
+               SOMETHING_LONG); // some dummy parameter for time alarmed.
 }
 
 Timer::Timer(int how_much) {
     initialize(true,
-               how_much);  // Timer object constructed with the clock ticking
+               how_much); // Timer object constructed with the clock ticking
 }
 
 void Timer::start(int how_much) {
-    initialize(true, how_much);  // timer now actually initialized
+    initialize(true, how_much); // timer now actually initialized
 }
 
 long int Timer::getElapsedTime() {
@@ -138,9 +138,9 @@ void Timer::restart() {
     start_time = buf.tms_utime;
 
     time_elapsed = 0;
-    time_up = (time_alarmed > 0);
-    running = true;
-    frozen = false;
+    time_up      = (time_alarmed > 0);
+    running      = true;
+    frozen       = false;
     // that does it
     return;
 }

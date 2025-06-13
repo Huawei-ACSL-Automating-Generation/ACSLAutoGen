@@ -15,16 +15,14 @@ using Formulas     = std::vector<std::unique_ptr<SymbolicExpr>>;
 using TransRel     = std::tuple<int, int, Formulas>;
 using InitRel      = std::pair<int, Formulas>;
 
-class Path
-{
+class Path {
   public:
     using EvalResult = std::pair<std::vector<std::unique_ptr<Path>>, Formulas>;
 
     Path()  = default;
     ~Path() = default;
 
-    enum class PathState
-    {
+    enum class PathState {
         Step,
         Continue,
         Break,
@@ -88,8 +86,7 @@ class Path
     unsigned int symbolVarCounter = 0;
 };
 
-class ProgramState
-{
+class ProgramState {
   public:
     ProgramState(std::unique_ptr<Path> initialPath, ACSLFunction *context);
     ProgramState(ACSLFunction *context);
@@ -109,11 +106,10 @@ class ProgramState
 
     std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<ProgramState>> splitActiveInactive();
     static std::unique_ptr<ProgramState> merge(const std::vector<const ProgramState *> &states);
-    static std::unique_ptr<ProgramState>
-    merge(const std::vector<std::unique_ptr<ProgramState>> &states);
+    static std::unique_ptr<ProgramState> merge(
+        const std::vector<std::unique_ptr<ProgramState>> &states);
     std::unique_ptr<ProgramState> clone() const;
-    std::unique_ptr<ProgramState>
-    cloneWithPaths(std::vector<std::unique_ptr<Path>> &newPaths) const;
+    std::unique_ptr<ProgramState> cloneWithPaths(std::vector<std::unique_ptr<Path>> &newPaths) const;
     bool isInactive() const;
 
     const clang::Stmt *StmtCtx = nullptr;
@@ -132,18 +128,19 @@ class ProgramState
     std::unique_ptr<ACSLFunction> Context;
 
     // Only be used in step when processing SwitchStmt, just for a cleaner code.
-    std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<SymbolicExpr>>>
-    splitStateBySwitchCond(const clang::Expr *switchCond);
+    std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<SymbolicExpr>>> splitStateBySwitchCond(
+        const clang::Expr *switchCond);
     void stepSimpleSwitch(const clang::SwitchStmt *switchstmt);
 
     void stepBranch(const std::vector<const clang::Expr *> &branchConds,
-        const std::vector<const clang::Stmt *> &branchStmts);
+                    const std::vector<const clang::Stmt *> &branchStmts);
 
     void stepLoop(const clang::Stmt *loopStmt);
 
     void CollectLoopACSL();
 };
 
-Formulas buildLoopInvariant(
-    const Formulas &conds, const std::vector<std::unique_ptr<Path>> &paths, const VarManager &vm);
+Formulas buildLoopInvariant(const Formulas &conds,
+                            const std::vector<std::unique_ptr<Path>> &paths,
+                            const VarManager &vm);
 #endif

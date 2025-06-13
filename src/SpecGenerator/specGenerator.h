@@ -17,14 +17,14 @@
 
 class ProgramState;
 
-std::string emitFunctionContract(const ProgramState &pre,
+std::string emitFunctionContract(
+    const ProgramState &pre,
     const ProgramState &post,
     const std::string &groupName = DEFAULT_FUNC_CONTRACT_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
 
-struct LoopInfo
-{
+struct LoopInfo {
     // SetLoopEntryPlugin
     std::unique_ptr<ProgramState> symbolicLoopEntry_;
 
@@ -33,8 +33,7 @@ struct LoopInfo
     std::unique_ptr<Symbolic::SymbolicExpr> indexBound_{nullptr}; ///< The bound is inclusive.
 
     // SetPatternsPlugin
-    struct pattern
-    {
+    struct pattern {
         std::unique_ptr<Symbolic::SymbolicExpr> initialValue_{nullptr};
         int64_t step_;
     };
@@ -47,7 +46,8 @@ struct LoopInfo
     // TODO(more info to be added)
 };
 
-std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
+std::optional<LoopInfo> parseLoopInfo(
+    const ProgramState &preState,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
@@ -56,29 +56,27 @@ std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
         std::nullopt);
 
 std::string emitLoopInvariant(const ProgramState &preState,
-    const clang::Expr *cond,
-    const clang::Stmt *inc,
-    const clang::Stmt *body,
-    const LoopInfo &loopInfo,
-    const std::string &groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
-    std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
-        std::nullopt);
+                              const clang::Expr *cond,
+                              const clang::Stmt *inc,
+                              const clang::Stmt *body,
+                              const LoopInfo &loopInfo,
+                              const std::string &groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
+                              std::optional<std::reference_wrapper<const std::vector<std::string>>>
+                                  extraPluginIds = std::nullopt);
 
 std::string emitInlineContract(const ProgramState &state,
-    const std::string &groupName,
-    const std::vector<std::string> &extraPluginIds);
+                               const std::string &groupName,
+                               const std::vector<std::string> &extraPluginIds);
 
 /*---------------------------------------*/
 /*-------Framework for ACSLPlugin--------*/
 /*---------------------------------------*/
 
-class ACSLPlugin
-{
+class ACSLPlugin {
   public:
     virtual ~ACSLPlugin()               = default;
     virtual std::string_view id() const = 0;
-    enum class Kind
-    {
+    enum class Kind {
         FunctionContract,
         LoopInvariant,
         InlineAssertion,
@@ -87,16 +85,14 @@ class ACSLPlugin
     virtual Kind kind() const = 0;
 };
 
-class FunctionContractPlugin : public ACSLPlugin
-{
+class FunctionContractPlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::FunctionContract; }
-    virtual std::optional<std::string>
-    generate(const ProgramState &pre, const ProgramState &post) const = 0;
+    virtual std::optional<std::string> generate(const ProgramState &pre,
+                                                const ProgramState &post) const = 0;
 };
 
-class LoopInfoPlugin : public ACSLPlugin
-{
+class LoopInfoPlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::LoopInfo; }
 
@@ -108,49 +104,43 @@ class LoopInfoPlugin : public ACSLPlugin
     /// @param loopInfo info to be filled in
     /// @return return false means this loop is too complex and will abort whole parsing!
     virtual bool parse(const ProgramState &pre,
-        const clang::Expr *cond,
-        const clang::Stmt *inc,
-        const clang::Stmt *body,
-        LoopInfo &loopInfo) const = 0;
+                       const clang::Expr *cond,
+                       const clang::Stmt *inc,
+                       const clang::Stmt *body,
+                       LoopInfo &loopInfo) const = 0;
 };
 
-class LoopInvariantPlugin : public ACSLPlugin
-{
+class LoopInvariantPlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
     virtual std::optional<std::string> generate(const ProgramState &preState,
-        const clang::Expr *cond,
-        const clang::Stmt *inc,
-        const clang::Stmt *body,
-        const LoopInfo &loopInfo) const = 0;
+                                                const clang::Expr *cond,
+                                                const clang::Stmt *inc,
+                                                const clang::Stmt *body,
+                                                const LoopInfo &loopInfo) const = 0;
 };
 
-class InlinePlugin : public ACSLPlugin
-{
+class InlinePlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::InlineAssertion; }
     virtual std::optional<std::string> generate(const ProgramState &state /* enough? */) = 0;
 };
 
-class ACSLPluginRegistry
-{
+class ACSLPluginRegistry {
   public:
-    static ACSLPluginRegistry &instance()
-    {
+    static ACSLPluginRegistry &instance() {
         static ACSLPluginRegistry R;
         return R;
     }
 
     void registerPlugin(std::unique_ptr<ACSLPlugin> P) { plugins_.emplace(P->id(), std::move(P)); }
 
-    ACSLPlugin *get(const std::string &id) const
-    {
+    ACSLPlugin *get(const std::string &id) const {
         auto it = plugins_.find(id);
         return it == plugins_.end() ? nullptr : it->second.get();
     }
 
-    std::vector<std::string> idsByKind(ACSLPlugin::Kind k) const
-    {
+    std::vector<std::string> idsByKind(ACSLPlugin::Kind k) const {
         std::vector<std::string> v;
         for (auto const &p : plugins_)
             if (p.second->kind() == k)
@@ -163,12 +153,9 @@ class ACSLPluginRegistry
 };
 
 #define REGISTER_ACSL_PLUGIN(PluginType, PluginID)                                                 \
-    namespace                                                                                      \
-    {                                                                                              \
-        struct PluginType##Reg                                                                     \
-        {                                                                                          \
-            PluginType##Reg()                                                                      \
-            {                                                                                      \
+    namespace {                                                                                    \
+        struct PluginType##Reg {                                                                   \
+            PluginType##Reg() {                                                                    \
                 ACSLPluginRegistry::instance().registerPlugin(                                     \
                     std::make_unique<PluginType>(PluginID));                                       \
                 INFO(#PluginType " is registered with id: " #PluginID);                            \
@@ -176,31 +163,26 @@ class ACSLPluginRegistry
         } _##PluginType##Reg;                                                                      \
     }
 
-struct ACSLPluginGroup
-{
+struct ACSLPluginGroup {
     std::string name;
     std::vector<std::string> pluginIds;
 };
 
-class ACSLPluginGroupRegistry
-{
+class ACSLPluginGroupRegistry {
   public:
-    static ACSLPluginGroupRegistry &instance()
-    {
+    static ACSLPluginGroupRegistry &instance() {
         static ACSLPluginGroupRegistry R;
         return R;
     }
 
     void registerGroup(ACSLPluginGroup G) { groups_.emplace(G.name, std::move(G)); }
 
-    const ACSLPluginGroup *getGroup(const std::string &name) const
-    {
+    const ACSLPluginGroup *getGroup(const std::string &name) const {
         auto it = groups_.find(name);
         return it == groups_.end() ? nullptr : &it->second;
     }
 
-    std::vector<std::string_view> allGroupNames() const
-    {
+    std::vector<std::string_view> allGroupNames() const {
         std::vector<std::string_view> v;
         for (auto &[name, _] : groups_)
             v.push_back(name);
@@ -212,20 +194,15 @@ class ACSLPluginGroupRegistry
 };
 
 #define REGISTER_ACSL_GROUP(GroupName, ...)                                                        \
-    namespace                                                                                      \
-    {                                                                                              \
-        struct GroupName##Reg                                                                      \
-        {                                                                                          \
-            GroupName##Reg()                                                                       \
-            {                                                                                      \
+    namespace {                                                                                    \
+        struct GroupName##Reg {                                                                    \
+            GroupName##Reg() {                                                                     \
                 ACSLPluginGroup G;                                                                 \
                 G.name      = #GroupName;                                                          \
                 G.pluginIds = {__VA_ARGS__};                                                       \
                 ACSLPluginGroupRegistry::instance().registerGroup(G);                              \
-                for (auto &id : G.pluginIds)                                                       \
-                {                                                                                  \
-                    if (ACSLPluginRegistry::instance().get(id) == nullptr)                         \
-                    {                                                                              \
+                for (auto &id : G.pluginIds) {                                                     \
+                    if (ACSLPluginRegistry::instance().get(id) == nullptr) {                       \
                         ERROR("Plugin with id " + id + " does not exist.");                        \
                     }                                                                              \
                 }                                                                                  \

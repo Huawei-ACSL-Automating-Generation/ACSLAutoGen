@@ -10,11 +10,9 @@
 using namespace clang;
 using namespace llvm;
 using namespace std;
-void ACSLAnalyzer::analyzeFunctions()
-{
+void ACSLAnalyzer::analyzeFunctions() {
     PROCESS("Running analysis functions...");
-    for (auto *func : this->Context.getFunctions())
-    {
+    for (auto *func : this->Context.getFunctions()) {
         auto loc = func->getLocation();
         if (!GlobalSM::getSM().isInMainFile(loc))
             continue;
@@ -25,12 +23,10 @@ void ACSLAnalyzer::analyzeFunctions()
     }
 }
 
-void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
-{
+void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
     const FunctionDecl *FD = func->getFunctionDecl();
 
-    if (FD->getNameAsString() == "main")
-    {
+    if (FD->getNameAsString() == "main") {
         WARN("Ignore MAIN Function.");
         return;
     }
@@ -39,8 +35,7 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
     auto acslFunc = new ACSLFunction(FD);
     auto state    = std::make_unique<ProgramState>(acslFunc);
 
-    if (const Stmt *Body = FD->getBody())
-    {
+    if (const Stmt *Body = FD->getBody()) {
         if (!isa<CompoundStmt>(Body))
             UNIMPLEMENT("Function body of " + FD->getNameAsString() + " is not a CompoundStmt");
 
@@ -56,11 +51,9 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func)
         INFO(spec);
 
         auto beginLoc = FD->getSourceRange().getBegin();
-        GlobalSM::getRewriter().InsertText(
-            beginLoc, spec, /*after*/ false, /*indentNewLines*/ true);
-    }
-    else
-    {
+        GlobalSM::getRewriter().InsertText(beginLoc, spec, /*after*/ false,
+                                           /*indentNewLines*/ true);
+    } else {
         INFO("No function body found for: " + FD->getNameAsString());
     }
 }

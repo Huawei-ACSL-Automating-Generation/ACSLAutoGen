@@ -32,7 +32,7 @@
 
 using namespace std;
 
-string var_info ::get_a_string(int i, const char* prefix) {
+string var_info ::get_a_string(int i, const char *prefix) {
     string x;
     int j = (i > 0) ? i : -i, rem;
 
@@ -41,7 +41,7 @@ string var_info ::get_a_string(int i, const char* prefix) {
 
     while (j > 0) {
         rem = j % 10;
-        x = (char)('0' + rem) + x;
+        x   = (char)('0' + rem) + x;
         j /= 10;
     }
 
@@ -51,17 +51,15 @@ string var_info ::get_a_string(int i, const char* prefix) {
 
 var_info::var_info() {
     dimension = 0;
-    v = new vector<char*>();
+    v         = new vector<char *>();
 }
 
-int var_info::getDim() const {
-    return dimension;
-}
+int var_info::getDim() const { return dimension; }
 
-var_info::var_info(var_info* f1, var_info* f2) {
+var_info::var_info(var_info *f1, var_info *f2) {
     int d1 = f1->getDim(), d2 = f2->getDim();
     dimension = 0;
-    v = new vector<char*>();
+    v         = new vector<char *>();
     int i;
     for (i = 0; i < d1; ++i) {
         insert(f1->getName(i));
@@ -71,31 +69,30 @@ var_info::var_info(var_info* f1, var_info* f2) {
         insert(f2->getName(i));
 }
 
-var_info::var_info(var_info* lambdaInfo, vector<int> tempInfo) {
+var_info::var_info(var_info *lambdaInfo, vector<int> tempInfo) {
     // project out from lambdaInfo based on v
 
-    int n = lambdaInfo->getDim();
+    int n     = lambdaInfo->getDim();
     dimension = 0;
-    this->v = new vector<char*>();
+    this->v   = new vector<char *>();
 
     vector<int>::iterator vi;
     int i;
     for (i = 0, vi = tempInfo.begin(); vi < tempInfo.end(); ++vi, ++i) {
-        PRECONDITION(((*vi) >= 0 && (*vi) < n),
-                     "var_info::var_info asked to project out of range");
+        PRECONDITION(((*vi) >= 0 && (*vi) < n), "var_info::var_info asked to project out of range");
 
         insert(lambdaInfo->getName(*vi));
     }
     return;
 }
 
-var_info::var_info(var_info const* lambdaInfo) {
-    if (!lambdaInfo){
+var_info::var_info(var_info const *lambdaInfo) {
+    if (!lambdaInfo) {
         return;
     }
     int i;
 
-    this->v = new vector<char*>();
+    this->v = new vector<char *>();
 
     this->dimension = 0;
     for (i = 0; i < lambdaInfo->dimension; ++i) {
@@ -103,12 +100,10 @@ var_info::var_info(var_info const* lambdaInfo) {
     }
 }
 
-vector<char*>* var_info::get_vector() {
-    return v;
-}
+vector<char *> *var_info::get_vector() { return v; }
 
-int var_info::insert(const char* what, int primed) {
-    char* c = (char*)malloc(strlen(what) + 2);
+int var_info::insert(const char *what, int primed) {
+    char *c = (char *)malloc(strlen(what) + 2);
     strcpy(c + primed, what);
     if (primed == 1) {
         c[0] = '`';
@@ -121,8 +116,8 @@ int var_info::insert(const char* what, int primed) {
     return dimension - 1;
 }
 
-int var_info::search(const char* what) const {
-    vector<char*>::iterator i = v->begin();
+int var_info::search(const char *what) const {
+    vector<char *>::iterator i = v->begin();
     int j;
     for (j = 0; i != v->end(); j++, i++) {
         if (strcmp(*i, what) == 0)
@@ -132,14 +127,13 @@ int var_info::search(const char* what) const {
     return VAR_NOT_FOUND;
 }
 
-char* var_info::getName(int dim) const {
+char *var_info::getName(int dim) const {
     PRECONDITION(dim >= 0 && dim < dimension, " Invalid dimension");
     return (*v)[dim];
 }
 
-
-var_info* var_info::prime() {
-    var_info* tempInfo = new var_info();
+var_info *var_info::prime() {
+    var_info *tempInfo = new var_info();
     int i;
 
     for (i = 0; i < dimension; i++)
@@ -149,8 +143,8 @@ var_info* var_info::prime() {
     return tempInfo;
 }
 
-void var_info::print(ostream& out) const {
-    vector<char*>::iterator i;
+void var_info::print(ostream &out) const {
+    vector<char *>::iterator i;
     int j = 0;
     out << " [[ " << endl;
     for (i = v->begin(); i != v->end(); i++) {
@@ -162,7 +156,7 @@ void var_info::print(ostream& out) const {
     out << "]]" << endl;
 }
 
-int var_info::searchElseInsert(const char* what) {
+int var_info::searchElseInsert(const char *what) {
     int index;
     index = search(what);
     if (index == VAR_NOT_FOUND) {
@@ -171,14 +165,13 @@ int var_info::searchElseInsert(const char* what) {
     return index;
 }
 
-void var_info::print_dimensions(ostream& out, set<int> const& what) const {
+void var_info::print_dimensions(ostream &out, set<int> const &what) const {
     set<int>::iterator vi;
     int j = 0;
     out << "[[  ";
     for (vi = what.begin(); vi != what.end(); ++vi) {
-        PRECONDITION(
-            ((*vi) >= 0 && (*vi) < dimension),
-            "var_info::print_dimensions --> asked to print out of range");
+        PRECONDITION(((*vi) >= 0 && (*vi) < dimension),
+                     "var_info::print_dimensions --> asked to print out of range");
 
         out << getName((*vi)) << "  ,";
         ++j;
@@ -189,7 +182,7 @@ void var_info::print_dimensions(ostream& out, set<int> const& what) const {
     return;
 }
 
-void var_info::resize_to(int what, const char* prefix) {
+void var_info::resize_to(int what, const char *prefix) {
     if (dimension > what) {
         v->erase(v->begin() + what, v->end());
         return;
@@ -210,7 +203,7 @@ void var_info::resize_to(int what, const char* prefix) {
     return;
 }
 
-ostream& operator<<(ostream& out, var_info* const info) {
+ostream &operator<<(ostream &out, var_info *const info) {
     info->print(out);
     return out;
 }

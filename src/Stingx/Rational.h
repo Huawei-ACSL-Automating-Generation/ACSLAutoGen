@@ -35,54 +35,54 @@
 
 using namespace std;
 class Rational {
-   private:
+  private:
     int nu, de;
 
     void initialize(int n, int d);
     void reduce_to_lowest();
 
-   public:
-    Rational(); 
+  public:
+    Rational();
 
     Rational(int n, int d);
     int num() const { return nu; }
     int den() const { return de; }
     Rational inverse() const;
 
-    Rational& operator=(Rational const& n);
-    Rational& operator=(int n);
-    bool operator==(Rational const& n) const;
-    bool operator!=(Rational const& n) const;
-    bool operator==(int const& n) const;
-    bool operator!=(int const& n) const;
+    Rational &operator=(Rational const &n);
+    Rational &operator=(int n);
+    bool operator==(Rational const &n) const;
+    bool operator!=(Rational const &n) const;
+    bool operator==(int const &n) const;
+    bool operator!=(int const &n) const;
 
-    Rational operator+(Rational const& n1) const;
+    Rational operator+(Rational const &n1) const;
     Rational operator+(int n1) const;
-    Rational operator-(Rational const& n1) const;
+    Rational operator-(Rational const &n1) const;
     Rational operator-(int n1) const;
     Rational operator*(int n) const;
-    Rational operator*(Rational const& n) const;
-    Rational& operator*=(int n);
-    Rational& operator*=(Rational const& n);
-    Rational& operator+=(Rational const& n1);
-    Rational& operator+=(int n1);
-    Rational& operator-=(Rational const& n1);
-    Rational& operator-=(int n1);
-    bool operator<(Rational const& p) const;
-    bool operator<(int const& n) const;
-    bool operator>(Rational const& p) const;
-    bool operator>(int const& p) const;
-    bool operator>=(Rational const& p) const;
-    bool operator>=(int const& p) const;
-    bool operator<=(Rational const& p) const;
-    bool operator<=(int const& p) const;
+    Rational operator*(Rational const &n) const;
+    Rational &operator*=(int n);
+    Rational &operator*=(Rational const &n);
+    Rational &operator+=(Rational const &n1);
+    Rational &operator+=(int n1);
+    Rational &operator-=(Rational const &n1);
+    Rational &operator-=(int n1);
+    bool operator<(Rational const &p) const;
+    bool operator<(int const &n) const;
+    bool operator>(Rational const &p) const;
+    bool operator>(int const &p) const;
+    bool operator>=(Rational const &p) const;
+    bool operator>=(int const &p) const;
+    bool operator<=(Rational const &p) const;
+    bool operator<=(int const &p) const;
     ~Rational();
 };
 
-Rational operator*(int n1, Rational const& n2);
+Rational operator*(int n1, Rational const &n2);
 
-Rational operator+(int n1, Rational const& n2);
+Rational operator+(int n1, Rational const &n2);
 
-ostream& operator<<(ostream& os, Rational const& p1);
+ostream &operator<<(ostream &os, Rational const &p1);
 
 #endif

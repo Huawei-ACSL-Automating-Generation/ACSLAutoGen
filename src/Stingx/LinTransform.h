@@ -40,9 +40,9 @@
 using namespace std;
 
 class LinTransform : public LinExpr {
-   public:
+  public:
     LinTransform();
-    LinTransform(int n, var_info* coefInfo);
+    LinTransform(int n, var_info *coefInfo);
     int getBase() const;
     bool is_trivial() const;
     bool is_inconsistent() const;

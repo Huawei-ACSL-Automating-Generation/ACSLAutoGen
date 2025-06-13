@@ -10,21 +10,18 @@
 using namespace std;
 using namespace clang;
 
-class AssignsPlugin : public FunctionContractPlugin
-{
+class AssignsPlugin : public FunctionContractPlugin {
   public:
     AssignsPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    optional<string> generate(const ProgramState &pre, const ProgramState &post) const override
-    {
+    optional<string> generate(const ProgramState &pre, const ProgramState &post) const override {
         string spec;
         vector<const Address *> assignedAddrs;
 
         auto isExisted = [&](const Address &addr) {
             // The time complexity can be reduced from O(n) to O(1), but it requires a complex
             // memoized recursive hash implementation.
-            for (auto &it : assignedAddrs)
-            {
+            for (auto &it : assignedAddrs) {
                 if (*it == addr)
                     return true;
             }
@@ -38,27 +35,22 @@ class AssignsPlugin : public FunctionContractPlugin
         };
 
         // Function's pre-state should have exactly one path.
-        if (auto &paths = pre.getPaths(); paths.size() == 1)
-        {
+        if (auto &paths = pre.getPaths(); paths.size() == 1) {
             auto &prePath = paths[0];
 
             // For every post-state path
-            for (auto &postPath : post.getPaths())
-            {
+            for (auto &postPath : post.getPaths()) {
                 // and every Address in the path's memoryState.
-                for (auto &[addr, value] : postPath->getMemoryState())
-                {
+                for (auto &[addr, value] : postPath->getMemoryState()) {
                     if (!isFromPointer(addr))
                         continue;
-                    if (value->getType() == SymbolicExpr::ExprType::Variable)
-                    {
+                    if (value->getType() == SymbolicExpr::ExprType::Variable) {
                         auto symbol = dynamic_cast<const Symbolic::Variable *>(value.get());
 
                         if (!symbol)
                             ERROR("A SymolicExpr with type 'Variable' but is not a Variable!");
 
-                        if (*symbol->getFrom() == addr)
-                        {
+                        if (*symbol->getFrom() == addr) {
                             continue;
                         }
                     }
@@ -70,8 +62,7 @@ class AssignsPlugin : public FunctionContractPlugin
             }
         }
 
-        for (auto &addr : assignedAddrs)
-        {
+        for (auto &addr : assignedAddrs) {
             spec += "*" + addr->regularForm(/*old = */ false) + ", ";
         }
 
@@ -86,13 +77,11 @@ class AssignsPlugin : public FunctionContractPlugin
 };
 REGISTER_ACSL_PLUGIN(AssignsPlugin, "assigns");
 
-class ResultPlugin : public FunctionContractPlugin
-{
+class ResultPlugin : public FunctionContractPlugin {
   public:
     ResultPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    optional<string> generate(const ProgramState &, const ProgramState &post) const override
-    {
+    optional<string> generate(const ProgramState &, const ProgramState &post) const override {
         // TODO
         return nullopt;
     }

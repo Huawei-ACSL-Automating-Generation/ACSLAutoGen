@@ -42,7 +42,7 @@ using namespace Parma_Polyhedra_Library;
 using namespace Parma_Polyhedra_Library::IO_Operators;
 
 class LinExpr {
-   protected:
+  protected:
     /*
      * members:
      *   n = dimension
@@ -54,37 +54,37 @@ class LinExpr {
 
     int n;
     vector<Rational> lin;
-    var_info* info;
+    var_info *info;
     int count;
 
-    void initialize(int n, var_info* info);
+    void initialize(int n, var_info *info);
     // set to zero.. preserving the dimensionality.
     void clear_out();
 
-   public:
+  public:
     LinExpr();
-    LinExpr(int n, var_info* info);
-    LinExpr(LinExpr const& ll);
+    LinExpr(int n, var_info *info);
+    LinExpr(LinExpr const &ll);
 
     // A public way of calling initialize. I suck
-    void init_set(int n, var_info* info);
+    void init_set(int n, var_info *info);
 
     // LinExpr(int n); // Can be added later if required
 
-    LinExpr operator+(LinExpr const& p1) const;  // Addition
-    LinExpr& operator+=(LinExpr const& p1);      // Addition to self
-    LinExpr operator-(LinExpr const& p1) const;  // Subtract
-    LinExpr& operator-=(LinExpr const& p1);      // from self
-    LinExpr& operator=(LinExpr const& p1);       // Assignment
-    LinExpr& operator*=(int i);                  // scale using integer
-    LinExpr& operator*=(Rational const& i);
+    LinExpr operator+(LinExpr const &p1) const; // Addition
+    LinExpr &operator+=(LinExpr const &p1);     // Addition to self
+    LinExpr operator-(LinExpr const &p1) const; // Subtract
+    LinExpr &operator-=(LinExpr const &p1);     // from self
+    LinExpr &operator=(LinExpr const &p1);      // Assignment
+    LinExpr &operator*=(int i);                 // scale using integer
+    LinExpr &operator*=(Rational const &i);
 
     //
     // checks if there is a factor c such that
     //              this = c * t
     // WARNING: non-standard semantics here.
 
-    bool operator==(LinExpr const& t) const;
+    bool operator==(LinExpr const &t) const;
 
     // mess around with count
     int getCount() const { return count; }
@@ -94,18 +94,16 @@ class LinExpr {
 
     // check if two linexprs have the same print info.
     // Post-comments : What is the big deal anyway.
-    bool check_variable_compatibility(var_info const* f1) const {
-        return (f1 == info);
-    }
+    bool check_variable_compatibility(var_info const *f1) const { return (f1 == info); }
 
     // access the ith coefficient
-    Rational& operator[](int i);
+    Rational &operator[](int i);
     // const reference to the same
     Rational operator()(int i) const;
 
     // access members
     int getDim() const;
-    var_info* getInfo() const;
+    var_info *getInfo() const;
 
     // disabled
     // vector<Rational> & get_array();
@@ -126,24 +124,24 @@ class LinExpr {
 
     // Is it the case that factor * l1 = this for some factor.
     // output parameter factor.
-    bool equiv(LinExpr const& l1, Rational& factor) const;
+    bool equiv(LinExpr const &l1, Rational &factor) const;
 
     // convert to PPL representation.
     Linear_Expression toLinExpression() const;
     Constraint get_constraint(int ineqType) const;
 
     // with generator g providing valuations, eval.
-    Rational evaluate(Generator const& g);
+    Rational evaluate(Generator const &g);
     // pretty print.
-    void print(ostream& os) const;
+    void print(ostream &os) const;
 };
 
 // to print my beautiful Lin Exprs
-ostream& operator<<(ostream& os, LinExpr const& expr);
+ostream &operator<<(ostream &os, LinExpr const &expr);
 
 // more scaling operators.
-LinExpr operator*(Rational const& i, LinExpr const& p1);
-LinExpr operator*(LinExpr const& p1, Rational const& i);
-LinExpr operator*(int i, LinExpr const& p1);
+LinExpr operator*(Rational const &i, LinExpr const &p1);
+LinExpr operator*(LinExpr const &p1, Rational const &i);
+LinExpr operator*(int i, LinExpr const &p1);
 
 #endif

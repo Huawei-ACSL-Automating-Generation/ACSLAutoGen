@@ -4,8 +4,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 
-class ACSLContext
-{
+class ACSLContext {
   public:
     ACSLContext(clang::ASTContext &Context) : TU(Context.getTranslationUnitDecl()) {}
 

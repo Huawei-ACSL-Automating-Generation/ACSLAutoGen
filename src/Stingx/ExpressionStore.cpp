@@ -30,10 +30,13 @@
 #include "Rational.h"
 #include "SparseLinExpr.h"
 
-void ExpressionStore::initialize(int varsNum, int lambdaNum, var_info* coefInfo, var_info* lambdaInfo) {
-    this->varsNum = varsNum;
-    this->lambdaNum = lambdaNum;
-    this->coefInfo = coefInfo;
+void ExpressionStore::initialize(int varsNum,
+                                 int lambdaNum,
+                                 var_info *coefInfo,
+                                 var_info *lambdaInfo) {
+    this->varsNum    = varsNum;
+    this->lambdaNum  = lambdaNum;
+    this->coefInfo   = coefInfo;
     this->lambdaInfo = lambdaInfo;
 
     le_list = new vector<SparseLinExpr>();
@@ -45,12 +48,15 @@ void ExpressionStore::initialize(int varsNum, int lambdaNum, var_info* coefInfo,
     */
 }
 
-ExpressionStore::ExpressionStore(int varsNum, int lambdaNum, var_info* coefInfo, var_info* lambdaInfo) {
+ExpressionStore::ExpressionStore(int varsNum,
+                                 int lambdaNum,
+                                 var_info *coefInfo,
+                                 var_info *lambdaInfo) {
     initialize(varsNum, lambdaNum, coefInfo, lambdaInfo);
 }
 
-bool ExpressionStore::AddExpression(Expression& exp) {
-    Expression* e = new Expression(exp);
+bool ExpressionStore::AddExpression(Expression &exp) {
+    Expression *e = new Expression(exp);
 
     /* if (exp.is_pure_a()){
        add_linear_expression(e->convert_linear());
@@ -118,7 +124,7 @@ bool ExpressionStore::isConsistent(){
 
 */
 
-void ExpressionStore::simplify(MatrixStore const& m) {
+void ExpressionStore::simplify(MatrixStore const &m) {
     //   bool info=true;
     vector<Expression>::iterator vi;
     SparseLinExpr ll;
@@ -164,13 +170,11 @@ MatrixStore & ExpressionStore::get_m(){
 }
 
 */
-vector<Expression>* ExpressionStore::get_vl() {
-    return vl;
-}
+vector<Expression> *ExpressionStore::get_vl() { return vl; }
 
-ostream& operator<<(ostream& os, ExpressionStore& es) {
+ostream &operator<<(ostream &os, ExpressionStore &es) {
     vector<Expression>::iterator vi;
-    vector<Expression>* vl = es.get_vl();
+    vector<Expression> *vl = es.get_vl();
     os << "The Expressions are:" << endl;
     for (vi = vl->begin(); vi < vl->end(); vi++) {
         os << (*vi) << endl;
@@ -179,8 +183,7 @@ ostream& operator<<(ostream& os, ExpressionStore& es) {
     return os;
 }
 
-vector<SparseLinExpr>::iterator ExpressionStore::lin_expr_collected(
-    SparseLinExpr const& l) const {
+vector<SparseLinExpr>::iterator ExpressionStore::lin_expr_collected(SparseLinExpr const &l) const {
     vector<SparseLinExpr>::iterator vi;
     for (vi = le_list->begin(); vi < le_list->end(); vi++) {
         if ((*vi) == l)
@@ -191,7 +194,7 @@ vector<SparseLinExpr>::iterator ExpressionStore::lin_expr_collected(
 }
 
 vector<LinTransform>::iterator ExpressionStore::lin_transform_collected(
-    LinTransform const& l) const {
+    LinTransform const &l) const {
     vector<LinTransform>::iterator vi;
     for (vi = lt_list->begin(); vi < lt_list->end(); vi++) {
         if ((*vi) == l)
@@ -209,7 +212,7 @@ bool ExpressionStore::collect_factors() {
     for (vi = vl->begin(); vi < vl->end(); vi++) {
         if ((*vi).factorize()) {
             some = true;
-            vj = lin_expr_collected((*vi).getLinFactor());
+            vj   = lin_expr_collected((*vi).getLinFactor());
             if (vj < le_list->end())
                 (*vj).count_up();
             else

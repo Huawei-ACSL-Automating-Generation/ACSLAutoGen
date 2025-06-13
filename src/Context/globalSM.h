@@ -10,11 +10,9 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 
-class GlobalSM
-{
+class GlobalSM {
   public:
-    static GlobalSM &getInstance()
-    {
+    static GlobalSM &getInstance() {
         static GlobalSM instance;
         return instance;
     }
@@ -23,16 +21,14 @@ class GlobalSM
     static clang::Rewriter &getRewriter() { return getInstance().rewriter_; }
 
     // Tuple{name(empty string for unnamed Decl), sourceText, filename, lineNumber, columnNumber}
-    static std::optional<
-        std::tuple<std::string, llvm::StringRef, llvm::StringRef, unsigned, unsigned>>
-    getDeclInfo(const clang::Decl *decl);
+    static std::optional<std::tuple<std::string, llvm::StringRef, llvm::StringRef, unsigned, unsigned>> getDeclInfo(
+        const clang::Decl *decl);
 
     // Tuple{sourceText, filename, lineNumber, columnNumber}
-    static std::optional<std::tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned>>
-    getStmtInfo(const clang::Stmt *stmt);
+    static std::optional<std::tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned>> getStmtInfo(
+        const clang::Stmt *stmt);
 
-    void initialize(clang::SourceManager &SM, const clang::LangOptions &LO)
-    {
+    void initialize(clang::SourceManager &SM, const clang::LangOptions &LO) {
         SM_ = &SM;
         rewriter_.setSourceMgr(*SM_, LO);
     }

@@ -39,93 +39,83 @@ void breakfn();
 #define ZERO_ONE_FORBIDDEN 3
 #define ZERO_ONE_ALLOWED 4
 
-void Context::initialize(var_info* info,
-                         var_info* coefInfo,
-                         var_info* lambdaInfo) {
+void Context::initialize(var_info *info, var_info *coefInfo, var_info *lambdaInfo) {
     context_count++;
-    this->info = info;
-    this->coefInfo = coefInfo;
+    this->info       = info;
+    this->coefInfo   = coefInfo;
     this->lambdaInfo = lambdaInfo;
-    varsNum = info->getDim();
-    coefNum = coefInfo->getDim();
-    lambdaNum = lambdaInfo->getDim();
-    tt = new int[lambdaNum];
-    factors = new vector<Expression>();
-    equalStore = new MatrixStore(coefNum, coefInfo);
-    polyStore = new PolyStore(coefNum, coefInfo);
-    LambdaStore = new DisequalityStore(lambdaNum, lambdaInfo);
+    varsNum          = info->getDim();
+    coefNum          = coefInfo->getDim();
+    lambdaNum        = lambdaInfo->getDim();
+    tt               = new int[lambdaNum];
+    factors          = new vector<Expression>();
+    equalStore       = new MatrixStore(coefNum, coefInfo);
+    polyStore        = new PolyStore(coefNum, coefInfo);
+    LambdaStore      = new DisequalityStore(lambdaNum, lambdaInfo);
 
-    eqExprs = new vector<Expression>();
-    ineqExprs = new vector<Expression>();
+    eqExprs       = new vector<Expression>();
+    ineqExprs     = new vector<Expression>();
     InConsistency = false;
 }
 
-void Context::initialize(var_info* info,
-                         var_info* coefInfo,
-                         var_info* lambdaInfo,
-                         MatrixStore* equalStore,
-                         PolyStore* polyStore,
-                         DisequalityStore* LambdaStore,
-                         vector<Expression>* eqExprs,
-                         vector<Expression>* ineqExprs) {
-    this->info = info;
+void Context::initialize(var_info *info,
+                         var_info *coefInfo,
+                         var_info *lambdaInfo,
+                         MatrixStore *equalStore,
+                         PolyStore *polyStore,
+                         DisequalityStore *LambdaStore,
+                         vector<Expression> *eqExprs,
+                         vector<Expression> *ineqExprs) {
+    this->info     = info;
     this->coefInfo = coefInfo;
 
     context_count++;
-    this->lambdaInfo = lambdaInfo;
-    varsNum = info->getDim();
-    coefNum = coefInfo->getDim();
-    lambdaNum = lambdaInfo->getDim();
-    tt = new int[lambdaNum];
-    this->equalStore = equalStore;
-    this->polyStore = polyStore;
+    this->lambdaInfo  = lambdaInfo;
+    varsNum           = info->getDim();
+    coefNum           = coefInfo->getDim();
+    lambdaNum         = lambdaInfo->getDim();
+    tt                = new int[lambdaNum];
+    this->equalStore  = equalStore;
+    this->polyStore   = polyStore;
     this->LambdaStore = LambdaStore;
-    this->eqExprs = eqExprs;
-    this->ineqExprs = ineqExprs;
+    this->eqExprs     = eqExprs;
+    this->ineqExprs   = ineqExprs;
 
     factors = new vector<Expression>();
     checkConsistent();
 }
 
-Context::Context(var_info* info, var_info* coefInfo, var_info* lambdaInfo) {
+Context::Context(var_info *info, var_info *coefInfo, var_info *lambdaInfo) {
     initialize(info, coefInfo, lambdaInfo);
 }
 
-Context::Context(var_info* info,
-                 var_info* coefInfo,
-                 var_info* lambdaInfo,
-                 MatrixStore* equalStore,
-                 PolyStore* polyStore,
-                 DisequalityStore* LambdaStore,
-                 vector<Expression>* eqExprs,
-                 vector<Expression>* ineqExprs) {
-    initialize(info, coefInfo, lambdaInfo, equalStore, polyStore, LambdaStore,
-               eqExprs, ineqExprs);
+Context::Context(var_info *info,
+                 var_info *coefInfo,
+                 var_info *lambdaInfo,
+                 MatrixStore *equalStore,
+                 PolyStore *polyStore,
+                 DisequalityStore *LambdaStore,
+                 vector<Expression> *eqExprs,
+                 vector<Expression> *ineqExprs) {
+    initialize(info, coefInfo, lambdaInfo, equalStore, polyStore, LambdaStore, eqExprs, ineqExprs);
 }
 
-Context::Context(var_info* info,
-                 var_info* coefInfo,
-                 var_info* lambdaInfo,
-                 MatrixStore* equalStore,
-                 PolyStore* polyStore,
-                 DisequalityStore* LambdaStore) {
-    eqExprs = new vector<Expression>();
+Context::Context(var_info *info,
+                 var_info *coefInfo,
+                 var_info *lambdaInfo,
+                 MatrixStore *equalStore,
+                 PolyStore *polyStore,
+                 DisequalityStore *LambdaStore) {
+    eqExprs   = new vector<Expression>();
     ineqExprs = new vector<Expression>();
-    initialize(info, coefInfo, lambdaInfo, equalStore, polyStore, LambdaStore,
-               eqExprs, ineqExprs);
+    initialize(info, coefInfo, lambdaInfo, equalStore, polyStore, LambdaStore, eqExprs, ineqExprs);
 }
 
-void Context::addEqExpr(Expression l) {
-    eqExprs->push_back(l);
-}
+void Context::addEqExpr(Expression l) { eqExprs->push_back(l); }
 
-void Context::addIneqExpr(Expression l) {
-    ineqExprs->push_back(l);
-}
+void Context::addIneqExpr(Expression l) { ineqExprs->push_back(l); }
 
-void Context::insertMatStore(SparseLinExpr l) {
-    equalStore->add_constraint(l);
-}
+void Context::insertMatStore(SparseLinExpr l) { equalStore->add_constraint(l); }
 
 void Context::insertMatStore(Linear_Expression lin) {
     int i;
@@ -138,30 +128,25 @@ void Context::insertMatStore(Linear_Expression lin) {
     equalStore->add_constraint(l);
 }
 
-void Context::insertPolyStore(SparseLinExpr l) {
-    polyStore->add_constraint(l, TYPE_GEQ);
-}
+void Context::insertPolyStore(SparseLinExpr l) { polyStore->add_constraint(l, TYPE_GEQ); }
 
 void Context::insertPolyStore(Constraint constraint) {
     int i;
-    polyStore->add_constraint(
-        constraint);  // the constarint on coef of template
-                      // derived from initial condition.
+    polyStore->add_constraint(constraint); // the constarint on coef of template
+                                           // derived from initial condition.
     if (constraint.is_equality()) {
         SparseLinExpr l(coefNum, coefInfo);
         for (i = 0; i < coefNum; i++) {
             l.setCoefficient(i, handleInt(constraint.coefficient(Variable(i))));
         }
         l.setCoefficient(coefNum, handleInt(constraint.inhomogeneous_term()));
-        equalStore->add_constraint(l);  // the constraint of equality.
+        equalStore->add_constraint(l); // the constraint of equality.
     }
 
     return;
 }
 
-void Context::add_linear_equality(SparseLinExpr l) {
-    insertMatStore(l);
-}
+void Context::add_linear_equality(SparseLinExpr l) { insertMatStore(l); }
 
 void Context::addTransform(LinTransform l) {
     vector<Expression>::iterator it;
@@ -176,9 +161,7 @@ void Context::addTransform(LinTransform l) {
     return;
 }
 
-void Context::add_linear_inequality(SparseLinExpr l) {
-    insertPolyStore(l);
-}
+void Context::add_linear_inequality(SparseLinExpr l) { insertPolyStore(l); }
 
 void Context::addIneqTransform(LinTransform l) {
     // Just add the transform as an expression into the disequality store
@@ -186,15 +169,14 @@ void Context::addIneqTransform(LinTransform l) {
     return;
 }
 
-Context* Context::clone() const {
+Context *Context::clone() const {
     // Some references like info,coefInfo,lambdaInfo, invariant should be passed
     // on equalStore,polyStore,LambdaStore,eqExprs,ineqExprs should be cloned so
     // that they are not rewritten
-    MatrixStore* ms1 = equalStore->clone();
-    PolyStore* ps1 = polyStore->clone();
-    DisequalityStore* ds1 = LambdaStore->clone();
-    vector<Expression>*eqs1 = new vector<Expression>(),
-    *ineqs1 = new vector<Expression>();
+    MatrixStore *ms1         = equalStore->clone();
+    PolyStore *ps1           = polyStore->clone();
+    DisequalityStore *ds1    = LambdaStore->clone();
+    vector<Expression> *eqs1 = new vector<Expression>(), *ineqs1 = new vector<Expression>();
 
     vector<Expression>::iterator it;
 
@@ -208,8 +190,8 @@ Context* Context::clone() const {
 }
 
 void Context::checkConsistent() {
-    InConsistency = !equalStore->isConsistent() || !polyStore->isConsistent() ||
-                    !LambdaStore->isConsistent();
+    InConsistency =
+        !equalStore->isConsistent() || !polyStore->isConsistent() || !LambdaStore->isConsistent();
 }
 
 bool Context::isConsistent() {
@@ -232,7 +214,7 @@ void Context::update_invariant(){
 
 */
 
-void Context::print(ostream& in) const {
+void Context::print(ostream &in) const {
     in << "----------------------------- " << endl;
     in << "- The matrix store:" << endl;
     in << *equalStore;
@@ -260,7 +242,7 @@ void Context::print(ostream& in) const {
     return;
 }
 
-ostream& operator<<(ostream& in, Context const& c) {
+ostream &operator<<(ostream &in, Context const &c) {
     c.print(in);
     return in;
 }
@@ -401,7 +383,7 @@ void Context::simplify_repeat() {
     return;
 }
 
-bool Context::checkFactorExists(LinTransform& t) {
+bool Context::checkFactorExists(LinTransform &t) {
     // check if the factor given by LinTransform already occurs
     // if so then increment the "count" of the expression
     vector<Expression>::iterator it;
@@ -441,7 +423,7 @@ bool Context::checkFactorizable() {
     return flag;
 }
 
-Expression& Context::getMaxFactor() {
+Expression &Context::getMaxFactor() {
     // assume that the vector factors is non-empty or else
     // an exception is to be thrown here.
 
@@ -467,12 +449,12 @@ Expression& Context::getMaxFactor() {
     return (*vj);
 }
 
-bool Context::isVisableEquals(LinTransform& lt) {
+bool Context::isVisableEquals(LinTransform &lt) {
     // check if split on lt==0 is allowed by the disequality constraint store
     return LambdaStore->check_status_equalities(lt);
 }
 
-bool Context::splitFactorEquals(LinTransform& lt) {
+bool Context::splitFactorEquals(LinTransform &lt) {
     vector<Expression>::iterator it;
     bool split = false;
     if (!isVisableEquals(lt)) {
@@ -482,10 +464,10 @@ bool Context::splitFactorEquals(LinTransform& lt) {
         simplify_repeat();
     } else {
         split = true;
-        childClump = new Context(
-            info, coefInfo, lambdaInfo, equalStore->clone(), polyStore->clone(),
-            LambdaStore->clone());  // create a new context by cloning the
-                                    // appropriate stores
+        childClump =
+            new Context(info, coefInfo, lambdaInfo, equalStore->clone(), polyStore->clone(),
+                        LambdaStore->clone()); // create a new context by cloning the
+                                               // appropriate stores
 
         // Now add each expression to the appropriate child context
         // childClump will take in lt==0
@@ -512,7 +494,7 @@ bool Context::splitFactorEquals(LinTransform& lt) {
     return split;
 }
 
-void Context::print_children(ostream& os) {
+void Context::print_children(ostream &os) {
     os << "- First child" << endl;
     os << *childClump << endl;
 }
@@ -534,33 +516,33 @@ bool Context::factorizationSplit() {
         if (!factorFlag)
             return false;
         Expression expr = getMaxFactor();
-        split = splitFactorEquals(expr.getTransformFactor());
+        split           = splitFactorEquals(expr.getTransformFactor());
     }
 
     return true;
 }
 
-void Context::RecursiveSplit(vector<Location*> locList,
-                             C_Polyhedron* dualp,
+void Context::RecursiveSplit(vector<Location *> locList,
+                             C_Polyhedron *dualp,
                              int wtime,
                              bool timed) {
     Timer one_timer;
     RecursiveSplit(locList, dualp, wtime, timed, one_timer);
 }
 
-void Context::Convert_CNF_to_DNF_and_Print(vector<Location*> locList,
-                                           C_Polyhedron* dualp,
+void Context::Convert_CNF_to_DNF_and_Print(vector<Location *> locList,
+                                           C_Polyhedron *dualp,
                                            int wtime,
                                            bool timed) {
     Timer one_timer;
     Convert_CNF_to_DNF_and_Print(locList, dualp, wtime, timed, one_timer);
 }
 
-void Context::RecursiveSplit(vector<Location*> locList,
-                             C_Polyhedron* dualp,
+void Context::RecursiveSplit(vector<Location *> locList,
+                             C_Polyhedron *dualp,
                              int wtime,
                              bool timed,
-                             Timer& one_timer) {
+                             Timer &one_timer) {
     int i = 1;
 
     if (timed && one_timer.getElapsedTime() >= wtime) {
@@ -584,11 +566,11 @@ void Context::RecursiveSplit(vector<Location*> locList,
         }
     }
 }
-void Context::Convert_CNF_to_DNF_and_Print(vector<Location*> locList,
-                                           C_Polyhedron* dualp,
+void Context::Convert_CNF_to_DNF_and_Print(vector<Location *> locList,
+                                           C_Polyhedron *dualp,
                                            int wtime,
                                            bool timed,
-                                           Timer& one_timer) {
+                                           Timer &one_timer) {
     int i = 1;
     if (timed && one_timer.getElapsedTime() >= wtime) {
         cerr << "Time is up" << endl;
@@ -605,8 +587,7 @@ void Context::Convert_CNF_to_DNF_and_Print(vector<Location*> locList,
             // print(cout);
             // cout<<endl<<"- The Right Child Context:
             // "<<endl<<(*childClump)<<endl;
-            childClump->Convert_CNF_to_DNF_and_Print(locList, dualp, wtime,
-                                                     timed, one_timer);
+            childClump->Convert_CNF_to_DNF_and_Print(locList, dualp, wtime, timed, one_timer);
         } else {
             splitZeroOneCase(locList, dualp, wtime, timed, one_timer);
             return;
@@ -614,7 +595,7 @@ void Context::Convert_CNF_to_DNF_and_Print(vector<Location*> locList,
     }
 }
 
-void Context::RecursiveSplit(Clump& clump) {
+void Context::RecursiveSplit(Clump &clump) {
     bool flag = true;
     while (flag) {
         if (clump.contains(polyStore->getPolyRef())) {
@@ -626,7 +607,7 @@ void Context::RecursiveSplit(Clump& clump) {
             childClump->RecursiveSplit(clump);
             delete (childClump);
         } else {
-            splitZeroOneCase(clump);  // contains process
+            splitZeroOneCase(clump); // contains process
             return;
         }
     }
@@ -670,13 +651,13 @@ int Context::get_multiplier_status() {
         if (tt[i] == 0) {
             tt[i] = MULTIPLIER_RESOLVED;
         } else {
-            lt[i] = 1;
+            lt[i]         = 1;
             lt[lambdaNum] = 0;
 
             // now test if zero and one are available
 
             zero_possible = false;
-            one_possible = false;
+            one_possible  = false;
 
             // Am I allowed a zero instantiation in the first place
             // check if \mu=0 is viable
@@ -701,7 +682,7 @@ int Context::get_multiplier_status() {
 
                 tt[i] = ZERO_ONE_FORBIDDEN;
             }
-            lt[i] = 0;
+            lt[i]         = 0;
             lt[lambdaNum] = 0;
         }
     }
@@ -742,7 +723,7 @@ int Context::choose_unresolved_multiplier() {
     return ret;
 }
 
-void Context::splitZeroOneCase(Clump& clump) {
+void Context::splitZeroOneCase(Clump &clump) {
     // choose an unresolved multiplier and create two children by instantiating
     // with 0 and 1 as long as these instantiations are allowed
 
@@ -751,23 +732,22 @@ void Context::splitZeroOneCase(Clump& clump) {
     if (index == NO_UNRESOLVED_MULTIPLIER) {
         // now add the invariants and update dualp
         clump.insert(polyStore->getPolyRef());
-        return;  // nothing to be done
+        return; // nothing to be done
     }
 
     // now go though all the multipliers for which zero or one is forbidden and
     // apply the remaining choose 0/1 values for the multiplier and expand
     LinTransform lt(lambdaNum, lambdaInfo);
-    Context* childClump;
+    Context *childClump;
 
     for (i = 0; i < lambdaNum; i++) {
         switch (tt[i]) {
-            case ZERO_ONE_FORBIDDEN:
-                continue;
+            case ZERO_ONE_FORBIDDEN: continue;
             case ZERO_FORBIDDEN:
-                lt[i] = 1;
+                lt[i]         = 1;
                 lt[lambdaNum] = -1;
                 addTransform(lt);
-                lt[i] = 0;
+                lt[i]         = 0;
                 lt[lambdaNum] = 0;
 
                 break;
@@ -778,30 +758,29 @@ void Context::splitZeroOneCase(Clump& clump) {
                 lt[i] = 0;
                 break;
 
-            default:
-                break;
+            default: break;
         }
     }
     simplify_repeat();
     index = get_multiplier_status();
     if (index == NO_UNRESOLVED_MULTIPLIER) {
         clump.insert(polyStore->getPolyRef());
-        return;  // nothing to be done
+        return; // nothing to be done
     }
     // now split on the remaining cases
     for (i = 0; i < lambdaNum; i++) {
         if (tt[i] == ZERO_ONE_ALLOWED) {
-            lt[i] = 1;
+            lt[i]         = 1;
             lt[lambdaNum] = 0;
-            childClump = this->clone();
+            childClump    = this->clone();
             childClump->addTransform(lt);
             childClump->simplify_repeat();
             childClump->RecursiveSplit(clump);
             delete (childClump);
 
-            lt[i] = 1;
+            lt[i]         = 1;
             lt[lambdaNum] = -1;
-            childClump = this->clone();
+            childClump    = this->clone();
             childClump->addTransform(lt);
             childClump->simplify_repeat();
             childClump->RecursiveSplit(clump);
@@ -814,11 +793,11 @@ void Context::splitZeroOneCase(Clump& clump) {
     return;
 }
 
-void Context::splitZeroOneCase(vector<Location*> locList,
-                               C_Polyhedron* dualp,
+void Context::splitZeroOneCase(vector<Location *> locList,
+                               C_Polyhedron *dualp,
                                int wtime,
                                bool timed,
-                               Timer& one_timer) {
+                               Timer &one_timer) {
     // choose an unresolved multiplier and create two children by instantiating
     // with 0 and 1 as long as these instantiations are allowed
 
@@ -832,27 +811,26 @@ void Context::splitZeroOneCase(vector<Location*> locList,
     if (index == NO_UNRESOLVED_MULTIPLIER) {
         // now add the invariants and update dualp
         (*dualp) = C_Polyhedron(coefNum, UNIVERSE);
-        vector<Location*>::iterator it;
+        vector<Location *>::iterator it;
         for (it = locList.begin(); it < locList.end(); it++) {
             (*it)->ExtractAndUpdateInvOrigin(polyStore->getPolyRef(), *dualp);
         }
-        return;  // nothing to be done
+        return; // nothing to be done
     }
 
     // now go though all the multipliers for which zero or one is forbidden and
     // apply the remaining choose 0/1 values for the multiplier and expand
     LinTransform lt(lambdaNum, lambdaInfo);
-    Context* childClump;
+    Context *childClump;
 
     for (i = 0; i < lambdaNum; i++) {
         switch (tt[i]) {
-            case ZERO_ONE_FORBIDDEN:
-                continue;
+            case ZERO_ONE_FORBIDDEN: continue;
             case ZERO_FORBIDDEN:
-                lt[i] = 1;
+                lt[i]         = 1;
                 lt[lambdaNum] = -1;
                 addTransform(lt);
-                lt[i] = 0;
+                lt[i]         = 0;
                 lt[lambdaNum] = 0;
 
                 break;
@@ -863,8 +841,7 @@ void Context::splitZeroOneCase(vector<Location*> locList,
                 lt[i] = 0;
                 break;
 
-            default:
-                break;
+            default: break;
         }
     }
     simplify_repeat();
@@ -872,23 +849,23 @@ void Context::splitZeroOneCase(vector<Location*> locList,
     if (index == NO_UNRESOLVED_MULTIPLIER) {
         // now add the invariants and update dualp
         (*dualp) = C_Polyhedron(coefNum, UNIVERSE);
-        vector<Location*>::iterator it;
+        vector<Location *>::iterator it;
         for (it = locList.begin(); it < locList.end(); it++) {
             (*it)->ExtractAndUpdateInvOrigin(polyStore->getPolyRef(), *dualp);
         }
-        return;  // nothing to be done
+        return; // nothing to be done
     }
     // now split on the remaining cases
     for (i = 0; i < lambdaNum; i++) {
         if (tt[i] == ZERO_ONE_ALLOWED) {
-            lt[i] = 1;
+            lt[i]      = 1;
             childClump = this->clone();
             childClump->addTransform(lt);
             childClump->simplify_repeat();
             childClump->RecursiveSplit(locList, dualp, wtime, timed, one_timer);
             delete (childClump);
 
-            lt[i] = 1;
+            lt[i]         = 1;
             lt[lambdaNum] = Rational(-1, 1);
 
             childClump = this->clone();
@@ -904,7 +881,7 @@ void Context::splitZeroOneCase(vector<Location*> locList,
     return;
 }
 
-void Context::collect_generators(Generator_System& g) {
+void Context::collect_generators(Generator_System &g) {
     reconcile_stores();
     if (!is_linear_context()) {
         if (gendrop)
@@ -943,10 +920,9 @@ minimized generators from the polystore Generator_System::const_iterator it;
 // New version, StInG compling under PPL 1.2 (05/07/2021),
 // updates by Hongming Liu, in Shanghai Jiao Tong University.
 // ***
-void Context::validate_generators(Generator_System& g) {
-    Generator_System g1 =
-        polyStore->minimized_generators();  // obtain the minimized generators
-                                            // from the polystore
+void Context::validate_generators(Generator_System &g) {
+    Generator_System g1 = polyStore->minimized_generators(); // obtain the minimized generators
+                                                             // from the polystore
     Generator_System::const_iterator it;
 
     for (it = g1.begin(); it != g1.end(); it++) {
@@ -971,14 +947,13 @@ void Context::validate_generators(Generator_System& g) {
     }
 }
 
-bool Context::is_valid_generator(Generator const& g) {
+bool Context::is_valid_generator(Generator const &g) {
     // check if the generator g is valid by
     // 1. replacing all the eqExprs and ineqExprs by transforms
     // 2. Insert them into a clone of the disequality store
     // 3. check the final disequality store for consistency
 
-    DisequalityStore* ds1 =
-        LambdaStore->clone();  // clone the disequality store
+    DisequalityStore *ds1 = LambdaStore->clone(); // clone the disequality store
 
     vector<Expression>::iterator it;
     for (it = eqExprs->begin(); it < eqExprs->end(); it++) {
@@ -1017,26 +992,25 @@ Context::~Context() {
     delete (factors);
 }
 
-void Context::obtain_primal_polyhedron(int left, C_Polyhedron& result) {
+void Context::obtain_primal_polyhedron(int left, C_Polyhedron &result) {
     PRECONDITION((result.space_dimension() == (unsigned)varsNum),
                  " Polyhedron of wrong space dimension passed");
 
-    PRECONDITION((left >= 0 && left + varsNum + 1 <= coefNum),
-                 " Asked to primalize out of range");
+    PRECONDITION((left >= 0 && left + varsNum + 1 <= coefNum), " Asked to primalize out of range");
 
     // assume that result's space dimension is =varsNum
 
     // obtain the generators of the polystore polyhedron
     reconcile_stores();
-    C_Polyhedron const& pp = polyStore->get_nnc_poly_reference();
-    Generator_System gs = pp.generators();
+    C_Polyhedron const &pp = polyStore->get_nnc_poly_reference();
+    Generator_System gs    = pp.generators();
     // now make them into constraints
     Generator_System::const_iterator it;
 
     Linear_Expression ll;
     int i, j;
     for (it = gs.begin(); it != gs.end(); ++it) {
-        ll *= 0;  // reset the linexpr
+        ll *= 0; // reset the linexpr
         for (i = 0; i < varsNum; ++i) {
             j = handleInt((*it).coefficient(Variable(left + i)));
             ll += j * Variable(i);
@@ -1075,9 +1049,7 @@ bool Context::is_multiplier_present(int index) {
     return false;
 }
 
-bool Context::obtain_transition_relation(int mult_index,
-                                         int left,
-                                         C_Polyhedron& result) {
+bool Context::obtain_transition_relation(int mult_index, int left, C_Polyhedron &result) {
     //
     // assume that the mutiplier is present .. return "false" otherwise
     //
@@ -1164,8 +1136,8 @@ bool Context::obtain_transition_relation(int mult_index,
 
 bool Context::to_constraints_(int index,
                               int left,
-                              C_Polyhedron& result,
-                              vector<Expression>* what,
+                              C_Polyhedron &result,
+                              vector<Expression> *what,
                               bool ineq) {
     vector<Expression>::iterator it;
     Linear_Expression ll;

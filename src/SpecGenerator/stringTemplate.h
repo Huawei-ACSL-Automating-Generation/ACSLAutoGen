@@ -22,20 +22,18 @@ using NameMap = unordered_map<string, string>;
 /// placeholder substitution and templates concatenation.
 /// The current implementation handles only simple placeholders: any text from ${ up to the first
 /// } is interpreted as the name, without special parsing.
-class StringTemplate
-{
+class StringTemplate {
   private:
     string rawText_; ///< The raw input text, will never be modified.
 
-    struct Placeholder
-    {
+    struct Placeholder {
         string name; ///< Placeholder's name, ${name} will be 'name'.
         size_t pos;  ///< Placeholder's start position in rawText_.
         size_t len;  ///< Placeholder's length, ${name} will be 6.
     };
     vector<Placeholder> placeholders_;
     unordered_map<string,
-        unordered_set<size_t>>
+                  unordered_set<size_t>>
         nameToPh_; ///< Map from name to index in placeholders_. ph = placeholder
     unique_ptr<StringTemplate>
         next_; ///< Pointer to next StringTemplate, for templates concatenations.
@@ -78,8 +76,7 @@ class StringTemplate
     /// @brief Append another StringTemplate to *this.
     /// @tparam Use template for supporting rValue reference.
     /// @param templ
-    template <typename T> void append(T &&templ)
-    {
+    template <typename T> void append(T &&templ) {
         if (next_)
             next_->append(std::forward<T>(templ));
         else
@@ -104,8 +101,7 @@ class StringTemplate
     /// @param LHS
     /// @param RHS
     /// @return Return the emptyTemplate.append(LHS).append(RHS).
-    template <typename T1, typename T2> friend StringTemplate operator+(T1 &&LHS, T2 &&RHS)
-    {
+    template <typename T1, typename T2> friend StringTemplate operator+(T1 &&LHS, T2 &&RHS) {
         StringTemplate temp = StringTemplate(std::forward<T1>(LHS));
         temp.append(StringTemplate(std::forward<T2>(RHS)));
         // copy elision
@@ -116,8 +112,7 @@ class StringTemplate
     /// @tparam Use template for supporting rValue reference.
     /// @param RHS
     /// @return Return the LHS.append(RHS).
-    template <typename T> friend StringTemplate &operator+=(StringTemplate &LHS, T &&RHS)
-    {
+    template <typename T> friend StringTemplate &operator+=(StringTemplate &LHS, T &&RHS) {
         LHS.append(StringTemplate(std::forward<T>(RHS)));
         // copy elision
         return LHS;

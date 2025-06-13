@@ -55,7 +55,7 @@ using namespace Parma_Polyhedra_Library;
 using namespace Parma_Polyhedra_Library::IO_Operators;
 
 class Context {
-   private:
+  private:
     // the main constraint solving ideas are implemented in this class
     // The class contains
     //    1. A Matrix Store for Equality Constraints
@@ -64,43 +64,43 @@ class Context {
     //    4. A set of expressions that are implicitly ==0
     //    5. A set of expressions that are implicitly >= 0
 
-    MatrixStore* equalStore;
-    PolyStore* polyStore;
-    DisequalityStore* LambdaStore;
+    MatrixStore *equalStore;
+    PolyStore *polyStore;
+    DisequalityStore *LambdaStore;
     vector<Expression> *eqExprs, *ineqExprs, *factors;
 
-    Context* childClump;
+    Context *childClump;
     var_info *info, *coefInfo, *lambdaInfo;
     int *tt;
     int varsNum, coefNum,
-        lambdaNum;  // No. of dimensions, coef dimensions, multipliers respectively
+        lambdaNum; // No. of dimensions, coef dimensions, multipliers respectively
 
-    void initialize(var_info* info, var_info* coefInfo, var_info* lambdaInfo);
-    void initialize(var_info* info,
-                    var_info* coefInfo,
-                    var_info* lambdaInfo,
-                    MatrixStore* equalStore,
-                    PolyStore* polyStore,
-                    DisequalityStore* LambdaStore,
-                    vector<Expression>* eqExprs,
-                    vector<Expression>* ineqExprs);
+    void initialize(var_info *info, var_info *coefInfo, var_info *lambdaInfo);
+    void initialize(var_info *info,
+                    var_info *coefInfo,
+                    var_info *lambdaInfo,
+                    MatrixStore *equalStore,
+                    PolyStore *polyStore,
+                    DisequalityStore *LambdaStore,
+                    vector<Expression> *eqExprs,
+                    vector<Expression> *ineqExprs);
 
-    void RecursiveSplit(vector<Location*> locList,
-                            C_Polyhedron* dual_poly,
-                            int wtime,
-                            bool cutoff,
-                            Timer& one_timer);
-    void Convert_CNF_to_DNF_and_Print(vector<Location*> locList,
-                                      C_Polyhedron* dual_poly,
+    void RecursiveSplit(vector<Location *> locList,
+                        C_Polyhedron *dual_poly,
+                        int wtime,
+                        bool cutoff,
+                        Timer &one_timer);
+    void Convert_CNF_to_DNF_and_Print(vector<Location *> locList,
+                                      C_Polyhedron *dual_poly,
                                       int wtime,
                                       bool cutoff,
-                                      Timer& one_timer);
+                                      Timer &one_timer);
     bool InConsistency;
     bool leaf;
 
-   public:
+  public:
     // added by Hongming
-    PolyStore* Get_PolyStore() { return (polyStore); }
+    PolyStore *Get_PolyStore() { return (polyStore); }
 
     // Operations include
     //    1. Creation and Organization of the context
@@ -113,21 +113,21 @@ class Context {
 
     //       1.7 Forming an invariant from a consistent leaf node
 
-    Context(var_info* info, var_info* coefInfo, var_info* lambdaInfo);
-    Context(var_info* info,
-            var_info* coefInfo,
-            var_info* lambdaInfo,
-            MatrixStore* equalStore,
-            PolyStore* polyStore,
-            DisequalityStore* LambdaStore,
-            vector<Expression>* eqExprs,
-            vector<Expression>* ineqExprs);
-    Context(var_info* info,
-            var_info* coefInfo,
-            var_info* lambdaInfo,
-            MatrixStore* equalStore,
-            PolyStore* polyStore,
-            DisequalityStore* LambdaStore);
+    Context(var_info *info, var_info *coefInfo, var_info *lambdaInfo);
+    Context(var_info *info,
+            var_info *coefInfo,
+            var_info *lambdaInfo,
+            MatrixStore *equalStore,
+            PolyStore *polyStore,
+            DisequalityStore *LambdaStore,
+            vector<Expression> *eqExprs,
+            vector<Expression> *ineqExprs);
+    Context(var_info *info,
+            var_info *coefInfo,
+            var_info *lambdaInfo,
+            MatrixStore *equalStore,
+            PolyStore *polyStore,
+            DisequalityStore *LambdaStore);
 
     ~Context();
 
@@ -135,10 +135,9 @@ class Context {
     void addIneqExpr(Expression l);
     void insertMatStore(SparseLinExpr l);
     void insertMatStore(Linear_Expression l);
-    void insertPolyStore(
-        SparseLinExpr l);  // implicitly assumed to be the expression l > = 0
-    void insertPolyStore(Constraint cc);  // Add the constraint directly to
-                                            // the polystores polyhedron
+    void insertPolyStore(SparseLinExpr l); // implicitly assumed to be the expression l > = 0
+    void insertPolyStore(Constraint cc);   // Add the constraint directly to
+                                           // the polystores polyhedron
 
     void add_linear_equality(SparseLinExpr l);
     void addTransform(LinTransform l);
@@ -146,9 +145,9 @@ class Context {
     void add_linear_inequality(SparseLinExpr l);
     void addIneqTransform(LinTransform l);
 
-    Context* clone() const;
+    Context *clone() const;
 
-    void print(ostream& in) const;
+    void print(ostream &in) const;
 
     void checkConsistent();
     bool isConsistent();
@@ -165,11 +164,10 @@ class Context {
     //        2.4 Simplifying expressions
 
     // Do not call these directly
-    void remove_trivial_equalities();  // remove trivial equalities in the store
-    void
-    remove_trivial_inequalities();  // remove trivial inequalities in the store
-    void remove_trivial();          // call this instead to remove the trivial
-                                    // expressions in the stores eqExprs and ineqExprs
+    void remove_trivial_equalities();   // remove trivial equalities in the store
+    void remove_trivial_inequalities(); // remove trivial inequalities in the store
+    void remove_trivial();              // call this instead to remove the trivial
+                                        // expressions in the stores eqExprs and ineqExprs
 
     // Move linear expressions into the stores
 
@@ -177,8 +175,8 @@ class Context {
 
     bool move_constraints_inequalities();
 
-    bool move_constraints();  // call this to move the equalities, transforms
-                              // and inequalities to the appropriate stores
+    bool move_constraints(); // call this to move the equalities, transforms
+                             // and inequalities to the appropriate stores
 
     void reconcile_stores();
 
@@ -195,36 +193,33 @@ class Context {
     //       occuring factor for both the equality and the inequality
     //       expressions
 
-    bool checkFactorizable();  // factorize all the equalities and
-                                        // return true if something factorizes
+    bool checkFactorizable(); // factorize all the equalities and
+                              // return true if something factorizes
     // Also collect expressions that factor in a list
 
-    bool collect_factors_inequalities();  // factorize all the inequalities and
-                                          // return true if something factorizes
+    bool collect_factors_inequalities(); // factorize all the inequalities and
+                                         // return true if something factorizes
 
     // Collect the expressions that factor in a list
 
-    bool checkFactorExists(LinTransform& t);
+    bool checkFactorExists(LinTransform &t);
 
-    Expression&
-    getMaxFactor();  // Choose an equality expression that
-                                         // factorizes and with maximal number
-                                         // of
+    Expression &getMaxFactor(); // Choose an equality expression that
+                                // factorizes and with maximal number
+                                // of
     // occurrences of its factor.
 
     //    4. Choosing/Splitting on a factor from the equality
     //       expressions and if no factors then doing the same on the
     //       inequalities
 
-    bool isVisableEquals(
-        LinTransform& lt);  // is the transform viable as a proper factor?
+    bool isVisableEquals(LinTransform &lt); // is the transform viable as a proper factor?
 
-    bool splitFactorEquals(
-        LinTransform& lt);  // Split into two children contexts if possible
+    bool splitFactorEquals(LinTransform &lt); // Split into two children contexts if possible
 
-    bool factorizationSplit();  // a cover function to split.
-                                            // Returns the number of children
-                                            // created  0.. or 2.
+    bool factorizationSplit(); // a cover function to split.
+                               // Returns the number of children
+                               // created  0.. or 2.
 
     //    5. A special set of strategizing functions that implement
     //      the constraint  solving strategy, handle leaf nodes and
@@ -233,7 +228,7 @@ class Context {
     //   The to_constraints_ function is not to be used for the time
     //   being.
 
-    void print_children(ostream& os);
+    void print_children(ostream &os);
 
     bool is_linear_context();
     // Check if the context has any simplification left to do
@@ -241,36 +236,34 @@ class Context {
     bool is_simplifiable_context();
     // Check if the context is simplifiable
 
-
-    void RecursiveSplit(vector<Location*> locList,
-                            C_Polyhedron* dual_poly,
-                            int wtime = 1000,
-                            bool cutoff = true);
-    void Convert_CNF_to_DNF_and_Print(vector<Location*> locList,
-                                      C_Polyhedron* dual_poly,
-                                      int wtime = 1000,
+    void RecursiveSplit(vector<Location *> locList,
+                        C_Polyhedron *dual_poly,
+                        int wtime   = 1000,
+                        bool cutoff = true);
+    void Convert_CNF_to_DNF_and_Print(vector<Location *> locList,
+                                      C_Polyhedron *dual_poly,
+                                      int wtime   = 1000,
                                       bool cutoff = true);
     // A recursive strategy function
 
-    void RecursiveSplit(Clump& clist);
+    void RecursiveSplit(Clump &clist);
     // A recursive strategy function
-    void collect_generators(Generator_System& g);
+    void collect_generators(Generator_System &g);
 
-    void validate_generators(
-        Generator_System& g);  // Collect the set of "validated generators in g"
+    void validate_generators(Generator_System &g); // Collect the set of "validated generators in g"
 
-    bool is_valid_generator(Generator const& g);
+    bool is_valid_generator(Generator const &g);
     int choose_unresolved_multiplier();
     void get_multiplier_counts();
     int get_multiplier_status();
 
-    void splitZeroOneCase(vector<Location*> locList,
-                           C_Polyhedron* dual_poly,
-                           int wtime,
-                           bool timed,
-                           Timer& one_timer);
+    void splitZeroOneCase(vector<Location *> locList,
+                          C_Polyhedron *dual_poly,
+                          int wtime,
+                          bool timed,
+                          Timer &one_timer);
 
-    void splitZeroOneCase(Clump& clist);
+    void splitZeroOneCase(Clump &clist);
 
     //
     // From a partial context.. go back to a transition system
@@ -280,14 +273,11 @@ class Context {
 
     void obtain_primal_polyhedron(
         int left,
-        C_Polyhedron&
-            result);  // obtain the primal polyhedron for the initial conditions
+        C_Polyhedron &result); // obtain the primal polyhedron for the initial conditions
 
     bool is_multiplier_present(int index);
 
-    bool obtain_transition_relation(int mult_index,
-                                    int left,
-                                    C_Polyhedron& result);
+    bool obtain_transition_relation(int mult_index, int left, C_Polyhedron &result);
 
     // collect constraints involving multiplier index in the result
     // as long as those constraints involve only variables from
@@ -295,10 +285,10 @@ class Context {
 
     bool to_constraints_(int index,
                          int left,
-                         C_Polyhedron& result,
-                         vector<Expression>* what,
+                         C_Polyhedron &result,
+                         vector<Expression> *what,
                          bool ineq);
 };
 
-ostream& operator<<(ostream& in, Context const& c);
+ostream &operator<<(ostream &in, Context const &c);
 #endif

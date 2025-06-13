@@ -11,11 +11,9 @@
 // TODO: Add error detection: Locations or Transitions with duplicate names are
 // not allowed.
 // TODO: Convert the SearchLocName function into a map stl.
-class LinTS
-{
+class LinTS {
   public:
-    enum VERIFIEDRESULT
-    {
+    enum VERIFIEDRESULT {
         CORRECT,
         UNKNOWN,
         WRONG
@@ -25,8 +23,8 @@ class LinTS
     void ComputeLinTSInv();
     void ComputeInitInv();
     void ComputeOverInv();
-    enum VERIFIEDRESULT
-    CheckAssertion(vector<C_Polyhedron *> constraints, vector<C_Polyhedron *> assertions);
+    enum VERIFIEDRESULT CheckAssertion(vector<C_Polyhedron *> constraints,
+                                       vector<C_Polyhedron *> assertions);
     enum VERIFIEDRESULT CheckAssertion();
     void TraverseSequences(vector<vector<vector<int>>> sequences, C_Polyhedron *initPoly);
     void TraverseSequencesTotal(vector<vector<vector<int>>> sequences, C_Polyhedron *initPoly);

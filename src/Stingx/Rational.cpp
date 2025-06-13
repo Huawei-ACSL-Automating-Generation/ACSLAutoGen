@@ -33,9 +33,7 @@ void Rational::initialize(int n, int d) {
     reduce_to_lowest();
 }
 
-Rational::Rational() {
-    initialize(0, 1);
-}
+Rational::Rational() { initialize(0, 1); }
 
 Rational::Rational(int n, int d) {
     if (d == 0)
@@ -53,7 +51,7 @@ RN  Rational::get_rat() const{
 }
 */
 
-Rational& Rational::operator=(Rational const& n) {
+Rational &Rational::operator=(Rational const &n) {
     initialize(n.num(), n.den());
     return (*this);
 }
@@ -82,35 +80,35 @@ Rational Rational::inverse() const {
     return r;
 }
 
-Rational& Rational::operator=(int n) {
+Rational &Rational::operator=(int n) {
     initialize(n, 1);
     return *this;
 }
 
-bool Rational::operator==(Rational const& n) const {
+bool Rational::operator==(Rational const &n) const {
     return num() * n.den() == den() * n.num();
 
     // return (num()==n.num() && den()== n.den()) ||(n.num()==-num() &&
     // den()==-n.den());
 }
 
-bool Rational::operator!=(Rational const& n) const {
+bool Rational::operator!=(Rational const &n) const {
     return num() * n.den() != den() * n.num();
     // return (num()!=n.num() || den()!= n.den());
 }
 
-bool Rational::operator==(int const& n) const {
+bool Rational::operator==(int const &n) const {
     return (num() == n * den());
     // return (num()==n && den()==1)|| (num()==-n && den()==-1) ;
 }
 
-bool Rational::operator!=(int const& n) const {
+bool Rational::operator!=(int const &n) const {
     // reduce_to_lowest();
     return num() != n * den();
     // return (nu!=n || de !=1);
 }
 
-Rational Rational::operator+(Rational const& n1) const {
+Rational Rational::operator+(Rational const &n1) const {
     Rational tmp(nu * n1.den() + de * n1.num(), n1.den() * de);
 
     tmp.reduce_to_lowest();
@@ -123,7 +121,7 @@ Rational Rational::operator+(int n1) const {
     return tmp;
 }
 
-Rational Rational::operator-(Rational const& n1) const {
+Rational Rational::operator-(Rational const &n1) const {
     int nu1 = n1.num(), de1 = n1.den();
     Rational tmp(nu * de1 - nu1 * de, de * de1);
 
@@ -140,41 +138,41 @@ Rational Rational::operator*(int n) const {
     return tmp;
 }
 
-Rational Rational::operator*(Rational const& n) const {
+Rational Rational::operator*(Rational const &n) const {
     Rational tmp(nu * n.num(), de * n.den());
     return tmp;
 }
 
-Rational& Rational::operator*=(int n) {
+Rational &Rational::operator*=(int n) {
     nu *= n;
     reduce_to_lowest();
     return *this;
 }
 
-Rational& Rational::operator*=(Rational const& n) {
+Rational &Rational::operator*=(Rational const &n) {
     nu *= n.num();
     de *= n.den();
     reduce_to_lowest();
     return *this;
 }
 
-Rational& Rational::operator+=(Rational const& n1) {
+Rational &Rational::operator+=(Rational const &n1) {
     int a, b;
-    a = nu * n1.den() + n1.num() * de;
-    b = de * n1.den();
+    a  = nu * n1.den() + n1.num() * de;
+    b  = de * n1.den();
     nu = a;
     de = b;
     reduce_to_lowest();
     return *this;
 }
 
-Rational& Rational::operator+=(int n1) {
+Rational &Rational::operator+=(int n1) {
     nu += n1 * de;
     reduce_to_lowest();
     return *this;
 }
 
-Rational& Rational::operator-=(Rational const& n1) {
+Rational &Rational::operator-=(Rational const &n1) {
     int a, b;
     if (nu == 0) {
         a = -n1.num();
@@ -189,7 +187,7 @@ Rational& Rational::operator-=(Rational const& n1) {
     return *this;
 }
 
-Rational& Rational::operator-=(int n1) {
+Rational &Rational::operator-=(int n1) {
     if (nu == 0) {
         nu = -n1;
         de = 1;
@@ -202,21 +200,21 @@ Rational& Rational::operator-=(int n1) {
 
 Rational::~Rational() {}
 
-Rational operator*(int n1, Rational const& n2) {
+Rational operator*(int n1, Rational const &n2) {
     Rational t(n1 * n2.num(), n2.den());
     return t;
 }
-Rational operator+(int n1, Rational const& n2) {
+Rational operator+(int n1, Rational const &n2) {
     Rational t(n1 * n2.den() + n2.num(), n2.den());
     return t;
 }
 
-Rational operator-(int n1, Rational const& n2) {
+Rational operator-(int n1, Rational const &n2) {
     Rational t(n1 * n2.den() - n2.num(), n2.den());
     return t;
 }
 
-ostream& operator<<(ostream& os, Rational const& r) {
+ostream &operator<<(ostream &os, Rational const &r) {
     int n = r.num(), d = r.den();
     if (d == 1)
         os << n;
@@ -234,10 +232,10 @@ void Rational::reduce_to_lowest() {
 
     int g = gcd(nu, de);
 
-    if (g == 0) {  // nu must be zero then
+    if (g == 0) { // nu must be zero then
         if (nu != 0) {
-            cerr << "Rational::reduce_to_lowest -- Fatal Error in result num="
-                 << nu << " den=" << de << endl;
+            cerr << "Rational::reduce_to_lowest -- Fatal Error in result num=" << nu
+                 << " den=" << de << endl;
             exit(1);
         }
 
@@ -252,34 +250,18 @@ void Rational::reduce_to_lowest() {
     }
 }
 
-bool Rational::operator<(Rational const& p) const {
-    return (nu * p.den() < de * p.num());
-}
+bool Rational::operator<(Rational const &p) const { return (nu * p.den() < de * p.num()); }
 
-bool Rational::operator<(int const& n) const {
-    return (nu < de * n);
-}
+bool Rational::operator<(int const &n) const { return (nu < de * n); }
 
-bool Rational::operator>(Rational const& p) const {
-    return (nu * p.den() > de * p.num());
-}
+bool Rational::operator>(Rational const &p) const { return (nu * p.den() > de * p.num()); }
 
-bool Rational::operator>(int const& n) const {
-    return (nu > de * n);
-}
+bool Rational::operator>(int const &n) const { return (nu > de * n); }
 
-bool Rational::operator>=(Rational const& p) const {
-    return (nu * p.den() >= de * p.num());
-}
+bool Rational::operator>=(Rational const &p) const { return (nu * p.den() >= de * p.num()); }
 
-bool Rational::operator>=(int const& n) const {
-    return (nu >= de * n);
-}
+bool Rational::operator>=(int const &n) const { return (nu >= de * n); }
 
-bool Rational::operator<=(Rational const& p) const {
-    return (nu * p.den() <= de * p.num());
-}
+bool Rational::operator<=(Rational const &p) const { return (nu * p.den() <= de * p.num()); }
 
-bool Rational::operator<=(int const& n) const {
-    return (nu <= de * n);
-}
+bool Rational::operator<=(int const &n) const { return (nu <= de * n); }

@@ -25,10 +25,7 @@
 #include "Macro.h"
 #include "myassertions.h"
 
-
-ostream& printPolyhedron(ostream& in,
-                          C_Polyhedron const& np,
-                          const var_info* info) {
+ostream &printPolyhedron(ostream &in, C_Polyhedron const &np, const var_info *info) {
     if (np.is_universe()) {
         in << "├ ";
         in << " True" << endl;
@@ -45,19 +42,19 @@ ostream& printPolyhedron(ostream& in,
     // info names the first info->dimension() dimensions of the polyhedron
     // The remaining will just receive some fake name, say "__A"-->"__Z"
     int n = np.space_dimension(), nf = info->getDim(), i;
-    var_info* primedInfo;
+    var_info *primedInfo;
     char a[4] = {'_', '_', 'A', '\0'};
     if (nf >= n) {
         primedInfo = new var_info();
         for (i = 0; i < n; i++)
             primedInfo->insert(info->getName(i));
     } else {
-        assert(n==nf*2);
+        assert(n == nf * 2);
         primedInfo = new var_info();
         for (i = 0; i < nf; i++)
             primedInfo->insert(info->getName(i));
         for (i = nf; i < n; i++) {
-            primedInfo->insert(("'"+string(info->getName(i-nf))).c_str());
+            primedInfo->insert(("'" + string(info->getName(i - nf))).c_str());
         }
     }
     bool flag = true;
@@ -65,7 +62,7 @@ ostream& printPolyhedron(ostream& in,
 
     LinExpr l(n, primedInfo);
 
-    Constraint_System const& cs = np.minimized_constraints();
+    Constraint_System const &cs = np.minimized_constraints();
 
     Constraint_System::const_iterator vi;
 
@@ -102,12 +99,12 @@ ostream& printPolyhedron(ostream& in,
     return in;
 }
 
-void outputPolyhedron(C_Polyhedron* poly,const var_info* info){
-    cout<<endl<<"================================================"<<endl;
-    printPolyhedron(std::cout,*poly,info);
-    cout<<"================================================"<<endl;
+void outputPolyhedron(C_Polyhedron *poly, const var_info *info) {
+    cout << endl << "================================================" << endl;
+    printPolyhedron(std::cout, *poly, info);
+    cout << "================================================" << endl;
 }
-void print_pure_polyhedron(C_Polyhedron const& np, const var_info* info) {
+void print_pure_polyhedron(C_Polyhedron const &np, const var_info *info) {
     if (np.is_universe()) {
         cout << endl << "True";
         return;
@@ -122,19 +119,19 @@ void print_pure_polyhedron(C_Polyhedron const& np, const var_info* info) {
     // info names the first info->dimension() dimensions of the polyhedron
     // The remaining will just receive some fake name, say "__A"-->"__Z"
     int n = np.space_dimension(), nf = info->getDim(), i;
-    var_info* primedInfo;
+    var_info *primedInfo;
     char a[4] = {'_', '_', 'A', '\0'};
     if (nf >= n) {
         primedInfo = new var_info();
         for (i = 0; i < n; i++)
             primedInfo->insert(info->getName(i));
     } else {
-        assert(n==nf*2);
+        assert(n == nf * 2);
         primedInfo = new var_info();
         for (i = 0; i < nf; i++)
             primedInfo->insert(info->getName(i));
         for (i = nf; i < n; i++) {
-            primedInfo->insert(("'"+string(info->getName(i))).c_str());
+            primedInfo->insert(("'" + string(info->getName(i))).c_str());
         }
     }
     bool flag = true;
@@ -142,7 +139,7 @@ void print_pure_polyhedron(C_Polyhedron const& np, const var_info* info) {
 
     LinExpr l(n, primedInfo);
 
-    Constraint_System const& cs = np.minimized_constraints();
+    Constraint_System const &cs = np.minimized_constraints();
 
     Constraint_System::const_iterator vi;
 
@@ -176,13 +173,12 @@ void print_pure_polyhedron(C_Polyhedron const& np, const var_info* info) {
     delete (primedInfo);
 }
 
-
-ostream& print_clump(ostream& in, Clump const& cl, const var_info* info) {
+ostream &print_clump(ostream &in, Clump const &cl, const var_info *info) {
     // Assume that info->dimension < the dimension of the polyhedron and that
     // info names the first info->dimension() dimensions of the polyhedron
     // The remaining will just receive some fake name, say "__A"-->"__Z"
     int n = cl.space_dimension(), nf = info->getDim(), i;
-    var_info* f2;
+    var_info *f2;
     char a[4] = {'_', '_', 'A', '\0'};
     if (nf >= n) {
         f2 = new var_info();
@@ -210,7 +206,7 @@ ostream& print_clump(ostream& in, Clump const& cl, const var_info* info) {
             in << "\\/" << endl;
             in << endl;
         }
-        Constraint_System const& cs = vpit->minimized_constraints();
+        Constraint_System const &cs = vpit->minimized_constraints();
         for (vi = cs.begin(); vi != cs.end(); ++vi) {
             flag = true;
             for (i = 0; i < n; i++) {
@@ -238,8 +234,7 @@ ostream& print_clump(ostream& in, Clump const& cl, const var_info* info) {
     return in;
 }
 
-
-bool handleInt(Coefficient const& t, int& res) {
+bool handleInt(Coefficient const &t, int &res) {
     bool ret = true;
 
     if (!t.fits_sint_p()) {
@@ -253,7 +248,7 @@ bool handleInt(Coefficient const& t, int& res) {
     return ret;
 }
 
-int handleInt(Coefficient const& t) {
+int handleInt(Coefficient const &t) {
     if (!t.fits_sint_p()) {
         cout << "Fatal Warning from PolyUtils::handleInt-- gmp integer "
                 "overflow"
@@ -264,12 +259,10 @@ int handleInt(Coefficient const& t) {
     return (int)t.get_si();
 }
 
-ostream& print_lin_expression(ostream& in,
-                              Linear_Expression const& lp,
-                              const var_info* info) {
+ostream &print_lin_expression(ostream &in, Linear_Expression const &lp, const var_info *info) {
     // print the linear expression lp using var_info info
     int n = lp.space_dimension(), nf = info->getDim(), i;
-    var_info* f2;
+    var_info *f2;
     char a[4] = {'_', '_', 'A', '\0'};
     if (nf >= n) {
         f2 = new var_info();
@@ -306,10 +299,10 @@ ostream& print_lin_expression(ostream& in,
     return in;
 }
 
-void print_pure_lin_expression(Linear_Expression const& lp, const var_info* info) {
+void print_pure_lin_expression(Linear_Expression const &lp, const var_info *info) {
     // print the linear expression lp using var_info info
     int n = lp.space_dimension(), nf = info->getDim(), i;
-    var_info* f2;
+    var_info *f2;
     char a[4] = {'_', '_', 'A', '\0'};
     if (nf >= n) {
         f2 = new var_info();
@@ -346,8 +339,7 @@ void print_pure_lin_expression(Linear_Expression const& lp, const var_info* info
     return;
 }
 
-
-void dualize(C_Polyhedron const& p, C_Polyhedron& result) {
+void dualize(C_Polyhedron const &p, C_Polyhedron &result) {
     int n = p.space_dimension();
 
     if (p.is_empty()) {
@@ -373,22 +365,21 @@ void dualize(C_Polyhedron const& p, C_Polyhedron& result) {
     // Now build the constraints
     for (i = 0; i < n; i++) {
         lin = Linear_Expression(0);
-        lin = lin - Variable(i);  // add -c_i to the constraint
-        j = 0;
+        lin = lin - Variable(i); // add -c_i to the constraint
+        j   = 0;
 
         for (vi = cs.begin(); vi != cs.end(); ++vi) {
             lin = lin + (*vi).coefficient(Variable(i)) * Variable(n + 1 + j);
             j++;
         }
 
-        result.add_constraint(lin ==
-                              0);  // Add the constraint lin==0 to the result
+        result.add_constraint(lin == 0); // Add the constraint lin==0 to the result
     }
 
     // Now the constraints on the constant
     lin = Linear_Expression(0);
-    lin = lin - Variable(n);  // add -d to the constraint
-    j = 0;
+    lin = lin - Variable(n); // add -d to the constraint
+    j   = 0;
     for (vi = cs.begin(); vi != cs.end(); ++vi) {
         lin = lin + (*vi).inhomogeneous_term() * Variable(n + 1 + j);
         j++;
@@ -403,25 +394,24 @@ void dualize(C_Polyhedron const& p, C_Polyhedron& result) {
         if ((*vi).type() == Constraint::NONSTRICT_INEQUALITY) {
             result.add_constraint(Variable(n + 1 + j) >= 0);
         } else if ((*vi).type() == Constraint::STRICT_INEQUALITY) {
-            cerr
-                << "Location::ComputeCoefConstraints -- Warning: Encountered "
-                   "Strict Inequality"
-                << endl;
+            cerr << "Location::ComputeCoefConstraints -- Warning: Encountered "
+                    "Strict Inequality"
+                 << endl;
             cerr << "                " << (*vi) << endl;
             result.add_constraint(Variable(n + 1 + j) >=
-                                  0);  // Just handle it as any other inequality
+                                  0); // Just handle it as any other inequality
         }
 
         j++;
     }
 
     result.remove_higher_space_dimensions(
-        n + 1);  // Remove the excess dimensions to obtain a new Polyhedron
+        n + 1); // Remove the excess dimensions to obtain a new Polyhedron
 
     return;
 }
 
-void primal(C_Polyhedron const& what, C_Polyhedron& result) {
+void primal(C_Polyhedron const &what, C_Polyhedron &result) {
     int n = (int)what.space_dimension() - 1;
 
     // compute the generators
@@ -453,20 +443,18 @@ void primal(C_Polyhedron const& what, C_Polyhedron& result) {
 }
 
 void test_and_add_generator(int n,
-                            Generator const& a,
-                            C_Polyhedron const& test,
-                            C_Polyhedron& result) {
+                            Generator const &a,
+                            C_Polyhedron const &test,
+                            C_Polyhedron &result) {
     if (test.relation_with(a) == Poly_Gen_Relation::subsumes()) {
         result.add_generator(a);
     }
 }
 
-
-
 void set_up_affine_transform(int n,
-                             Constraint const& cc,
-                             Linear_Expression& left,
-                             Linear_Expression& right) {
+                             Constraint const &cc,
+                             Linear_Expression &left,
+                             Linear_Expression &right) {
     // decompose the expression into two parts, the right has the expression
     // from 0.. n-1 the left has expression n.. 2n-1 returns true if left ==0
 

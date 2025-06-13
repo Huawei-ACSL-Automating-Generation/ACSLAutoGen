@@ -22,19 +22,17 @@
 #ifndef D__MY_ASSERTIONS__H_
 #define D__MY_ASSERTIONS__H_
 
-#define ASSERTMSG(TST, MSG)                                                   \
-    ((TST) ? (void)0                                                          \
-           : (cerr << __FILE__ "(" << __LINE__ << "): Assertion failed " #TST \
-                   << MSG << endl                                             \
-                   << endl,                                                   \
+#define ASSERTMSG(TST, MSG)                                                                        \
+    ((TST) ? (void)0                                                                               \
+           : (cerr << __FILE__ "(" << __LINE__ << "): Assertion failed " #TST << MSG << endl       \
+                   << endl,                                                                        \
               abort()))
 
 #define PRECONDITION(TST, MSG) ASSERTMSG(TST, "Precondition " << MSG)
 
 #ifndef NDEBUG
 
-#define DEBUG_INFO(MSG) \
-    (cerr << __FILE__ "(" << __LINE__ << "):" << MSG << endl)
+#define DEBUG_INFO(MSG) (cerr << __FILE__ "(" << __LINE__ << "):" << MSG << endl)
 
 #define POSTCONDITION(TST, MSG) ASSERTMSG(TST, "Postcondition " << MSG)
 #define INVARIANT(TST, MSG) ASSERTMSG(TST, "Invariant " << MSG)

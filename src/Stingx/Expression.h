@@ -62,44 +62,43 @@ class Expression {
     //         5.2 factorize inside Saclib and re-interpret the results
     //     6. Simplify an against a constraint store
 
-private:
-    int coefNum, lambdaNum;           // the number of linear and multiplier variables resp.
-    var_info *coefInfo, *lambdaInfo;  // Mostly for printing purposes
+  private:
+    int coefNum, lambdaNum;          // the number of linear and multiplier variables resp.
+    var_info *coefInfo, *lambdaInfo; // Mostly for printing purposes
 
-    vector<SparseLinExpr> linExpr;  // An lambdaNum+1 dimension array of linear expressions
+    vector<SparseLinExpr> linExpr; // An lambdaNum+1 dimension array of linear expressions
 
     SparseLinExpr linFact;  // The linear factor
-    LinTransform transFact;    // the transform factor
+    LinTransform transFact; // the transform factor
 
     bool factored;
     int count;
 
-    void initialize(int coefNum, int lambdaNum, var_info* coefInfo, var_info* lambdaInfo);
+    void initialize(int coefNum, int lambdaNum, var_info *coefInfo, var_info *lambdaInfo);
 
     void zero_out();
 
-   public:
-    Expression(int coefNum, int lambdaNum, var_info* coefInfo, var_info* lambdaInfo);
+  public:
+    Expression(int coefNum, int lambdaNum, var_info *coefInfo, var_info *lambdaInfo);
     ~Expression();
-    Expression(Expression const& e);
-    Expression(Expression* e1, Expression* e2);
+    Expression(Expression const &e);
+    Expression(Expression *e1, Expression *e2);
 
     // add subtract, access, assign etc...
 
-    Expression operator+(Expression const& p1) const;  // Addition
-    Expression& operator+=(Expression const& p1);      // Addition to self
-    Expression operator-(Expression const& p1) const;  // Subtraction
-    Expression& operator-=(Expression const& p1);      // Subtraction from self
-    Expression& operator=(Expression const& p1);       // Assignment
-    SparseLinExpr& operator[](
-        int i);  // Reference to the linear expression corr. to multipler i
-    SparseLinExpr operator()(int i) const;  // constant reference
+    Expression operator+(Expression const &p1) const; // Addition
+    Expression &operator+=(Expression const &p1);     // Addition to self
+    Expression operator-(Expression const &p1) const; // Subtraction
+    Expression &operator-=(Expression const &p1);     // Subtraction from self
+    Expression &operator=(Expression const &p1);      // Assignment
+    SparseLinExpr &operator[](int i); // Reference to the linear expression corr. to multipler i
+    SparseLinExpr operator()(int i) const; // constant reference
 
     // accessors
     int getVarNum() const;
     int getLambdaNum() const;
-    var_info* get_fr() const;
-    var_info* get_fn() const;
+    var_info *get_fr() const;
+    var_info *get_fn() const;
 
     // Count to keep track of the freq of occurrence
     // of the factors among the other constraints
@@ -107,28 +106,27 @@ private:
     void add_count(int i = 1);
     int getCount();
 
-    bool is_pure_a() const;  // Is the expression purely linear
-    bool is_pure_b()
-        const;  // Is the expression purely linear in the multipliers?
+    bool is_pure_a() const; // Is the expression purely linear
+    bool is_pure_b() const; // Is the expression purely linear in the multipliers?
 
-    SparseLinExpr& convert_linear();  // CALL: Only if the expression is_pure_a
-                                      // else I will throw an exception
-    LinTransform convert_transform() const;  // call only if is_pure_b is true
-                                             // or else exception will be thrown
+    SparseLinExpr &convert_linear();        // CALL: Only if the expression is_pure_a
+                                            // else I will throw an exception
+    LinTransform convert_transform() const; // call only if is_pure_b is true
+                                            // or else exception will be thrown
 
     // Call only if factorizable
-    SparseLinExpr& getLinFactor();
-    LinTransform& getTransformFactor();
+    SparseLinExpr &getLinFactor();
+    LinTransform &getTransformFactor();
 
     // convert the generator to a linear expression
     // Post-comments: This line of research has been disabled will revive soon.
-    SparseLinExpr to_transform(Generator const& g);
+    SparseLinExpr to_transform(Generator const &g);
 
     // perform a linear transformation specified by l on the expression
-    void transform(LinTransform& l);
+    void transform(LinTransform &l);
 
     // Simplify using the store c
-    void simplify(MatrixStore const& c);
+    void simplify(MatrixStore const &c);
 
     // get the lcm of all the denominators
     int getDenLcm() const;
@@ -152,27 +150,27 @@ private:
     bool isZero() const;
     // print factors of the expression
 
-    void print_factors(ostream& os) const;
+    void print_factors(ostream &os) const;
     // clone the expressoin
-    Expression* clone() const;
+    Expression *clone() const;
     // count non-zero multipliers
-    void count_multipliers(int* t);
+    void count_multipliers(int *t);
 
     // If the expression is factorizable and that the
     // lintransform part matches lt then drop the transform part
-    void drop_transform(LinTransform& lt);
+    void drop_transform(LinTransform &lt);
 
     // Does the expression factorize and its transform match lt?
-    bool transform_matches(LinTransform& lt);
+    bool transform_matches(LinTransform &lt);
 
     // is multiplier index associated with a non-zero expression
     bool is_multiplier_present(int index);
 };
 
-ostream& operator<<(ostream& os, Expression const& p);
+ostream &operator<<(ostream &os, Expression const &p);
 
 // scaling operators
-Expression operator*(int i, Expression const& p1);
-Expression operator*(Expression const& p1, int i);
+Expression operator*(int i, Expression const &p1);
+Expression operator*(Expression const &p1, int i);
 
 #endif

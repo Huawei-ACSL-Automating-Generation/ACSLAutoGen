@@ -6,8 +6,7 @@
 #include <vector>
 #include <memory>
 
-class ACSLAnalyzer
-{
+class ACSLAnalyzer {
   public:
     ACSLAnalyzer(ACSLContext &Ctx) : Context(Ctx) {}
 

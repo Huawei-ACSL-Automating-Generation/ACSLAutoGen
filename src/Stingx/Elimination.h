@@ -38,25 +38,24 @@ using namespace std;
 using namespace Parma_Polyhedra_Library;
 using namespace Parma_Polyhedra_Library::IO_Operators;
 
-void repack_constraints_based_on_protection(
-    Constraint_System& cs,
-    Constraint_System& cs_only_unprotected,
-    Constraint_System& cs_mixed_protected,
-    Constraint_System& cs_only_protected,
-    int l,
-    int r);
-void restruct_generators(Generator_System& gs);
+void repack_constraints_based_on_protection(Constraint_System &cs,
+                                            Constraint_System &cs_only_unprotected,
+                                            Constraint_System &cs_mixed_protected,
+                                            Constraint_System &cs_only_protected,
+                                            int l,
+                                            int r);
+void restruct_generators(Generator_System &gs);
 
-void eliminate_by_Farkas(C_Polyhedron& result, int lb);
-void Project_by_Farkas(C_Polyhedron& result, int l, int r);
-void Project_by_Kohler(C_Polyhedron& result, int l, int r);
-void Project_by_FouMot(C_Polyhedron& result, int l, int r);
-void Project(C_Polyhedron& result, int l, int r);
+void eliminate_by_Farkas(C_Polyhedron &result, int lb);
+void Project_by_Farkas(C_Polyhedron &result, int l, int r);
+void Project_by_Kohler(C_Polyhedron &result, int l, int r);
+void Project_by_FouMot(C_Polyhedron &result, int l, int r);
+void Project(C_Polyhedron &result, int l, int r);
 
-void contains_test(C_Polyhedron& poly, int lb);
+void contains_test(C_Polyhedron &poly, int lb);
 
-void bring_to_forward(C_Polyhedron& result, int l, int r);
-C_Polyhedron const& swap2_index_and_divide_from(C_Polyhedron& ph, int index);
-C_Polyhedron swap_index_and_divide_from(C_Polyhedron& ph, int index);
+void bring_to_forward(C_Polyhedron &result, int l, int r);
+C_Polyhedron const &swap2_index_and_divide_from(C_Polyhedron &ph, int index);
+C_Polyhedron swap_index_and_divide_from(C_Polyhedron &ph, int index);
 
 #endif

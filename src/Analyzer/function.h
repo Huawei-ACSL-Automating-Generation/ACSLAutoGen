@@ -6,8 +6,7 @@
 #include <clang/AST/Decl.h>
 #include "Utils/utils.h"
 
-class ACSLFunction
-{
+class ACSLFunction {
   public:
     ACSLFunction(const clang::FunctionDecl *FD) : FuncDecl(FD) {}
 
@@ -21,8 +20,8 @@ class ACSLFunction
     const clang::FunctionDecl *FuncDecl;
 
     std::unordered_map<const clang::Stmt *,
-        std::unordered_set<std::pair<const clang::VarDecl *, const clang::VarDecl *>,
-            acslg::pair_hash>>
+                       std::unordered_set<std::pair<const clang::VarDecl *, const clang::VarDecl *>,
+                                          acslg::pair_hash>>
         loopAssigns;
 };
 

@@ -30,37 +30,31 @@
 #include "SparseLinExpr.h"
 #include "var-info.h"
 
-void PolyStore::initialize(int varsNum, var_info* info) {
+void PolyStore::initialize(int varsNum, var_info *info) {
     this->varsNum = varsNum;
-    this->info = info;
+    this->info    = info;
     // Build a polyhedron with a space dimension varsNum
     p = new C_Polyhedron(varsNum);
     make_trivial_polyhedron();
 }
 
-void PolyStore::add_constraint(SparseLinExpr const& l, int ineqType) {
+void PolyStore::add_constraint(SparseLinExpr const &l, int ineqType) {
     // Build a linear expression corresponding to the expression p
     Constraint cc = l.get_constraint(ineqType);
     p->add_constraint(cc);
 }
 
-void PolyStore::add_constraint(Constraint const& cc) {
-    p->add_constraint(cc);
-}
+void PolyStore::add_constraint(Constraint const &cc) { p->add_constraint(cc); }
 
-PolyStore::PolyStore(int varsNum, var_info* info) {
-    initialize(varsNum, info);
-}
+PolyStore::PolyStore(int varsNum, var_info *info) { initialize(varsNum, info); }
 
-bool PolyStore::isConsistent() const {
-    return !(p->is_empty());
-}
+bool PolyStore::isConsistent() const { return !(p->is_empty()); }
 
 void PolyStore::make_trivial_polyhedron() {
     // Construct the zero polyhedron on varsNum dimensions
     // Question: Does PPL have a routine to do this?
 
-    C_Polyhedron* trivial_poly = new C_Polyhedron(varsNum, EMPTY);
+    C_Polyhedron *trivial_poly = new C_Polyhedron(varsNum, EMPTY);
     int i;
     Linear_Expression l;
     for (i = 0; i < varsNum; i++) {
@@ -73,8 +67,7 @@ void PolyStore::make_trivial_polyhedron() {
     return;
 }
 
-
-void PolyStore::extract_linear_part(MatrixStore& m) const {
+void PolyStore::extract_linear_part(MatrixStore &m) const {
     // First obtain the set of constraints in the polyhedron
     Constraint_System cs = p->minimized_constraints();
     // extract the constraints from the polyhedron
@@ -138,44 +131,36 @@ void PolyStore::extract_linear_part(MatrixStore& m) const {
                 m.add_constraint(l);
             }
 
-        }  // if not equality then nothing to be done!
+        } // if not equality then nothing to be done!
     }
 
     // return
 }
 
-void PolyStore::add_linear_store(MatrixStore const& m) {
+void PolyStore::add_linear_store(MatrixStore const &m) {
     // Take each constraint from the store and
     // add to the polyhedron
     Constraint_System cs = m.to_constraint_system();
     p->add_constraints(cs);
 }
 
-int PolyStore::getDim() const {
-    return varsNum;
-}
+int PolyStore::getDim() const { return varsNum; }
 
-const C_Polyhedron& PolyStore::get_nnc_poly_reference() const {
-    return (*p);
-}
+const C_Polyhedron &PolyStore::get_nnc_poly_reference() const { return (*p); }
 
-C_Polyhedron& PolyStore::getPolyRef() {
-    return (*p);
-}
+C_Polyhedron &PolyStore::getPolyRef() { return (*p); }
 
-var_info* PolyStore::getInfo() const {
-    return info;
-}
+var_info *PolyStore::getInfo() const { return info; }
 
-ostream& operator<<(ostream& os, PolyStore const& p) {
+ostream &operator<<(ostream &os, PolyStore const &p) {
     // print the contents of p into os
     int varsNum = p.getDim();
 
     os << "├ Polyhedral Constraint Store of Dimension " << varsNum << endl;
 
-    C_Polyhedron pp = p.get_nnc_poly_reference();
+    C_Polyhedron pp      = p.get_nnc_poly_reference();
     Constraint_System cs = pp.minimized_constraints();
-    var_info* info = p.getInfo();
+    var_info *info       = p.getInfo();
 
     int i;
     Coefficient t;
@@ -195,7 +180,7 @@ ostream& operator<<(ostream& os, PolyStore const& p) {
         l.setCoefficient(i, (int)t.get_si());
 
         os << "├ ";
-        os << l;  // Print the linear constraint
+        os << l; // Print the linear constraint
 
         if (cc.is_equality())
             os << " =  0 ";
@@ -211,15 +196,13 @@ ostream& operator<<(ostream& os, PolyStore const& p) {
     return os;
 }
 
-PolyStore* PolyStore::clone() const {
+PolyStore *PolyStore::clone() const {
     // create a new cloned polystore
-    PolyStore* ret = new PolyStore(varsNum, info);
+    PolyStore *ret = new PolyStore(varsNum, info);
     // now extract the constraints from p
-    Constraint_System cs =
-        p->minimized_constraints();  // extract the constraints
-                                     // from the polyhedron
-    Constraint_System::const_iterator
-        vi;  // iterator to explore the obtained constraint system
+    Constraint_System cs = p->minimized_constraints(); // extract the constraints
+                                                       // from the polyhedron
+    Constraint_System::const_iterator vi; // iterator to explore the obtained constraint system
 
     for (vi = cs.begin(); vi != cs.end(); vi++) {
         ret->add_constraint((*vi));
@@ -228,7 +211,7 @@ PolyStore* PolyStore::clone() const {
     return ret;
 }
 
-void PolyStore::collect_generators(Generator_System& g) {
+void PolyStore::collect_generators(Generator_System &g) {
     // just strip the generators off p and insert them in g
     Generator_System g1 = p->minimized_generators();
     Generator_System::const_iterator vi;
@@ -242,12 +225,10 @@ Generator_System PolyStore::minimized_generators() {
     Generator_System g, g1 = p->minimized_generators();
     Generator_System::const_iterator vi;
     for (vi = g1.begin(); vi != g1.end(); vi++)
-        g.insert(Generator((*vi)));  // use a copy constructor to clone
+        g.insert(Generator((*vi))); // use a copy constructor to clone
     return g;
 }
 
-bool PolyStore::contained(C_Polyhedron* pp) {
-    return pp->contains(*p);
-}
+bool PolyStore::contained(C_Polyhedron *pp) { return pp->contains(*p); }
 
 PolyStore::~PolyStore() {}

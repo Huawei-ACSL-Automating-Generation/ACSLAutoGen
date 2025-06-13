@@ -30,76 +30,73 @@
 extern string projection;
 
 void Location::initialize(int varsNum,
-                          var_info* info,
-                          var_info* coefInfo,
-                          var_info* lambdaInfo,
-                          C_Polyhedron* p,
+                          var_info *info,
+                          var_info *coefInfo,
+                          var_info *lambdaInfo,
+                          C_Polyhedron *p,
                           string name) {
-    this->varsNum = varsNum;
-    this->info = info;
-    this->coefInfo = coefInfo;
-    this->lambdaInfo = lambdaInfo;
-    this->poly = p;
-    this->locName = name;
-    this->preInv = new C_Polyhedron(varsNum, UNIVERSE);
+    this->varsNum      = varsNum;
+    this->info         = info;
+    this->coefInfo     = coefInfo;
+    this->lambdaInfo   = lambdaInfo;
+    this->poly         = p;
+    this->locName      = name;
+    this->preInv       = new C_Polyhedron(varsNum, UNIVERSE);
     this->disableClump = new Clump(coefInfo, name, "Location");
     setCoefInfo();
-    invariant = new C_Polyhedron(varsNum, UNIVERSE);
+    invariant    = new C_Polyhedron(varsNum, UNIVERSE);
     contextReady = false;
 }
 
 void Location::InitWithoutPopulating(int varsNum,
-                                     var_info* info,
-                                     var_info* coefInfo,
-                                     var_info* lambdaInfo,
-                                     C_Polyhedron* p,
+                                     var_info *info,
+                                     var_info *coefInfo,
+                                     var_info *lambdaInfo,
+                                     C_Polyhedron *p,
                                      string name,
                                      int LIndex) {
-    this->varsNum = varsNum;
-    this->info = info;
-    this->coefInfo = coefInfo;
-    this->lambdaInfo = lambdaInfo;
-    this->poly = p;
-    this->locName = name;
-    this->preInv = new C_Polyhedron(varsNum, UNIVERSE);
+    this->varsNum      = varsNum;
+    this->info         = info;
+    this->coefInfo     = coefInfo;
+    this->lambdaInfo   = lambdaInfo;
+    this->poly         = p;
+    this->locName      = name;
+    this->preInv       = new C_Polyhedron(varsNum, UNIVERSE);
     this->disableClump = new Clump(coefInfo, name, "Location");
-    LIndex = LIndex;
-    invariant = new C_Polyhedron(varsNum, UNIVERSE);
-    contextReady = false;
+    LIndex             = LIndex;
+    invariant          = new C_Polyhedron(varsNum, UNIVERSE);
+    contextReady       = false;
 }
 
-Context* Location::getContext() {
-    return context;
-}
+Context *Location::getContext() { return context; }
 
 void Location::makeContext() {
-    context = new Context(info, coefInfo, lambdaInfo);
+    context      = new Context(info, coefInfo, lambdaInfo);
     contextReady = true;
 }
 
 Location::Location(int varsNum,
-                   var_info* info,
-                   var_info* coefInfo,
-                   var_info* lambdaInfo,
+                   var_info *info,
+                   var_info *coefInfo,
+                   var_info *lambdaInfo,
                    string name) {
-    C_Polyhedron* init = new C_Polyhedron(varsNum, UNIVERSE);
+    C_Polyhedron *init = new C_Polyhedron(varsNum, UNIVERSE);
     initialize(varsNum, info, coefInfo, lambdaInfo, init, name);
     initFlag = false;
 }
 
 Location::Location(int varsNum,
-                   var_info* info,
-                   var_info* coefInfo,
-                   var_info* lambdaInfo,
+                   var_info *info,
+                   var_info *coefInfo,
+                   var_info *lambdaInfo,
                    string name,
                    int LIndex) {
-    C_Polyhedron* init = new C_Polyhedron(varsNum, UNIVERSE);
-    InitWithoutPopulating(varsNum, info, coefInfo, lambdaInfo, init, name,
-                          LIndex);
+    C_Polyhedron *init = new C_Polyhedron(varsNum, UNIVERSE);
+    InitWithoutPopulating(varsNum, info, coefInfo, lambdaInfo, init, name, LIndex);
     initFlag = false;
 }
 
-void Location::setPoly(C_Polyhedron* q) {
+void Location::setPoly(C_Polyhedron *q) {
     if (!initFlag) {
         poly->intersection_assign(*q);
         initFlag = true;
@@ -108,7 +105,7 @@ void Location::setPoly(C_Polyhedron* q) {
     }
 }
 
-void Location::setInitPoly(C_Polyhedron& q) {
+void Location::setInitPoly(C_Polyhedron &q) {
     if (!initFlag) {
         poly->intersection_assign(q);
         initFlag = true;
@@ -117,29 +114,17 @@ void Location::setInitPoly(C_Polyhedron& q) {
     }
 }
 
-C_Polyhedron* Location::get_initial() {
-    return poly;
-}
+C_Polyhedron *Location::get_initial() { return poly; }
 
-bool Location::isInitLoc() {
-    return initFlag;
-}
+bool Location::isInitLoc() { return initFlag; }
 
-int Location::getDim() const {
-    return varsNum;
-}
+int Location::getDim() const { return varsNum; }
 
-const var_info* Location::getInfo() const {
-    return info;
-}
-const var_info* Location::getCoefInfo() const {
-    return coefInfo;
-}
-int Location::getLIndex() const {
-    return LIndex;
-}
+const var_info *Location::getInfo() const { return info; }
+const var_info *Location::getCoefInfo() const { return coefInfo; }
+int Location::getLIndex() const { return LIndex; }
 
-void Location::addClump(vector<Clump>& clumps) {
+void Location::addClump(vector<Clump> &clumps) {
     // *** new-empty without disabled-path
     // Clump disClump(coefInfo, name, "Location");
     // ***
@@ -159,9 +144,7 @@ void Location::addClump(vector<Clump>& clumps) {
     // cout << "done";
 }
 
-bool Location::matches(string name) const {
-    return (locName == name);
-}
+bool Location::matches(string name) const { return (locName == name); }
 
 void Location::setCoefInfo() {
     LIndex = coefInfo->getDim();
@@ -174,16 +157,14 @@ void Location::setCoefInfo() {
     coefInfo->insert(dual_variable.c_str());
 }
 
-string const& Location::getName() const {
-    return locName;
-}
+string const &Location::getName() const { return locName; }
 
-ostream& operator<<(ostream& in, Location const& l) {
+ostream &operator<<(ostream &in, Location const &l) {
     // details of the location should go in here
     int varsNum = l.getDim();
 
-    const var_info* info = l.getInfo();
-    string name = l.getName();
+    const var_info *info = l.getInfo();
+    string name          = l.getName();
     // The rest to be completed later
     in << endl;
     in << "Location: " << name << endl;
@@ -210,10 +191,8 @@ ostream& operator<<(ostream& in, Location const& l) {
     return in;
 }
 
-void Location::ComputeCoefConstraints() {
-    ComputeCoefConstraints(*context);
-}
-void Location::ComputeCoefConstraints(Context& cc) {
+void Location::ComputeCoefConstraints() { ComputeCoefConstraints(*context); }
+void Location::ComputeCoefConstraints(Context &cc) {
     // Inefficient solution for the time being
     // Just build a polyhedron with the right coefficient variables
     //   and adding dimensions for the multipliers
@@ -225,7 +204,7 @@ void Location::ComputeCoefConstraints(Context& cc) {
     Constraint_System constraints = poly->minimized_constraints();
     Constraint_System::const_iterator it;
 
-    C_Polyhedron* result;
+    C_Polyhedron *result;
 
     int i, j, constraintNum, coefNum;
 
@@ -237,27 +216,26 @@ void Location::ComputeCoefConstraints(Context& cc) {
     coefNum = coefInfo->getDim();
 
     result = new C_Polyhedron(coefNum + constraintNum,
-                              UNIVERSE);  // create a universe polyhedron of
-                                          // coefNum +constraintNum dimensions
+                              UNIVERSE); // create a universe polyhedron of
+                                         // coefNum +constraintNum dimensions
     Linear_Expression lin(0);
 
     // Now build the constraints
     for (i = 0; i < varsNum; i++) {
         lin = Linear_Expression(0);
-        lin = lin - Variable(LIndex + i);  // add -c_i to the constraint
-        j = 0;
+        lin = lin - Variable(LIndex + i); // add -c_i to the constraint
+        j   = 0;
         for (it = constraints.begin(); it != constraints.end(); ++it) {
             lin = lin + (*it).coefficient(Variable(i)) * Variable(coefNum + j);
             j++;
         }
-        result->add_constraint(lin ==
-                               0);  // Add the constraint lin==0 to the result
+        result->add_constraint(lin == 0); // Add the constraint lin==0 to the result
     }
 
     // Now the constraints on the constant
     lin = Linear_Expression(0);
-    lin = lin - Variable(LIndex + varsNum);  // add -d to the constraint
-    j = 0;
+    lin = lin - Variable(LIndex + varsNum); // add -d to the constraint
+    j   = 0;
     for (it = constraints.begin(); it != constraints.end(); ++it) {
         lin = lin + (*it).inhomogeneous_term() * Variable(coefNum + j);
         j++;
@@ -277,9 +255,8 @@ void Location::ComputeCoefConstraints(Context& cc) {
                  << endl;
             cerr << "                " << (*it) << endl;
 
-            result->add_constraint(
-                Variable(coefNum + j) >=
-                0);  // Just handle it as any other inequality
+            result->add_constraint(Variable(coefNum + j) >=
+                                   0); // Just handle it as any other inequality
         }
 
         j++;
@@ -291,7 +268,7 @@ void Location::ComputeCoefConstraints(Context& cc) {
     printPolyhedron(cout, *result, coefInfo);
 #endif
     result->remove_higher_space_dimensions(
-        coefNum);  // Remove the excess dimensions to obtain a new Polyhedron
+        coefNum); // Remove the excess dimensions to obtain a new Polyhedron
 
     constraints = result->minimized_constraints();
     for (it = constraints.begin(); it != constraints.end(); it++) {
@@ -300,7 +277,7 @@ void Location::ComputeCoefConstraints(Context& cc) {
     return;
 }
 
-void Location::ComputeCoefConstraints(C_Polyhedron& initPoly) {
+void Location::ComputeCoefConstraints(C_Polyhedron &initPoly) {
     // solution for the time being
     // Just build a polyhedron with the right coefficient variables
     //   and adding dimensions for the multipliers
@@ -328,7 +305,7 @@ void Location::ComputeCoefConstraints(C_Polyhedron& initPoly) {
     for (int i = 0; i < varsNum; i++) {
         lin = Linear_Expression(0);
         lin = lin - Variable(LIndex + i);
-        j = 0;
+        j   = 0;
         for (auto it = constraints.begin(); it != constraints.end(); ++it) {
             lin = lin + (*it).coefficient(Variable(i)) * Variable(coefNum + j);
             j++;
@@ -338,7 +315,7 @@ void Location::ComputeCoefConstraints(C_Polyhedron& initPoly) {
 
     lin = Linear_Expression(0);
     lin = lin - Variable(LIndex + varsNum);
-    j = 0;
+    j   = 0;
     for (auto it = constraints.begin(); it != constraints.end(); ++it) {
         lin = lin + (*it).inhomogeneous_term() * Variable(coefNum + j);
         j++;
@@ -379,11 +356,9 @@ void Location::ComputeCoefConstraints(C_Polyhedron& initPoly) {
     return;
 }
 
-void Location::initInv() {
-    invariant = new C_Polyhedron(varsNum, UNIVERSE);
-}
+void Location::initInv() { invariant = new C_Polyhedron(varsNum, UNIVERSE); }
 
-void Location::ExtractInvfromGenerator(Generator const& g) {
+void Location::ExtractInvfromGenerator(Generator const &g) {
     // Extract coefficients from l to r of the generators and make a constraint
     // Add this constraint to the invariant polyhedron
     Linear_Expression lin;
@@ -396,13 +371,13 @@ void Location::ExtractInvfromGenerator(Generator const& g) {
     bool flag = true;
     for (int i = 0; i < varsNum; i++) {
         if (!handleInt(lin.coefficient(Variable(i)),
-                       c)) {  // l+i turn to i
+                       c)) { // l+i turn to i
             flag = false;
         }
         lin1 += c * Variable(i);
     }
     if (!handleInt(lin.coefficient(Variable(varsNum)),
-                   c)) {  // l+varsNum turn to varsNum
+                   c)) { // l+varsNum turn to varsNum
         flag = false;
     }
     lin1 += c;
@@ -418,7 +393,7 @@ void Location::ExtractInvfromGenerator(Generator const& g) {
     }
 }
 
-void Location::computeInvFromGenerator(Generator const& g) {
+void Location::computeInvFromGenerator(Generator const &g) {
     Linear_Expression lin;
     for (dimension_type i = g.space_dimension(); i-- > 0;) {
         lin += g.coefficient(Variable(i)) * Variable(i);
@@ -429,13 +404,13 @@ void Location::computeInvFromGenerator(Generator const& g) {
     bool flag = true;
     for (int i = 0; i < varsNum; i++) {
         if (!handleInt(lin.coefficient(Variable(i)),
-                       c)) {  // l+i turn to i
+                       c)) { // l+i turn to i
             flag = false;
         }
         lin1 += c * Variable(i);
     }
     if (!handleInt(lin.coefficient(Variable(varsNum)),
-                   c)) {  // l+varsNum turn to varsNum
+                   c)) { // l+varsNum turn to varsNum
         flag = false;
     }
     lin1 += c;
@@ -451,19 +426,19 @@ void Location::computeInvFromGenerator(Generator const& g) {
     }
 }
 
-void Location::ExtractInvfromGenerator(Generator_System const& generators) {
+void Location::ExtractInvfromGenerator(Generator_System const &generators) {
     for (auto it = generators.begin(); it != generators.end(); it++) {
         ExtractInvfromGenerator(*it);
     }
 }
 
-void Location::computeInvFromGenerator(Generator_System const& generators) {
+void Location::computeInvFromGenerator(Generator_System const &generators) {
     for (auto it = generators.begin(); it != generators.end(); it++) {
         computeInvFromGenerator(*it);
     }
 }
 
-void Location::ExtractInv(Constraint_System const& constraints) {
+void Location::ExtractInv(Constraint_System const &constraints) {
     C_Polyhedron res(constraints);
     Variables_Set projectSet;
     if ((int)(constraints.space_dimension()) != (varsNum + 1)) {
@@ -480,20 +455,19 @@ void Location::ExtractInv(Constraint_System const& constraints) {
     return;
 }
 
-void Location::addTrivial(C_Polyhedron* trivial) {
+void Location::addTrivial(C_Polyhedron *trivial) {
     for (int i = 0; i < varsNum; i++)
         trivial->add_constraint(Variable(LIndex + i) == 0);
     return;
 }
 
-void Location::addTrivial(C_Polyhedron& trivial) {
+void Location::addTrivial(C_Polyhedron &trivial) {
     for (int i = 0; i < varsNum; i++)
         trivial.add_constraint(Variable(LIndex + i) == 0);
     return;
 }
 
-void Location::ExtractAndUpdateInvOrigin(C_Polyhedron& poly,
-                                         C_Polyhedron& coefPoly) {
+void Location::ExtractAndUpdateInvOrigin(C_Polyhedron &poly, C_Polyhedron &coefPoly) {
     // cout << endl << "For location: " << locName;
     // cout << endl
     //      << "「 l: " << LIndex << ", varsNum: " << varsNum
@@ -502,18 +476,16 @@ void Location::ExtractAndUpdateInvOrigin(C_Polyhedron& poly,
     UpdateCoefCS(coefPoly);
 }
 
-void Location::ExtractAndUpdateInv(C_Polyhedron& poly, C_Polyhedron& coefPoly) {
+void Location::ExtractAndUpdateInv(C_Polyhedron &poly, C_Polyhedron &coefPoly) {
     int coefNum = coefInfo->getDim();
     ExtractInv(poly.minimized_constraints());
     UpdateCoefCS(coefPoly);
 }
 
-void Location::contains_test(C_Polyhedron& poly,
-                             C_Polyhedron& preInv,
-                             C_Polyhedron& trans_rel) {
+void Location::contains_test(C_Polyhedron &poly, C_Polyhedron &preInv, C_Polyhedron &trans_rel) {
     // cout << endl << "Start contains test";
     C_Polyhedron inv_extracted(invariant->space_dimension(), UNIVERSE);
-    Generator_System gs = poly.minimized_generators();
+    Generator_System gs                 = poly.minimized_generators();
     Generator_System::const_iterator it = gs.begin();
     // cout<<endl<<"l: "<<l<<", varsNum: "<<varsNum<<endl;
     for (; it != gs.end(); it++) {
@@ -555,7 +527,7 @@ void Location::contains_test(C_Polyhedron& poly,
 
     C_Polyhedron inv_propagated(invariant->space_dimension(), UNIVERSE);
     Constraint_System cs_loc_inv = preInv.minimized_constraints();
-    C_Polyhedron ph = trans_rel;
+    C_Polyhedron ph              = trans_rel;
     // preInv.intersection_assign(trans_rel);
     ph.add_constraints(cs_loc_inv);
     // cout<<endl<<"ph.space_dimension: "<<ph.space_dimension();
@@ -569,12 +541,10 @@ void Location::contains_test(C_Polyhedron& poly,
         lin2 = Linear_Expression(0);
         for (int i = 0; i < static_cast<int>(ph.space_dimension()); i++) {
             if (i < varsNum) {
-                lin2 = lin2 +
-                       (*vi2).coefficient(Variable(varsNum + i)) * Variable(i);
+                lin2 = lin2 + (*vi2).coefficient(Variable(varsNum + i)) * Variable(i);
             }
             if (varsNum <= i) {
-                lin2 = lin2 +
-                       (*vi2).coefficient(Variable(i - varsNum)) * Variable(i);
+                lin2 = lin2 + (*vi2).coefficient(Variable(i - varsNum)) * Variable(i);
             }
         }
         lin2 = lin2 + (*vi2).inhomogeneous_term();
@@ -608,9 +578,9 @@ void Location::contains_test(C_Polyhedron& poly,
     // cout << endl << "End contains test";
 }
 
-void Location::UpdateCoefCS(C_Polyhedron& coefPoly) {
+void Location::UpdateCoefCS(C_Polyhedron &coefPoly) {
     Constraint_System constraints = invariant->minimized_constraints();
-    C_Polyhedron* result;
+    C_Polyhedron *result;
 
     int i, j, constraintNum, coefNum;
 
@@ -627,7 +597,7 @@ void Location::UpdateCoefCS(C_Polyhedron& coefPoly) {
     for (i = 0; i < varsNum; i++) {
         lin = Linear_Expression(0);
         lin = lin - Variable(LIndex + i);
-        j = 0;
+        j   = 0;
         for (auto it = constraints.begin(); it != constraints.end(); ++it) {
             lin = lin + (*it).coefficient(Variable(i)) * Variable(coefNum + j);
             j++;
@@ -637,7 +607,7 @@ void Location::UpdateCoefCS(C_Polyhedron& coefPoly) {
 
     lin = Linear_Expression(0);
     lin = lin - Variable(LIndex + varsNum);
-    j = 0;
+    j   = 0;
     for (auto it = constraints.begin(); it != constraints.end(); ++it) {
         lin = lin + (*it).inhomogeneous_term() * Variable(coefNum + j);
         j++;

@@ -40,8 +40,7 @@ using namespace std;
 using namespace Parma_Polyhedra_Library;
 using namespace Parma_Polyhedra_Library::IO_Operators;
 
-class Clump
-{
+class Clump {
   private:
     /*
      * coefNum = num of coef dimensions (depends on what mode the
@@ -121,10 +120,8 @@ inline void Clump::resetIter() { iter = 0; }
 
 inline bool Clump::has_next() { return (vecPolys.size() > 0) && (iter < (int)vecPolys.size()); }
 
-inline C_Polyhedron &Clump::getReference()
-{
-    if (iter < 0)
-    {
+inline C_Polyhedron &Clump::getReference() {
+    if (iter < 0) {
         // This should not happen.
         // I suck.
         cerr << " Sloppy programming pays off.. Invariants could be lost!!" << endl;
@@ -134,10 +131,8 @@ inline C_Polyhedron &Clump::getReference()
     return vecPolys[iter];
 }
 
-inline C_Polyhedron &Clump::getReference(int index)
-{
-    if (index < 0)
-    {
+inline C_Polyhedron &Clump::getReference(int index) {
+    if (index < 0) {
         // This should not happen.
         // I suck.
         cerr << " Sloppy programming pays off.. Invariants could be lost!!" << endl;

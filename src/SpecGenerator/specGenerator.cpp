@@ -8,26 +8,21 @@
 using namespace std;
 using namespace clang;
 
-namespace
-{
+namespace {
     // auxiliary function
     template <typename T>
-    vector<const T *> getPlugins(
-        const string &groupName, optional<reference_wrapper<const vector<string>>> extraPluginIds)
-    {
+    vector<const T *> getPlugins(const string &groupName,
+                                 optional<reference_wrapper<const vector<string>>> extraPluginIds) {
         const ACSLPluginGroup *group = ACSLPluginGroupRegistry::instance().getGroup(groupName);
-        if (!group)
-        {
+        if (!group) {
             auto names = ACSLPluginGroupRegistry::instance().allGroupNames();
             string allName;
             allName += "[";
-            for (auto &name : names)
-            {
+            for (auto &name : names) {
                 allName += name;
                 allName += ", ";
             }
-            if (allName.size() > 1)
-            {
+            if (allName.size() > 1) {
                 // No flag!
                 allName.pop_back();
                 allName.pop_back();
@@ -41,14 +36,12 @@ namespace
             ids.insert(ids.end(), (*extraPluginIds).get().begin(), (*extraPluginIds).get().end());
 
         vector<const T *> plugins;
-        for (auto &pid : ids)
-        {
+        for (auto &pid : ids) {
             auto *pl = ACSLPluginRegistry::instance().get(pid);
             if (!pl)
                 ERROR("Plugin with id " + pid + " does not exist!");
             auto *fcp = dynamic_cast<const T *>(pl);
-            if (fcp)
-            {
+            if (fcp) {
                 plugins.push_back(fcp);
             }
         }
@@ -57,15 +50,13 @@ namespace
 } // namespace
 
 string emitFunctionContract(const ProgramState &pre,
-    const ProgramState &post,
-    const string &groupName,
-    optional<reference_wrapper<const vector<string>>> extraPluginIds)
-{
+                            const ProgramState &post,
+                            const string &groupName,
+                            optional<reference_wrapper<const vector<string>>> extraPluginIds) {
     auto plugins = getPlugins<FunctionContractPlugin>(groupName, extraPluginIds);
     string spec  = ACSL_HEAD.to_string();
 
-    for (auto &plugin : plugins)
-    {
+    for (auto &plugin : plugins) {
         if (plugin == nullptr)
             continue;
         if (auto s = plugin->generate(pre, post); s)
@@ -75,18 +66,17 @@ string emitFunctionContract(const ProgramState &pre,
     return spec;
 }
 
-std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
+std::optional<LoopInfo> parseLoopInfo(
+    const ProgramState &preState,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
     const string &groupName,
-    optional<reference_wrapper<const vector<string>>> extraPluginIds)
-{
+    optional<reference_wrapper<const vector<string>>> extraPluginIds) {
     auto plugins = getPlugins<LoopInfoPlugin>(groupName, extraPluginIds);
 
     LoopInfo loopInfo;
-    for (auto &plugin : plugins)
-    {
+    for (auto &plugin : plugins) {
         if (plugin == nullptr)
             continue;
         if (!plugin->parse(preState, cond, inc, body, loopInfo))
@@ -95,19 +85,18 @@ std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
     return loopInfo;
 }
 
-std::string emitLoopInvariant(const ProgramState &preState,
+std::string emitLoopInvariant(
+    const ProgramState &preState,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
     const LoopInfo &loopInfo,
     const std::string &groupName,
-    std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds)
-{
+    std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
     auto plugins = getPlugins<LoopInvariantPlugin>(groupName, extraPluginIds);
     string spec  = ACSL_HEAD.to_string();
 
-    for (auto &plugin : plugins)
-    {
+    for (auto &plugin : plugins) {
         INFO(plugin->id());
         if (plugin == nullptr)
             UNREACHABLE();

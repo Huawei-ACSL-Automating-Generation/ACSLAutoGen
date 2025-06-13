@@ -15,22 +15,18 @@ using namespace llvm;
 
 static cl::OptionCategory ACSLGCategory("ACSLG options");
 
-static cl::opt<bool> ASTOnly("ast-only",
+static cl::opt<bool> ASTOnly(
+    "ast-only",
     cl::desc("Output only the entire AST (Decls) using Clang's pretty print"),
     cl::cat(ACSLGCategory));
 
-class TUASTConsumer : public ASTConsumer
-{
+class TUASTConsumer : public ASTConsumer {
   public:
-    void HandleTranslationUnit(ASTContext &Context) override
-    {
-        if (ASTOnly)
-        {
+    void HandleTranslationUnit(ASTContext &Context) override {
+        if (ASTOnly) {
             TranslationUnitDecl *TUDecl = Context.getTranslationUnitDecl();
             TUDecl->dump();
-        }
-        else
-        {
+        } else {
             ACSLContext acslContext(Context);
             ACSLAnalyzer analyzer(acslContext);
             analyzer.analyzeFunctions();
@@ -56,15 +52,13 @@ class TUASTConsumer : public ASTConsumer
     }
 };
 
-class ACSLCommentHandler : public CommentHandler
-{
+class ACSLCommentHandler : public CommentHandler {
     Rewriter &TheRewriter;
 
   public:
     ACSLCommentHandler(Rewriter &R) : TheRewriter(R) {}
 
-    bool HandleComment(Preprocessor &PP, SourceRange CommentRange) override
-    {
+    bool HandleComment(Preprocessor &PP, SourceRange CommentRange) override {
         SourceManager &SM = PP.getSourceManager();
         if (!SM.isInMainFile(CommentRange.getBegin()))
             return false;
@@ -74,8 +68,7 @@ class ACSLCommentHandler : public CommentHandler
             Lexer::getSourceText(CharSourceRange::getCharRange(CommentRange), SM, PP.getLangOpts());
 
         // Only care about ACSL-style comments: /*@ ... */ or //@ ...
-        if (text.starts_with("/*@") || text.starts_with("//@"))
-        {
+        if (text.starts_with("/*@") || text.starts_with("//@")) {
             //-------------------------------
             // remove all ACSL now
             //-------------------------------
@@ -83,8 +76,7 @@ class ACSLCommentHandler : public CommentHandler
             TheRewriter.RemoveText(CharSourceRange::getCharRange(CommentRange));
             return false;
             // If it contains a 'requires', extract only those lines
-            if (text.contains("requires"))
-            {
+            if (text.contains("requires")) {
                 SmallVector<StringRef, 8> lines;
                 text.split(lines, '\n');
 
@@ -95,10 +87,8 @@ class ACSLCommentHandler : public CommentHandler
                 else
                     newComment = "//@\n";
 
-                for (auto &line : lines)
-                {
-                    if (auto pos = line.find("requires"); pos != StringRef::npos)
-                    {
+                for (auto &line : lines) {
+                    if (auto pos = line.find("requires"); pos != StringRef::npos) {
                         newComment += line.substr(pos);
                         newComment += "\n";
                     }
@@ -109,9 +99,7 @@ class ACSLCommentHandler : public CommentHandler
 
                 // TODO: store 'requires'.
                 TheRewriter.ReplaceText(CharSourceRange::getCharRange(CommentRange), newComment);
-            }
-            else
-            {
+            } else {
                 // Remove all ACSL
                 TheRewriter.RemoveText(CharSourceRange::getCharRange(CommentRange));
             }
@@ -123,11 +111,9 @@ class ACSLCommentHandler : public CommentHandler
     }
 };
 
-class TUFrontendAction : public ASTFrontendAction
-{
+class TUFrontendAction : public ASTFrontendAction {
   public:
-    std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef) override
-    {
+    std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef) override {
         GlobalSM::getInstance().initialize(CI.getSourceManager(), CI.getLangOpts());
         commentHandler_ = std::make_unique<ACSLCommentHandler>(GlobalSM::getRewriter());
         CI.getPreprocessor().addCommentHandler(commentHandler_.get());
@@ -138,11 +124,9 @@ class TUFrontendAction : public ASTFrontendAction
     std::unique_ptr<ACSLCommentHandler> commentHandler_;
 };
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     auto ExpectedParser = CommonOptionsParser::create(argc, argv, ACSLGCategory);
-    if (!ExpectedParser)
-    {
+    if (!ExpectedParser) {
         llvm::errs() << "Error while parsing options.\n";
         return 1;
     }

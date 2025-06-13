@@ -29,16 +29,13 @@
 #include "myassertions.h"
 #include "var-info.h"
 
-void Expression::initialize(int coefNum,
-                            int lambdaNum,
-                            var_info* coefInfo,
-                            var_info* lambdaInfo) {
+void Expression::initialize(int coefNum, int lambdaNum, var_info *coefInfo, var_info *lambdaInfo) {
     // Initialize the parameters of the class
-    this->coefNum = coefNum;
-    this->lambdaNum = lambdaNum;
-    this->coefInfo = coefInfo;
+    this->coefNum    = coefNum;
+    this->lambdaNum  = lambdaNum;
+    this->coefInfo   = coefInfo;
     this->lambdaInfo = lambdaInfo;
-    factored = false;
+    factored         = false;
     linExpr.resize(lambdaNum + 1, SparseLinExpr(coefNum, coefInfo));
     count = 0;
 }
@@ -50,10 +47,7 @@ void Expression::zero_out() {
         linExpr[i].init_set(coefNum, coefInfo);
 }
 
-Expression::Expression(int coefNum,
-                       int lambdaNum,
-                       var_info* coefInfo,
-                       var_info* lambdaInfo) {
+Expression::Expression(int coefNum, int lambdaNum, var_info *coefInfo, var_info *lambdaInfo) {
     initialize(coefNum, lambdaNum, coefInfo, lambdaInfo);
 }
 
@@ -61,14 +55,14 @@ Expression::~Expression() {
     // delete[] l;
 }
 
-Expression::Expression(Expression* e1, Expression* e2) {
+Expression::Expression(Expression *e1, Expression *e2) {
     initialize(e1->getVarNum(), e1->getLambdaNum(), e1->get_fn(), e1->get_fr());
     int i;
     for (i = 0; i < lambdaNum + 1; i++)
         linExpr[i] = (*e1)[i] - (*e2)[i];
 }
 
-Expression::Expression(Expression const& e) {
+Expression::Expression(Expression const &e) {
     initialize(e.getVarNum(), e.getLambdaNum(), e.get_fn(), e.get_fr());
     int i;
     for (i = 0; i < lambdaNum + 1; i++)
@@ -77,7 +71,7 @@ Expression::Expression(Expression const& e) {
         factorize();
 }
 
-Expression& Expression::operator=(Expression const& p1) {
+Expression &Expression::operator=(Expression const &p1) {
     // initialize(p1.getVarNum(),p1.getLambdaNum(),p1.get_fn(),p1.get_fr());
     for (int i = 0; i < lambdaNum + 1; i++)
         linExpr[i] = p1(i);
@@ -85,26 +79,14 @@ Expression& Expression::operator=(Expression const& p1) {
     return (*this);
 }
 
-SparseLinExpr& Expression::operator[](int i) {
-    return linExpr[i];
-}
+SparseLinExpr &Expression::operator[](int i) { return linExpr[i]; }
 
-SparseLinExpr Expression::operator()(int i) const {
-    return linExpr[i];
-}
+SparseLinExpr Expression::operator()(int i) const { return linExpr[i]; }
 
-int Expression::getVarNum() const {
-    return coefNum;
-}
-int Expression::getLambdaNum() const {
-    return lambdaNum;
-}
-var_info* Expression::get_fr() const {
-    return lambdaInfo;
-}
-var_info* Expression::get_fn() const {
-    return coefInfo;
-}
+int Expression::getVarNum() const { return coefNum; }
+int Expression::getLambdaNum() const { return lambdaNum; }
+var_info *Expression::get_fr() const { return lambdaInfo; }
+var_info *Expression::get_fn() const { return coefInfo; }
 
 bool Expression::is_pure_a() const {
     // check if for each of the expression l[0].. l[lambdaNum-1]
@@ -127,7 +109,7 @@ bool Expression::is_pure_b() const {
     return true;
 }
 
-SparseLinExpr& Expression::convert_linear() {
+SparseLinExpr &Expression::convert_linear() {
     if (!is_pure_a()) {
         cerr << "Expression::convert_linear-- Asked to convert an expression "
                 "that "
@@ -149,12 +131,12 @@ LinTransform Expression::convert_transform() const {
     SparseLinExpr temp;
 
     for (int i = 0; i < lambdaNum + 1; i++) {
-        tmp[i] = (linExpr[i])(coefNum);  // set it to a constant
+        tmp[i] = (linExpr[i])(coefNum); // set it to a constant
     }
     return tmp;
 }
 
-void Expression::transform(LinTransform& lin) {
+void Expression::transform(LinTransform &lin) {
     if (lin.is_trivial() || lin.is_inconsistent())
         return;
 
@@ -162,13 +144,13 @@ void Expression::transform(LinTransform& lin) {
     assert(lin(base) == 1);
     for (int i = base + 1; i < lambdaNum + 1; i++)
         linExpr[i] = linExpr[i] - lin(i) * linExpr[base];
-    //TODO: 确定这里是否需要修改，为什么除了lambdaNum还会有其他不为0的地方。
+    // TODO: 确定这里是否需要修改，为什么除了lambdaNum还会有其他不为0的地方。
 
-    linExpr[base] *= 0;  // kill the base
-                         // That completes the transformation
+    linExpr[base] *= 0; // kill the base
+                        // That completes the transformation
 }
 
-void Expression::simplify(MatrixStore const& c) {
+void Expression::simplify(MatrixStore const &c) {
     for (int i = 0; i < lambdaNum + 1; i++)
         c.simplify(linExpr[i]);
     return;
@@ -232,7 +214,7 @@ int Expression::getNumGcd() const {
                 run = gcd(run, j);
             else {
                 first_number_seen = true;
-                run = j;
+                run               = j;
             }
         }
     }
@@ -242,8 +224,8 @@ int Expression::getNumGcd() const {
 void Expression::adjust() {
     int i = getDenLcm(), j = getNumGcd();
     if (j == 0)
-        return;  // Nothing much to be done here.. constraint should not have
-                 // been there.
+        return; // Nothing much to be done here.. constraint should not have
+                // been there.
 
     Rational r1(i, j);
 
@@ -253,25 +235,22 @@ void Expression::adjust() {
     return;
 }
 
-bool Expression::is_factored() const {
-    return factored;
-}
+bool Expression::is_factored() const { return factored; }
 
-void Expression::print_factors(ostream& os) const {
+void Expression::print_factors(ostream &os) const {
     os << " ( " << transFact << " ) * ( " << linFact << " ) ";
 }
-ostream& operator<<(ostream& os, Expression const& expr) {
+ostream &operator<<(ostream &os, Expression const &expr) {
     os << "├ ";
     if (expr.is_factored()) {
         expr.print_factors(os);
     } else {
-        int lambdaNum = expr.getLambdaNum();
-        var_info* lambdaInfo = expr.get_fr();
+        int lambdaNum        = expr.getLambdaNum();
+        var_info *lambdaInfo = expr.get_fr();
 
         os << lambdaInfo->getName(0) << " * (" << expr(0) << " ) ";
         for (int i = 1; i < lambdaNum; i++) {
-            os << " + " << lambdaInfo->getName(i) << " * ( " << expr(i)
-               << " ) ";
+            os << " + " << lambdaInfo->getName(i) << " * ( " << expr(i) << " ) ";
         }
 
         os << " + " << expr(lambdaNum) << "  ";
@@ -299,78 +278,66 @@ bool Expression::factorize() {
         t[i] = factor;
     }
 
-    transFact = t;  // NOTE: j 所在的位置就是
-                    // \mu所在的位置，所以这里的系数是1，t记录的就是(\mu - a)
-                    // \alpha中的 \mu和a前面的系数
-    linFact =
-        linExpr[j];  // NOTE : 记录的是\alpha，也就是后面的对应系数的表达式。
+    transFact = t;        // NOTE: j 所在的位置就是
+                          // \mu所在的位置，所以这里的系数是1，t记录的就是(\mu - a)
+                          // \alpha中的 \mu和a前面的系数
+    linFact = linExpr[j]; // NOTE : 记录的是\alpha，也就是后面的对应系数的表达式。
 
     factored = true;
     return true;
 }
 
-SparseLinExpr& Expression::getLinFactor() {
-    return linFact;
-}
+SparseLinExpr &Expression::getLinFactor() { return linFact; }
 
-LinTransform& Expression::getTransformFactor() {
-    return transFact;
-}
+LinTransform &Expression::getTransformFactor() { return transFact; }
 
-Expression* Expression::clone() const {
+Expression *Expression::clone() const {
     // create a new expression
-    Expression* ret = new Expression(coefNum, lambdaNum, coefInfo, lambdaInfo);
+    Expression *ret = new Expression(coefNum, lambdaNum, coefInfo, lambdaInfo);
     for (int i = 0; i < lambdaNum + 1; i++) {
-        (*ret)[i] = linExpr[i];  // Assign the appropriate linear expressions
+        (*ret)[i] = linExpr[i]; // Assign the appropriate linear expressions
     }
-    ret->factorize();  // so that the factored representation may be filled in
+    ret->factorize(); // so that the factored representation may be filled in
 
     return ret;
 }
 
-void Expression::resetCounter() {
-    count = 0;
-}
+void Expression::resetCounter() { count = 0; }
 
-void Expression::add_count(int i) {
-    count += i;
-}
+void Expression::add_count(int i) { count += i; }
 
-int Expression::getCount() {
-    return count;
-}
+int Expression::getCount() { return count; }
 
-bool Expression::transform_matches(LinTransform& lt) {
+bool Expression::transform_matches(LinTransform &lt) {
     if (!factorize())
         return false;
     return (lt == transFact);
 }
 
-void Expression::drop_transform(LinTransform& lt) {
+void Expression::drop_transform(LinTransform &lt) {
     if (transform_matches(lt)) {
         int i;
         for (i = 0; i < lambdaNum; i++)
             linExpr[i] *= 0;
 
         linExpr[lambdaNum] = linFact;
-        factored = false;
+        factored           = false;
     }
     return;
 }
 
-SparseLinExpr Expression::to_transform(Generator const& g) {
+SparseLinExpr Expression::to_transform(Generator const &g) {
     SparseLinExpr ret(lambdaNum, lambdaInfo);
     for (int i = 0; i < lambdaNum + 1; i++) {
         ret.setCoefficient(
             i,
-            linExpr[i].evaluate(
-                g));  // Evaluate the value of l[i] under the generator g
+            linExpr[i].evaluate(g)); // Evaluate the value of l[i] under the generator g
     }
 
     return ret;
 }
 
-void Expression::count_multipliers(int* t) {
+void Expression::count_multipliers(int *t) {
     // assume t[0..lambdaNum-1] is an allocated array or suffer the core dump!
     for (int i = 0; i < lambdaNum; i++)
         if (!(*this)(i).isZero()) {
