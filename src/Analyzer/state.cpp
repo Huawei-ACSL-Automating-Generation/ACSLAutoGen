@@ -959,7 +959,14 @@ void ProgramState::stepBranch(
 
 void ProgramState::stepLoop(const Stmt *loopStmt)
 {
-    auto loopInfo = parseLoopInfo(*this, loopStmt);
+    auto preState = this->clone();
+
+    if (auto forLoop = dyn_cast<ForStmt>(loopStmt); forLoop && forLoop->getInit())
+    {
+        preState->step(forLoop->getInit());
+    }
+
+    auto loopInfo = parseLoopInfo(*preState, loopStmt);
     if (!loopInfo)
     {
         // TODO(complex loop)

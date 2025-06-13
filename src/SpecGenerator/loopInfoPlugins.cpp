@@ -14,7 +14,6 @@ class SetLoopEntryPlugin : public LoopInfoPlugin
     SetLoopEntryPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
     bool parse(const ProgramState &pre,
-        const Stmt *init,
         const Expr *cond,
         const Stmt *inc,
         const Stmt *body,
@@ -38,7 +37,6 @@ class SetPatternsPlugin : public LoopInfoPlugin
     SetPatternsPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
     bool parse(const ProgramState &preState,
-        const Stmt *init,
         const Expr *cond,
         const Stmt *inc,
         const Stmt *body,
@@ -146,7 +144,6 @@ class SetIndexPlugin : public LoopInfoPlugin
     SetIndexPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
     bool parse(const ProgramState &preState,
-        const Stmt *init,
         const Expr *cond,
         const Stmt *inc,
         const Stmt *body,

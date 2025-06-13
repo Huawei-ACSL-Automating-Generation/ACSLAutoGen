@@ -75,21 +75,19 @@ string emitFunctionContract(const ProgramState &pre,
     return spec;
 }
 
-std::optional<LoopInfo> parseLoopInfo(ProgramState &preState,
+std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
     const clang::Stmt *loopStmt,
     const string &groupName,
     optional<reference_wrapper<const vector<string>>> extraPluginIds)
 {
     auto plugins = getPlugins<LoopInfoPlugin>(groupName, extraPluginIds);
 
-    const Stmt *init = nullptr;
     const Expr *cond = nullptr;
     const Stmt *body = nullptr;
     const Stmt *inc  = nullptr;
 
     if (const auto *forStmt = dyn_cast<ForStmt>(loopStmt))
     {
-        init = forStmt->getInit();
         cond = forStmt->getCond();
         body = forStmt->getBody();
         inc  = forStmt->getInc();
@@ -104,16 +102,12 @@ std::optional<LoopInfo> parseLoopInfo(ProgramState &preState,
         UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
     }
 
-    if (init)
-    {
-        preState.step(init);
-    }
     LoopInfo loopInfo;
     for (auto &plugin : plugins)
     {
         if (plugin == nullptr)
             continue;
-        if (!plugin->parse(preState, init, cond, inc, body, loopInfo))
+        if (!plugin->parse(preState, cond, inc, body, loopInfo))
             return nullopt;
     }
     return loopInfo;

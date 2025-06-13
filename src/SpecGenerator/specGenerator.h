@@ -47,7 +47,7 @@ struct LoopInfo
     // TODO(more info to be added)
 };
 
-std::optional<LoopInfo> parseLoopInfo(ProgramState &preState,
+std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
     const clang::Stmt *loopStmt,
     const std::string &groupName = DEFAULT_LOOP_INFO_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
@@ -97,14 +97,12 @@ class LoopInfoPlugin : public ACSLPlugin
 
     /// @brief Parse the given loop and fill in loopInfo.
     /// @param preState loop's pre state before 'init'
-    /// @param init
     /// @param cond
     /// @param inc
     /// @param body
     /// @param loopInfo info to be filled in
     /// @return return false means this loop is too complex and will abort whole parsing!
     virtual bool parse(const ProgramState &pre,
-        const clang::Stmt *init,
         const clang::Expr *cond,
         const clang::Stmt *inc,
         const clang::Stmt *body,
