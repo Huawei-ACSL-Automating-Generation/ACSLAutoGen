@@ -76,31 +76,13 @@ string emitFunctionContract(const ProgramState &pre,
 }
 
 std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
-    const clang::Stmt *loopStmt,
+    const clang::Expr *cond,
+    const clang::Stmt *inc,
+    const clang::Stmt *body,
     const string &groupName,
     optional<reference_wrapper<const vector<string>>> extraPluginIds)
 {
     auto plugins = getPlugins<LoopInfoPlugin>(groupName, extraPluginIds);
-
-    const Expr *cond = nullptr;
-    const Stmt *body = nullptr;
-    const Stmt *inc  = nullptr;
-
-    if (const auto *forStmt = dyn_cast<ForStmt>(loopStmt))
-    {
-        cond = forStmt->getCond();
-        body = forStmt->getBody();
-        inc  = forStmt->getInc();
-    }
-    else if (const auto *whileStmt = dyn_cast<WhileStmt>(loopStmt))
-    {
-        cond = whileStmt->getCond();
-        body = whileStmt->getBody();
-    }
-    else
-    {
-        UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
-    }
 
     LoopInfo loopInfo;
     for (auto &plugin : plugins)
@@ -114,6 +96,9 @@ std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
 }
 
 std::string emitLoopInvariant(const ProgramState &preState,
+    const clang::Expr *cond,
+    const clang::Stmt *inc,
+    const clang::Stmt *body,
     const LoopInfo &loopInfo,
     const std::string &groupName,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds)
@@ -123,9 +108,10 @@ std::string emitLoopInvariant(const ProgramState &preState,
 
     for (auto &plugin : plugins)
     {
+        INFO(plugin->id());
         if (plugin == nullptr)
             UNREACHABLE();
-        if (auto s = plugin->generate(preState, loopInfo); s)
+        if (auto s = plugin->generate(preState, cond, inc, body, loopInfo); s)
             spec += "\t" + *s + "\n";
     }
     spec += ACSL_END.to_string();

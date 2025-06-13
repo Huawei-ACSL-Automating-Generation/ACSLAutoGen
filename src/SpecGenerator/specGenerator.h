@@ -48,12 +48,17 @@ struct LoopInfo
 };
 
 std::optional<LoopInfo> parseLoopInfo(const ProgramState &preState,
-    const clang::Stmt *loopStmt,
+    const clang::Expr *cond,
+    const clang::Stmt *inc,
+    const clang::Stmt *body,
     const std::string &groupName = DEFAULT_LOOP_INFO_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
 
 std::string emitLoopInvariant(const ProgramState &preState,
+    const clang::Expr *cond,
+    const clang::Stmt *inc,
+    const clang::Stmt *body,
     const LoopInfo &loopInfo,
     const std::string &groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
@@ -113,8 +118,11 @@ class LoopInvariantPlugin : public ACSLPlugin
 {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
-    virtual std::optional<std::string>
-    generate(const ProgramState &preState, const LoopInfo &loopInfo) const = 0;
+    virtual std::optional<std::string> generate(const ProgramState &preState,
+        const clang::Expr *cond,
+        const clang::Stmt *inc,
+        const clang::Stmt *body,
+        const LoopInfo &loopInfo) const = 0;
 };
 
 class InlinePlugin : public ACSLPlugin

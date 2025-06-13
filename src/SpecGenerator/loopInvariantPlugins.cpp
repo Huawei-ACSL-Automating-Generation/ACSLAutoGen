@@ -13,7 +13,11 @@ class DumpLoopInfoPlugin : public LoopInvariantPlugin
   public:
     DumpLoopInfoPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    optional<string> generate(const ProgramState &preState, const LoopInfo &loopInfo) const override
+    optional<string> generate(const ProgramState &preState,
+        const clang::Expr *,
+        const clang::Stmt *,
+        const clang::Stmt *,
+        const LoopInfo &loopInfo) const override
     {
         ostringstream oss;
         oss << "index's address: "
@@ -45,20 +49,25 @@ class DumpLoopInfoPlugin : public LoopInvariantPlugin
   private:
     string id_;
 };
+REGISTER_ACSL_PLUGIN(DumpLoopInfoPlugin, "dumpLoopInfo");
 
 class LinearInvariantPlugin : public LoopInvariantPlugin
 {
   public:
     LinearInvariantPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    optional<string> generate(const ProgramState &preState, const LoopInfo &loopInfo) const override
+    optional<string> generate(const ProgramState &preState,
+        const clang::Expr *cond,
+        const clang::Stmt *inc,
+        const clang::Stmt *body,
+        const LoopInfo &loopInfo) const override
     {
         INFO(preState.dump());
+        INFO(loopInfo.symbolicLoopEntry_->dump());
+        TODO();
     }
 
   private:
     string id_;
 };
-
-REGISTER_ACSL_PLUGIN(DumpLoopInfoPlugin, "dumpLoopInfo");
-REGISTER_ACSL_PLUGIN(LinearInvariantPlugin, "StingxPlugin");
+REGISTER_ACSL_PLUGIN(LinearInvariantPlugin, "StInGXPlugin");
