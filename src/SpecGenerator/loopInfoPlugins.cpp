@@ -14,9 +14,9 @@ class SetLoopEntryPlugin : public LoopInfoPlugin
     SetLoopEntryPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
     bool parse(const ProgramState &pre,
-        const Expr *cond,
-        const Stmt *inc,
-        const Stmt *body,
+        const Expr *,
+        const Stmt *,
+        const Stmt *,
         LoopInfo &loopInfo) const override
     {
         auto symbolicState = pre.clone();
@@ -31,13 +31,14 @@ class SetLoopEntryPlugin : public LoopInfoPlugin
 };
 REGISTER_ACSL_PLUGIN(SetLoopEntryPlugin, "setLoopEntry");
 
+// Preprocess simple patterns of regions.
 class SetPatternsPlugin : public LoopInfoPlugin
 {
   public:
     SetPatternsPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
     bool parse(const ProgramState &preState,
-        const Expr *cond,
+        const Expr *,
         const Stmt *inc,
         const Stmt *body,
         LoopInfo &loopInfo) const override
@@ -48,88 +49,137 @@ class SetPatternsPlugin : public LoopInfoPlugin
             ERROR("SymbolicLoopEntry_ has something wrong, check the SetLoopEntryPlugin?");
         }
 
-        auto loopEntry = loopInfo.symbolicLoopEntry_->clone();
+        auto symbolState = loopInfo.symbolicLoopEntry_->clone();
 
         using pattern = LoopInfo::pattern;
-        unordered_map<Address, optional<pattern>, AddressHash> patterns;
 
-        loopEntry->step(body);
-        loopEntry->step(inc);
+        symbolState->step(body);
+        symbolState->step(inc);
 
-        if (loopEntry->getPaths().size() != 1)
-        {
-            TODO();
-        }
-
-        auto &preMS        = loopInfo.symbolicLoopEntry_->getPaths()[0]->getMemoryState();
-        auto &currentEntry = loopEntry->getPaths()[0];
-        for (auto &[addr, value] : currentEntry->getMemoryState())
-        {
-            if (preMS.find(addr) == preMS.end())
-                continue; // local variable
-            if (*preMS.find(addr)->second == *value)
-                continue; // unchanged
-            if (value->getType() == SymbolicExpr::ExprType::SymbolAddress)
+        auto getPatternsFromPath = [&](const Path &currentEntry) {
+            unordered_map<Address, optional<pattern>, AddressHash> patterns;
+            auto &preMS = loopInfo.symbolicLoopEntry_->getPaths()[0]->getMemoryState();
+            for (auto &[addr, value] : currentEntry.getMemoryState())
             {
-                UNIMPLEMENT("Need Address::toLinearExpr");
-            }
-            // toLinearExpr hasn't been finished, use 'try' to avoid unexpected error.
-            try
-            {
-                auto entryExpr   = preMS.find(addr)->second->toLinearExpr();
-                auto currentExpr = value->toLinearExpr();
-
-                if (auto diff = currentExpr - entryExpr; diff.all_homogeneous_terms_are_zero())
+                if (preMS.find(addr) == preMS.end())
+                    continue; // local variable
+                if (*preMS.find(addr)->second == *value)
+                    continue; // unchanged
+                if (value->getType() == SymbolicExpr::ExprType::SymbolAddress)
                 {
-                    auto step                          = diff.inhomogeneous_term().get_si();
-                    unique_ptr<SymbolicExpr> initValue = nullptr;
+                    UNIMPLEMENT("Need Address::toLinearExpr");
+                }
+                // toLinearExpr hasn't been finished, use 'try' to avoid unexpected error.
+                try
+                {
+                    auto entryExpr   = preMS.find(addr)->second->toLinearExpr();
+                    auto currentExpr = value->toLinearExpr();
 
-                    // Get the only initial value.
-                    bool isTooComplex = false;
-                    for (auto &path : preState.getPaths())
+                    if (auto diff = currentExpr - entryExpr; diff.all_homogeneous_terms_are_zero())
                     {
-                        if (isTooComplex)
-                            break;
-                        // Bad complexity, may need a wrapper to wrap the symbolicExpr completely.
-                        for (auto &[addrInPre, valueInPre] : path->getMemoryState())
+                        auto step                          = diff.inhomogeneous_term().get_si();
+                        unique_ptr<SymbolicExpr> initValue = nullptr;
+
+                        // Get the only initial value.
+                        bool isTooComplex = false;
+                        for (auto &path : preState.getPaths())
                         {
-                            if (addrInPre != addr)
-                                continue;
-                            if (initValue)
+                            if (isTooComplex)
+                                break;
+                            // Bad complexity, may need a wrapper to wrap the symbolicExpr
+                            // completely.
+                            for (auto &[addrInPre, valueInPre] : path->getMemoryState())
                             {
-                                if (*initValue != *valueInPre)
+                                if (addrInPre != addr)
+                                    continue;
+                                if (initValue)
                                 {
-                                    isTooComplex = true;
-                                    break;
+                                    if (*initValue != *valueInPre)
+                                    {
+                                        isTooComplex = true;
+                                        break;
+                                    }
+                                }
+                                else
+                                {
+                                    initValue = valueInPre->clone();
                                 }
                             }
-                            else
-                            {
-                                initValue = valueInPre->clone();
-                            }
                         }
-                    }
-                    if (isTooComplex)
-                    {
-                        patterns.emplace(addr, nullopt);
+                        if (isTooComplex)
+                        {
+                            patterns.emplace(addr, nullopt);
+                        }
+                        else
+                        {
+                            patterns.emplace(addr, pattern{std::move(initValue), step});
+                        }
                     }
                     else
                     {
-                        patterns.emplace(addr, pattern{std::move(initValue), step});
+                        patterns.emplace(addr, nullopt);
                     }
                 }
-                else
+                catch (...)
                 {
                     patterns.emplace(addr, nullopt);
                 }
             }
-            catch (...)
+            return patterns;
+        }; // getPatternsFromPath end
+
+        unordered_map<Address, optional<pattern>, AddressHash> patterns;
+
+        for (auto &path : symbolState->getPaths())
+        {
+            switch (path->getPathState())
             {
-                patterns.emplace(addr, nullopt);
+                using enum Path::PathState;
+            case Break:
+            case Continue:
+            case Return: TODO();
+            case Step: {
+                auto currentPatterns = getPatternsFromPath(*path);
+                if (patterns.empty())
+                    patterns = std::move(currentPatterns);
+                else
+                {
+                    auto isEqual = [](const optional<LoopInfo::pattern> &LHS,
+                                       const optional<LoopInfo::pattern> &RHS) {
+                        if (LHS == nullopt && RHS == nullopt)
+                            return true;
+                        if (LHS && RHS)
+                        {
+                            if (*(*LHS).initialValue_ != *(*RHS).initialValue_)
+                                UNREACHABLE();
+                            if ((*LHS).step_ == (*RHS).step_)
+                                return true;
+                        }
+                        return false;
+                    }; // isEqual end
+
+                    // Is this addr has same pattern on every step-path?
+                    for (auto &[addr, pattern] : patterns)
+                    {
+                        if (auto it = currentPatterns.find(addr);
+                            it == currentPatterns.end() || !isEqual(it->second, pattern))
+                            patterns[addr] = nullopt;
+                    }
+                    for (auto &[addr, pattern] : currentPatterns)
+                    {
+                        if (auto it = patterns.find(addr);
+                            it == patterns.end() || !isEqual(it->second, pattern))
+                            patterns[addr] = nullopt;
+                    }
+                }
+                break;
+            }
+            default: UNREACHABLE();
             }
         }
 
         loopInfo.patternsMap_ = std::move(patterns);
+        // TODO: may do another round to improve rubustness.
         return true;
     }
 
@@ -166,12 +216,14 @@ class SetIndexPlugin : public LoopInfoPlugin
                     nowAddrValue   = get_if<unique_ptr<Address>>(&nowLValue);
                     addrValue && nowAddrValue && **addrValue != **nowAddrValue)
                 {
-                    // lValue and nowLValue are both unique_ptr<Address> and not equal.
+                    // lValue and nowLValue are both unique_ptr<Address> and not
+                    // equal.
                     return nullopt;
                 }
                 else if (lValue != nowLValue)
                 {
-                    // lValue and nowLValue have distinct type or both VarDecl* and different.
+                    // lValue and nowLValue have distinct type or both VarDecl* and
+                    // different.
                     return nullopt;
                 }
             }
@@ -185,7 +237,8 @@ class SetIndexPlugin : public LoopInfoPlugin
                 }
                 else
                 {
-                    ERROR("A varDecl* has no Address mapped, something must goes wrong.");
+                    ERROR("A varDecl* has no Address mapped, something must goes "
+                          "wrong.");
                 }
             }
             else if (auto addrLValue = get_if<unique_ptr<Address>>(&lValue))
@@ -282,7 +335,8 @@ class SetIndexPlugin : public LoopInfoPlugin
             case BinaryOperator::Opcode::BO_NE: break;
             default:
                 // too complex
-                INFO("Loop's condition expr is too complex! Unimplemented binary operator.");
+                INFO("Loop's condition expr is too complex! Unimplemented binary "
+                     "operator.");
                 return false;
             }
 
@@ -295,7 +349,8 @@ class SetIndexPlugin : public LoopInfoPlugin
             // TODO: more operators
             if (unaryExpr->getOpcode() != UnaryOperatorKind::UO_Deref)
             {
-                INFO("Loop's condition expr is too complex! Unimplemented unary operator.");
+                INFO("Loop's condition expr is too complex! Unimplemented unary "
+                     "operator.");
                 return false;
             }
 
@@ -332,7 +387,8 @@ class SetIndexPlugin : public LoopInfoPlugin
 
             if (varDecl == nullptr)
             {
-                INFO("Parsing loop's index vaibale has failed. Does loop's condition expr have a "
+                INFO("Parsing loop's index vaibale has failed. Does loop's "
+                     "condition expr have a "
                      "variable?");
                 return false;
             }

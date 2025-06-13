@@ -63,7 +63,7 @@ class Path
     auto getMemoryState() const -> const auto & { return memoryState; }
     int getNextSymVarId() { return symbolVarCounter++; }
     // auto getReturnExpr() const -> const auto & { return returnExpr; }
-    // auto getPathState() const -> const auto & { return currentState; }
+    auto getPathState() const -> const auto & { return currentState; }
     // auto getAddrCounter() const -> const auto & { return addrCounter; }
 
   private:

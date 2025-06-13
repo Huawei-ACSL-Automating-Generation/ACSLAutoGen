@@ -25,6 +25,7 @@ using LValueTarget = variant<const VarDecl *, unique_ptr<Address>>;
 void Path::resymbolize()
 {
     memoryState.clear();
+    pathConditions.clear();
 
     for (auto &entry : varAddr)
     {
@@ -399,7 +400,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr)
             static const set<string> ignoreNames = {"llvm.dbg.declare", "llvm.lifetime.start",
                 "llvm.lifetime.end", "printf", "__assert_fail"};
             string name                          = callee->getNameAsString();
-            if (ignoreNames.count(name))
+            if (ignoreNames.contains(name))
                 return Path::EvalResult{};
 
             // TODO: complete the logic to call function.
@@ -615,7 +616,7 @@ string Path::dump() const
         oss << "Memory State:\n";
         for (auto const &pair : memoryState)
         {
-            if (printedAddrs.count(pair.first) == 0)
+            if (!printedAddrs.contains(pair.first))
             {
                 oss << "  " << pair.first.dump() << " -> "
                     << (pair.second ? pair.second->dump() : "null") << "\n";
