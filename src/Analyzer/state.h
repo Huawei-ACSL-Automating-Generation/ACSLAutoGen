@@ -6,14 +6,15 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/Expr.h>
+#include <ppl.hh>
 #include "Symbolic/expr.h"
 #include "function.h"
 
 using namespace Symbolic;
 using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>>;
 using Formulas     = std::vector<std::unique_ptr<SymbolicExpr>>;
-using TransRel     = std::tuple<int, int, Formulas>;
-using InitRel      = std::pair<int, Formulas>;
+using TransRel     = std::tuple<int, int, Parma_Polyhedra_Library::C_Polyhedron *>;
+using InitRel      = std::pair<int, Parma_Polyhedra_Library::C_Polyhedron *>;
 
 class Path {
   public:
@@ -34,7 +35,7 @@ class Path {
     LValueTarget extractLValue(const clang::Expr *lhs);
     std::unique_ptr<Address> extractAddress(const clang::Expr *lhs);
 
-    std::unique_ptr<SymbolicExpr> getVarState(const clang::VarDecl *var);
+    std::unique_ptr<SymbolicExpr> getVarState(const clang::VarDecl *var) const;
     const Formulas &getPathConditions() const;
 
     Address *allocMemory(const clang::VarDecl *);
@@ -161,7 +162,6 @@ struct VarManager {
                 }
             }
         }
-
         vm.numVars = varCounter;
         return vm;
     }
@@ -174,5 +174,5 @@ struct VarManager {
         return it->second;
     }
 };
-Formulas buildLoopInvariant(const Formulas &conds, const std::vector<std::unique_ptr<Path>> &paths);
+Formulas buildLoopInvariant(Formulas conds, const std::vector<std::unique_ptr<Path>> &paths);
 #endif

@@ -124,7 +124,7 @@ unique_ptr<Address> Path::extractAddress(const Expr *lhs) {
     UNIMPLEMENT("extractAddress: unsupported lvalue for address");
 }
 
-unique_ptr<SymbolicExpr> Path::getVarState(const VarDecl *var) {
+unique_ptr<SymbolicExpr> Path::getVarState(const VarDecl *var) const {
     auto canonicalVar = var->getCanonicalDecl();
     auto varIt        = varAddr.find(canonicalVar);
     if (varIt == varAddr.end())

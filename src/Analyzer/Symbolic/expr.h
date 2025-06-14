@@ -90,7 +90,7 @@ namespace Symbolic {
         // Only valid for expressions that are affine (i.e., linear w.r.t. variables).
         // Throws or fails if the expression is not representable in linear form.
         virtual Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
-            const std::unordered_map<std::string, int> &varIndexMap) const {
+            const std::unordered_map<std::string, int> &) const {
             ERROR("not implemented for expression type: ");
         }
 

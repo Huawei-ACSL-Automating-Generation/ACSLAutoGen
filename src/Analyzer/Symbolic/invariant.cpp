@@ -2,6 +2,7 @@
 #include "ppl.hh"
 #include "Analyzer/state.h"
 #include "Stingx/LinTS.h"
+#include <queue>
 
 using namespace std;
 using namespace Symbolic;
@@ -223,6 +224,22 @@ Parma_Polyhedra_Library::Constraint primedConstriant(const Parma_Polyhedra_Libra
     }
 }
 
+Parma_Polyhedra_Library::C_Polyhedron *primedPolyhedron(
+    const Parma_Polyhedra_Library::C_Polyhedron &poly,
+    const VarManager &vm) {
+    using namespace Parma_Polyhedra_Library;
+
+    auto *primed = new C_Polyhedron(vm.numVars * 2, EMPTY);
+
+    Constraint_System cs = poly.constraints();
+    for (Constraint_System::const_iterator it = cs.begin(); it != cs.end(); ++it) {
+        Constraint primedC = primedConstriant(*it, vm);
+        primed->add_constraint(primedC);
+    }
+
+    return primed;
+}
+
 Parma_Polyhedra_Library::Constraint toConstraint(const Symbolic::SymbolicExpr *expr,
                                                  const VarManager &vm) {
     if (!expr || expr->getType() != Symbolic::SymbolicExpr::ExprType::BinaryOp) {
@@ -254,7 +271,7 @@ Parma_Polyhedra_Library::C_Polyhedron *convertFormulaToPoly(const Formulas &asse
         ERROR("convertFormulaToPoly: empty variable map");
     }
 
-    int dimension = static_cast<int>(vm.numVars);
+    int dimension = vm.numVars * 2;
     auto *poly =
         new Parma_Polyhedra_Library::C_Polyhedron(dimension, Parma_Polyhedra_Library::UNIVERSE);
 
@@ -336,44 +353,300 @@ void computeLinearInv(const vector<string> &locations,
                       const vector<TransRel> &transitions,
                       const InitRel &initial,
                       const VarManager &vm) {
-    auto linTS = make_unique<LinTS>();
+    auto linTS = std::make_unique<LinTS>();
+
     for (const std::string &name : vm.orderedVars) {
         linTS->addVariable(const_cast<char *>(name.c_str()));
     }
 
     for (size_t i = 0; i < locations.size(); ++i) {
-        const string &locName = locations[i];
+        const std::string &locName = locations[i];
         if (static_cast<int>(i) == initial.first && initial.first != -1) {
-            C_Polyhedron *initPoly = convertFormulaToPoly(initial.second, vm);
-            linTS->addLocInit(const_cast<char *>(locName.c_str()), initPoly);
+            linTS->addLocInit(const_cast<char *>(locName.c_str()), initial.second);
         } else {
             linTS->addLocInit(const_cast<char *>(locName.c_str()), nullptr);
         }
     }
 
     for (size_t i = 0; i < transitions.size(); ++i) {
-        const auto &[src, dst, exprs] = transitions[i];
-        string transName              = "t" + to_string(i);
-        C_Polyhedron *transPoly       = convertFormulaToPoly(exprs, vm);
+        const auto &[src, dst, transPoly] = transitions[i];
+        std::string transName             = "t" + std::to_string(i);
+
         linTS->addTransRel(const_cast<char *>(transName.c_str()),
                            const_cast<char *>(locations[src].c_str()),
                            const_cast<char *>(locations[dst].c_str()), transPoly);
     }
 
     linTS->ComputeLinTSInv();
+    auto invariants = linTS->getInvMap();
 }
+
+void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm);
+void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManager &vm);
 
 /******************************************************************************\
  *                              Path Preprocessing                            *
  *  This section handles symbolic path condition construction and transition  *
  *  constraint setup for downstream invariant analysis.                       *
+ *                                                                            *
+ *  This is designed to facilitate integration with StInGx by providing the   *
+ *  necessary InitRel and TransRel relations for its analysis engine.         *
 \******************************************************************************/
 
+std::vector<Formulas> preprocessLoopCond(Formulas loopCond) {
+    std::vector<Formulas> result;
+    std::queue<Formulas> worklist;
+    worklist.push(std::move(loopCond));
+
+    while (!worklist.empty()) {
+        Formulas current = std::move(worklist.front());
+        worklist.pop();
+
+        bool expanded = false;
+
+        for (size_t i = 0; i < current.size(); ++i) {
+            auto *bin = dynamic_cast<Symbolic::BinaryOpExpr *>(current[i].get());
+            if (!bin) {
+                ERROR("preprocessLoopCond: loopCond[" + std::to_string(i) +
+                      "] is not a BinaryOpExpr");
+            }
+
+            using Op        = Symbolic::BinaryOpExpr::Operator;
+            const auto &lhs = bin->getLeft();
+            const auto &rhs = bin->getRight();
+
+            switch (bin->getOperator()) {
+                case Op::NotEqual: {
+                    auto rhsPlus1 = std::make_unique<Symbolic::BinaryOpExpr>(
+                        rhs->clone(), Op::Add, std::make_unique<Symbolic::LiteralExpr>(1));
+                    auto geExpr = std::make_unique<Symbolic::BinaryOpExpr>(
+                        lhs->clone(), Op::GreaterEqual, std::move(rhsPlus1));
+
+                    auto rhsMinus1 = std::make_unique<Symbolic::BinaryOpExpr>(
+                        rhs->clone(), Op::Subtract, std::make_unique<Symbolic::LiteralExpr>(1));
+                    auto leExpr = std::make_unique<Symbolic::BinaryOpExpr>(
+                        lhs->clone(), Op::LessEqual, std::move(rhsMinus1));
+
+                    Formulas branch;
+                    branch.reserve(current.size());
+                    for (size_t j = 0; j < current.size(); ++j) {
+                        if (j == i)
+                            branch.push_back(std::move(leExpr));
+                        else
+                            branch.push_back(current[j]->clone());
+                    }
+
+                    current[i] = std::move(geExpr);
+
+                    worklist.push(std::move(current));
+                    worklist.push(std::move(branch));
+                    expanded = true;
+                    break;
+                }
+                case Op::GreaterThan: {
+                    auto newRHS = std::make_unique<Symbolic::BinaryOpExpr>(
+                        rhs->clone(), Op::Add, std::make_unique<Symbolic::LiteralExpr>(1));
+                    current[i] = std::make_unique<Symbolic::BinaryOpExpr>(
+                        lhs->clone(), Op::GreaterEqual, std::move(newRHS));
+                    worklist.push(std::move(current));
+                    expanded = true;
+                    break;
+                }
+                case Op::LessThan: {
+                    auto newRHS = std::make_unique<Symbolic::BinaryOpExpr>(
+                        rhs->clone(), Op::Subtract, std::make_unique<Symbolic::LiteralExpr>(1));
+                    current[i] = std::make_unique<Symbolic::BinaryOpExpr>(
+                        lhs->clone(), Op::LessEqual, std::move(newRHS));
+                    worklist.push(std::move(current));
+                    expanded = true;
+                    break;
+                }
+                default: break;
+            }
+
+            if (expanded)
+                break;
+        }
+
+        if (!expanded)
+            result.push_back(std::move(current));
+    }
+
+    return result;
+}
+
+Parma_Polyhedra_Library::C_Polyhedron *buildTransPolyhedron(const Path &path,
+                                                            const VarManager &vm) {
+    using namespace Parma_Polyhedra_Library;
+
+    int dim      = vm.numVars * 2;
+    auto *result = new C_Polyhedron(dim, UNIVERSE);
+
+    const auto &varAddrMap = path.getVarAddr();
+    std::unordered_set<std::string> assignedVars;
+
+    for (const auto &[varDecl, addrPtr] : varAddrMap) {
+        if (!varDecl || !addrPtr)
+            continue;
+        std::string varName = varDecl->getNameAsString();
+
+        auto expr = path.getVarState(varDecl);
+        if (!expr)
+            continue;
+
+        auto varIt = vm.varIndexMap.find(varName);
+        if (varIt == vm.varIndexMap.end())
+            continue;
+
+        int primedIdx = varIt->second + vm.numVars;
+
+        Linear_Expression lhs = Parma_Polyhedra_Library::Variable(primedIdx);
+        Linear_Expression rhs = expr->toLinearExpr(vm.varIndexMap);
+
+        Linear_Expression eq = lhs - rhs;
+        result->add_constraint(Constraint(eq == 0));
+
+        assignedVars.insert(varName);
+    }
+
+    for (const auto &[name, idx] : vm.varIndexMap) {
+        if (assignedVars.find(name) != assignedVars.end())
+            continue;
+
+        int unprimed = idx;
+        int primed   = idx + vm.numVars;
+
+        Linear_Expression eq =
+            Parma_Polyhedra_Library::Variable(primed) - Parma_Polyhedra_Library::Variable(unprimed);
+        result->add_constraint(Constraint(eq == 0));
+    }
+
+    return result;
+}
+
 // TODO: optimize to one cond, condition won't get multi cases.
-Formulas buildLoopInvariant(const Formulas &loopCond, const vector<unique_ptr<Path>> &paths) {
+Formulas buildLoopInvariant(Formulas loopCond, const vector<unique_ptr<Path>> &paths) {
     Formulas invariants;
     VarManager vm = VarManager::fromPaths(paths);
 
+    for (size_t i = 0; i < paths.size(); ++i) {
+        INFO("----- Path " + std::to_string(i) + " -----");
+        if (paths[i]) {
+            INFO(paths[i]->dump()); // assuming this prints to std::cout or uses your logging system
+        } else {
+            INFO("Null path pointer at index " + std::to_string(i));
+        }
+    }
+
+    vector<Formulas> processedCond = preprocessLoopCond(std::move(loopCond));
+
+    std::vector<Parma_Polyhedra_Library::C_Polyhedron *> transPolys;
+    for (const auto &path : paths) {
+        if (path)
+            transPolys.push_back(buildTransPolyhedron(*path, vm));
+        else
+            UNREACHABLE();
+    }
+
+    for (size_t i = 0; i < processedCond.size(); ++i) {
+        const Formulas &assertions = processedCond[i];
+        auto *conditionPoly        = convertFormulaToPoly(assertions, vm);
+        auto *primedConditionPoly  = primedPolyhedron(*conditionPoly, vm);
+    }
     TODO();
     return invariants;
+}
+
+void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm) {
+    using namespace Parma_Polyhedra_Library;
+
+    const Constraint_System &cs = poly.constraints();
+
+    for (const auto &c : cs) {
+        std::ostringstream oss;
+        bool first = true;
+
+        for (int i = 0; i < c.space_dimension(); ++i) {
+            Coefficient coeff = c.coefficient(Parma_Polyhedra_Library::Variable(i));
+            if (coeff == 0)
+                continue;
+
+            if (!first && coeff > 0)
+                oss << " + ";
+            if (coeff < 0)
+                oss << " - ";
+            if (abs(coeff) != 1)
+                oss << abs(coeff); // Coefficient has its own abs()
+
+            std::string varName;
+            if (i < vm.numVars) {
+                varName = vm.orderedVars[i];
+            } else {
+                varName = vm.orderedVars[i - vm.numVars] + "'";
+            }
+
+            oss << varName;
+            first = false;
+        }
+
+        Coefficient inhom = c.inhomogeneous_term();
+        if (inhom != 0) {
+            if (!first && inhom > 0)
+                oss << " + ";
+            if (inhom < 0)
+                oss << " - ";
+            oss << abs(inhom); // Coefficient abs() again
+        }
+
+        switch (c.type()) {
+            case Constraint::EQUALITY: oss << " == 0"; break;
+            case Constraint::NONSTRICT_INEQUALITY: oss << " <= 0"; break;
+            case Constraint::STRICT_INEQUALITY: oss << " < 0"; break;
+            default: oss << " ?? 0"; break;
+        }
+
+        INFO("Constraint: " + oss.str());
+    }
+}
+
+void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManager &vm) {
+    using namespace Parma_Polyhedra_Library;
+
+    std::ostringstream oss;
+    bool first = true;
+
+    for (int i = 0; i < expr.space_dimension(); ++i) {
+        Coefficient coeff = expr.coefficient(Parma_Polyhedra_Library::Variable(i));
+        if (coeff == 0)
+            continue;
+
+        if (!first && coeff > 0)
+            oss << " + ";
+        if (coeff < 0)
+            oss << " - ";
+
+        if (abs(coeff) != 1)
+            oss << abs(coeff);
+
+        std::string varName;
+        if (i < vm.numVars) {
+            varName = vm.orderedVars[i];
+        } else {
+            varName = vm.orderedVars[i - vm.numVars] + "'";
+        }
+
+        oss << varName;
+        first = false;
+    }
+
+    Coefficient inhom = expr.inhomogeneous_term();
+    if (inhom != 0 || first) {
+        if (!first && inhom > 0)
+            oss << " + ";
+        if (inhom < 0)
+            oss << " - ";
+        oss << abs(inhom);
+    }
+
+    INFO("LinearExpr: " + oss.str());
 }
