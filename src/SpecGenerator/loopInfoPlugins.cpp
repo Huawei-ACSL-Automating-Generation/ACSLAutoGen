@@ -34,8 +34,8 @@ class SetPatternsPlugin : public LoopInfoPlugin {
   public:
     SetPatternsPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    bool parse(const ProgramState &preState,
-               const Expr *,
+    bool parse(const ProgramState &loopEntry,
+               const Expr *cond,
                const Stmt *inc,
                const Stmt *body,
                LoopInfo &loopInfo) const override {
@@ -44,12 +44,13 @@ class SetPatternsPlugin : public LoopInfoPlugin {
             ERROR("SymbolicLoopEntry_ has something wrong, check the SetLoopEntryPlugin?");
         }
 
-        auto symbolState = loopInfo.symbolicLoopEntry_->clone();
+        auto loopCurrent = loopInfo.symbolicLoopEntry_->clone();
 
         using pattern = LoopInfo::pattern;
 
-        symbolState->step(body);
-        symbolState->step(inc);
+        loopCurrent->step(cond);
+        loopCurrent->step(body);
+        loopCurrent->step(inc);
 
         auto getPatternsFromPath = [&](const Path &currentEntry) {
             unordered_map<Address, optional<pattern>, AddressHash> patterns;
@@ -74,7 +75,7 @@ class SetPatternsPlugin : public LoopInfoPlugin {
 
                         // Get the only initial value.
                         bool isTooComplex = false;
-                        for (auto &path : preState.getPaths()) {
+                        for (auto &path : loopEntry.getPaths()) {
                             if (isTooComplex)
                                 break;
                             // Bad complexity, may need a wrapper to wrap the symbolicExpr
@@ -107,7 +108,7 @@ class SetPatternsPlugin : public LoopInfoPlugin {
 
         unordered_map<Address, optional<pattern>, AddressHash> patterns;
 
-        for (auto &path : symbolState->getPaths()) {
+        for (auto &path : loopCurrent->getPaths()) {
             switch (path->getPathState()) {
                 using enum Path::PathState;
                 case Break:
