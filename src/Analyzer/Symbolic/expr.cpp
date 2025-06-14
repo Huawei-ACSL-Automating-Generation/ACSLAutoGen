@@ -79,6 +79,9 @@ int64_t LiteralExpr::getLiteralValue() const {
         case LiteralType::Int64: return data.int64Value;
         case LiteralType::UInt64: return data.uint64Value;
     }
+
+    UNREACHABLE();
+    return 0;
 }
 
 std::size_t Symbolic::Variable::hash() const {

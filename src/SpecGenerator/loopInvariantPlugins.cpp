@@ -1,9 +1,9 @@
 // src/SpecGenerator/loopInvariantPlugins.cpp
 
-#include "specGenerator.h"
-#include "stringTemplate.h"
 #include "macros.h"
+#include "specGenerator.h"
 #include "state.h"
+#include "stringTemplate.h"
 
 using namespace std;
 using namespace clang;
@@ -23,6 +23,7 @@ class DumpLoopInfoPlugin : public LoopInvariantPlugin {
         oss << "index's bound: "
             << (loopInfo.indexBound_ ? loopInfo.indexBound_->regularForm(false) : "NULL") << endl;
         oss << "patterns: " << endl;
+
         for (auto &[addr, pattern] : loopInfo.patternsMap_) {
             oss << "address: " << addr.regularForm(false) << "\t";
             oss << "pattern: ";

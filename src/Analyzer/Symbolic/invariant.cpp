@@ -47,7 +47,8 @@ int BinaryOpExpr::getMaxDegree() const {
         default: return -1; // invalid in linear context
     }
 }
-Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr(const VarManager &) const {
+Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr(
+    const std::unordered_map<std::string, int> &) const {
     using namespace Parma_Polyhedra_Library;
     switch (type) {
         case LiteralType::Boolean: return Linear_Expression(data.boolValue ? 1 : 0);
@@ -64,9 +65,10 @@ Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr(const VarMa
     }
 }
 
-Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr(const VarManager &vm) const {
-    auto L = left_->toLinearExpr(vm);
-    auto R = right_->toLinearExpr(vm);
+Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr(
+    const std::unordered_map<std::string, int> &varIndexMap) const {
+    auto L = left_->toLinearExpr(varIndexMap);
+    auto R = right_->toLinearExpr(varIndexMap);
 
     switch (op_) {
         case Operator::Add: return L + R;
@@ -99,8 +101,9 @@ Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr(const VarM
     ERROR("BinaryOpExpr: non-affine or unsupported operator");
 }
 
-Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr(const VarManager &vm) const {
-    auto E = expr_->toLinearExpr(vm);
+Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr(
+    const std::unordered_map<std::string, int> &varIndexMap) const {
+    auto E = expr_->toLinearExpr(varIndexMap);
 
     switch (op_) {
         case Operator::Plus: return E;
@@ -110,12 +113,14 @@ Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr(const VarMa
 }
 
 Parma_Polyhedra_Library::Linear_Expression Symbolic::Variable::toLinearExpr(
-    const VarManager &vm) const {
+    const std::unordered_map<std::string, int> &varIndexMap) const {
     using namespace Parma_Polyhedra_Library;
     Linear_Expression e(0);
-    int index = vm.getIndex(*this);
-    Parma_Polyhedra_Library::Variable v(index);
-    e += v;
+    auto it = varIndexMap.find(getName());
+    if (it == varIndexMap.end()) {
+        ERROR("Variable '" + getName() + "' not found in index map.");
+    }
+    e += Parma_Polyhedra_Library::Variable(it->second);
     return e;
 }
 
@@ -227,8 +232,8 @@ Parma_Polyhedra_Library::Constraint toConstraint(const Symbolic::SymbolicExpr *e
     const Symbolic::BinaryOpExpr *bin = static_cast<const Symbolic::BinaryOpExpr *>(expr);
     const auto &op                    = bin->getOperator();
 
-    Parma_Polyhedra_Library::Linear_Expression lhs = bin->getLeft()->toLinearExpr(vm);
-    Parma_Polyhedra_Library::Linear_Expression rhs = bin->getRight()->toLinearExpr(vm);
+    Parma_Polyhedra_Library::Linear_Expression lhs = bin->getLeft()->toLinearExpr(vm.varIndexMap);
+    Parma_Polyhedra_Library::Linear_Expression rhs = bin->getRight()->toLinearExpr(vm.varIndexMap);
     Parma_Polyhedra_Library::Linear_Expression le  = lhs - rhs;
 
     switch (op) {

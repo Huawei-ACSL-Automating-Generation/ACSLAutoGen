@@ -140,7 +140,39 @@ class ProgramState {
     void CollectLoopACSL();
 };
 
-Formulas buildLoopInvariant(const Formulas &conds,
-                            const std::vector<std::unique_ptr<Path>> &paths,
-                            const VarManager &vm);
+struct VarManager {
+    int numVars = 0;
+    std::unordered_map<std::string, int> varIndexMap;
+    std::vector<std::string> orderedVars;
+
+    static VarManager fromPaths(const std::vector<std::unique_ptr<Path>> &paths) {
+        VarManager vm;
+        int varCounter = 0;
+
+        for (const auto &path : paths) {
+            const auto &varAddrMap = path->getVarAddr();
+            for (const auto &[varDecl, addrPtr] : varAddrMap) {
+                if (!varDecl)
+                    continue;
+                std::string name = varDecl->getNameAsString();
+                if (vm.varIndexMap.insert({name, varCounter}).second) {
+                    vm.orderedVars.push_back(name);
+                    ++varCounter;
+                }
+            }
+        }
+
+        vm.numVars = varCounter;
+        return vm;
+    }
+
+    int getIndex(const Symbolic::Variable &var) const {
+        auto it = varIndexMap.find(var.getName());
+        if (it == varIndexMap.end()) {
+            ERROR("VarManager: Variable name '" + var.getName() + "' not found in index map.");
+        }
+        return it->second;
+    }
+};
+Formulas buildLoopInvariant(const Formulas &conds, const std::vector<std::unique_ptr<Path>> &paths);
 #endif
