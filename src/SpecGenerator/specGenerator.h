@@ -47,7 +47,7 @@ struct LoopInfo {
 };
 
 std::optional<LoopInfo> parseLoopInfo(
-    const ProgramState &preState,
+    const ProgramState &loopEntry,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
@@ -97,13 +97,13 @@ class LoopInfoPlugin : public ACSLPlugin {
     Kind kind() const override { return Kind::LoopInfo; }
 
     /// @brief Parse the given loop and fill in loopInfo.
-    /// @param preState loop's pre state before 'init'
+    /// @param loopEntry
     /// @param cond
     /// @param inc
     /// @param body
     /// @param loopInfo info to be filled in
     /// @return return false means this loop is too complex and will abort whole parsing!
-    virtual bool parse(const ProgramState &pre,
+    virtual bool parse(const ProgramState &loopEntry,
                        const clang::Expr *cond,
                        const clang::Stmt *inc,
                        const clang::Stmt *body,
@@ -113,11 +113,13 @@ class LoopInfoPlugin : public ACSLPlugin {
 class LoopInvariantPlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
-    virtual std::optional<std::string> generate(const ProgramState &preState,
-                                                const clang::Expr *cond,
-                                                const clang::Stmt *inc,
-                                                const clang::Stmt *body,
-                                                const LoopInfo &loopInfo) const = 0;
+
+    virtual std::tuple<std::optional<std::string>, bool> generate(
+        const ProgramState &loopEntry,
+        const clang::Expr *cond,
+        const clang::Stmt *inc,
+        const clang::Stmt *body,
+        const LoopInfo &loopInfo) const = 0;
 };
 
 class InlinePlugin : public ACSLPlugin {

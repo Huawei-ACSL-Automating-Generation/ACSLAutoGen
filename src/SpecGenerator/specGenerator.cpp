@@ -67,7 +67,7 @@ string emitFunctionContract(const ProgramState &pre,
 }
 
 std::optional<LoopInfo> parseLoopInfo(
-    const ProgramState &preState,
+    const ProgramState &loopEntry,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
@@ -79,14 +79,14 @@ std::optional<LoopInfo> parseLoopInfo(
     for (auto &plugin : plugins) {
         if (plugin == nullptr)
             continue;
-        if (!plugin->parse(preState, cond, inc, body, loopInfo))
+        if (!plugin->parse(loopEntry, cond, inc, body, loopInfo))
             return nullopt;
     }
     return loopInfo;
 }
 
 std::string emitLoopInvariant(
-    const ProgramState &preState,
+    const ProgramState &loopEntry,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
@@ -100,8 +100,12 @@ std::string emitLoopInvariant(
         INFO(plugin->id());
         if (plugin == nullptr)
             UNREACHABLE();
-        if (auto s = plugin->generate(preState, cond, inc, body, loopInfo); s)
+        auto [s, continueFlag] = plugin->generate(loopEntry, cond, inc, body, loopInfo);
+        if (s) {
             spec += "\t" + *s + "\n";
+        }
+        if (!continueFlag)
+            break;
     }
     spec += ACSL_END.to_string();
     return spec;
