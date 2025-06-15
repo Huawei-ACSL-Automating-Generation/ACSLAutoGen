@@ -382,19 +382,6 @@ void computeLinearInv(const vector<string> &locations,
 
     linTS->ComputeLinTSInv();
     auto invariants = linTS->getInvMap();
-
-    auto it = invariants.find("exit");
-    if (it != invariants.end()) {
-        const auto &exitInvariants = it->second;
-        std::cout << "=== Invariants at 'exit' ===\n";
-        for (size_t i = 0; i < exitInvariants.size(); ++i) {
-            std::cout << "Invariant " << i << ":\n";
-            dump(*exitInvariants[i], vm);
-            std::cout << std::endl;
-        }
-    } else {
-        std::cout << "No invariants found at 'exit'.\n";
-    }
 }
 
 Formulas cloneFormulas(const Formulas &input) {
@@ -432,6 +419,8 @@ Parma_Polyhedra_Library::C_Polyhedron buildIdentityPoly(const VarManager &vm) {
 }
 
 std::vector<Formulas> negateFormulas(Formulas input) {
+    using Op = Symbolic::BinaryOpExpr::Operator;
+
     std::vector<Formulas> result;
     std::queue<std::pair<Formulas, size_t>> worklist;
     worklist.push({std::move(input), 0});
@@ -448,7 +437,6 @@ std::vector<Formulas> negateFormulas(Formulas input) {
                 ERROR("negateFormulas: input[" + std::to_string(i) + "] is not a BinaryOpExpr");
             }
 
-            using Op        = Symbolic::BinaryOpExpr::Operator;
             const auto &lhs = bin->getLeft();
             const auto &rhs = bin->getRight();
 
@@ -660,15 +648,6 @@ Formulas buildLoopInvariant(Formulas loopCond,
     Formulas invariants;
     VarManager vm = VarManager::fromPaths(paths);
 
-    for (size_t i = 0; i < paths.size(); ++i) {
-        INFO("----- Path " + std::to_string(i) + " -----");
-        if (paths[i]) {
-            INFO(paths[i]->dump()); // assuming this prints to std::cout or uses your logging system
-        } else {
-            INFO("Null path pointer at index " + std::to_string(i));
-        }
-    }
-
     vector<Formulas> processedCond = preprocessLoopCond(std::move(loopCond));
 
     const auto &initPaths = initState.getPaths();
@@ -746,7 +725,6 @@ Formulas buildLoopInvariant(Formulas loopCond,
                     auto *exitPoly = primedPolyhedron(*negPoly, vm);
                     exitPoly->intersection_assign(*transPolys[j]);
                     exitPoly->intersection_assign(*baseConditionPoly);
-                    dump(*exitPoly, vm);
                     if (!exitPoly->is_empty()) {
                         transitions.push_back(
                             std::make_tuple(static_cast<int>(j + 1), exitIdx, exitPoly));
@@ -762,7 +740,6 @@ Formulas buildLoopInvariant(Formulas loopCond,
             delete initRel.second;
         }
 
-        // cleanup
         delete baseConditionPoly;
         delete primedConditionPoly;
         for (auto *p : negatedPolys) {

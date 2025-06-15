@@ -97,7 +97,6 @@ std::string emitLoopInvariant(
     string spec  = ACSL_HEAD.to_string();
 
     for (auto &plugin : plugins) {
-        INFO(plugin->id());
         if (plugin == nullptr)
             UNREACHABLE();
         auto [s, continueFlag] = plugin->generate(loopEntry, cond, inc, body, loopInfo);
