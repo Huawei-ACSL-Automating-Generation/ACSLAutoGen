@@ -9,7 +9,6 @@ using namespace Symbolic;
 
 void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm);
 void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManager &vm);
-Parma_Polyhedra_Library::C_Polyhedron buildIdentityPoly(const VarManager &vm);
 
 bool UnaryOpExpr::isLinear() const {
     switch (op_) {
@@ -222,7 +221,7 @@ Parma_Polyhedra_Library::Constraint primedConstriant(const Parma_Polyhedra_Libra
 
     switch (c.type()) {
         case Constraint::Type::EQUALITY: return Constraint(shiftedExpr == 0);
-        case Constraint::Type::NONSTRICT_INEQUALITY: return Constraint(shiftedExpr <= 0);
+        case Constraint::Type::NONSTRICT_INEQUALITY: return Constraint(shiftedExpr >= 0);
         case Constraint::Type::STRICT_INEQUALITY: ERROR("Strict inequality not supported");
         default: ERROR("Unsupported constraint type");
     }
@@ -233,7 +232,7 @@ Parma_Polyhedra_Library::C_Polyhedron *primedPolyhedron(
     const VarManager &vm) {
     using namespace Parma_Polyhedra_Library;
 
-    auto *primed = new C_Polyhedron(vm.numVars * 2, EMPTY);
+    auto *primed = new C_Polyhedron(vm.numVars * 2, UNIVERSE);
 
     Constraint_System cs = poly.constraints();
     for (Constraint_System::const_iterator it = cs.begin(); it != cs.end(); ++it) {
@@ -261,7 +260,7 @@ Parma_Polyhedra_Library::Constraint toConstraint(const Symbolic::SymbolicExpr *e
         case Symbolic::BinaryOpExpr::Operator::LessEqual:
             return Parma_Polyhedra_Library::Constraint(le <= 0);
         case Symbolic::BinaryOpExpr::Operator::GreaterEqual:
-            return Parma_Polyhedra_Library::Constraint(-le <= 0);
+            return Parma_Polyhedra_Library::Constraint(le >= 0);
         case Symbolic::BinaryOpExpr::Operator::Equal:
             return Parma_Polyhedra_Library::Constraint(le == 0);
         default:
@@ -355,7 +354,7 @@ Formulas convertPolyToFormula(const Parma_Polyhedra_Library::C_Polyhedron &poly,
 
 void computeLinearInv(const vector<string> &locations,
                       const vector<TransRel> &transitions,
-                      //   const InitRel &initial,
+                      const InitRel &initial,
                       const VarManager &vm) {
     auto linTS = std::make_unique<LinTS>();
 
@@ -365,10 +364,8 @@ void computeLinearInv(const vector<string> &locations,
 
     for (size_t i = 0; i < locations.size(); ++i) {
         const std::string &locName = locations[i];
-        if (i == 0) {
-            Parma_Polyhedra_Library::C_Polyhedron initPoly = buildIdentityPoly(vm);
-            auto *initPtr = new Parma_Polyhedra_Library::C_Polyhedron(std::move(initPoly));
-            linTS->addLocInit(const_cast<char *>(locName.c_str()), initPtr);
+        if (static_cast<int>(i) == initial.first) {
+            linTS->addLocInit(const_cast<char *>(locName.c_str()), initial.second);
         } else {
             linTS->addLocInit(const_cast<char *>(locName.c_str()), nullptr);
         }
@@ -455,6 +452,7 @@ std::vector<Formulas> negateFormulas(Formulas input) {
             const auto &lhs = bin->getLeft();
             const auto &rhs = bin->getRight();
 
+            // @WindOctober: try to optimize clone.
             switch (bin->getOperator()) {
                 case Op::LessEqual: {
                     auto newRHS = std::make_unique<Symbolic::BinaryOpExpr>(
@@ -598,10 +596,13 @@ std::vector<Formulas> preprocessLoopCond(Formulas loopCond) {
     return result;
 }
 
-Parma_Polyhedra_Library::C_Polyhedron *buildPathPoly(const Path &path, const VarManager &vm) {
+Parma_Polyhedra_Library::C_Polyhedron *buildPathPoly(const Path &path,
+                                                     const VarManager &vm,
+                                                     bool init = false) {
     using namespace Parma_Polyhedra_Library;
 
-    int dim      = vm.numVars * 2;
+    int dim = init ? vm.numVars : vm.numVars * 2;
+
     auto *result = new C_Polyhedron(dim, UNIVERSE);
 
     const auto &varAddrMap = path.getVarAddr();
@@ -620,9 +621,14 @@ Parma_Polyhedra_Library::C_Polyhedron *buildPathPoly(const Path &path, const Var
         if (varIt == vm.varIndexMap.end())
             continue;
 
-        int primedIdx = varIt->second + vm.numVars;
+        int idx;
+        if (init) {
+            idx = varIt->second;
+        } else {
+            idx = varIt->second + vm.numVars;
+        }
+        Linear_Expression lhs = Parma_Polyhedra_Library::Variable(idx);
 
-        Linear_Expression lhs = Parma_Polyhedra_Library::Variable(primedIdx);
         Linear_Expression rhs = expr->toLinearExpr(vm.varIndexMap);
 
         Linear_Expression eq = lhs - rhs;
@@ -630,17 +636,18 @@ Parma_Polyhedra_Library::C_Polyhedron *buildPathPoly(const Path &path, const Var
 
         assignedVars.insert(varName);
     }
+    if (!init) {
+        for (const auto &[name, idx] : vm.varIndexMap) {
+            if (assignedVars.find(name) != assignedVars.end())
+                continue;
 
-    for (const auto &[name, idx] : vm.varIndexMap) {
-        if (assignedVars.find(name) != assignedVars.end())
-            continue;
+            int unprimed = idx;
+            int primed   = idx + vm.numVars;
 
-        int unprimed = idx;
-        int primed   = idx + vm.numVars;
-
-        Linear_Expression eq =
-            Parma_Polyhedra_Library::Variable(primed) - Parma_Polyhedra_Library::Variable(unprimed);
-        result->add_constraint(Constraint(eq == 0));
+            Linear_Expression eq = Parma_Polyhedra_Library::Variable(primed) -
+                                   Parma_Polyhedra_Library::Variable(unprimed);
+            result->add_constraint(Constraint(eq == 0));
+        }
     }
 
     return result;
@@ -668,7 +675,7 @@ Formulas buildLoopInvariant(Formulas loopCond,
     std::vector<Parma_Polyhedra_Library::C_Polyhedron *> initPathPolys;
     for (size_t i = 0; i < initPaths.size(); ++i) {
         if (initPaths[i])
-            initPathPolys.push_back(buildPathPoly(*initPaths[i], vm));
+            initPathPolys.push_back(buildPathPoly(*initPaths[i], vm, true));
         else
             UNREACHABLE();
     }
@@ -693,46 +700,74 @@ Formulas buildLoopInvariant(Formulas loopCond,
     int exitIdx = paths.size() + 1;
 
     // TODO: fully disjunctive.
+    auto identityPoly = buildIdentityPoly(vm); // shared across all paths
     for (size_t i = 0; i < processedCond.size(); ++i) {
         const Formulas &assertions = processedCond[i];
         auto *baseConditionPoly    = convertFormulaToPoly(assertions, vm);
         auto *primedConditionPoly  = primedPolyhedron(*baseConditionPoly, vm);
 
-        std::vector<TransRel> transitions;
-        for (size_t k = 0; k < paths.size(); ++k) {
-            for (auto *initPoly : initPathPolys) {
-                auto *copy = new Parma_Polyhedra_Library::C_Polyhedron(*initPoly);
-                transitions.push_back(TransRel{initIdx, static_cast<int>(k + 1), copy});
-            }
+        auto negatedConds = negateFormulas(cloneFormulas(assertions));
+
+        // === Precompute negated polyhedra
+        std::vector<C_Polyhedron *> negatedPolys;
+        for (const auto &neg : negatedConds) {
+            auto *poly = convertFormulaToPoly(neg, vm);
+            negatedPolys.push_back(poly);
         }
 
-        for (size_t j = 0; j < paths.size(); ++j) {
+        for (auto *initPoly : initPathPolys) {
+            std::vector<TransRel> transitions;
+
+            // === init -> path_k ===
             for (size_t k = 0; k < paths.size(); ++k) {
-                auto *joined = new Parma_Polyhedra_Library::C_Polyhedron(*transPolys[k]);
-                joined->intersection_assign(*baseConditionPoly);
-                joined->intersection_assign(*primedConditionPoly);
-                if (!joined->is_empty()) {
-                    transitions.push_back(
-                        std::make_tuple(static_cast<int>(j + 1), static_cast<int>(k + 1), joined));
-                } else {
-                    delete joined;
+                auto *poly = new C_Polyhedron(identityPoly);
+                transitions.push_back(std::make_tuple(initIdx, static_cast<int>(k + 1), poly));
+            }
+
+            // === path_j -> path_k ===
+            for (size_t j = 0; j < paths.size(); ++j) {
+                for (size_t k = 0; k < paths.size(); ++k) {
+                    auto *joined = new C_Polyhedron(*transPolys[j]);
+                    joined->intersection_assign(*baseConditionPoly);
+                    joined->intersection_assign(*primedConditionPoly);
+
+                    if (!joined->is_empty()) {
+                        transitions.push_back(std::make_tuple(static_cast<int>(j + 1),
+                                                              static_cast<int>(k + 1), joined));
+                    } else {
+                        delete joined;
+                    }
                 }
             }
-        }
 
-        auto identityPoly = buildIdentityPoly(vm);
-
-        auto negatedConds = negateFormulas(cloneFormulas(assertions));
-        for (size_t j = 0; j < paths.size(); ++j) {
-            for (const auto &neg : negatedConds) {
-                auto *negPoly  = convertFormulaToPoly(neg, vm);
-                auto *exitPoly = new Parma_Polyhedra_Library::C_Polyhedron(*negPoly);
-                exitPoly->intersection_assign(identityPoly);
-                transitions.push_back(std::make_tuple(static_cast<int>(j + 1), exitIdx, exitPoly));
+            // === path_j -> exit using precomputed negatedPolys
+            for (size_t j = 0; j < paths.size(); ++j) {
+                for (auto *negPoly : negatedPolys) {
+                    auto *exitPoly = primedPolyhedron(*negPoly, vm);
+                    exitPoly->intersection_assign(*transPolys[j]);
+                    exitPoly->intersection_assign(*baseConditionPoly);
+                    dump(*exitPoly, vm);
+                    if (!exitPoly->is_empty()) {
+                        transitions.push_back(
+                            std::make_tuple(static_cast<int>(j + 1), exitIdx, exitPoly));
+                    } else {
+                        delete exitPoly;
+                    }
+                }
             }
+
+            // === this initPoly as InitRel ===
+            InitRel initRel = std::make_pair(initIdx, new C_Polyhedron(*initPoly));
+            computeLinearInv(locations, transitions, initRel, vm);
+            delete initRel.second;
         }
 
-        computeLinearInv(locations, transitions, vm);
+        // cleanup
+        delete baseConditionPoly;
+        delete primedConditionPoly;
+        for (auto *p : negatedPolys) {
+            delete p;
+        }
     }
 
     TODO();
@@ -748,7 +783,8 @@ void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &v
         std::ostringstream oss;
         bool first = true;
 
-        for (Parma_Polyhedra_Library::dimension_type i = 0; i < c.space_dimension(); ++i) {
+        size_t dim = c.space_dimension();
+        for (size_t i = 0; i < dim; ++i) {
             Coefficient coeff = c.coefficient(Parma_Polyhedra_Library::Variable(i));
             if (coeff == 0)
                 continue;
@@ -761,7 +797,7 @@ void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &v
                 oss << abs(coeff); // Coefficient has its own abs()
 
             std::string varName;
-            if (i < vm.numVars) {
+            if (i < static_cast<size_t>(vm.numVars)) {
                 varName = vm.orderedVars[i];
             } else {
                 varName = vm.orderedVars[i - vm.numVars] + "'";
@@ -782,8 +818,8 @@ void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &v
 
         switch (c.type()) {
             case Constraint::EQUALITY: oss << " == 0"; break;
-            case Constraint::NONSTRICT_INEQUALITY: oss << " <= 0"; break;
-            case Constraint::STRICT_INEQUALITY: oss << " < 0"; break;
+            case Constraint::NONSTRICT_INEQUALITY: oss << " >= 0"; break;
+            case Constraint::STRICT_INEQUALITY: oss << " > 0"; break;
             default: oss << " ?? 0"; break;
         }
 
@@ -797,7 +833,8 @@ void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManag
     std::ostringstream oss;
     bool first = true;
 
-    for (int i = 0; i < expr.space_dimension(); ++i) {
+    size_t dim = expr.space_dimension();
+    for (size_t i = 0; i < dim; ++i) {
         Coefficient coeff = expr.coefficient(Parma_Polyhedra_Library::Variable(i));
         if (coeff == 0)
             continue;
@@ -811,7 +848,7 @@ void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManag
             oss << abs(coeff);
 
         std::string varName;
-        if (i < vm.numVars) {
+        if (i < static_cast<size_t>(vm.numVars)) {
             varName = vm.orderedVars[i];
         } else {
             varName = vm.orderedVars[i - vm.numVars] + "'";
