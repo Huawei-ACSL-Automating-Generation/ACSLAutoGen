@@ -174,5 +174,7 @@ struct VarManager {
         return it->second;
     }
 };
-Formulas buildLoopInvariant(Formulas conds, const std::vector<std::unique_ptr<Path>> &paths);
+Formulas buildLoopInvariant(Formulas conds,
+                            const std::vector<std::unique_ptr<Path>> &paths,
+                            const ProgramState &initState);
 #endif

@@ -86,7 +86,7 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
             symbolicState->step(inc);
 
         const auto &paths = symbolicState->getPaths();
-        auto invariants   = buildLoopInvariant(std::move(loopCond), paths);
+        auto invariants   = buildLoopInvariant(std::move(loopCond), paths, loopEntry);
 
         std::ostringstream oss;
         for (const auto &inv : invariants)
