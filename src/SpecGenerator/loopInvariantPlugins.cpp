@@ -119,16 +119,6 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         string spec;
         vector<const Address *> assignedAddrs;
 
-        auto isExisted = [&](const Address &addr) {
-            // The time complexity can be reduced from O(n) to O(1), but it requires a complex
-            // memoized recursive hash implementation.
-            for (auto &it : assignedAddrs) {
-                if (*it == addr)
-                    return true;
-            }
-            return false;
-        }; // isExisted end
-
         auto isLocal = [&](const Address &addr) {
             auto from = &addr.getFrom();
             while (auto addr = get_if<unique_ptr<Address>>(from)) {
@@ -141,36 +131,12 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                 UNREACHABLE();
             }
             return false;
-        }; // isLocal
+        }; // isLocal end
 
-        // For every path after one round symbolic execution.
-        for (const auto &path : loopCurrent->getPaths()) {
-            // and every Address in the path's memoryState.
-            for (auto &[addr, value] : path->getMemoryState()) {
-                if (isLocal(addr))
-                    continue;
-                if (auto it = entryMS.find(addr); it != entryMS.end()) {
-                    if (*value == *it->second)
-                        continue;
-                } else {
-                    if (value->getType() != SymbolicExpr::ExprType::Variable)
-                        continue;
-
-                    auto symbol = dynamic_cast<const Symbolic::Variable *>(value.get());
-
-                    if (!symbol)
-                        UNREACHABLE();
-
-                    if (*symbol->getFrom() == addr) {
-                        continue;
-                    }
-                }
-
-                if (isExisted(addr))
-                    continue;
-
-                assignedAddrs.push_back(&addr);
-            }
+        for (auto &[addr, _] : loopInfo.patternsMap_) {
+            if (isLocal(addr))
+                continue;
+            assignedAddrs.push_back(&addr);
         }
 
         for (auto &addr : assignedAddrs) {
