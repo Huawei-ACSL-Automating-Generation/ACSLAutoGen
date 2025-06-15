@@ -868,13 +868,13 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
     }
 
     const Expr *cond = nullptr;
-    const Stmt *body = nullptr;
     const Stmt *inc  = nullptr;
+    const Stmt *body = nullptr;
 
     if (const auto *forStmt = dyn_cast<ForStmt>(loopStmt)) {
         cond = forStmt->getCond();
-        body = forStmt->getBody();
         inc  = forStmt->getInc();
+        body = forStmt->getBody();
     } else if (const auto *whileStmt = dyn_cast<WhileStmt>(loopStmt)) {
         cond = whileStmt->getCond();
         body = whileStmt->getBody();
@@ -882,13 +882,13 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
         UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
     }
 
-    auto loopInfo = parseLoopInfo(*loopEntry, cond, body, inc);
+    auto loopInfo = parseLoopInfo(*loopEntry, cond, inc, body);
     if (!loopInfo) {
         // TODO(complex loop)
         UNIMPLEMENT("Loop is too complex!");
     }
 
-    INFO(emitLoopInvariant(*loopEntry, cond, body, inc, *loopInfo));
+    INFO(emitLoopInvariant(*loopEntry, cond, inc, body, *loopInfo));
 
     // @WindOctober: process loop post state.
     TODO();
