@@ -208,6 +208,7 @@ std::string Address::dump() const {
 }
 
 std::string LiteralExpr::regularForm(
+    std::optional<std::reference_wrapper<const std::string>>,
     std::optional<std::reference_wrapper<const std::string>>) const {
     std::ostringstream oss;
     switch (getLiteralType()) {
@@ -223,7 +224,8 @@ std::string LiteralExpr::regularForm(
 }
 
 std::string BinaryOpExpr::regularForm(
-    std::optional<std::reference_wrapper<const std::string>> varLabel) const {
+    std::optional<std::reference_wrapper<const std::string>> prefix,
+    std::optional<std::reference_wrapper<const std::string>> suffix) const {
     std::ostringstream oss;
     std::string opStr;
     switch (op_) {
@@ -247,13 +249,14 @@ std::string BinaryOpExpr::regularForm(
         case Operator::LogicalOr: opStr = "||"; break;
         default: opStr = "?"; break;
     }
-    oss << "(" << left_->regularForm(varLabel) << " " << opStr << " "
-        << right_->regularForm(varLabel) << ")";
+    oss << "(" << left_->regularForm(prefix, suffix) << " " << opStr << " "
+        << right_->regularForm(prefix, suffix) << ")";
     return oss.str();
 }
 
 std::string UnaryOpExpr::regularForm(
-    std::optional<std::reference_wrapper<const std::string>> varLabel) const {
+    std::optional<std::reference_wrapper<const std::string>> prefix,
+    std::optional<std::reference_wrapper<const std::string>> suffix) const {
     std::ostringstream oss;
     std::string opStr;
     switch (op_) {
@@ -269,18 +272,20 @@ std::string UnaryOpExpr::regularForm(
         case Operator::Dereference: opStr = "*"; break;
         default: opStr = "?"; break;
     }
-    oss << opStr << "(" << expr_->regularForm(varLabel) << ")";
+    oss << opStr << "(" << expr_->regularForm(prefix, suffix) << ")";
     return oss.str();
 }
 
-std::string NullExpr::regularForm(std::optional<std::reference_wrapper<const std::string>>) const {
+std::string NullExpr::regularForm(std::optional<std::reference_wrapper<const std::string>>,
+                                  std::optional<std::reference_wrapper<const std::string>>) const {
     WARN("Output NullExpr's regular form, something may go wrong.");
     return "";
 }
 
 std::string Symbolic::Variable::regularForm(
-    std::optional<std::reference_wrapper<const std::string>> varLabel) const {
-    auto addr = from_->regularForm(varLabel);
+    std::optional<std::reference_wrapper<const std::string>> prefix,
+    std::optional<std::reference_wrapper<const std::string>> suffix) const {
+    auto addr = from_->regularForm(prefix, suffix);
     if (addr.length() == 0)
         ERROR("Empty regular from.");
 
@@ -290,35 +295,37 @@ std::string Symbolic::Variable::regularForm(
 }
 
 std::string Address::regularForm(
-    std::optional<std::reference_wrapper<const std::string>> varLabel) const {
+    std::optional<std::reference_wrapper<const std::string>> prefix,
+    std::optional<std::reference_wrapper<const std::string>> suffix) const {
     if (const auto varDeclPtr = std::get_if<const clang::VarDecl *>(&from_)) {
         if (isOffseted())
             ERROR("Address from varDecl should not be offseted.");
-        return "&" + (varLabel ? (std::string)*varLabel + "(" : "") +
-               (*varDeclPtr)->getNameAsString() + (varLabel ? ")" : "");
+        return "&" + (prefix ? (std::string)*prefix : "") + (*varDeclPtr)->getNameAsString() +
+               (suffix ? (string)*suffix : "");
     } else {
-        auto prefix = std::get<std::unique_ptr<Address>>(from_)->regularForm(varLabel);
-        auto suffix = ((isOffseted()) ? offset_->regularForm(varLabel) : "");
-        if (suffix == "0")
-            suffix = "";
-        if (prefix.empty())
+        auto pre = std::get<std::unique_ptr<Address>>(from_)->regularForm(prefix, suffix);
+        auto suf = ((isOffseted()) ? offset_->regularForm(prefix, suffix) : "");
+        if (suf == "0")
+            suf = "";
+        if (pre.empty())
             ERROR("Empty regular from.");
 
-        if (prefix[0] == '&')
-            prefix = prefix.substr(1);
+        if (pre[0] == '&')
+            pre = pre.substr(1);
         else
-            prefix = "*" + prefix;
+            pre = "*" + pre;
 
-        if (!suffix.empty())
-            return "(" + prefix + "+" + suffix + ")";
+        if (!suf.empty())
+            return "(" + pre + "+" + suf + ")";
         else
-            return prefix;
+            return pre;
     }
 }
 
 std::string Address::regularFormOfValue(
-    std::optional<std::reference_wrapper<const std::string>> varLabel) const {
-    string s = regularForm(varLabel);
+    std::optional<std::reference_wrapper<const std::string>> prefix,
+    std::optional<std::reference_wrapper<const std::string>> suffix) const {
+    string s = regularForm(prefix, suffix);
     if (s.empty())
         ERROR("Empty regular from.");
     if (s[0] == '&')
@@ -364,12 +371,23 @@ bool Symbolic::Variable::equal(const SymbolicExpr &expr) const {
     if (!var)
         return false;
 
+    if (from_ == nullptr || var->from_ == nullptr)
+        return false;
     return *from_ == *var->from_;
 }
 
 bool Address::equal(const SymbolicExpr &expr) const {
     const auto addr = dynamic_cast<const Address *>(&expr);
     if (!addr)
+        return false;
+
+    if (auto it = std::get_if<const clang::VarDecl *>(&from_); it && *it == nullptr)
+        return false;
+    if (auto it = std::get_if<std::unique_ptr<Address>>(&from_); it && *it == nullptr)
+        return false;
+    if (auto it = std::get_if<const clang::VarDecl *>(&addr->from_); it && *it == nullptr)
+        return false;
+    if (auto it = std::get_if<std::unique_ptr<Address>>(&addr->from_); it && *it == nullptr)
         return false;
 
     // compare base
