@@ -207,7 +207,8 @@ std::string Address::dump() const {
     return oss.str();
 }
 
-std::string LiteralExpr::regularForm(bool) const {
+std::string LiteralExpr::regularForm(
+    std::optional<std::reference_wrapper<const std::string>>) const {
     std::ostringstream oss;
     switch (getLiteralType()) {
         case LiteralType::Boolean: oss << (data.boolValue ? "true" : "false"); break;
@@ -221,7 +222,8 @@ std::string LiteralExpr::regularForm(bool) const {
     return oss.str();
 }
 
-std::string BinaryOpExpr::regularForm(bool old) const {
+std::string BinaryOpExpr::regularForm(
+    std::optional<std::reference_wrapper<const std::string>> varLabel) const {
     std::ostringstream oss;
     std::string opStr;
     switch (op_) {
@@ -245,11 +247,13 @@ std::string BinaryOpExpr::regularForm(bool old) const {
         case Operator::LogicalOr: opStr = "||"; break;
         default: opStr = "?"; break;
     }
-    oss << "(" << left_->regularForm(old) << " " << opStr << " " << right_->regularForm(old) << ")";
+    oss << "(" << left_->regularForm(varLabel) << " " << opStr << " "
+        << right_->regularForm(varLabel) << ")";
     return oss.str();
 }
 
-std::string UnaryOpExpr::regularForm(bool old) const {
+std::string UnaryOpExpr::regularForm(
+    std::optional<std::reference_wrapper<const std::string>> varLabel) const {
     std::ostringstream oss;
     std::string opStr;
     switch (op_) {
@@ -265,17 +269,18 @@ std::string UnaryOpExpr::regularForm(bool old) const {
         case Operator::Dereference: opStr = "*"; break;
         default: opStr = "?"; break;
     }
-    oss << opStr << "(" << expr_->regularForm(old) << ")";
+    oss << opStr << "(" << expr_->regularForm(varLabel) << ")";
     return oss.str();
 }
 
-std::string NullExpr::regularForm(bool) const {
+std::string NullExpr::regularForm(std::optional<std::reference_wrapper<const std::string>>) const {
     WARN("Output NullExpr's regular form, something may go wrong.");
     return "";
 }
 
-std::string Symbolic::Variable::regularForm(bool old) const {
-    auto addr = from_->regularForm(old);
+std::string Symbolic::Variable::regularForm(
+    std::optional<std::reference_wrapper<const std::string>> varLabel) const {
+    auto addr = from_->regularForm(varLabel);
     if (addr.length() == 0)
         ERROR("Empty regular from.");
 
@@ -284,18 +289,19 @@ std::string Symbolic::Variable::regularForm(bool old) const {
     return "(*" + addr + ")";
 }
 
-std::string Address::regularForm(bool old) const {
+std::string Address::regularForm(
+    std::optional<std::reference_wrapper<const std::string>> varLabel) const {
     if (const auto varDeclPtr = std::get_if<const clang::VarDecl *>(&from_)) {
         if (isOffseted())
             ERROR("Address from varDecl should not be offseted.");
-        return "&" + (old ? (std::string) R"(\old()" : "") + (*varDeclPtr)->getNameAsString() +
-               (old ? ")" : "");
+        return "&" + (varLabel ? (std::string)*varLabel + "(" : "") +
+               (*varDeclPtr)->getNameAsString() + (varLabel ? ")" : "");
     } else {
-        auto prefix = std::get<std::unique_ptr<Address>>(from_)->regularForm(old);
-        auto suffix = ((isOffseted()) ? offset_->regularForm(old) : "");
+        auto prefix = std::get<std::unique_ptr<Address>>(from_)->regularForm(varLabel);
+        auto suffix = ((isOffseted()) ? offset_->regularForm(varLabel) : "");
         if (suffix == "0")
             suffix = "";
-        if (prefix.length() == 0)
+        if (prefix.empty())
             ERROR("Empty regular from.");
 
         if (prefix[0] == '&')
@@ -303,11 +309,22 @@ std::string Address::regularForm(bool old) const {
         else
             prefix = "*" + prefix;
 
-        if (suffix.length())
+        if (!suffix.empty())
             return "(" + prefix + "+" + suffix + ")";
         else
             return prefix;
     }
+}
+
+std::string Address::regularFormOfValue(
+    std::optional<std::reference_wrapper<const std::string>> varLabel) const {
+    string s = regularForm(varLabel);
+    if (s.empty())
+        ERROR("Empty regular from.");
+    if (s[0] == '&')
+        return s.substr(1);
+    else
+        return "*(" + s + ")";
 }
 
 bool LiteralExpr::equal(const SymbolicExpr &expr) const {

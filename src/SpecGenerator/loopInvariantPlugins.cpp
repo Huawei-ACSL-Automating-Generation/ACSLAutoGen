@@ -32,19 +32,18 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
         }
         ostringstream oss;
         oss << "SymbolicLoopEntry: " << loopInfo.symbolicLoopEntry_->dump() << endl;
-        oss << "index's address: "
-            << (loopInfo.index_ ? loopInfo.index_->regularForm(false) : "NULL") << endl;
+        oss << "index's address: " << (loopInfo.index_ ? loopInfo.index_->regularForm() : "NULL")
+            << endl;
         oss << "index's bound: "
-            << (loopInfo.indexBound_ ? loopInfo.indexBound_->regularForm(false) : "NULL") << endl;
+            << (loopInfo.indexBound_ ? loopInfo.indexBound_->regularForm() : "NULL") << endl;
         oss << "patterns: " << endl;
 
         for (auto &[addr, pattern] : loopInfo.patternsMap_) {
-            oss << "address: " << addr.regularForm(false) << "\t";
+            oss << "address: " << addr.regularForm() << "\t";
             oss << "pattern: ";
             if (pattern) {
                 oss << "{ initial value="
-                    << ((*pattern).initialValue_ ? (*pattern).initialValue_->regularForm(false)
-                                                 : "NULL")
+                    << ((*pattern).initialValue_ ? (*pattern).initialValue_->regularForm() : "NULL")
                     << ", step=" << (*pattern).step_ << " }" << endl;
             } else {
                 oss << "Value has changed in loop, but pattern is too complex to preprocess."
@@ -140,7 +139,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         }
 
         for (auto &addr : assignedAddrs) {
-            auto addrStr = addr->regularForm(/*old = */ false);
+            auto addrStr = addr->regularForm();
             if (addrStr.empty())
                 UNREACHABLE();
             if (addrStr[0] == '&')

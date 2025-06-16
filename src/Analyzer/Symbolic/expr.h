@@ -48,11 +48,12 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
         virtual std::string dump() const                    = 0;
         /// @brief emit symbolic expressions in regular form compliant with ACSL
-        /// @param old variables will be enclosed in \old()
+        /// @param varLabel variables will be enclosed in varLabel() is varLabel != nullopt
         /// @return string that can be directly output in ACSL
-        virtual std::string regularForm(bool old) const = 0;
-        virtual bool equal(const SymbolicExpr &) const  = 0;
-        virtual std::size_t hash() const                = 0;
+        virtual std::string regularForm(std::optional<std::reference_wrapper<const std::string>>
+                                            varLabel = std::nullopt) const = 0;
+        virtual bool equal(const SymbolicExpr &) const                     = 0;
+        virtual std::size_t hash() const                                   = 0;
 
         friend std::ostream &operator<<(std::ostream &os, const SymbolicExpr &expr) {
             return os << expr.dump();
@@ -158,7 +159,8 @@ namespace Symbolic {
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        virtual std::string regularForm(bool old) const override;
+        virtual std::string regularForm(std::optional<std::reference_wrapper<const std::string>>
+                                            varLabel = std::nullopt) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -227,7 +229,8 @@ namespace Symbolic {
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        std::string regularForm(bool old) const override;
+        std::string regularForm(std::optional<std::reference_wrapper<const std::string>> varLabel =
+                                    std::nullopt) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -266,7 +269,8 @@ namespace Symbolic {
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        std::string regularForm(bool old) const override;
+        std::string regularForm(std::optional<std::reference_wrapper<const std::string>> varLabel =
+                                    std::nullopt) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -290,7 +294,8 @@ namespace Symbolic {
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        std::string regularForm(bool old) const override;
+        std::string regularForm(std::optional<std::reference_wrapper<const std::string>> varLabel =
+                                    std::nullopt) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -317,7 +322,8 @@ namespace Symbolic {
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        std::string regularForm(bool old) const override;
+        std::string regularForm(std::optional<std::reference_wrapper<const std::string>> varLabel =
+                                    std::nullopt) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         auto getFrom() const -> const auto & { return from_; }
@@ -387,7 +393,10 @@ namespace Symbolic {
         std::unique_ptr<SymbolicExpr> clone() const override;
         unsigned int getId() const { return id_; }
         std::string dump() const override;
-        std::string regularForm(bool old) const override;
+        std::string regularForm(std::optional<std::reference_wrapper<const std::string>> varLabel =
+                                    std::nullopt) const override;
+        std::string regularFormOfValue(
+            std::optional<std::reference_wrapper<const std::string>> varLabel = std::nullopt) const;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
         SymbolicExpr *getOffset() const { return offset_.get(); }

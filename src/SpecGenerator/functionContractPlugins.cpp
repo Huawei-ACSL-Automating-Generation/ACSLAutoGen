@@ -63,7 +63,7 @@ class AssignsPlugin : public FunctionContractPlugin {
         }
 
         for (auto &addr : assignedAddrs) {
-            spec += "*" + addr->regularForm(/*old = */ false) + ", ";
+            spec += "*" + addr->regularForm() + ", ";
         }
 
         if (spec.empty())
