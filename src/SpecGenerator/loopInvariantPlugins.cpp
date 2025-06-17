@@ -151,9 +151,9 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
 };
 REGISTER_ACSL_PLUGIN(LoopAssignsPlugin, "loopAssigns");
 
-class ParadigmMaxPlugin : public LoopInvariantPlugin {
+class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
   public:
-    ParadigmMaxPlugin(const string &ID) : id_(ID) {}
+    ParadigmMaxMinPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
     tuple<optional<string>, bool> generate(const ProgramState &,
                                            const clang::Expr *,
@@ -183,10 +183,10 @@ class ParadigmMaxPlugin : public LoopInvariantPlugin {
             if (s == nullptr)
                 return;
 
-            StringTemplate specTemplate{FIND_MAX_LOOP_WITH_VAR_BOUND};
+            optional<StringTemplate> specTemplate{nullopt};
             // Parameters for template filling, see StringTemplate for more information.
             optional<string> param_n{nullopt}, param_array{nullopt}, param_index{nullopt},
-                param_max{nullopt};
+                param_m{nullopt};
 
             param_index = loopInfo.index_->regularFormOfValue();
             param_n     = loopInfo.indexBound_->regularForm();
@@ -280,9 +280,24 @@ class ParadigmMaxPlugin : public LoopInvariantPlugin {
                     dyn_cast_if_present<clang::BinaryOperator>(ifCond->IgnoreParenImpCasts())) {
                 using enum clang::BinaryOperatorKind;
                 using enum clang::UnaryOperatorKind;
-                // Operator is '<' or '<='.
-                if (auto op = bin->getOpcode(); op != BO_LE && op != BO_LT)
-                    return;
+                // Operator is '<', '<=', '>' or '>='.
+                switch (bin->getOpcode()) {
+                    case BO_LE:
+                    case BO_LT:
+                        if (loopInfo.indexBound_->getType() == Variable)
+                            specTemplate = FIND_MAX_LOOP_WITH_VAR_BOUND;
+                        else
+                            specTemplate = FIND_MAX_LOOP_WITH_OTHER_BOUND;
+                        break;
+                    case BO_GE:
+                    case BO_GT:
+                        if (loopInfo.indexBound_->getType() == Variable)
+                            specTemplate = FIND_MIN_LOOP_WITH_VAR_BOUND;
+                        else
+                            specTemplate = FIND_MIN_LOOP_WITH_OTHER_BOUND;
+                        break;
+                    default: return;
+                }
                 DEBUG("Operator matched.");
 
                 // LHS is DeclRef of Variable.
@@ -293,7 +308,7 @@ class ParadigmMaxPlugin : public LoopInvariantPlugin {
                         maxDecl = var->getCanonicalDecl();
                         if (isLocal(maxDecl))
                             return;
-                        param_max = maxDecl->getNameAsString();
+                        param_m = maxDecl->getNameAsString();
                     } else {
                         return;
                     }
@@ -308,8 +323,8 @@ class ParadigmMaxPlugin : public LoopInvariantPlugin {
                 DEBUG("RHS matched.");
             }
 
-            if (param_n == nullopt || param_array == nullopt || param_index == nullopt ||
-                param_max == nullopt)
+            if (specTemplate == nullopt || param_n == nullopt || param_array == nullopt ||
+                param_index == nullopt || param_m == nullopt)
                 return;
 
             // Verify 'then' of if.
@@ -342,6 +357,7 @@ class ParadigmMaxPlugin : public LoopInvariantPlugin {
             } else {
                 return;
             }
+            DEBUG("Then Verified.");
 
             // Verify 'else' of if.
             if (auto elseStmt = s->getElse()) {
@@ -361,14 +377,15 @@ class ParadigmMaxPlugin : public LoopInvariantPlugin {
                     }
                 }
             }
+            DEBUG("Else Verified.");
 
             // Pretty sure we have found a 'find_max' loop.
-            spec += specTemplate.to_string(NameMap{{"n", *param_n},
-                                                   {"array", *param_array},
-                                                   {"index", *param_index},
-                                                   {"max", *param_max}}) +
+            spec += (*specTemplate)
+                        .to_string(NameMap{{"n", *param_n},
+                                           {"array", *param_array},
+                                           {"index", *param_index},
+                                           {"m", *param_m}}) +
                     "\n";
-            DEBUG("Finished.");
         }}; // ifVisitor end
         ifVisitor.runOn(body);
 
@@ -383,4 +400,4 @@ class ParadigmMaxPlugin : public LoopInvariantPlugin {
   private:
     string id_;
 };
-REGISTER_ACSL_PLUGIN(ParadigmMaxPlugin, "paradigmMax");
+REGISTER_ACSL_PLUGIN(ParadigmMaxMinPlugin, "paradigmMaxMin");
