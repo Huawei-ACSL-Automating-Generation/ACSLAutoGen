@@ -285,6 +285,9 @@ std::string NullExpr::regularForm(std::optional<std::reference_wrapper<const std
 std::string Symbolic::Variable::regularForm(
     std::optional<std::reference_wrapper<const std::string>> prefix,
     std::optional<std::reference_wrapper<const std::string>> suffix) const {
+    if (from_ == nullptr) {
+        ERROR("Trying to get regular form of Variable with nullptr from_.");
+    }
     auto addr = from_->regularForm(prefix, suffix);
     if (addr.length() == 0)
         ERROR("Empty regular from.");
@@ -297,13 +300,14 @@ std::string Symbolic::Variable::regularForm(
 std::string Address::regularForm(
     std::optional<std::reference_wrapper<const std::string>> prefix,
     std::optional<std::reference_wrapper<const std::string>> suffix) const {
-    if (const auto varDeclPtr = std::get_if<const clang::VarDecl *>(&from_)) {
+    if (const auto varDeclPtr = std::get_if<const clang::VarDecl *>(&from_);
+        varDeclPtr && *varDeclPtr) {
         if (isOffseted())
             ERROR("Address from varDecl should not be offseted.");
         return "&" + (prefix ? (std::string)*prefix : "") + (*varDeclPtr)->getNameAsString() +
                (suffix ? (string)*suffix : "");
-    } else {
-        auto pre = std::get<std::unique_ptr<Address>>(from_)->regularForm(prefix, suffix);
+    } else if (auto addrPtr = std::get_if<std::unique_ptr<Address>>(&from_); addrPtr && *addrPtr) {
+        auto pre = (*addrPtr)->regularForm(prefix, suffix);
         auto suf = ((isOffseted()) ? offset_->regularForm(prefix, suffix) : "");
         if (suf == "0")
             suf = "";
@@ -319,6 +323,8 @@ std::string Address::regularForm(
             return "(" + pre + "+" + suf + ")";
         else
             return pre;
+    } else {
+        ERROR("Trying to get regular form of address with bad-defined from_.");
     }
 }
 
