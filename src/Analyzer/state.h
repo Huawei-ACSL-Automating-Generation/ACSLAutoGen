@@ -48,7 +48,7 @@ class Path {
     void setPathState(PathState state) { currentState = state; }
 
     bool isActive() const { return currentState == PathState::Step; }
-    // bool isUnchangedState(Address addr);
+    bool isUnchanged(const Address &addr);
     std::unique_ptr<Path> clone() const;
 
     const clang::Stmt *StmtCtx = nullptr;
@@ -115,7 +115,6 @@ class ProgramState {
     const clang::Stmt *StmtCtx = nullptr;
 
     std::string dump() const;
-    void generateFuncACSL();
     void resetState();
     void resymbolize();
 
@@ -136,8 +135,6 @@ class ProgramState {
                     const std::vector<const clang::Stmt *> &branchStmts);
 
     void stepLoop(const clang::Stmt *loopStmt);
-
-    void CollectLoopACSL();
 };
 
 struct VarManager {

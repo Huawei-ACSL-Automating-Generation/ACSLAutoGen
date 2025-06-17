@@ -3,7 +3,8 @@
 #include "macros.h"
 #include "specGenerator.h"
 #include "state.h"
-#include "stringTemplate.h"
+#include "loopInvTemplates.h"
+#include "utils.h"
 
 using namespace std;
 using namespace clang;
@@ -103,18 +104,11 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
   public:
     LoopAssignsPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool> generate(const ProgramState &preState,
-                                           const clang::Expr *cond,
-                                           const clang::Stmt *inc,
-                                           const clang::Stmt *body,
+    tuple<optional<string>, bool> generate(const ProgramState &,
+                                           const clang::Expr *,
+                                           const clang::Stmt *,
+                                           const clang::Stmt *,
                                            const LoopInfo &loopInfo) const override {
-        auto loopCurrent = loopInfo.symbolicLoopEntry_->clone();
-        loopCurrent->step(cond);
-        loopCurrent->step(body);
-        loopCurrent->step(inc);
-
-        auto &entryMS = loopInfo.symbolicLoopEntry_->getPaths()[0]->getMemoryState();
-
         string spec;
         vector<const Address *> assignedAddrs;
 
@@ -124,6 +118,9 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                 from = &(*addr)->getFrom();
             }
             if (auto var = get_if<const VarDecl *>(from)) {
+                if (loopInfo.symbolicLoopEntry_ == nullptr ||
+                    loopInfo.symbolicLoopEntry_->getPaths().size() != 1)
+                    ERROR("SymbolicLoopEntry_ is in an invaild state");
                 if (!loopInfo.symbolicLoopEntry_->getPaths()[0]->getVarAddr().contains(*var))
                     return true;
             } else {
@@ -139,13 +136,8 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         }
 
         for (auto &addr : assignedAddrs) {
-            auto addrStr = addr->regularForm();
-            if (addrStr.empty())
-                UNREACHABLE();
-            if (addrStr[0] == '&')
-                spec += addrStr.substr(1) + ", ";
-            else
-                spec += "*" + addrStr + ", ";
+            auto valueForm = addr->regularFormOfValue();
+            spec += valueForm + ", ";
         }
 
         if (spec.empty())
@@ -158,3 +150,237 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
     string id_;
 };
 REGISTER_ACSL_PLUGIN(LoopAssignsPlugin, "loopAssigns");
+
+class ParadigmMaxPlugin : public LoopInvariantPlugin {
+  public:
+    ParadigmMaxPlugin(const string &ID) : id_(ID) {}
+    string_view id() const override { return id_; }
+    tuple<optional<string>, bool> generate(const ProgramState &,
+                                           const clang::Expr *,
+                                           const clang::Stmt *,
+                                           const clang::Stmt *body,
+                                           const LoopInfo &loopInfo) const override {
+        // Only work when loop is 1-step.
+        int64_t indexStep;
+        if (loopInfo.index_ == nullptr)
+            ERROR("Index_ is in an invalid state");
+        if (auto it = loopInfo.patternsMap_.find(*loopInfo.index_);
+            it != loopInfo.patternsMap_.end()) {
+            if (it->second == nullopt)
+                ERROR("PatternsMap_ is in an invalid state");
+            if ((*it->second).step_ != 1 && (*it->second).step_ != -1)
+                return make_tuple(nullopt, true);
+            else
+                indexStep = (*it->second).step_;
+        } else {
+            ERROR("PatternsMap_ is in an invalid state");
+        }
+
+        string spec;
+
+        // Hook that deals with every if.
+        auto ifVisitor = StmtVisitor{[&](const clang::IfStmt *s) {
+            if (s == nullptr)
+                return;
+
+            StringTemplate specTemplate{FIND_MAX_LOOP_WITH_VAR_BOUND};
+            // Parameters for template filling, see StringTemplate for more information.
+            optional<string> param_n{nullopt}, param_array{nullopt}, param_index{nullopt},
+                param_max{nullopt};
+
+            param_index = loopInfo.index_->regularFormOfValue();
+            param_n     = loopInfo.indexBound_->regularForm();
+
+            using enum SymbolicExpr::ExprType;
+            if (loopInfo.indexBound_->getType() == Variable) {
+                param_n = loopInfo.indexBound_->regularForm();
+            }
+
+            auto getAddress = [&](const clang::Expr *expr) -> unique_ptr<Address> {
+                if (expr == nullptr)
+                    return nullptr;
+                try {
+                    // May pass some strange expr to extractAddress.
+                    return loopInfo.symbolicLoopEntry_->getPaths()[0]->extractAddress(expr);
+                } catch (...) { return nullptr; }
+            }; // getAddress end
+
+            // Is expr 'p[i]', *(p+i) or *it where it == p+i?
+            auto parseIndexedArray = [&](const clang::Expr *expr) {
+                if (expr == nullptr)
+                    return false;
+
+                if (auto arraySub = dyn_cast_if_present<clang::ArraySubscriptExpr>(
+                        expr->IgnoreParenImpCasts())) {
+                    // p[i]
+                    auto idxAddr = getAddress(arraySub->getIdx());
+                    // Is 'i' loop's index?
+                    if (idxAddr == nullptr || *idxAddr != *loopInfo.index_)
+                        return false;
+
+                    if (auto addr = getAddress(arraySub->getBase())) {
+                        param_array = addr->regularFormOfValue();
+                        return true;
+                    } else
+                        return false;
+                } else if (auto unary = dyn_cast_if_present<clang::UnaryOperator>(
+                               expr->IgnoreParenImpCasts());
+                           unary && unary->getOpcode() == UO_Deref) {
+                    if (auto bin = dyn_cast_if_present<clang::BinaryOperator>(
+                            unary->getSubExpr()->IgnoreParenImpCasts());
+                        bin && bin->getOpcode() == BO_Add) {
+                        // *(p+i)
+
+                        // Is 'i' loop's index?
+                        if (auto rhsAddr = getAddress(bin->getRHS());
+                            rhsAddr == nullptr || *rhsAddr != *loopInfo.index_)
+                            return false;
+                        if (auto addr = getAddress(bin->getLHS())) {
+                            param_array = addr->regularFormOfValue();
+                            return true;
+                        } else {
+                            return false;
+                        }
+
+                    } else if (auto declRef = dyn_cast_if_present<clang::DeclRefExpr>(
+                                   unary->getSubExpr()->IgnoreParenImpCasts())) {
+                        // *it
+
+                        auto addr = getAddress(declRef);
+                        if (addr == nullptr)
+                            return false;
+                        // Does this variable step same as loop?
+                        if (auto it = loopInfo.patternsMap_.find(*addr);
+                            it == loopInfo.patternsMap_.end() || it->second == nullopt ||
+                            (*it->second).step_ != indexStep)
+                            return false;
+                        param_array = addr->regularFormOfValue();
+                        return true;
+                    }
+                } else {
+                    return false;
+                }
+                UNREACHABLE();
+            }; // parseIndexedArray end
+
+            auto isLocal = [&](const clang::VarDecl *varDecl) {
+                if (loopInfo.symbolicLoopEntry_ == nullptr ||
+                    loopInfo.symbolicLoopEntry_->getPaths().size() != 1)
+                    ERROR("SymbolicLoopEntry_ is in an invaild state");
+                if (!loopInfo.symbolicLoopEntry_->getPaths()[0]->getVarAddr().contains(varDecl))
+                    return true;
+                return false;
+            }; // isLocal end
+
+            const clang::VarDecl *maxDecl;
+
+            // Does if's condition has form 'max < p[i]'?
+            auto ifCond = s->getCond();
+            if (auto bin =
+                    dyn_cast_if_present<clang::BinaryOperator>(ifCond->IgnoreParenImpCasts())) {
+                using enum clang::BinaryOperatorKind;
+                using enum clang::UnaryOperatorKind;
+                // Operator is '<' or '<='.
+                if (auto op = bin->getOpcode(); op != BO_LE && op != BO_LT)
+                    return;
+                DEBUG("Operator matched.");
+
+                // LHS is DeclRef of Variable.
+                if (auto declRef = dyn_cast_if_present<clang::DeclRefExpr>(
+                        bin->getLHS()->IgnoreParenImpCasts())) {
+                    if (auto var = dyn_cast<VarDecl>(declRef->getDecl());
+                        var && var->getCanonicalDecl()) {
+                        maxDecl = var->getCanonicalDecl();
+                        if (isLocal(maxDecl))
+                            return;
+                        param_max = maxDecl->getNameAsString();
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+                DEBUG("LHS matched.");
+
+                // Deal with RHS
+                if (!parseIndexedArray(bin->getRHS()))
+                    return;
+                DEBUG("RHS matched.");
+            }
+
+            if (param_n == nullopt || param_array == nullopt || param_index == nullopt ||
+                param_max == nullopt)
+                return;
+
+            // Verify 'then' of if.
+            if (auto thenStmt = s->getThen()) {
+                if (loopInfo.symbolicLoopEntry_ == nullptr ||
+                    loopInfo.symbolicLoopEntry_->getPaths().size() != 1)
+                    ERROR("SymbolicLoopEntry_ is in an invaild state");
+                auto symbolState = loopInfo.symbolicLoopEntry_->clone();
+                symbolState->step(thenStmt);
+                for (auto &path : symbolState->getPaths()) {
+                    unique_ptr<Symbolic::Variable> maxVar{nullptr};
+                    if (auto maxValue = path->getVarState(maxDecl);
+                        maxValue && maxValue->getType() == SymbolicExpr::ExprType::Variable) {
+                        maxVar = unique_ptr<Symbolic::Variable>(
+                            static_cast<Symbolic::Variable *>(maxValue.release()));
+                    } else {
+                        return;
+                    }
+
+                    if (auto bin = dyn_cast_if_present<clang::BinaryOperator>(ifCond)) {
+                        auto rhsAddr = getAddress(bin->getRHS());
+                        if (rhsAddr == nullptr)
+                            return;
+                        if (*maxVar->getFrom() != *rhsAddr)
+                            return;
+                    } else {
+                        UNREACHABLE();
+                    }
+                }
+            } else {
+                return;
+            }
+
+            // Verify 'else' of if.
+            if (auto elseStmt = s->getElse()) {
+                if (loopInfo.symbolicLoopEntry_ == nullptr ||
+                    loopInfo.symbolicLoopEntry_->getPaths().size() != 1)
+                    ERROR("SymbolicLoopEntry_ is in an invaild state");
+                auto symbolState = loopInfo.symbolicLoopEntry_->clone();
+                symbolState->step(elseStmt);
+                for (auto &path : symbolState->getPaths()) {
+                    if (auto varAddrIt = path->getVarAddr().find(maxDecl);
+                        varAddrIt != path->getVarAddr().end()) {
+                        auto &maxAddr = varAddrIt->second;
+                        if (!path->isUnchanged(*maxAddr))
+                            return;
+                    } else {
+                        ERROR("Can't find maxDecl after step, something must be wrong.");
+                    }
+                }
+            }
+
+            // Pretty sure we have found a 'find_max' loop.
+            spec += specTemplate.to_string(NameMap{{"n", *param_n},
+                                                   {"array", *param_array},
+                                                   {"index", *param_index},
+                                                   {"max", *param_max}}) +
+                    "\n";
+            DEBUG("Finished.");
+        }}; // ifVisitor end
+        ifVisitor.runOn(body);
+
+        if (spec.empty())
+            return make_tuple(nullopt, true);
+        else {
+            spec.pop_back(); // earse \n
+            return make_tuple(spec, true);
+        }
+    }
+
+  private:
+    string id_;
+};
+REGISTER_ACSL_PLUGIN(ParadigmMaxPlugin, "paradigmMax");

@@ -12,13 +12,21 @@
 // TODO: some typical loop invariant patterns.
 
 // Placeholders: n, index, array, max.
-const StringTemplate FIND_MAX_LOOP = R"(loop invariant \forall integer j;
+const StringTemplate FIND_MAX_LOOP_WITH_VAR_BOUND = R"(loop invariant \forall integer j;
         0 <= j < ${index} ==> ${max} >= ${array}[j];
     loop invariant \exists integer j;
         0 <= j < ${index} ==> (\valid(${array} + j) && ${array}[j] == ${max});
     loop invariant 0 <= ${index} < ${n};
     loop invariant ${array} == \at(${array}, Pre) && ${n} == \at(${n}, Pre);
-    loop invariant \valid(${array} + (0..${n}-1));
-)";
+    loop invariant \valid(${array} + (0..${n}-1));)";
+
+// Placeholders: n, index, array, max.
+const StringTemplate FIND_MAX_LOOP_WITH_OTHER_BOUND = R"(loop invariant \forall integer j;
+        0 <= j < ${index} ==> ${max} >= ${array}[j];
+    loop invariant \exists integer j;
+        0 <= j < ${index} ==> (\valid(${array} + j) && ${array}[j] == ${max});
+    loop invariant 0 <= ${index} < ${n};
+    loop invariant ${array} == \at(${array}, Pre);
+    loop invariant \valid(${array} + (0..${n}-1));)";
 
 #endif

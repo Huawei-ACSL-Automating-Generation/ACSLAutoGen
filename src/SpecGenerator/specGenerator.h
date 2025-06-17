@@ -30,7 +30,8 @@ struct LoopInfo {
 
     // SetIndexPlugin
     std::unique_ptr<Symbolic::Address> index_{nullptr};
-    std::unique_ptr<Symbolic::SymbolicExpr> indexBound_{nullptr}; ///< The bound is inclusive.
+    clang::BinaryOperator::Opcode op_;
+    std::unique_ptr<Symbolic::SymbolicExpr> indexBound_{nullptr};
 
     // SetPatternsPlugin
     struct pattern {

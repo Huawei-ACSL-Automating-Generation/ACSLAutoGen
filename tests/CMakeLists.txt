@@ -39,4 +39,6 @@ target_link_libraries(test_all PRIVATE
   SpecGeneratorLib
 )
 
-gtest_discover_tests(test_all)
+gtest_add_tests(TARGET test_all
+                TEST_PREFIX test_all::
+                TEST_LIST test_all_tests)

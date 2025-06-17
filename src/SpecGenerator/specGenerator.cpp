@@ -60,7 +60,7 @@ string emitFunctionContract(const ProgramState &pre,
         if (plugin == nullptr)
             continue;
         if (auto s = plugin->generate(pre, post); s)
-            spec += "\t" + *s + "\n";
+            spec += "    " /*4 spaces*/ + *s + "\n";
     }
     spec += ACSL_END.to_string();
     return spec;
@@ -102,7 +102,7 @@ std::string emitLoopInvariant(
             UNREACHABLE();
         auto [s, continueFlag] = plugin->generate(loopEntry, cond, inc, body, loopInfo);
         if (s) {
-            spec += "\t" + *s + "\n";
+            spec += "    " /*4 spaces*/ + *s + "\n";
         }
         if (!continueFlag)
             break;

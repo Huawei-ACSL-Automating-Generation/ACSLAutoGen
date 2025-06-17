@@ -243,7 +243,9 @@ class SetIndexPlugin : public LoopInfoPlugin {
             auto indexExpr = binExpr->getLHS()->IgnoreParenImpCasts();
             auto boundExpr = binExpr->getRHS()->IgnoreParenImpCasts();
 
+            using enum BinaryOperator::Opcode;
             unique_ptr<Address> indexAddr;
+            BinaryOperator::Opcode opCode;
             unique_ptr<SymbolicExpr> boundValue;
 
             if (auto addr = sameAddressBetweenEveryPaths(indexExpr)) {
@@ -266,20 +268,11 @@ class SetIndexPlugin : public LoopInfoPlugin {
 
             // TODO: more operators
             switch (binExpr->getOpcode()) {
-                case BinaryOperator::Opcode::BO_LT:
-                    boundValue = make_unique<BinaryOpExpr>(std::move(boundValue),
-                                                           BinaryOpExpr::Operator::Subtract,
-                                                           make_unique<LiteralExpr>((int64_t)1));
-                    break;
-                case BinaryOperator::Opcode::BO_GT:
-                    boundValue = make_unique<BinaryOpExpr>(std::move(boundValue),
-                                                           BinaryOpExpr::Operator::Add,
-                                                           make_unique<LiteralExpr>((int64_t)1));
-                    break;
-
-                case BinaryOperator::Opcode::BO_LE:
-                case BinaryOperator::Opcode::BO_GE:
-                case BinaryOperator::Opcode::BO_NE: break;
+                case BO_LT:
+                case BO_GT:
+                case BO_LE:
+                case BO_GE:
+                case BO_NE: opCode = binExpr->getOpcode(); break;
                 default:
                     // too complex
                     INFO("Loop's condition expr is too complex! Unimplemented binary "
@@ -288,6 +281,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
             }
 
             loopInfo.index_      = std::move(indexAddr);
+            loopInfo.op_         = opCode;
             loopInfo.indexBound_ = std::move(boundValue);
             return true;
         } else if (auto unaryExpr = dyn_cast<UnaryOperator>(cond->IgnoreParenImpCasts())) {
@@ -311,6 +305,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
             }
 
             loopInfo.index_      = std::move(indexAddr);
+            loopInfo.op_         = BO_NE;
             loopInfo.indexBound_ = make_unique<LiteralExpr>((int64_t)0);
             return true;
         } else if (auto refExpr = dyn_cast<DeclRefExpr>(cond->IgnoreParenImpCasts())) {
@@ -343,6 +338,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
             }
 
             loopInfo.index_      = std::move(indexAddr);
+            loopInfo.op_         = BO_NE;
             loopInfo.indexBound_ = make_unique<LiteralExpr>((int64_t)0);
             return true;
         }
