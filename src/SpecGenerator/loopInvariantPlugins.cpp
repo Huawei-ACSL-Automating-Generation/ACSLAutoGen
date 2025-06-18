@@ -272,7 +272,8 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                 return false;
             }; // isLocal end
 
-            const clang::VarDecl *maxDecl;
+            const clang::VarDecl *maxDecl{nullptr}; // max
+            clang::Expr *elementExpr{nullptr};      // p[i]
 
             // Does if's condition has form 'max < p[i]' or 'p[i] > max'?
             auto ifCond = s->getCond();
@@ -281,8 +282,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                 using enum clang::BinaryOperatorKind;
                 using enum clang::UnaryOperatorKind;
 
-                clang::DeclRefExpr *maxExpr;
-                clang::Expr *elementExpr;
+                clang::DeclRefExpr *maxExpr{nullptr};
                 bool maxOnLeft = true;
 
                 // Where is 'max'?
@@ -362,14 +362,11 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                         return;
                     }
 
-                    if (auto bin = dyn_cast_if_present<clang::BinaryOperator>(ifCond)) {
-                        auto rhsAddr = getAddress(bin->getRHS());
-                        if (rhsAddr == nullptr)
-                            return;
-                        if (*maxVar->getFrom() != *rhsAddr)
+                    if (auto elementAddr = getAddress(elementExpr)) {
+                        if (*maxVar->getFrom() != *elementAddr)
                             return;
                     } else {
-                        UNREACHABLE();
+                        return;
                     }
                 }
             } else {
