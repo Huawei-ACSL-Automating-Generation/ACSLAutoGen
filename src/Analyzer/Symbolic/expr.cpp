@@ -118,13 +118,15 @@ std::size_t NullExpr::hash() const { return static_cast<std::size_t>(getType());
 std::string LiteralExpr::dump() const {
     std::ostringstream oss;
     switch (getLiteralType()) {
-        case LiteralType::Boolean: oss << (data.boolValue ? "true" : "false"); break;
-        case LiteralType::Int: oss << data.intValue; break;
-        case LiteralType::UnsignedInt: oss << data.uintValue; break;
-        case LiteralType::Short: oss << data.shortValue; break;
-        case LiteralType::UnsignedShort: oss << data.ushortValue; break;
-        case LiteralType::Int64: oss << data.int64Value; break;
-        case LiteralType::UInt64: oss << data.uint64Value; break;
+        case LiteralType::Boolean:
+            oss << "Boolean(" << (data.boolValue ? "true" : "false") << ")";
+            break;
+        case LiteralType::Int: oss << "Int(" << data.intValue << ")"; break;
+        case LiteralType::UnsignedInt: oss << "UnsignedInt(" << data.uintValue << ")"; break;
+        case LiteralType::Short: oss << "Short(" << data.shortValue << ")"; break;
+        case LiteralType::UnsignedShort: oss << "UnsignedShort(" << data.ushortValue << ")"; break;
+        case LiteralType::Int64: oss << "Int64(" << data.int64Value << ")"; break;
+        case LiteralType::UInt64: oss << "Uint64(" << data.uint64Value << ")"; break;
     }
 
     return oss.str();
@@ -345,7 +347,7 @@ bool LiteralExpr::equal(const SymbolicExpr &expr) const {
     if (!liter)
         return false;
 
-    return type == liter->type && (std::memcmp(&data, &(liter->data), sizeof(Data)) == 0);
+    return type == liter->type && getLiteralValue() == liter->getLiteralValue();
 }
 
 bool BinaryOpExpr::equal(const SymbolicExpr &expr) const {
