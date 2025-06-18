@@ -32,8 +32,7 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
     }
     INFO("Processing Function " + FD->getNameAsString());
 
-    auto acslFunc = new ACSLFunction(FD);
-    auto state    = std::make_unique<ProgramState>(acslFunc);
+    auto state = std::make_unique<ProgramState>(make_unique<ACSLFunction>(FD));
 
     if (const Stmt *Body = FD->getBody()) {
         if (!isa<CompoundStmt>(Body))
