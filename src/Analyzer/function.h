@@ -11,7 +11,7 @@ class ACSLFunction {
     ACSLFunction(const clang::FunctionDecl *FD) : FuncDecl(FD) {}
 
     const clang::FunctionDecl *getFunctionDecl() const { return FuncDecl; }
-    ACSLFunction *clone() const;
+    std::unique_ptr<ACSLFunction> clone() const;
 
     bool operator==(const ACSLFunction &RHS) { return FuncDecl == RHS.getFunctionDecl(); }
     bool operator!=(const ACSLFunction &RHS) { return !(*this == RHS); }
@@ -19,10 +19,11 @@ class ACSLFunction {
   private:
     const clang::FunctionDecl *FuncDecl;
 
-    std::unordered_map<const clang::Stmt *,
-                       std::unordered_set<std::pair<const clang::VarDecl *, const clang::VarDecl *>,
-                                          acslg::pair_hash>>
-        loopAssigns;
+    // std::unordered_map<const clang::Stmt *,
+    //                    std::unordered_set<std::pair<const clang::VarDecl *, const clang::VarDecl
+    //                    *>,
+    //                                       acslg::pair_hash>>
+    //     loopAssigns;
 };
 
 #endif

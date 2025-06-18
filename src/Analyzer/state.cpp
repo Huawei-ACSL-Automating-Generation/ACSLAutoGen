@@ -578,18 +578,18 @@ bool Path::isUnchanged(const Address &addr) {
     if (memIt->second->getType() == SymbolicExpr::ExprType::Variable) {
         auto var = unique_ptr<Symbolic::Variable>(
             static_cast<Symbolic::Variable *>(memIt->second->clone().release()));
-        if(*var->getFrom() == addr)
+        if (*var->getFrom() == addr)
             return true;
     }
     return false;
 }
 
-ProgramState::ProgramState(unique_ptr<Path> initialPath, ACSLFunction *context) {
+ProgramState::ProgramState(unique_ptr<Path> initialPath, unique_ptr<ACSLFunction> context) {
     paths.push_back(std::move(initialPath));
-    Context = unique_ptr<ACSLFunction>(context);
+    Context = std::move(context);
 }
 
-ProgramState::ProgramState(ACSLFunction *context) { Context = unique_ptr<ACSLFunction>(context); }
+ProgramState::ProgramState(unique_ptr<ACSLFunction> context) { Context = std::move(context); }
 
 void ProgramState::init() {
     auto FD = Context->getFunctionDecl();

@@ -88,8 +88,8 @@ class Path {
 
 class ProgramState {
   public:
-    ProgramState(std::unique_ptr<Path> initialPath, ACSLFunction *context);
-    ProgramState(ACSLFunction *context);
+    ProgramState(std::unique_ptr<Path> initialPath, std::unique_ptr<ACSLFunction> context);
+    ProgramState(std::unique_ptr<ACSLFunction> context);
     ~ProgramState() = default;
 
     void init();
