@@ -274,53 +274,71 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
 
             const clang::VarDecl *maxDecl;
 
-            // Does if's condition has form 'max < p[i]'?
+            // Does if's condition has form 'max < p[i]' or 'p[i] > max'?
             auto ifCond = s->getCond();
             if (auto bin =
                     dyn_cast_if_present<clang::BinaryOperator>(ifCond->IgnoreParenImpCasts())) {
                 using enum clang::BinaryOperatorKind;
                 using enum clang::UnaryOperatorKind;
+
+                clang::DeclRefExpr *maxExpr;
+                clang::Expr *elementExpr;
+                bool maxOnLeft = true;
+
+                // Where is 'max'?
+                if (auto declRef = dyn_cast_if_present<clang::DeclRefExpr>(
+                        bin->getLHS()->IgnoreParenImpCasts())) {
+                    maxExpr     = declRef;
+                    elementExpr = bin->getRHS()->IgnoreParenImpCasts();
+                } else if (auto declRef = dyn_cast_if_present<clang::DeclRefExpr>(
+                               bin->getRHS()->IgnoreParenImpCasts())) {
+                    maxExpr     = declRef;
+                    elementExpr = bin->getLHS()->IgnoreParenImpCasts();
+                    maxOnLeft   = false;
+                } else {
+                    return;
+                }
+
                 // Operator is '<', '<=', '>' or '>='.
                 switch (bin->getOpcode()) {
                     case BO_LE:
                     case BO_LT:
                         if (loopInfo.indexBound_->getType() == Variable)
-                            specTemplate = FIND_MAX_LOOP_WITH_VAR_BOUND;
+                            specTemplate = maxOnLeft ? FIND_MAX_LOOP_WITH_VAR_BOUND
+                                                     : FIND_MIN_LOOP_WITH_VAR_BOUND;
                         else
-                            specTemplate = FIND_MAX_LOOP_WITH_OTHER_BOUND;
+                            specTemplate = maxOnLeft ? FIND_MAX_LOOP_WITH_OTHER_BOUND
+                                                     : FIND_MIN_LOOP_WITH_OTHER_BOUND;
                         break;
                     case BO_GE:
                     case BO_GT:
                         if (loopInfo.indexBound_->getType() == Variable)
-                            specTemplate = FIND_MIN_LOOP_WITH_VAR_BOUND;
+                            specTemplate = maxOnLeft ? FIND_MIN_LOOP_WITH_VAR_BOUND
+                                                     : FIND_MAX_LOOP_WITH_VAR_BOUND;
                         else
-                            specTemplate = FIND_MIN_LOOP_WITH_OTHER_BOUND;
+                            specTemplate = maxOnLeft ? FIND_MIN_LOOP_WITH_OTHER_BOUND
+                                                     : FIND_MAX_LOOP_WITH_OTHER_BOUND;
                         break;
                     default: return;
                 }
                 DEBUG("Operator matched.");
 
-                // LHS is DeclRef of Variable.
-                if (auto declRef = dyn_cast_if_present<clang::DeclRefExpr>(
-                        bin->getLHS()->IgnoreParenImpCasts())) {
-                    if (auto var = dyn_cast<VarDecl>(declRef->getDecl());
-                        var && var->getCanonicalDecl()) {
-                        maxDecl = var->getCanonicalDecl();
-                        if (isLocal(maxDecl))
-                            return;
-                        param_m = maxDecl->getNameAsString();
-                    } else {
+                // Verify 'max'.
+                if (auto var = dyn_cast<VarDecl>(maxExpr->getDecl());
+                    var && var->getCanonicalDecl()) {
+                    maxDecl = var->getCanonicalDecl();
+                    if (isLocal(maxDecl))
                         return;
-                    }
+                    param_m = maxDecl->getNameAsString();
                 } else {
                     return;
                 }
-                DEBUG("LHS matched.");
+                DEBUG("Max matched.");
 
-                // Deal with RHS
-                if (!parseIndexedArray(bin->getRHS()))
+                // Deal with p[i].
+                if (!parseIndexedArray(elementExpr))
                     return;
-                DEBUG("RHS matched.");
+                DEBUG("p[i] matched.");
             }
 
             if (specTemplate == nullopt || param_n == nullopt || param_array == nullopt ||
