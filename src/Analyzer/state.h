@@ -124,10 +124,6 @@ class ProgramState {
     auto getContext() const -> const auto & { return Context; }
 
   private:
-    std::vector<std::unique_ptr<Path>> paths{};
-
-    std::unique_ptr<ACSLFunction> Context;
-
     // Only be used in step when processing SwitchStmt, just for a cleaner code.
     std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<SymbolicExpr>>> splitStateBySwitchCond(
         const clang::Expr *switchCond);
@@ -139,6 +135,10 @@ class ProgramState {
     void stepLoop(const clang::Stmt *loopStmt);
 
     void CollectLoopACSL();
+
+    std::vector<std::unique_ptr<Path>> paths{};
+
+    std::unique_ptr<ACSLFunction> Context;
 };
 
 struct VarManager {
@@ -148,6 +148,7 @@ struct VarManager {
 
     static VarManager fromPaths(const std::vector<std::unique_ptr<Path>> &paths) {
         VarManager vm;
+        std::vector<std::string> rawVars;
         int varCounter = 0;
 
         for (const auto &path : paths) {
@@ -155,14 +156,21 @@ struct VarManager {
             for (const auto &[varDecl, addrPtr] : varAddrMap) {
                 if (!varDecl)
                     continue;
+
                 std::string name = varDecl->getNameAsString();
                 if (vm.varIndexMap.insert({name, varCounter}).second) {
-                    vm.orderedVars.push_back(name);
+                    rawVars.push_back(name);
                     ++varCounter;
                 }
             }
         }
-        vm.numVars = varCounter;
+
+        for (const auto &name : rawVars)
+            vm.orderedVars.push_back(name);
+        for (const auto &name : rawVars)
+            vm.orderedVars.push_back(name + "_init");
+
+        vm.numVars = static_cast<int>(rawVars.size() * 2);
         return vm;
     }
 

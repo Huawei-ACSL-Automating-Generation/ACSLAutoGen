@@ -352,10 +352,11 @@ Formulas convertPolyToFormula(const Parma_Polyhedra_Library::C_Polyhedron &poly,
     return result;
 }
 
-void computeLinearInv(const vector<string> &locations,
-                      const vector<TransRel> &transitions,
-                      const InitRel &initial,
-                      const VarManager &vm) {
+std::vector<Parma_Polyhedra_Library::C_Polyhedron> computeLinearInv(
+    const vector<string> &locations,
+    const vector<TransRel> &transitions,
+    const InitRel &initial,
+    const VarManager &vm) {
     auto linTS = std::make_unique<LinTS>();
 
     for (const std::string &name : vm.orderedVars) {
@@ -382,6 +383,14 @@ void computeLinearInv(const vector<string> &locations,
 
     linTS->ComputeLinTSInv();
     auto invariants = linTS->getInvMap();
+
+    std::vector<Parma_Polyhedra_Library::C_Polyhedron> result;
+    const auto &exitInvariants = invariants["exit"];
+
+    for (const auto *p : exitInvariants) {
+        result.emplace_back(*p);
+    }
+    return result;
 }
 
 Formulas cloneFormulas(const Formulas &input) {
@@ -636,6 +645,23 @@ Parma_Polyhedra_Library::C_Polyhedron *buildPathPoly(const Path &path,
                                    Parma_Polyhedra_Library::Variable(unprimed);
             result->add_constraint(Constraint(eq == 0));
         }
+
+        int half = vm.numVars / 2;
+        for (int idx = half; idx < vm.numVars; ++idx) {
+            int primed = idx + vm.numVars;
+            Linear_Expression eq =
+                Parma_Polyhedra_Library::Variable(primed) - Parma_Polyhedra_Library::Variable(idx);
+            result->add_constraint(Constraint(eq == 0));
+        }
+    } else {
+        int half = vm.numVars / 2;
+        for (const auto &[name, idx] : vm.varIndexMap) {
+            int initIdx = idx + half;
+
+            Linear_Expression eq =
+                Parma_Polyhedra_Library::Variable(initIdx) - Parma_Polyhedra_Library::Variable(idx);
+            result->add_constraint(Constraint(eq == 0));
+        }
     }
 
     return result;
@@ -750,11 +776,12 @@ Formulas buildLoopInvariant(Formulas loopCond,
     TODO();
     return invariants;
 }
-
 void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm) {
     using namespace Parma_Polyhedra_Library;
 
     const Constraint_System &cs = poly.constraints();
+    size_t n                    = vm.numVars;
+    size_t half                 = n / 2;
 
     for (const auto &c : cs) {
         std::ostringstream oss;
@@ -771,13 +798,17 @@ void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &v
             if (coeff < 0)
                 oss << " - ";
             if (abs(coeff) != 1)
-                oss << abs(coeff); // Coefficient has its own abs()
+                oss << abs(coeff);
 
             std::string varName;
-            if (i < static_cast<size_t>(vm.numVars)) {
+            if (i < half) {
                 varName = vm.orderedVars[i];
+            } else if (i < n) {
+                varName = vm.orderedVars[i - half] + "_init";
+            } else if (i < n + half) {
+                varName = vm.orderedVars[i - n] + "'";
             } else {
-                varName = vm.orderedVars[i - vm.numVars] + "'";
+                varName = vm.orderedVars[i - n - half] + "_init'";
             }
 
             oss << varName;
@@ -790,7 +821,7 @@ void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &v
                 oss << " + ";
             if (inhom < 0)
                 oss << " - ";
-            oss << abs(inhom); // Coefficient abs() again
+            oss << abs(inhom);
         }
 
         switch (c.type()) {
@@ -810,7 +841,10 @@ void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManag
     std::ostringstream oss;
     bool first = true;
 
-    size_t dim = expr.space_dimension();
+    size_t n    = vm.numVars;
+    size_t half = n / 2;
+    size_t dim  = expr.space_dimension();
+
     for (size_t i = 0; i < dim; ++i) {
         Coefficient coeff = expr.coefficient(Parma_Polyhedra_Library::Variable(i));
         if (coeff == 0)
@@ -820,15 +854,18 @@ void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManag
             oss << " + ";
         if (coeff < 0)
             oss << " - ";
-
         if (abs(coeff) != 1)
             oss << abs(coeff);
 
         std::string varName;
-        if (i < static_cast<size_t>(vm.numVars)) {
+        if (i < half) {
             varName = vm.orderedVars[i];
+        } else if (i < n) {
+            varName = vm.orderedVars[i - half] + "_init";
+        } else if (i < n + half) {
+            varName = vm.orderedVars[i - n] + "'";
         } else {
-            varName = vm.orderedVars[i - vm.numVars] + "'";
+            varName = vm.orderedVars[i - n - half] + "_init'";
         }
 
         oss << varName;
