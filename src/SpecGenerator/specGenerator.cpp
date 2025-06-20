@@ -99,7 +99,7 @@ std::string emitLoopInvariant(
     for (auto &plugin : plugins) {
         if (plugin == nullptr)
             UNREACHABLE();
-        auto [s, continueFlag] = plugin->generate(loopEntry, cond, inc, body, loopInfo);
+        auto [s, continueFlag, invariants] = plugin->generate(loopEntry, cond, inc, body, loopInfo);
         if (s) {
             spec += "\t" + *s + "\n";
         }

@@ -12,11 +12,12 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
   public:
     CheckAndDumpLoopInfoPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool> generate(const ProgramState &,
-                                           const clang::Expr *,
-                                           const clang::Stmt *,
-                                           const clang::Stmt *,
-                                           const LoopInfo &loopInfo) const override {
+    tuple<optional<string>, bool, vector<Formulas>> generate(
+        const ProgramState &,
+        const clang::Expr *,
+        const clang::Stmt *,
+        const clang::Stmt *,
+        const LoopInfo &loopInfo) const override {
         if (loopInfo.symbolicLoopEntry_ == nullptr ||
             loopInfo.symbolicLoopEntry_->getPaths().size() != 1) {
             ERROR("SymbolicLoopEntry_ is in an invalid state");
@@ -51,7 +52,7 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
             }
         }
         INFO(oss.str());
-        return make_tuple(nullopt, true);
+        return make_tuple(nullopt, true, std::vector<Formulas>{});
     }
 
   private:
@@ -63,14 +64,15 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
   public:
     LinearInvariantPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool> generate(const ProgramState &loopEntry,
-                                           const clang::Expr *cond,
-                                           const clang::Stmt *inc,
-                                           const clang::Stmt *body,
-                                           const LoopInfo &loopInfo) const override {
+    tuple<optional<string>, bool, vector<Formulas>> generate(
+        const ProgramState &loopEntry,
+        const clang::Expr *cond,
+        const clang::Stmt *inc,
+        const clang::Stmt *body,
+        const LoopInfo &loopInfo) const override {
         auto &symbolicState = loopInfo.symbolicLoopEntry_;
         if (symbolicState->getPaths().empty())
-            return make_tuple(nullopt, true);
+            return make_tuple(nullopt, true, std::vector<Formulas>{});
 
         auto exprs = symbolicState->stepExpr(cond);
         int len    = exprs.size() / symbolicState->getPaths().size();
@@ -78,20 +80,19 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
         for (int i = 0; i < len; ++i)
             loopCond.push_back(std::move(exprs[i]));
         if (loopCond.empty())
-            return make_tuple(nullopt, true);
+            return make_tuple(nullopt, true, std::vector<Formulas>{});
 
         symbolicState->step(body);
         if (inc)
             symbolicState->step(inc);
 
         const auto &paths = symbolicState->getPaths();
-        auto invariants   = buildLoopInvariant(std::move(loopCond), paths, loopEntry);
+
+        vector<Formulas> invariants = buildLoopInvariant(std::move(loopCond), paths, loopEntry);
 
         std::ostringstream oss;
-        for (const auto &inv : invariants)
-            INFO(inv->dump());
 
-        return make_tuple(oss.str(), true);
+        return make_tuple(oss.str(), true, std::move(invariants));
     }
 
   private:
@@ -103,11 +104,12 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
   public:
     LoopAssignsPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool> generate(const ProgramState &preState,
-                                           const clang::Expr *cond,
-                                           const clang::Stmt *inc,
-                                           const clang::Stmt *body,
-                                           const LoopInfo &loopInfo) const override {
+    tuple<optional<string>, bool, vector<Formulas>> generate(
+        const ProgramState &preState,
+        const clang::Expr *cond,
+        const clang::Stmt *inc,
+        const clang::Stmt *body,
+        const LoopInfo &loopInfo) const override {
         auto loopCurrent = loopInfo.symbolicLoopEntry_->clone();
         loopCurrent->step(cond);
         loopCurrent->step(body);
@@ -183,9 +185,10 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         }
 
         if (spec.empty())
-            return make_tuple(R"(loop assigns \nothing;)", true);
+            return make_tuple(R"(loop assigns \nothing;)", true, std::vector<Formulas>{});
         else
-            return make_tuple("loop assigns " + spec.substr(0, spec.length() - 2) + ";", true);
+            return make_tuple("loop assigns " + spec.substr(0, spec.length() - 2) + ";", true,
+                              std::vector<Formulas>{});
     }
 
   private:

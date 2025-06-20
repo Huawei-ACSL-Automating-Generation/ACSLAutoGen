@@ -16,6 +16,7 @@
 #include "Analyzer/Symbolic/expr.h"
 
 class ProgramState;
+using Formulas = std::vector<std::unique_ptr<Symbolic::SymbolicExpr>>;
 
 std::string emitFunctionContract(
     const ProgramState &pre,
@@ -114,7 +115,7 @@ class LoopInvariantPlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
 
-    virtual std::tuple<std::optional<std::string>, bool> generate(
+    virtual std::tuple<std::optional<std::string>, bool, std::vector<Formulas>> generate(
         const ProgramState &loopEntry,
         const clang::Expr *cond,
         const clang::Stmt *inc,

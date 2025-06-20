@@ -668,10 +668,10 @@ Parma_Polyhedra_Library::C_Polyhedron *buildPathPoly(const Path &path,
 }
 
 // TODO: optimize to one cond, condition won't get multi cases.
-Formulas buildLoopInvariant(Formulas loopCond,
-                            const vector<unique_ptr<Path>> &paths,
-                            const ProgramState &initState) {
-    Formulas invariants;
+vector<Formulas> buildLoopInvariant(Formulas loopCond,
+                                    const vector<unique_ptr<Path>> &paths,
+                                    const ProgramState &initState) {
+    vector<Formulas> invariants;
     VarManager vm = VarManager::fromPaths(paths);
 
     vector<Formulas> processedCond = preprocessLoopCond(std::move(loopCond));
@@ -762,7 +762,12 @@ Formulas buildLoopInvariant(Formulas loopCond,
 
             // === this initPoly as InitRel ===
             InitRel initRel = std::make_pair(initIdx, new C_Polyhedron(*initPoly));
-            computeLinearInv(locations, transitions, initRel, vm);
+            auto exit_invs  = computeLinearInv(locations, transitions, initRel, vm);
+
+            for (const auto &poly : exit_invs) {
+                Formulas fmls = convertPolyToFormula(poly, vm);
+                invariants.push_back(std::move(fmls));
+            }
             delete initRel.second;
         }
 
@@ -773,7 +778,6 @@ Formulas buildLoopInvariant(Formulas loopCond,
         }
     }
 
-    TODO();
     return invariants;
 }
 void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm) {
