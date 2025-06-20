@@ -2,11 +2,16 @@
 #define SYMBOLIC_H
 
 #include <string>
-#include "macros.h"
 #include <memory>
-#include "ppl.hh"
+#include <ppl.hh>
 #include <clang/AST/Decl.h>
+#include <clang/AST/Expr.h>
+#include <clang/AST/Stmt.h>
 #include <variant>
+#include "macros.h"
+#include "Utils/utils.h"
+
+using namespace acslg;
 
 namespace Symbolic {
     class Variable;
@@ -317,7 +322,10 @@ namespace Symbolic {
     class Address;
     class Variable : public SymbolicExpr {
       public:
-        Variable(const std::string &name, Type varType, int id, std::unique_ptr<Address> from)
+        Variable(const std::string &name,
+                 Type varType,
+                 int id,
+                 std::optional<std::unique_ptr<Address>> from)
             : SymbolicExpr(ExprType::Variable, varType), name_(name), varType_(varType), id_(id),
               from_(std::move(from)) {}
 
@@ -352,7 +360,7 @@ namespace Symbolic {
         std::string name_;
         Type varType_;
         int id_; // unique identifier to distinguish between variables with the same name
-        std::unique_ptr<Address> from_;
+        std::optional<not_null<std::unique_ptr<Address>>> from_;
     };
 
     class Address : public SymbolicExpr {
@@ -360,13 +368,13 @@ namespace Symbolic {
         Address(const Address &other)
             : SymbolicExpr(other), id_(other.id_),
               offset_(other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull()) {
-            if (auto decl = std::get_if<const clang::VarDecl *>(&other.from_))
+            if (auto decl = std::get_if<not_null<const clang::VarDecl *>>(&other.from_))
                 from_ = *decl;
-            else if (auto addr = std::get_if<std::unique_ptr<Address>>(&other.from_)) {
-                from_ =
-                    std::unique_ptr<Address>((static_cast<Address *>((*addr)->clone().release())));
+            else if (auto addr = std::get_if<not_null<std::unique_ptr<Address>>>(&other.from_)) {
+                from_.emplace<2>(
+                    std::unique_ptr<Address>(static_cast<Address *>((*addr)->clone().release())));
             } else {
-                from_ = nullptr;
+                from_ = std::monostate{};
             }
         }
         Address &operator=(const Address &other) {
@@ -374,13 +382,14 @@ namespace Symbolic {
                 SymbolicExpr::operator=(other);
                 id_     = other.id_;
                 offset_ = other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull();
-                if (auto decl = std::get_if<const clang::VarDecl *>(&other.from_))
+                if (auto decl = std::get_if<not_null<const clang::VarDecl *>>(&other.from_))
                     from_ = *decl;
-                else if (auto addr = std::get_if<std::unique_ptr<Address>>(&other.from_)) {
-                    from_ = std::unique_ptr<Address>(
-                        (static_cast<Address *>((*addr)->clone().release())));
+                else if (auto addr =
+                             std::get_if<not_null<std::unique_ptr<Address>>>(&other.from_)) {
+                    from_.emplace<2>(std::unique_ptr<Address>(
+                        (static_cast<Address *>((*addr)->clone().release()))));
                 } else {
-                    from_ = nullptr;
+                    from_ = std::monostate{};
                 }
             }
             return *this;
@@ -391,16 +400,37 @@ namespace Symbolic {
         Address() = delete;
 
         Address(unsigned int id,
-                std::variant<const clang::VarDecl *, std::unique_ptr<Address>> from)
+                std::variant<std::monostate, const clang::VarDecl *, std::unique_ptr<Address>> from)
             : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id),
-              offset_(SymbolicExpr::makeNull()), from_(std::move(from)) {}
+              offset_(SymbolicExpr::makeNull()) {
+            if (auto varPtr = std::get_if<const clang::VarDecl *>(&from)) {
+                from_ = *varPtr;
+            } else if (auto addrPtr = std::get_if<std::unique_ptr<Address>>(&from)) {
+                from_.emplace<2>(std::move(*addrPtr));
+            } else {
+                from_ = std::monostate{};
+            }
+        }
 
         Address(unsigned int id,
                 std::unique_ptr<SymbolicExpr> offset,
-                std::variant<const clang::VarDecl *, std::unique_ptr<Address>> from)
+                std::variant<std::monostate, const clang::VarDecl *, std::unique_ptr<Address>> from)
+            : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id),
+              offset_(offset ? std::move(offset) : SymbolicExpr::makeNull()) {
+            if (auto varPtr = std::get_if<const clang::VarDecl *>(&from)) {
+                from_ = *varPtr;
+            } else if (auto addrPtr = std::get_if<std::unique_ptr<Address>>(&from)) {
+                from_.emplace<2>(std::move(*addrPtr));
+            } else {
+                from_ = std::monostate{};
+            }
+        }
+
+        // To unify the interfaces
+        Address(unsigned int id, std::unique_ptr<SymbolicExpr> offset, std::nullopt_t)
             : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id),
               offset_(offset ? std::move(offset) : SymbolicExpr::makeNull()),
-              from_(std::move(from)) {}
+              from_(std::monostate{}) {}
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         unsigned int getId() const { return id_; }
@@ -431,7 +461,10 @@ namespace Symbolic {
       private:
         unsigned int id_;
         std::unique_ptr<SymbolicExpr> offset_;
-        std::variant<const clang::VarDecl *, std::unique_ptr<Address>> from_;
+        std::variant<std::monostate,
+                     not_null<const clang::VarDecl *>,
+                     not_null<std::unique_ptr<Address>>>
+            from_;
     };
 
     struct AddressHash {
@@ -441,6 +474,11 @@ namespace Symbolic {
     struct AddressEqual {
         bool operator()(const Address &a, const Address &b) const noexcept { return a == b; }
     };
+
+    std::unique_ptr<SymbolicExpr> createLNotExpr(std::unique_ptr<SymbolicExpr> expr);
+    BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
+    BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
+    SymbolicExpr::Type deriveVarType(clang::QualType type);
 
 } // namespace Symbolic
 

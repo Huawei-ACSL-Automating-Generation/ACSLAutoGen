@@ -2,11 +2,15 @@
 #include <sstream>
 #include <cstring>
 #include <variant>
+#include <llvm/ADT/TypeSwitch.h>
 #include "expr.h"
 #include "macros.h"
 
 using namespace std;
 using namespace Symbolic;
+using namespace clang;
+using namespace llvm;
+
 std::unique_ptr<SymbolicExpr> SymbolicExpr::makeNull() { return std::make_unique<NullExpr>(); }
 
 std::unique_ptr<SymbolicExpr> LiteralExpr::clone() const {
@@ -34,19 +38,21 @@ unique_ptr<SymbolicExpr> UnaryOpExpr::clone() const {
 unique_ptr<SymbolicExpr> NullExpr::clone() const { return make_unique<NullExpr>(); }
 
 std::unique_ptr<SymbolicExpr> Symbolic::Variable::clone() const {
-    return std::make_unique<Symbolic::Variable>(
-        name_, varType_, id_,
-        std::unique_ptr<Address>(static_cast<Address *>(from_->clone().release())));
+    if (from_)
+        return std::make_unique<Symbolic::Variable>(
+            name_, varType_, id_,
+            std::unique_ptr<Address>(static_cast<Address *>((*from_)->clone().release())));
+    return std::make_unique<Symbolic::Variable>(name_, varType_, id_, std::nullopt);
 }
 
 std::unique_ptr<SymbolicExpr> Address::clone() const {
-    variant<const clang::VarDecl *, unique_ptr<Address>> from;
-    if (auto decl = std::get_if<const clang::VarDecl *>(&from_)) {
+    variant<std::monostate, const clang::VarDecl *, unique_ptr<Address>> from;
+    if (auto decl = std::get_if<not_null<const clang::VarDecl *>>(&from_)) {
         from = *decl;
-    } else if (auto addr = std::get_if<unique_ptr<Address>>(&from_)) {
+    } else if (auto addr = std::get_if<not_null<unique_ptr<Address>>>(&from_)) {
         from = std::unique_ptr<Address>(static_cast<Address *>((*addr)->clone().release()));
     } else {
-        from = nullptr;
+        from = std::monostate{};
     }
     auto cloned = std::make_unique<Address>(id_, offset_->clone(), std::move(from));
     return cloned;
@@ -287,10 +293,10 @@ std::string NullExpr::regularForm(std::optional<std::reference_wrapper<const std
 std::string Symbolic::Variable::regularForm(
     std::optional<std::reference_wrapper<const std::string>> prefix,
     std::optional<std::reference_wrapper<const std::string>> suffix) const {
-    if (from_ == nullptr) {
-        ERROR("Trying to get regular form of Variable with nullptr from_.");
+    if (from_ == nullopt) {
+        ERROR("Trying to get regular form of Variable with nullopt from_.");
     }
-    auto addr = from_->regularForm(prefix, suffix);
+    auto addr = (*from_)->regularForm(prefix, suffix);
     if (addr.length() == 0)
         ERROR("Empty regular from.");
 
@@ -302,13 +308,12 @@ std::string Symbolic::Variable::regularForm(
 std::string Address::regularForm(
     std::optional<std::reference_wrapper<const std::string>> prefix,
     std::optional<std::reference_wrapper<const std::string>> suffix) const {
-    if (const auto varDeclPtr = std::get_if<const clang::VarDecl *>(&from_);
-        varDeclPtr && *varDeclPtr) {
+    if (const auto varDeclPtr = std::get_if<not_null<const clang::VarDecl *>>(&from_)) {
         if (isOffseted())
             ERROR("Address from varDecl should not be offseted.");
         return "&" + (prefix ? (std::string)*prefix : "") + (*varDeclPtr)->getNameAsString() +
                (suffix ? (string)*suffix : "");
-    } else if (auto addrPtr = std::get_if<std::unique_ptr<Address>>(&from_); addrPtr && *addrPtr) {
+    } else if (auto addrPtr = std::get_if<not_null<std::unique_ptr<Address>>>(&from_)) {
         auto pre = (*addrPtr)->regularForm(prefix, suffix);
         auto suf = ((isOffseted()) ? offset_->regularForm(prefix, suffix) : "");
         if (suf == "0")
@@ -379,9 +384,9 @@ bool Symbolic::Variable::equal(const SymbolicExpr &expr) const {
     if (!var)
         return false;
 
-    if (from_ == nullptr || var->from_ == nullptr)
+    if (from_ == nullopt || var->from_ == nullopt)
         return false;
-    return *from_ == *var->from_;
+    return **from_ == **var->from_;
 }
 
 bool Address::equal(const SymbolicExpr &expr) const {
@@ -389,26 +394,25 @@ bool Address::equal(const SymbolicExpr &expr) const {
     if (!addr)
         return false;
 
-    if (auto it = std::get_if<const clang::VarDecl *>(&from_); it && *it == nullptr)
-        return false;
-    if (auto it = std::get_if<std::unique_ptr<Address>>(&from_); it && *it == nullptr)
-        return false;
-    if (auto it = std::get_if<const clang::VarDecl *>(&addr->from_); it && *it == nullptr)
-        return false;
-    if (auto it = std::get_if<std::unique_ptr<Address>>(&addr->from_); it && *it == nullptr)
-        return false;
-
+    bool flag = false;
     // compare base
-    if (std::get_if<std::unique_ptr<Address>>(&from_) &&
-        std::get_if<std::unique_ptr<Address>>(&addr->from_)) {
-        auto &from     = *std::get<std::unique_ptr<Address>>(from_);
-        auto &addrFrom = *std::get<std::unique_ptr<Address>>(addr->from_);
-        if (from != addrFrom) {
-            return false;
+    if (std::holds_alternative<not_null<std::unique_ptr<Address>>>(from_) &&
+        std::holds_alternative<not_null<std::unique_ptr<Address>>>(addr->from_)) {
+        auto &from     = *std::get<not_null<std::unique_ptr<Address>>>(from_);
+        auto &addrFrom = *std::get<not_null<std::unique_ptr<Address>>>(addr->from_);
+        if (from == addrFrom) {
+            flag = true;
         }
-    } else if (from_ != addr->from_) {
-        return false;
+    } else if (std::holds_alternative<not_null<const clang::VarDecl *>>(from_) &&
+               std::holds_alternative<not_null<const clang::VarDecl *>>(addr->from_)) {
+        auto &from     = std::get<not_null<const clang::VarDecl *>>(from_);
+        auto &addrFrom = std::get<not_null<const clang::VarDecl *>>(addr->from_);
+        if (from == addrFrom) {
+            flag = true;
+        }
     }
+    if (!flag)
+        return false;
 
     // compare offset
     if (isOffseted() && addr->isOffseted()) {
@@ -447,12 +451,12 @@ std::unique_ptr<Address> Address::addOffset(std::unique_ptr<SymbolicExpr> extra)
 }
 
 std::string Address::getBaseName() const {
-    if (const auto varDeclPtr = std::get_if<const clang::VarDecl *>(&from_)) {
+    if (const auto varDeclPtr = std::get_if<not_null<const clang::VarDecl *>>(&from_)) {
         if (offset_ && *offset_ != *SymbolicExpr::makeNull())
             ERROR("Address from varDecl should not be offseted.");
         return "&" + (*varDeclPtr)->getNameAsString();
-    } else {
-        auto prefix = std::get<std::unique_ptr<Address>>(from_)->getBaseName();
+    } else if (const auto addrPtr = std::get_if<not_null<std::unique_ptr<Address>>>(&from_)) {
+        auto prefix = (*addrPtr)->getBaseName();
         auto suffix = (offset_ && *offset_ == *makeNull() ? offset_->dump() : "");
         if (prefix.length() == 0)
             ERROR("Empty name.");
@@ -466,6 +470,8 @@ std::string Address::getBaseName() const {
             return "(" + prefix.substr(1) + "+" + suffix + ")";
         else
             return prefix;
+    } else {
+        ERROR("Trying to get base name of address with bad-defined from_.");
     }
 }
 
@@ -488,3 +494,101 @@ std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType t) {
     }
     return os;
 }
+
+namespace Symbolic {
+    unique_ptr<SymbolicExpr> createLNotExpr(unique_ptr<SymbolicExpr> expr) {
+        return make_unique<UnaryOpExpr>(UnaryOpExpr::Operator::LogicalNot, std::move(expr));
+    }
+
+    BinaryOpExpr::Operator getCompoundAssignOp(BinaryOperatorKind compoundAssignOp) {
+        switch (compoundAssignOp) {
+            case BO_MulAssign: return BinaryOpExpr::Operator::Multiply;
+            case BO_DivAssign: return BinaryOpExpr::Operator::Divide;
+            case BO_RemAssign: return BinaryOpExpr::Operator::Remainder;
+            case BO_AddAssign: return BinaryOpExpr::Operator::Add;
+            case BO_SubAssign: return BinaryOpExpr::Operator::Subtract;
+            case BO_ShlAssign: return BinaryOpExpr::Operator::ShiftLeft;
+            case BO_ShrAssign: return BinaryOpExpr::Operator::ShiftRight;
+            case BO_AndAssign: return BinaryOpExpr::Operator::BitAnd;
+            case BO_XorAssign: return BinaryOpExpr::Operator::BitXor;
+            case BO_OrAssign: return BinaryOpExpr::Operator::BitOr;
+            default: UNREACHABLE();
+        }
+    }
+
+    // No AssignOp Here.
+    BinaryOpExpr::Operator getBinaryOp(BinaryOperatorKind op) {
+        switch (op) {
+            case BO_Mul: return BinaryOpExpr::Operator::Multiply;
+            case BO_Div: return BinaryOpExpr::Operator::Divide;
+            case BO_Rem: return BinaryOpExpr::Operator::Remainder;
+            case BO_Add: return BinaryOpExpr::Operator::Add;
+            case BO_Sub: return BinaryOpExpr::Operator::Subtract;
+            case BO_Shl: return BinaryOpExpr::Operator::ShiftLeft;
+            case BO_Shr: return BinaryOpExpr::Operator::ShiftRight;
+            case BO_LT: return BinaryOpExpr::Operator::LessThan;
+            case BO_GT: return BinaryOpExpr::Operator::GreaterThan;
+            case BO_LE: return BinaryOpExpr::Operator::LessEqual;
+            case BO_GE: return BinaryOpExpr::Operator::GreaterEqual;
+            case BO_EQ: return BinaryOpExpr::Operator::Equal;
+            case BO_NE: return BinaryOpExpr::Operator::NotEqual;
+            case BO_And: return BinaryOpExpr::Operator::BitAnd;
+            case BO_Xor: return BinaryOpExpr::Operator::BitXor;
+            case BO_Or: return BinaryOpExpr::Operator::BitOr;
+            case BO_LAnd: return BinaryOpExpr::Operator::LogicalAnd;
+            case BO_LOr: return BinaryOpExpr::Operator::LogicalOr;
+            case BO_Assign:
+            case BO_AddAssign:
+            case BO_SubAssign:
+            case BO_MulAssign:
+            case BO_DivAssign:
+            case BO_RemAssign:
+            case BO_ShlAssign:
+            case BO_ShrAssign:
+            case BO_AndAssign:
+            case BO_XorAssign:
+            case BO_OrAssign: UNREACHABLE();
+            default:
+                UNIMPLEMENT("Unsupported binary operator: " << op);
+                return BinaryOpExpr::Operator::Add;
+        }
+    }
+
+    SymbolicExpr::Type deriveVarType(QualType type) {
+        if (auto ptr = type->getAs<PointerType>())
+            return deriveVarType(ptr->getPointeeType());
+        return TypeSwitch<QualType, SymbolicExpr::Type>(type.getCanonicalType())
+            .Case([](const BuiltinType *BT) -> SymbolicExpr::Type {
+                using Kind = SymbolicExpr::ScalarKind;
+
+                switch (BT->getKind()) {
+                    case BuiltinType::Bool: return {Kind::Bool, 1};
+                    case BuiltinType::Char_S:
+                    case BuiltinType::SChar: return {Kind::Int, 8};
+                    case BuiltinType::Char_U:
+                    case BuiltinType::UChar: return {Kind::UInt, 8};
+
+                    case BuiltinType::Short: return {Kind::Int, 16};
+                    case BuiltinType::UShort: return {Kind::UInt, 16};
+
+                    case BuiltinType::Int: return {Kind::Int, 32};
+                    case BuiltinType::UInt: return {Kind::UInt, 32};
+
+                    case BuiltinType::Long: return {Kind::Int, 64};
+                    case BuiltinType::ULong: return {Kind::UInt, 64};
+
+                    case BuiltinType::LongLong: return {Kind::Int, 64};
+                    case BuiltinType::ULongLong: return {Kind::UInt, 64};
+                    case BuiltinType::Void: return {Kind::Void, 0};
+
+                    default:
+                        LangOptions langOpts;
+                        PrintingPolicy pp(langOpts);
+                        UNIMPLEMENT("Unsupported builtin type: " << BT->getName(pp).str());
+                }
+            })
+            .Default([&](QualType QT) -> SymbolicExpr::Type {
+                UNIMPLEMENT("Unsupported non-builtin type: " << QT.getAsString());
+            });
+    }
+} // namespace Symbolic

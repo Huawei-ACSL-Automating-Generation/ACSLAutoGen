@@ -114,17 +114,17 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
 
         auto isLocal = [&](const Address &addr) {
             auto from = &addr.getFrom();
-            while (auto addr = get_if<unique_ptr<Address>>(from)) {
+            while (auto addr = get_if<not_null<unique_ptr<Address>>>(from)) {
                 from = &(*addr)->getFrom();
             }
-            if (auto var = get_if<const VarDecl *>(from)) {
+            if (auto var = get_if<not_null<const VarDecl *>>(from)) {
                 if (loopInfo.symbolicLoopEntry_ == nullptr ||
                     loopInfo.symbolicLoopEntry_->getPaths().size() != 1)
                     ERROR("SymbolicLoopEntry_ is in an invaild state");
                 if (!loopInfo.symbolicLoopEntry_->getPaths()[0]->getVarAddr().contains(*var))
                     return true;
             } else {
-                UNREACHABLE();
+                TODO();
             }
             return false;
         }; // isLocal end
@@ -363,8 +363,9 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                     }
 
                     if (auto elementAddr = getAddress(elementExpr)) {
-                        if (*maxVar->getFrom() != *elementAddr)
-                            return;
+                        if (auto &maxVarFrom = maxVar->getFrom())
+                            if (**maxVarFrom != *elementAddr)
+                                return;
                     } else {
                         return;
                     }

@@ -578,7 +578,7 @@ bool Path::isUnchanged(const Address &addr) {
     if (memIt->second->getType() == SymbolicExpr::ExprType::Variable) {
         auto var = unique_ptr<Symbolic::Variable>(
             static_cast<Symbolic::Variable *>(memIt->second->clone().release()));
-        if (*var->getFrom() == addr)
+        if (auto &from = var->getFrom(); from && **from == addr)
             return true;
     }
     return false;

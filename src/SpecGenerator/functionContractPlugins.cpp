@@ -29,8 +29,10 @@ class AssignsPlugin : public FunctionContractPlugin {
         };
 
         auto isFromPointer = [&](const Address &addr) {
-            if (get_if<unique_ptr<Address>>(&addr.getFrom()))
+            if (holds_alternative<not_null<unique_ptr<Address>>>(addr.getFrom()))
                 return true;
+            else if (holds_alternative<monostate>(addr.getFrom()))
+                TODO();
             return false;
         };
 
@@ -50,8 +52,11 @@ class AssignsPlugin : public FunctionContractPlugin {
                         if (!symbol)
                             ERROR("A SymolicExpr with type 'Variable' but is not a Variable!");
 
-                        if (*symbol->getFrom() == addr) {
-                            continue;
+                        if (auto &from = symbol->getFrom()) {
+                            if (**from == addr)
+                                continue;
+                        } else {
+                            TODO();
                         }
                     }
                     if (isExisted(addr))
