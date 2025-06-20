@@ -85,7 +85,7 @@ std::optional<LoopInfo> parseLoopInfo(
     return loopInfo;
 }
 
-std::string emitLoopInvariant(
+std::tuple<std::string, std::vector<Formulas>> emitLoopInvariant(
     const ProgramState &loopEntry,
     const clang::Expr *cond,
     const clang::Stmt *inc,
@@ -94,12 +94,16 @@ std::string emitLoopInvariant(
     const std::string &groupName,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
     auto plugins = getPlugins<LoopInvariantPlugin>(groupName, extraPluginIds);
-    string spec  = ACSL_HEAD.to_string();
+    vector<Formulas> invariants;
+    string spec = ACSL_HEAD.to_string();
 
+    // TODO: split invariants derived by each plugin [now only stingx-plugin can generate invariant.]
     for (auto &plugin : plugins) {
         if (plugin == nullptr)
             UNREACHABLE();
-        auto [s, continueFlag, invariants] = plugin->generate(loopEntry, cond, inc, body, loopInfo);
+        auto [s, continueFlag, exit_invs] = plugin->generate(loopEntry, cond, inc, body, loopInfo);
+
+        invariants = std::move(exit_invs);
         if (s) {
             spec += "\t" + *s + "\n";
         }
@@ -107,5 +111,5 @@ std::string emitLoopInvariant(
             break;
     }
     spec += ACSL_END.to_string();
-    return spec;
+    return make_tuple(spec, std::move(invariants));
 }

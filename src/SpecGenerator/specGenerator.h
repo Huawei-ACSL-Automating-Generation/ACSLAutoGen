@@ -56,14 +56,15 @@ std::optional<LoopInfo> parseLoopInfo(
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
 
-std::string emitLoopInvariant(const ProgramState &preState,
-                              const clang::Expr *cond,
-                              const clang::Stmt *inc,
-                              const clang::Stmt *body,
-                              const LoopInfo &loopInfo,
-                              const std::string &groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
-                              std::optional<std::reference_wrapper<const std::vector<std::string>>>
-                                  extraPluginIds = std::nullopt);
+std::tuple<std::string, std::vector<Formulas>> emitLoopInvariant(
+    const ProgramState &preState,
+    const clang::Expr *cond,
+    const clang::Stmt *inc,
+    const clang::Stmt *body,
+    const LoopInfo &loopInfo,
+    const std::string &groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
+    std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
+        std::nullopt);
 
 std::string emitInlineContract(const ProgramState &state,
                                const std::string &groupName,

@@ -887,3 +887,14 @@ void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManag
 
     INFO("LinearExpr: " + oss.str());
 }
+
+/******************************************************************************\
+ *                           Invariant-to-Path Extraction                     *
+ *  This section converts computed invariants into symbolic execution paths,  *
+ *  capturing the relationships between initial values and post-loop states.  *
+ *                                                                            *
+ *  It enables symbolic representation of postconditions by analyzing the     *
+ *  invariant polyhedra and mapping them into logical formulas over symbolic  *
+ *  variables. The generated paths are suitable for downstream ACSL or        *
+ *  verification-based consumption.                                           *
+\******************************************************************************/
