@@ -22,6 +22,7 @@ class Path {
 
     Path()  = default;
     ~Path() = default;
+    Path(const Path &other, bool shallowCopy);
 
     enum class PathState {
         Step,

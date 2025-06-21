@@ -22,6 +22,16 @@ using namespace Symbolic;
 
 using LValueTarget = variant<const VarDecl *, unique_ptr<Address>>;
 
+Path::Path(const Path &other, bool shallowCopy) {
+    if (shallowCopy) {
+        currentState     = other.currentState;
+        returnExpr       = other.returnExpr->clone();
+        addrCounter      = other.addrCounter;
+        symbolVarCounter = other.symbolVarCounter;
+    } else {
+        TODO();
+    }
+}
 void Path::resymbolize() {
     memoryState.clear();
     pathConditions.clear();
@@ -889,7 +899,7 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
     INFO(spec);
 
     this->paths = std::move(invs);
-
+    INFO(this->dump());
     TODO();
 }
 

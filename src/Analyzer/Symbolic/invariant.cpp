@@ -291,67 +291,6 @@ Parma_Polyhedra_Library::C_Polyhedron *convertFormulaToPoly(const Formulas &asse
     return poly;
 }
 
-// @WindOctober: assume all int operation here.
-Formulas convertPolyToFormula(const Parma_Polyhedra_Library::C_Polyhedron &poly,
-                              const VarManager &vm) {
-    Formulas result;
-
-    for (const Parma_Polyhedra_Library::Constraint &c : poly.constraints()) {
-        std::unique_ptr<Symbolic::SymbolicExpr> lhs = std::make_unique<Symbolic::LiteralExpr>(0);
-
-        for (int i = 0; i < vm.numVars; ++i) {
-            Parma_Polyhedra_Library::Variable pplVar(i);
-            Parma_Polyhedra_Library::Coefficient coeff = c.coefficient(pplVar);
-
-            if (coeff != 0) {
-                const std::string &name = vm.orderedVars[i];
-
-                auto varExpr = std::make_unique<Symbolic::Variable>(
-                    name, Symbolic::SymbolicExpr::Type{Symbolic::SymbolicExpr::ScalarKind::Int, 32},
-                    i, nullptr);
-
-                std::unique_ptr<Symbolic::SymbolicExpr> term;
-                if (coeff == 1) {
-                    term = std::move(varExpr);
-                } else {
-                    // @WindOctober: Overflow for get_si().
-                    auto lit =
-                        std::make_unique<Symbolic::LiteralExpr>(static_cast<int>(coeff.get_si()));
-                    term = std::make_unique<Symbolic::BinaryOpExpr>(
-                        std::move(lit), Symbolic::BinaryOpExpr::Operator::Multiply,
-                        std::move(varExpr));
-                }
-
-                lhs = std::make_unique<Symbolic::BinaryOpExpr>(
-                    std::move(lhs), Symbolic::BinaryOpExpr::Operator::Add, std::move(term));
-            }
-        }
-
-        // @WindOctober: same as above.
-        auto rhs = std::make_unique<Symbolic::LiteralExpr>(
-            static_cast<int>(-c.inhomogeneous_term().get_si()));
-
-        Symbolic::BinaryOpExpr::Operator op;
-
-        switch (c.type()) {
-            case Parma_Polyhedra_Library::Constraint::Type::EQUALITY:
-                op = Symbolic::BinaryOpExpr::Operator::Equal;
-                break;
-            case Parma_Polyhedra_Library::Constraint::Type::NONSTRICT_INEQUALITY:
-                op = Symbolic::BinaryOpExpr::Operator::LessEqual;
-                break;
-            case Parma_Polyhedra_Library::Constraint::Type::STRICT_INEQUALITY:
-                ERROR("Strict inequalities not supported in symbolic conversion");
-            default: ERROR("Unsupported constraint type in convertPolyToFormula");
-        }
-
-        result.push_back(
-            std::make_unique<Symbolic::BinaryOpExpr>(std::move(lhs), op, std::move(rhs)));
-    }
-
-    return result;
-}
-
 std::vector<Parma_Polyhedra_Library::C_Polyhedron> computeLinearInv(
     const vector<string> &locations,
     const vector<TransRel> &transitions,
@@ -400,6 +339,203 @@ Formulas cloneFormulas(const Formulas &input) {
         result.push_back(expr->clone());
     }
     return result;
+}
+
+/******************************************************************************\
+ *                           Invariant-to-Path Extraction                     *
+ *  This section converts computed invariants into symbolic execution paths,  *
+ *  capturing the relationships between initial values and post-loop states.  *
+ *                                                                            *
+ *  It enables symbolic representation of postconditions by analyzing the     *
+ *  invariant polyhedra and mapping them into logical formulas over symbolic  *
+ *  variables. The generated paths are suitable for downstream ACSL or        *
+ *  verification-based consumption.                                           *
+\******************************************************************************/
+
+std::unordered_map<std::string, std::unique_ptr<SymbolicExpr>> extractNameMap(const Path &path) {
+    std::unordered_map<std::string, std::unique_ptr<SymbolicExpr>> nameToExpr;
+    const auto &varAddrMap  = path.getVarAddr();
+    const auto &memoryState = path.getMemoryState();
+
+    for (const auto &[decl, addr] : varAddrMap) {
+        if (!decl || !addr)
+            continue;
+        auto it = memoryState.find(*addr);
+        if (it != memoryState.end()) {
+            nameToExpr[decl->getNameAsString()] = it->second->clone();
+        }
+    }
+
+    return nameToExpr;
+}
+
+std::unique_ptr<Path> buildPostPathFromFormulas(const C_Polyhedron &poly,
+                                                const Path &initPath,
+                                                const VarManager &vm) {
+    using namespace Parma_Polyhedra_Library;
+    // TODO: whether clone from initPath? or select some field from initPath.
+    auto newPath   = std::make_unique<Path>(initPath, true);
+    const int n    = vm.numVars;
+    const int half = n / 2;
+
+    auto nameToExpr = extractNameMap(initPath);
+
+    std::unordered_map<int, std::unique_ptr<SymbolicExpr>> resolvedExprs;
+    for (int i = half; i < n; ++i) {
+        const std::string &initName = vm.orderedVars[i - half];
+
+        auto it = nameToExpr.find(initName);
+        if (it != nameToExpr.end()) {
+            resolvedExprs[i] = std::move(it->second);
+        }
+    }
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+
+        Constraint_System cs = poly.constraints();
+        for (Constraint_System::const_iterator it = cs.begin(); it != cs.end(); ++it) {
+            std::map<int, Coefficient> coeffs;
+            Coefficient constant = it->inhomogeneous_term();
+            int maxIdx           = it->space_dimension();
+
+            for (int i = 0; i < maxIdx; ++i) {
+                Coefficient c = it->coefficient(Parma_Polyhedra_Library::Variable(i));
+                if (c != 0)
+                    coeffs[i] = c;
+            }
+
+            std::vector<int> unknowns;
+            for (const auto &[idx, coeff] : coeffs) {
+                if (idx < half && !resolvedExprs.count(idx))
+                    unknowns.push_back(idx);
+            }
+
+            if (unknowns.size() != 1)
+                continue;
+            int target = unknowns[0];
+
+            unique_ptr<SymbolicExpr> rhs = std::make_unique<LiteralExpr>(-constant.get_si());
+
+            bool skip = false;
+            for (const auto &[idx, coeff] : coeffs) {
+                if (idx == target)
+                    continue;
+
+                SymbolicExpr *base = resolvedExprs[idx].get();
+
+                auto term = base->clone();
+                if (coeff != 1) {
+                    term = std::make_unique<BinaryOpExpr>(
+
+                        std::make_unique<LiteralExpr>(coeff.get_si()),
+                        BinaryOpExpr::Operator::Multiply, std::move(term));
+                }
+
+                rhs = std::make_unique<BinaryOpExpr>(
+                    std::move(rhs), BinaryOpExpr::Operator::Subtract, std::move(term));
+            }
+
+            if (skip)
+                continue;
+
+            if (coeffs[target] != 1) {
+                rhs = std::make_unique<BinaryOpExpr>(
+                    std::move(rhs), BinaryOpExpr::Operator::Divide,
+                    std::make_unique<LiteralExpr>(coeffs[target].get_si()));
+            }
+
+            resolvedExprs[target] = std::move(rhs);
+
+            changed = true;
+        }
+    }
+
+    std::unordered_map<int, SymbolicExpr *> newVars;
+
+    for (int i = 0; i < half; ++i) {
+        const std::string &name = vm.orderedVars[i];
+
+        for (const auto &[decl, _] : initPath.getVarAddr()) {
+            if (decl && decl->getNameAsString() == name) {
+                auto addr = newPath->allocMemory(decl);
+                Symbolic::SymbolicExpr::Type int32Type{Symbolic::SymbolicExpr::ScalarKind::Int, 32};
+
+                std::unique_ptr<SymbolicExpr> expr;
+                if (resolvedExprs.find(i) != resolvedExprs.end()) {
+                    expr = resolvedExprs[i]->clone();
+                } else {
+                    auto from = std::make_unique<Address>(*addr);
+                    expr      = std::make_unique<Symbolic::Variable>(
+                        name, int32Type, newPath->getNextSymVarId(), std::move(from));
+                    newVars[i] = expr.get();
+                }
+
+                newPath->updateMemory(addr, std::move(expr));
+                break;
+            }
+        }
+    }
+
+    Constraint_System cs = poly.constraints();
+    for (Constraint_System::const_iterator it = cs.begin(); it != cs.end(); ++it) {
+        std::unique_ptr<SymbolicExpr> lhs = nullptr;
+        int maxIdx                        = it->space_dimension();
+
+        for (int i = 0; i < maxIdx; ++i) {
+            Coefficient c = it->coefficient(Parma_Polyhedra_Library::Variable(i));
+            if (c == 0)
+                continue;
+
+            SymbolicExpr *base = nullptr;
+            if (resolvedExprs.count(i))
+                base = resolvedExprs[i].get();
+            else {
+                base = newVars[i];
+            }
+
+            auto term = base->clone();
+            if (c != 1) {
+                term = std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(c.get_si()),
+                                                      BinaryOpExpr::Operator::Multiply,
+                                                      std::move(term));
+            }
+
+            if (!lhs) {
+                lhs = std::move(term);
+            } else {
+                lhs = std::make_unique<BinaryOpExpr>(std::move(lhs), BinaryOpExpr::Operator::Add,
+                                                     std::move(term));
+            }
+        }
+
+        if (!lhs)
+            continue;
+
+        Coefficient c0 = it->inhomogeneous_term();
+        if (c0 != 0) {
+            lhs = std::make_unique<BinaryOpExpr>(std::move(lhs), BinaryOpExpr::Operator::Add,
+                                                 std::make_unique<LiteralExpr>(c0.get_si()));
+        }
+
+        BinaryOpExpr::Operator op;
+        if (it->is_equality()) {
+            op = BinaryOpExpr::Operator::Equal;
+        } else if (it->is_strict_inequality()) {
+            op = BinaryOpExpr::Operator::GreaterEqual;
+        } else if (it->is_inequality()) {
+            op = BinaryOpExpr::Operator::GreaterThan;
+        } else {
+            continue;
+        }
+
+        auto cond =
+            std::make_unique<BinaryOpExpr>(std::move(lhs), op, std::make_unique<LiteralExpr>(0));
+
+        newPath->insertPathCondition(std::move(cond));
+    }
+    return newPath;
 }
 
 /******************************************************************************\
@@ -671,6 +807,7 @@ Parma_Polyhedra_Library::C_Polyhedron *buildPathPoly(const Path &path,
 vector<std::unique_ptr<Path>> buildLoopInvariant(Formulas loopCond,
                                                  const vector<unique_ptr<Path>> &paths,
                                                  const ProgramState &initState) {
+    // TODO: process case that paths contain return.
     vector<unique_ptr<Path>> invariants;
     VarManager vm = VarManager::fromPaths(paths);
 
@@ -765,8 +902,7 @@ vector<std::unique_ptr<Path>> buildLoopInvariant(Formulas loopCond,
             auto exit_invs  = computeLinearInv(locations, transitions, initRel, vm);
 
             for (const auto &poly : exit_invs) {
-                Formulas fmls = convertPolyToFormula(poly, vm);
-                // invariants.push_back(std::move(fmls));
+                invariants.push_back(buildPostPathFromFormulas(poly, *initPaths[i], vm));
             }
             delete initRel.second;
         }
@@ -887,14 +1023,3 @@ void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManag
 
     INFO("LinearExpr: " + oss.str());
 }
-
-/******************************************************************************\
- *                           Invariant-to-Path Extraction                     *
- *  This section converts computed invariants into symbolic execution paths,  *
- *  capturing the relationships between initial values and post-loop states.  *
- *                                                                            *
- *  It enables symbolic representation of postconditions by analyzing the     *
- *  invariant polyhedra and mapping them into logical formulas over symbolic  *
- *  variables. The generated paths are suitable for downstream ACSL or        *
- *  verification-based consumption.                                           *
-\******************************************************************************/
