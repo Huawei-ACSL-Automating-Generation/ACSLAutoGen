@@ -460,7 +460,7 @@ std::unique_ptr<Path> buildPostPathFromFormulas(const C_Polyhedron &poly,
         for (const auto &[decl, _] : initPath.getVarAddr()) {
             if (decl && decl->getNameAsString() == name) {
                 auto addr = newPath->allocMemory(decl);
-                Symbolic::SymbolicExpr::Type int32Type{Symbolic::SymbolicExpr::ScalarKind::Int, 32};
+                Symbolic::SymbolicExpr::Type int64Type{Symbolic::SymbolicExpr::ScalarKind::Int, 64};
 
                 std::unique_ptr<SymbolicExpr> expr;
                 if (resolvedExprs.find(i) != resolvedExprs.end()) {
@@ -468,7 +468,7 @@ std::unique_ptr<Path> buildPostPathFromFormulas(const C_Polyhedron &poly,
                 } else {
                     auto from = std::make_unique<Address>(*addr);
                     expr      = std::make_unique<Symbolic::Variable>(
-                        name, int32Type, newPath->getNextSymVarId(), std::move(from));
+                        name, int64Type, newPath->getNextSymVarId(), std::move(from));
                     newVars[i] = expr.get();
                 }
 
@@ -482,7 +482,7 @@ std::unique_ptr<Path> buildPostPathFromFormulas(const C_Polyhedron &poly,
     for (Constraint_System::const_iterator it = cs.begin(); it != cs.end(); ++it) {
         std::unique_ptr<SymbolicExpr> lhs = nullptr;
         int maxIdx                        = it->space_dimension();
-
+        bool constrained                  = false;
         for (int i = 0; i < maxIdx; ++i) {
             Coefficient c = it->coefficient(Parma_Polyhedra_Library::Variable(i));
             if (c == 0)
@@ -492,7 +492,8 @@ std::unique_ptr<Path> buildPostPathFromFormulas(const C_Polyhedron &poly,
             if (resolvedExprs.count(i))
                 base = resolvedExprs[i].get();
             else {
-                base = newVars[i];
+                base        = newVars[i];
+                constrained = true;
             }
 
             auto term = base->clone();
@@ -510,7 +511,7 @@ std::unique_ptr<Path> buildPostPathFromFormulas(const C_Polyhedron &poly,
             }
         }
 
-        if (!lhs)
+        if (!lhs || !constrained)
             continue;
 
         Coefficient c0 = it->inhomogeneous_term();
