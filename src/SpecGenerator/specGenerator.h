@@ -27,22 +27,22 @@ std::string emitFunctionContract(
 
 struct LoopInfo {
     // SetLoopEntryPlugin
-    std::unique_ptr<ProgramState> symbolicLoopEntry_;
+    std::unique_ptr<const ProgramState> symbolicLoopEntry_;
 
     // SetIndexPlugin
-    std::unique_ptr<Symbolic::Address> index_{nullptr};
-    std::unique_ptr<Symbolic::SymbolicExpr> indexBound_{nullptr}; ///< The bound is inclusive.
+    std::unique_ptr<const Symbolic::Address> index_{nullptr};
+    std::unique_ptr<const Symbolic::SymbolicExpr> indexBound_{nullptr}; ///< The bound is inclusive.
 
     // SetPatternsPlugin
     struct pattern {
-        std::unique_ptr<Symbolic::SymbolicExpr> initialValue_{nullptr};
+        std::unique_ptr<const Symbolic::SymbolicExpr> initialValue_{nullptr};
         int64_t step_;
     };
 
     // Address with pattern has constant step.
     // Address with nullopt means too complex.
     // Other addresses' values hold through loop.
-    std::unordered_map<Symbolic::Address, std::optional<pattern>, Symbolic::AddressHash>
+    std::unordered_map<Symbolic::Address, std::optional<const pattern>, Symbolic::AddressHash>
         patternsMap_;
     // TODO(more info to be added)
 };

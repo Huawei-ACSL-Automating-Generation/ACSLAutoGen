@@ -158,7 +158,7 @@ struct VarManager {
                     continue;
 
                 std::string name = varDecl->getNameAsString();
-                if (vm.varIndexMap.insert({name, varCounter}).second) {
+                if (auto [_, ok] = vm.varIndexMap.insert({name, varCounter}); ok) {
                     rawVars.push_back(name);
                     ++varCounter;
                 }

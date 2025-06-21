@@ -529,21 +529,21 @@ std::vector<Formulas> preprocessLoopCond(Formulas loopCond) {
                       "] is not a BinaryOpExpr");
             }
 
-            using Op        = Symbolic::BinaryOpExpr::Operator;
+            using enum Symbolic::BinaryOpExpr::Operator;
             const auto &lhs = bin->getLeft();
             const auto &rhs = bin->getRight();
 
             switch (bin->getOperator()) {
-                case Op::NotEqual: {
+                case NotEqual: {
                     auto rhsPlus1 = std::make_unique<Symbolic::BinaryOpExpr>(
-                        rhs->clone(), Op::Add, std::make_unique<Symbolic::LiteralExpr>(1));
+                        rhs->clone(), Add, std::make_unique<Symbolic::LiteralExpr>(1));
                     auto geExpr = std::make_unique<Symbolic::BinaryOpExpr>(
-                        lhs->clone(), Op::GreaterEqual, std::move(rhsPlus1));
+                        lhs->clone(), GreaterEqual, std::move(rhsPlus1));
 
                     auto rhsMinus1 = std::make_unique<Symbolic::BinaryOpExpr>(
-                        rhs->clone(), Op::Subtract, std::make_unique<Symbolic::LiteralExpr>(1));
-                    auto leExpr = std::make_unique<Symbolic::BinaryOpExpr>(
-                        lhs->clone(), Op::LessEqual, std::move(rhsMinus1));
+                        rhs->clone(), Subtract, std::make_unique<Symbolic::LiteralExpr>(1));
+                    auto leExpr = std::make_unique<Symbolic::BinaryOpExpr>(lhs->clone(), LessEqual,
+                                                                           std::move(rhsMinus1));
 
                     Formulas branch;
                     branch.reserve(current.size());
@@ -561,20 +561,20 @@ std::vector<Formulas> preprocessLoopCond(Formulas loopCond) {
                     expanded = true;
                     break;
                 }
-                case Op::GreaterThan: {
+                case GreaterThan: {
                     auto newRHS = std::make_unique<Symbolic::BinaryOpExpr>(
-                        rhs->clone(), Op::Add, std::make_unique<Symbolic::LiteralExpr>(1));
+                        rhs->clone(), Add, std::make_unique<Symbolic::LiteralExpr>(1));
                     current[i] = std::make_unique<Symbolic::BinaryOpExpr>(
-                        lhs->clone(), Op::GreaterEqual, std::move(newRHS));
+                        lhs->clone(), GreaterEqual, std::move(newRHS));
                     worklist.push({std::move(current), i + 1});
                     expanded = true;
                     break;
                 }
-                case Op::LessThan: {
+                case LessThan: {
                     auto newRHS = std::make_unique<Symbolic::BinaryOpExpr>(
-                        rhs->clone(), Op::Subtract, std::make_unique<Symbolic::LiteralExpr>(1));
-                    current[i] = std::make_unique<Symbolic::BinaryOpExpr>(
-                        lhs->clone(), Op::LessEqual, std::move(newRHS));
+                        rhs->clone(), Subtract, std::make_unique<Symbolic::LiteralExpr>(1));
+                    current[i] = std::make_unique<Symbolic::BinaryOpExpr>(lhs->clone(), LessEqual,
+                                                                          std::move(newRHS));
                     worklist.push({std::move(current), i + 1});
                     expanded = true;
                     break;
@@ -635,7 +635,7 @@ Parma_Polyhedra_Library::C_Polyhedron *buildPathPoly(const Path &path,
     }
     if (!init) {
         for (const auto &[name, idx] : vm.varIndexMap) {
-            if (assignedVars.find(name) != assignedVars.end())
+            if (assignedVars.contains(name))
                 continue;
 
             int unprimed = idx;

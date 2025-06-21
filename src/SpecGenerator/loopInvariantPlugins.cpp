@@ -70,12 +70,15 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
         const clang::Stmt *inc,
         const clang::Stmt *body,
         const LoopInfo &loopInfo) const override {
-        auto &symbolicState = loopInfo.symbolicLoopEntry_;
-        if (symbolicState->getPaths().empty())
-            return make_tuple(nullopt, true, std::vector<Formulas>{});
+        if (loopInfo.symbolicLoopEntry_ == nullptr ||
+            loopInfo.symbolicLoopEntry_->getPaths().size() != 1) {
+            ERROR("SymbolicLoopEntry_ is in an invalid state");
+        }
+
+        auto symbolicState = loopInfo.symbolicLoopEntry_->clone();
 
         auto exprs = symbolicState->stepExpr(cond);
-        int len    = exprs.size() / symbolicState->getPaths().size();
+        int len    = exprs.size();
         std::vector<std::unique_ptr<SymbolicExpr>> loopCond;
         for (int i = 0; i < len; ++i)
             loopCond.push_back(std::move(exprs[i]));

@@ -53,7 +53,7 @@ class SetPatternsPlugin : public LoopInfoPlugin {
         loopCurrent->step(inc);
 
         auto getPatternsFromPath = [&](const Path &currentEntry) {
-            unordered_map<Address, optional<pattern>, AddressHash> patterns;
+            unordered_map<Address, optional<const pattern>, AddressHash> patterns;
             auto &preMS = loopInfo.symbolicLoopEntry_->getPaths()[0]->getMemoryState();
             for (auto &[addr, value] : currentEntry.getMemoryState()) {
                 if (preMS.find(addr) == preMS.end())
@@ -106,7 +106,7 @@ class SetPatternsPlugin : public LoopInfoPlugin {
             return patterns;
         }; // getPatternsFromPath end
 
-        unordered_map<Address, optional<pattern>, AddressHash> patterns;
+        unordered_map<Address, optional<const pattern>, AddressHash> patterns;
 
         for (auto &path : loopCurrent->getPaths()) {
             switch (path->getPathState()) {
@@ -119,8 +119,8 @@ class SetPatternsPlugin : public LoopInfoPlugin {
                     if (patterns.empty())
                         patterns = std::move(currentPatterns);
                     else {
-                        auto isEqual = [](const optional<LoopInfo::pattern> &LHS,
-                                          const optional<LoopInfo::pattern> &RHS) {
+                        auto isEqual = [](const optional<const LoopInfo::pattern> &LHS,
+                                          const optional<const LoopInfo::pattern> &RHS) {
                             if (LHS == nullopt && RHS == nullopt)
                                 return true;
                             if (LHS && RHS) {
