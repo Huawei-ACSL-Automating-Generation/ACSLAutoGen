@@ -2,6 +2,7 @@
 
 #include "macros.h"
 #include "specGenerator.h"
+#include <memory>
 #include "state.h"
 #include "stringTemplate.h"
 
@@ -12,7 +13,7 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
   public:
     CheckAndDumpLoopInfoPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool, vector<Formulas>> generate(
+    tuple<optional<string>, bool, vector<unique_ptr<Path>>> generate(
         const ProgramState &,
         const clang::Expr *,
         const clang::Stmt *,
@@ -52,7 +53,7 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
             }
         }
         INFO(oss.str());
-        return make_tuple(nullopt, true, std::vector<Formulas>{});
+        return make_tuple(nullopt, true, std::vector<unique_ptr<Path>>{});
     }
 
   private:
@@ -64,7 +65,7 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
   public:
     LinearInvariantPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool, vector<Formulas>> generate(
+    tuple<optional<string>, bool, vector<unique_ptr<Path>>> generate(
         const ProgramState &loopEntry,
         const clang::Expr *cond,
         const clang::Stmt *inc,
@@ -83,7 +84,7 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
         for (int i = 0; i < len; ++i)
             loopCond.push_back(std::move(exprs[i]));
         if (loopCond.empty())
-            return make_tuple(nullopt, true, std::vector<Formulas>{});
+            return make_tuple(nullopt, true, std::vector<unique_ptr<Path>>{});
 
         symbolicState->step(body);
         if (inc)
@@ -91,7 +92,8 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
 
         const auto &paths = symbolicState->getPaths();
 
-        vector<Formulas> invariants = buildLoopInvariant(std::move(loopCond), paths, loopEntry);
+        vector<unique_ptr<Path>> invariants =
+            buildLoopInvariant(std::move(loopCond), paths, loopEntry);
 
         std::ostringstream oss;
 
@@ -107,7 +109,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
   public:
     LoopAssignsPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool, vector<Formulas>> generate(
+    tuple<optional<string>, bool, vector<unique_ptr<Path>>> generate(
         const ProgramState &preState,
         const clang::Expr *cond,
         const clang::Stmt *inc,
@@ -188,10 +190,10 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         }
 
         if (spec.empty())
-            return make_tuple(R"(loop assigns \nothing;)", true, std::vector<Formulas>{});
+            return make_tuple(R"(loop assigns \nothing;)", true, std::vector<unique_ptr<Path>>{});
         else
             return make_tuple("loop assigns " + spec.substr(0, spec.length() - 2) + ";", true,
-                              std::vector<Formulas>{});
+                              std::vector<unique_ptr<Path>>{});
     }
 
   private:

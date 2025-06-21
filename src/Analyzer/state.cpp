@@ -888,7 +888,8 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
     auto [spec, invs] = emitLoopInvariant(*this, cond, inc, body, *loopInfo);
     INFO(spec);
 
-    // @WindOctober: process loop post state.
+    this->paths = std::move(invs);
+
     TODO();
 }
 

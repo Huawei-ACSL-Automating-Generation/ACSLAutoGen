@@ -14,9 +14,9 @@
 #include <clang/AST/StmtCXX.h>
 #include "groups.h"
 #include "Analyzer/Symbolic/expr.h"
+#include "Analyzer/state.h"
 
 class ProgramState;
-using Formulas = std::vector<std::unique_ptr<Symbolic::SymbolicExpr>>;
 
 std::string emitFunctionContract(
     const ProgramState &pre,
@@ -56,7 +56,7 @@ std::optional<LoopInfo> parseLoopInfo(
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
 
-std::tuple<std::string, std::vector<Formulas>> emitLoopInvariant(
+std::tuple<std::string, std::vector<std::unique_ptr<Path>>> emitLoopInvariant(
     const ProgramState &preState,
     const clang::Expr *cond,
     const clang::Stmt *inc,
@@ -116,7 +116,7 @@ class LoopInvariantPlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
 
-    virtual std::tuple<std::optional<std::string>, bool, std::vector<Formulas>> generate(
+    virtual std::tuple<std::optional<std::string>, bool, std::vector<std::unique_ptr<Path>>> generate(
         const ProgramState &loopEntry,
         const clang::Expr *cond,
         const clang::Stmt *inc,

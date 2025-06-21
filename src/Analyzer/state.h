@@ -123,6 +123,8 @@ class ProgramState {
     auto getPaths() const -> const auto & { return paths; }
     auto getContext() const -> const auto & { return Context; }
 
+    void deriveLinearPostState(std::vector<Formulas> invs);
+
   private:
     // Only be used in step when processing SwitchStmt, just for a cleaner code.
     std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<SymbolicExpr>>> splitStateBySwitchCond(
@@ -182,7 +184,8 @@ struct VarManager {
         return it->second;
     }
 };
-std::vector<Formulas> buildLoopInvariant(Formulas conds,
-                                         const std::vector<std::unique_ptr<Path>> &paths,
-                                         const ProgramState &initState);
+std::vector<std::unique_ptr<Path>> buildLoopInvariant(
+    Formulas conds,
+    const std::vector<std::unique_ptr<Path>> &paths,
+    const ProgramState &initState);
 #endif
