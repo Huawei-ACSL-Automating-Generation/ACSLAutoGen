@@ -900,7 +900,6 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
 
     this->paths = std::move(invs);
     INFO(this->dump());
-    TODO();
 }
 
 void ProgramState::setStates(Path::PathState state, const Stmt *stmt) {
