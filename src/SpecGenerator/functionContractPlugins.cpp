@@ -82,7 +82,24 @@ class ResultPlugin : public FunctionContractPlugin {
     ResultPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
     optional<string> generate(const ProgramState &, const ProgramState &post) const override {
-        // TODO
+        unique_ptr<SymbolicExpr> returnExpr{nullptr};
+        for (auto &path : post.getPaths()) {
+            if (returnExpr == nullptr) {
+                returnExpr = path->getReturnExpr()->clone();
+            } else {
+                auto &pathReturnExpr = path->getReturnExpr();
+                if (pathReturnExpr == nullptr) {
+                    ERROR("Some paths reach the end of the function without a return statement.");
+                }
+                if (*pathReturnExpr != *returnExpr) {
+                    returnExpr = nullptr;
+                    break;
+                }
+            }
+        }
+
+        if (returnExpr != nullptr)
+            return "ensures \\result == " + returnExpr->regularForm("\\old(", ")");
         return nullopt;
     }
 

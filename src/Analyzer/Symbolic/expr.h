@@ -51,11 +51,10 @@ namespace Symbolic {
         /// @param varLabel variables will be enclosed in varLabel() is varLabel != nullopt
         /// @return string that can be directly output in ACSL
         virtual std::string regularForm(
-            std::optional<std::reference_wrapper<const std::string>> prefix = std::nullopt,
-            std::optional<std::reference_wrapper<const std::string>> suffix =
-                std::nullopt) const                    = 0;
-        virtual bool equal(const SymbolicExpr &) const = 0;
-        virtual std::size_t hash() const               = 0;
+            std::optional<std::string_view> prefix = std::nullopt,
+            std::optional<std::string_view> suffix = std::nullopt) const = 0;
+        virtual bool equal(const SymbolicExpr &) const                   = 0;
+        virtual std::size_t hash() const                                 = 0;
 
         friend std::ostream &operator<<(std::ostream &os, const SymbolicExpr &expr) {
             return os << expr.dump();
@@ -162,9 +161,8 @@ namespace Symbolic {
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
         virtual std::string regularForm(
-            std::optional<std::reference_wrapper<const std::string>> prefix = std::nullopt,
-            std::optional<std::reference_wrapper<const std::string>> suffix =
-                std::nullopt) const override;
+            std::optional<std::string_view> prefix = std::nullopt,
+            std::optional<std::string_view> suffix = std::nullopt) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -234,9 +232,8 @@ namespace Symbolic {
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
         virtual std::string regularForm(
-            std::optional<std::reference_wrapper<const std::string>> prefix = std::nullopt,
-            std::optional<std::reference_wrapper<const std::string>> suffix =
-                std::nullopt) const override;
+            std::optional<std::string_view> prefix = std::nullopt,
+            std::optional<std::string_view> suffix = std::nullopt) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -276,9 +273,8 @@ namespace Symbolic {
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
         virtual std::string regularForm(
-            std::optional<std::reference_wrapper<const std::string>> prefix = std::nullopt,
-            std::optional<std::reference_wrapper<const std::string>> suffix =
-                std::nullopt) const override;
+            std::optional<std::string_view> prefix = std::nullopt,
+            std::optional<std::string_view> suffix = std::nullopt) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -303,9 +299,8 @@ namespace Symbolic {
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
         virtual std::string regularForm(
-            std::optional<std::reference_wrapper<const std::string>> prefix = std::nullopt,
-            std::optional<std::reference_wrapper<const std::string>> suffix =
-                std::nullopt) const override;
+            std::optional<std::string_view> prefix = std::nullopt,
+            std::optional<std::string_view> suffix = std::nullopt) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -333,9 +328,8 @@ namespace Symbolic {
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
         virtual std::string regularForm(
-            std::optional<std::reference_wrapper<const std::string>> prefix = std::nullopt,
-            std::optional<std::reference_wrapper<const std::string>> suffix =
-                std::nullopt) const override;
+            std::optional<std::string_view> prefix = std::nullopt,
+            std::optional<std::string_view> suffix = std::nullopt) const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         auto getFrom() const -> const auto & { return from_; }
@@ -406,12 +400,10 @@ namespace Symbolic {
         unsigned int getId() const { return id_; }
         std::string dump() const override;
         virtual std::string regularForm(
-            std::optional<std::reference_wrapper<const std::string>> prefix = std::nullopt,
-            std::optional<std::reference_wrapper<const std::string>> suffix =
-                std::nullopt) const override;
-        std::string regularFormOfValue(
-            std::optional<std::reference_wrapper<const std::string>> prefix = std::nullopt,
-            std::optional<std::reference_wrapper<const std::string>> suffix = std::nullopt) const;
+            std::optional<std::string_view> prefix = std::nullopt,
+            std::optional<std::string_view> suffix = std::nullopt) const override;
+        std::string regularFormOfValue(std::optional<std::string_view> prefix = std::nullopt,
+                                       std::optional<std::string_view> suffix = std::nullopt) const;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
         SymbolicExpr *getOffset() const { return offset_.get(); }

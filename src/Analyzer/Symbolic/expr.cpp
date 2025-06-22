@@ -209,9 +209,8 @@ std::string Address::dump() const {
     return oss.str();
 }
 
-std::string LiteralExpr::regularForm(
-    std::optional<std::reference_wrapper<const std::string>>,
-    std::optional<std::reference_wrapper<const std::string>>) const {
+std::string LiteralExpr::regularForm(std::optional<std::string_view>,
+                                     std::optional<std::string_view>) const {
     std::ostringstream oss;
     switch (getLiteralType()) {
         case LiteralType::Boolean: oss << (data.boolValue ? "true" : "false"); break;
@@ -225,9 +224,8 @@ std::string LiteralExpr::regularForm(
     return oss.str();
 }
 
-std::string BinaryOpExpr::regularForm(
-    std::optional<std::reference_wrapper<const std::string>> prefix,
-    std::optional<std::reference_wrapper<const std::string>> suffix) const {
+std::string BinaryOpExpr::regularForm(std::optional<std::string_view> prefix,
+                                      std::optional<std::string_view> suffix) const {
     std::ostringstream oss;
     std::string opStr;
     switch (op_) {
@@ -256,9 +254,8 @@ std::string BinaryOpExpr::regularForm(
     return oss.str();
 }
 
-std::string UnaryOpExpr::regularForm(
-    std::optional<std::reference_wrapper<const std::string>> prefix,
-    std::optional<std::reference_wrapper<const std::string>> suffix) const {
+std::string UnaryOpExpr::regularForm(std::optional<std::string_view> prefix,
+                                     std::optional<std::string_view> suffix) const {
     std::ostringstream oss;
     std::string opStr;
     switch (op_) {
@@ -278,15 +275,14 @@ std::string UnaryOpExpr::regularForm(
     return oss.str();
 }
 
-std::string NullExpr::regularForm(std::optional<std::reference_wrapper<const std::string>>,
-                                  std::optional<std::reference_wrapper<const std::string>>) const {
+std::string NullExpr::regularForm(std::optional<std::string_view>,
+                                  std::optional<std::string_view>) const {
     WARN("Output NullExpr's regular form, something may go wrong.");
     return "";
 }
 
-std::string Symbolic::Variable::regularForm(
-    std::optional<std::reference_wrapper<const std::string>> prefix,
-    std::optional<std::reference_wrapper<const std::string>> suffix) const {
+std::string Symbolic::Variable::regularForm(std::optional<std::string_view> prefix,
+                                            std::optional<std::string_view> suffix) const {
     if (from_ == nullptr) {
         ERROR("Trying to get regular form of Variable with nullptr from_.");
     }
@@ -299,9 +295,8 @@ std::string Symbolic::Variable::regularForm(
     return "(*" + addr + ")";
 }
 
-std::string Address::regularForm(
-    std::optional<std::reference_wrapper<const std::string>> prefix,
-    std::optional<std::reference_wrapper<const std::string>> suffix) const {
+std::string Address::regularForm(std::optional<std::string_view> prefix,
+                                 std::optional<std::string_view> suffix) const {
     if (const auto varDeclPtr = std::get_if<const clang::VarDecl *>(&from_);
         varDeclPtr && *varDeclPtr) {
         if (isOffseted())
@@ -330,9 +325,8 @@ std::string Address::regularForm(
     }
 }
 
-std::string Address::regularFormOfValue(
-    std::optional<std::reference_wrapper<const std::string>> prefix,
-    std::optional<std::reference_wrapper<const std::string>> suffix) const {
+std::string Address::regularFormOfValue(std::optional<std::string_view> prefix,
+                                        std::optional<std::string_view> suffix) const {
     string s = regularForm(prefix, suffix);
     if (s.empty())
         ERROR("Empty regular from.");
