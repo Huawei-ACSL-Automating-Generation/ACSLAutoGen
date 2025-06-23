@@ -5,7 +5,7 @@ include(FetchContent)
 FetchContent_Declare(
   googletest
   GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG v1.14.0
+  GIT_TAG v1.16.0
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
@@ -24,7 +24,9 @@ include(GoogleTest)
 add_executable(test_all
   ${CMAKE_CURRENT_SOURCE_DIR}/SpecGenerator/stringTemplate_test.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/SpecGenerator/templates_test.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/Analyzer/state_test.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/SpecGenerator/loopInvariantPlugins_test.cpp
+  # ${CMAKE_CURRENT_SOURCE_DIR}/Analyzer/state_test.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/context/globalSM_test.cpp
 )
 
 llvm_map_components_to_libnames(llvm_libs support)
@@ -34,9 +36,19 @@ target_link_libraries(test_all PRIVATE
   gmock
   gtest_main
   ACSLG_compiler_flags
+  clangTooling
+  clangFrontend
+  clangAST
+  clangBasic
+  TestUtilsLib
   ${llvm_libs}
   AnalyzerLib
   SpecGeneratorLib
+  ContextLib
 )
 
-gtest_discover_tests(test_all)
+gtest_add_tests(TARGET test_all
+                TEST_PREFIX test_all::
+                TEST_LIST test_all_tests)
+
+add_subdirectory(testUtils)

@@ -30,8 +30,9 @@ struct LoopInfo {
     std::unique_ptr<const ProgramState> symbolicLoopEntry_;
 
     // SetIndexPlugin
-    std::unique_ptr<const Symbolic::Address> index_{nullptr};
-    std::unique_ptr<const Symbolic::SymbolicExpr> indexBound_{nullptr}; ///< The bound is inclusive.
+    std::unique_ptr<Symbolic::Address> index_{nullptr};
+    clang::BinaryOperator::Opcode op_;
+    std::unique_ptr<Symbolic::SymbolicExpr> indexBound_{nullptr};
 
     // SetPatternsPlugin
     struct pattern {

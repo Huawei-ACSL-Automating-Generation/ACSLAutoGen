@@ -44,4 +44,4 @@ class GlobalSM {
     clang::Rewriter rewriter_;
 };
 
-#endif // SIMPLE_SM_H
+#endif // GLOBAL_SM_H

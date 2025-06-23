@@ -50,7 +50,7 @@ class Path {
     void setPathState(PathState state) { currentState = state; }
 
     bool isActive() const { return currentState == PathState::Step; }
-    // bool isUnchangedState(Address addr);
+    bool isUnchanged(const Address &addr);
     std::unique_ptr<Path> clone() const;
 
     const clang::Stmt *StmtCtx = nullptr;
@@ -64,7 +64,7 @@ class Path {
     int getNextSymVarId() { return symbolVarCounter++; }
     auto getReturnExpr() const -> const auto & { return returnExpr; }
     auto getPathState() const -> const auto & { return currentState; }
-    // auto getAddrCounter() const -> const auto & { return addrCounter; }
+    auto getAddrCounter() const -> const auto & { return addrCounter; }
 
   private:
     // Map: variable record definition ID -> corresponding symbolic address.
@@ -117,7 +117,6 @@ class ProgramState {
     const clang::Stmt *StmtCtx = nullptr;
 
     std::string dump() const;
-    void generateFuncACSL();
     void resetState();
     void resymbolize();
 

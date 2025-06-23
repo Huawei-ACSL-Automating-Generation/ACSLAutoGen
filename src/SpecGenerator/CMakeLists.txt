@@ -23,6 +23,7 @@ target_include_directories(SpecGeneratorLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR
 target_include_directories(SpecGeneratorLib PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(SpecGeneratorLib PRIVATE 
     ACSLG_compiler_flags
+    UtilsLib
     $<TARGET_OBJECTS:plugins_obj>
     AnalyzerLib
     clangAST

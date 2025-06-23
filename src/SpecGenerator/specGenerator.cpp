@@ -60,7 +60,7 @@ string emitFunctionContract(const ProgramState &pre,
         if (plugin == nullptr)
             continue;
         if (auto s = plugin->generate(pre, post); s)
-            spec += "\t" + *s + "\n";
+            spec += "    " /*4 spaces*/ + *s + "\n";
     }
     spec += ACSL_END.to_string();
     return spec;
@@ -107,7 +107,7 @@ std::tuple<std::string, std::vector<unique_ptr<Path>>> emitLoopInvariant(
             invariants.push_back(std::move(inv));
         }
         if (s) {
-            spec += "\t" + *s + "\n";
+            spec += "    " /*4 spaces*/ + *s + "\n";
         }
         if (!continueFlag)
             break;

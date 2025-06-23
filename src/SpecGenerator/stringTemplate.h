@@ -51,6 +51,12 @@ class StringTemplate {
     /// Copy constructor.
     StringTemplate(const StringTemplate &);
 
+    /// Assign.
+    StringTemplate &operator=(StringTemplate templ) {
+        swap(templ);
+        return *this;
+    }
+
     /// @brief Constructor with raw C-string.
     /// @param str if str is nullptr, treat it as empty string.
     StringTemplate(const char *str);
@@ -116,6 +122,15 @@ class StringTemplate {
         LHS.append(StringTemplate(std::forward<T>(RHS)));
         // copy elision
         return LHS;
+    }
+
+    /// For implement of assign.
+    void swap(StringTemplate &other) noexcept {
+        using std::swap;
+        swap(rawText_, other.rawText_);
+        swap(placeholders_, other.placeholders_);
+        swap(nameToPh_, other.nameToPh_);
+        swap(next_, other.next_);
     }
 };
 

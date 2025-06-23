@@ -580,29 +580,19 @@ string Path::dump() const {
     return oss.str();
 }
 
-// bool Path::isUnchangedState(Address addr)
-// {
-//     auto memIt = memoryState.find(addr);
-//     if (memIt == memoryState.end())
-//         return false;
+bool Path::isUnchanged(const Address &addr) {
+    auto memIt = memoryState.find(addr);
+    if (memIt == memoryState.end())
+        return false;
 
-//     SymbolicExpr *stored = memIt->second.get();
-//     if (stored->getType() != SymbolicExpr::ExprType::Variable)
-//         return false;
-
-//     Symbolic::Variable *var = static_cast<Symbolic::Variable *>(stored);
-
-//     if (!addr.hasVarDecl())
-//         ERROR("Cannot resolve base VarDecl from address id");
-//     string baseName = addr.getBaseName();
-
-//     Step 2 : compare name if (!addr.isOffseted()) { return var->getName() == baseName; }
-//     else
-//     {
-//         std::string expected = baseName + "[" + addr.getOffset()->dump() + "]";
-//         return var->getName() == expected;
-//     }
-// }
+    if (memIt->second->getType() == SymbolicExpr::ExprType::Variable) {
+        auto var = unique_ptr<Symbolic::Variable>(
+            static_cast<Symbolic::Variable *>(memIt->second->clone().release()));
+        if (auto &from = var->getFrom(); from && **from == addr)
+            return true;
+    }
+    return false;
+}
 
 ProgramState::ProgramState(unique_ptr<Path> initialPath, unique_ptr<ACSLFunction> context) {
     paths.push_back(std::move(initialPath));
@@ -1247,16 +1237,6 @@ void ProgramState::resymbolize() {
         }
     }
 }
-
-#include "SpecGenerator/stringTemplate.h"
-#include "SpecGenerator/loopInvTemplates.h"
-
-void ProgramState::CollectLoopACSL() {
-    NameMap map = {{"index", "i"}, {"max", "res"}, {"array", "p"}, {"i", "i"}, {"n", "n"}};
-    INFO(FIND_MAX_LOOP.to_string(map));
-}
-
-void ProgramState::generateFuncACSL() {}
 
 string ProgramState::dump() const {
     ostringstream oss;
