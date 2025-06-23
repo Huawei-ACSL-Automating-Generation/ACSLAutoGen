@@ -100,7 +100,7 @@ class ResultPlugin : public FunctionContractPlugin {
 
         if (returnExpr != nullptr) {
             return "ensures \\result == " +
-                   returnExpr->simplifiedExpr()->regularForm("\\old(", ")");
+                   returnExpr->simplifiedExpr()->regularForm("\\Old(", ")");
         }
         return nullopt;
     }
