@@ -15,8 +15,9 @@ std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedLinearExpr() const {
     auto idVarMap   = collectUsedVars();
     auto linearExpr = toLinearExpr();
     unique_ptr<SymbolicExpr> result{nullptr};
+
+    using enum BinaryOpExpr::Operator;
     for (auto [id, varPtr] : idVarMap) {
-        using enum BinaryOpExpr::Operator;
         auto C = linearExpr.coefficient(Parma_Polyhedra_Library::Variable{id}).get_si();
         unique_ptr<SymbolicExpr> varExpr{nullptr};
         if (C != 1)
@@ -28,6 +29,16 @@ std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedLinearExpr() const {
             result = std::move(varExpr);
         else
             result = make_unique<BinaryOpExpr>(std::move(result), Add, std::move(varExpr));
+    }
+    if (auto inhomo = linearExpr.inhomogeneous_term().get_si()) {
+        if (result != nullptr)
+            result = make_unique<BinaryOpExpr>(std::move(result), Add,
+                                               std::make_unique<LiteralExpr>(inhomo));
+        else
+            result = make_unique<LiteralExpr>(inhomo);
+    }
+    if (result == nullptr) {
+        ERROR("Simplified expr is null! Something goes wrong.");
     }
     return result;
 }
