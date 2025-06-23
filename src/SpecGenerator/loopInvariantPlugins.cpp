@@ -102,6 +102,8 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
 
         std::ostringstream oss;
 
+        if (oss.str().empty())
+            return make_tuple(nullopt, true, std::move(invariants));
         return make_tuple(oss.str(), true, std::move(invariants));
     }
 

@@ -888,6 +888,10 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
     auto [spec, invs] = emitLoopInvariant(*this, cond, inc, body, *loopInfo);
     INFO(spec);
 
+    auto beginLoc = loopStmt->getSourceRange().getBegin();
+    GlobalSM::getRewriter().InsertText(beginLoc, spec, /*after*/ false,
+                                       /*indentNewLines*/ true);
+
     this->paths = std::move(invs);
     INFO(this->dump());
 }

@@ -5,8 +5,8 @@ add_compile_options(-Wno-deprecated-declarations)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(LLVM REQUIRED CONFIG)
-find_package(Clang REQUIRED CONFIG)
+find_package(LLVM 19.1.7 REQUIRED CONFIG)
+find_package(Clang 19.1.7 REQUIRED CONFIG)
 find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(GMP REQUIRED IMPORTED_TARGET gmpxx)  
