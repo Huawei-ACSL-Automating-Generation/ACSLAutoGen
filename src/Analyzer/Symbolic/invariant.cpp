@@ -369,9 +369,9 @@ std::unordered_map<std::string, std::unique_ptr<SymbolicExpr>> extractNameMap(co
     return nameToExpr;
 }
 
-std::unique_ptr<Path> buildPostPathFromFormulas(const C_Polyhedron &poly,
-                                                const Path &initPath,
-                                                const VarManager &vm) {
+std::unique_ptr<Path> buildPostPath(const C_Polyhedron &poly,
+                                    const Path &initPath,
+                                    const VarManager &vm) {
     using namespace Parma_Polyhedra_Library;
     // TODO: whether clone from initPath? or select some field from initPath.
     auto newPath   = std::make_unique<Path>(initPath, true);
@@ -857,8 +857,8 @@ vector<std::unique_ptr<Path>> buildLoopInvariant(Formulas loopCond,
             auto *poly = convertFormulaToPoly(neg, vm);
             negatedPolys.push_back(poly);
         }
-
-        for (auto *initPoly : initPathPolys) {
+        for (size_t path_i = 0; path_i < initPathPolys.size(); ++path_i) {
+            auto *initPoly = initPathPolys[path_i];
             std::vector<TransRel> transitions;
 
             // === init -> path_k ===
@@ -903,7 +903,7 @@ vector<std::unique_ptr<Path>> buildLoopInvariant(Formulas loopCond,
             auto exit_invs  = computeLinearInv(locations, transitions, initRel, vm);
 
             for (const auto &poly : exit_invs) {
-                invariants.push_back(buildPostPathFromFormulas(poly, *initPaths[i], vm));
+                invariants.push_back(buildPostPath(poly, *initPaths[path_i], vm));
             }
             delete initRel.second;
         }
