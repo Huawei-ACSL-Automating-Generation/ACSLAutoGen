@@ -1,0 +1,51 @@
+#ifndef ALL_OP
+#define ALL_OP(name, tok, prec, isRight)
+#endif
+
+#ifndef BIN_OP
+#define BIN_OP(name, tok, prec, isRight) ALL_OP(name, tok, prec, isRight)
+#endif
+
+#ifndef UN_OP
+#define UN_OP(name, tok, prec, isRight) ALL_OP(name, tok, prec, isRight)
+#endif
+
+// binary operator
+#ifdef BIN_OP
+BIN_OP(Multiply, "*", 6, /*left*/ false)
+BIN_OP(Divide, "/", 6, /*left*/ false)
+BIN_OP(Remainder, "%", 6, /*left*/ false)
+BIN_OP(Add, "+", 5, /*left*/ false)
+BIN_OP(Subtract, "-", 5, /*left*/ false)
+BIN_OP(ShiftLeft, "<<", 4, /*left*/ false)
+BIN_OP(ShiftRight, ">>", 4, /*left*/ false)
+BIN_OP(LessThan, "<", 3, /*left*/ false)
+BIN_OP(GreaterThan, ">", 3, /*left*/ false)
+BIN_OP(LessEqual, "<=", 3, /*left*/ false)
+BIN_OP(GreaterEqual, ">=", 3, /*left*/ false)
+BIN_OP(Equal, "==", 2, /*left*/ false)
+BIN_OP(NotEqual, "!=", 2, /*left*/ false)
+BIN_OP(BitAnd, "&", 1, /*left*/ false)
+BIN_OP(BitXor, "^", 0, /*left*/ false)
+BIN_OP(BitOr, "|", -1, /*left*/ false)
+BIN_OP(LogicalAnd, "&&", -2, /*left*/ false)
+BIN_OP(LogicalOr, "||", -3, /*left*/ false)
+#endif
+
+// unary operator
+#ifdef UN_OP
+UN_OP(Plus, "+", 7, /*right*/ true)
+UN_OP(Minus, "-", 7, /*right*/ true)
+UN_OP(LogicalNot, "!", 7, /*right*/ true)
+UN_OP(BitwiseNot, "~", 7, /*right*/ true)
+UN_OP(PreInc, "++", 7, /*right*/ true)
+UN_OP(PreDec, "--", 7, /*right*/ true)
+UN_OP(PostInc, "++", 8, /*left*/ false)
+UN_OP(PostDec, "--", 8, /*left*/ false)
+UN_OP(AddrOf, "&", 7, /*right*/ true)
+UN_OP(Dereference, "*", 7, /*right*/ true)
+#endif
+
+#undef BIN_OP
+#undef UN_OP
+#undef ALL_OP

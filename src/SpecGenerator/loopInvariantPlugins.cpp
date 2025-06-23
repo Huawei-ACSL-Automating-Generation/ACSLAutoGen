@@ -37,7 +37,9 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
         oss << "index's address: " << (loopInfo.index_ ? loopInfo.index_->regularForm() : "NULL")
             << endl;
         oss << "index's bound: "
-            << (loopInfo.indexBound_ ? loopInfo.indexBound_->regularForm() : "NULL") << endl;
+            << (loopInfo.indexBound_ ? loopInfo.indexBound_->simplifiedExpr()->regularForm()
+                                     : "NULL")
+            << endl;
         oss << "patterns: " << endl;
 
         for (auto &[addr, pattern] : loopInfo.patternsMap_) {
@@ -45,7 +47,9 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
             oss << "pattern: ";
             if (pattern) {
                 oss << "{ initial value="
-                    << ((*pattern).initialValue_ ? (*pattern).initialValue_->regularForm() : "NULL")
+                    << ((*pattern).initialValue_
+                            ? (*pattern).initialValue_->simplifiedExpr()->regularForm()
+                            : "NULL")
                     << ", step=" << (*pattern).step_ << " }" << endl;
             } else {
                 oss << "Value has changed in loop, but pattern is too complex to preprocess."

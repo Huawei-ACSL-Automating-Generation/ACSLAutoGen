@@ -48,13 +48,16 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
         virtual std::string dump() const                    = 0;
         /// @brief emit symbolic expressions in regular form compliant with ACSL
-        /// @param varLabel variables will be enclosed in varLabel() is varLabel != nullopt
+        /// @param prefix variables will be prefixed with it.
+        /// @param suffix variables will be suffix with it.
         /// @return string that can be directly output in ACSL
-        virtual std::string regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const = 0;
-        virtual bool equal(const SymbolicExpr &) const                   = 0;
-        virtual std::size_t hash() const                                 = 0;
+        virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
+                                        std::optional<std::string_view> suffix = std::nullopt,
+                                        int parentPrec                         = 0,
+                                        bool isRightChild                      = false) const = 0;
+
+        virtual bool equal(const SymbolicExpr &) const = 0;
+        virtual std::size_t hash() const               = 0;
 
         friend std::ostream &operator<<(std::ostream &os, const SymbolicExpr &expr) {
             return os << expr.dump();
@@ -70,7 +73,13 @@ namespace Symbolic {
             return !(LHS == RHS);
         }
 
-        virtual void collectUsedVars(std::vector<Variable *> &) const {}
+        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const = 0;
+
+        /// @brief collect Variables used in this SymbolicExpr.
+        /// @return key: Variable's id_, value: pointer to the Variable
+        virtual std::unordered_map<unsigned int, const Variable *> collectUsedVars() const {
+            return std::unordered_map<unsigned int, const Variable *>{};
+        };
 
         //===----------------------------------------------------------------------===//
         // StInG Interface Utilities - Symbolic Expression Adapter
@@ -99,6 +108,9 @@ namespace Symbolic {
         virtual Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const {
             ERROR("not implemented for expression type: ");
         }
+
+      protected:
+        std::unique_ptr<SymbolicExpr> simplifiedLinearExpr() const;
 
       private:
         ExprType type_;
@@ -160,9 +172,11 @@ namespace Symbolic {
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        virtual std::string regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const override;
+        virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
+                                        std::optional<std::string_view> suffix = std::nullopt,
+                                        int parentPrec                         = 0,
+                                        bool isRightChild = false) const override;
+        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -193,25 +207,27 @@ namespace Symbolic {
     class BinaryOpExpr : public SymbolicExpr {
       public:
         enum class Operator {
-            Multiply,
-            Divide,
-            Remainder,
-            Add,
-            Subtract,
-            ShiftLeft,
-            ShiftRight,
-            LessThan,
-            GreaterThan,
-            LessEqual,
-            GreaterEqual,
-            Equal,
-            NotEqual,
-            BitAnd,
-            BitXor,
-            BitOr,
-            LogicalAnd,
-            LogicalOr,
+#define BIN_OP(name, tok, prec, isRight) name,
+#include "operators.def"
         };
+
+        inline static int getPrecedence(BinaryOpExpr::Operator op) {
+            switch (op) {
+#define BIN_OP(name, tok, prec, right)                                                             \
+    case BinaryOpExpr::Operator::name: return prec;
+#include "operators.def"
+                default: ERROR("Unknown Operator");
+            }
+        }
+
+        inline static bool isRightAssociative(BinaryOpExpr::Operator op) {
+            switch (op) {
+#define BIN_OP(name, tok, prec, right)                                                             \
+    case BinaryOpExpr::Operator::name: return right;
+#include "operators.def"
+                default: ERROR("Unknown operator");
+            }
+        }
 
         // Constructor accepting unique_ptr for both operands
 
@@ -231,13 +247,15 @@ namespace Symbolic {
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        virtual std::string regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const override;
+        virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
+                                        std::optional<std::string_view> suffix = std::nullopt,
+                                        int parentPrec                         = 0,
+                                        bool isRightChild = false) const override;
+        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
-        void collectUsedVars(std::vector<Variable *> &vars) const override;
+        std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override;
         int getMaxDegree() const override;
@@ -254,17 +272,27 @@ namespace Symbolic {
     class UnaryOpExpr : public SymbolicExpr {
       public:
         enum class Operator {
-            Plus,       // +
-            Minus,      // -
-            LogicalNot, // !
-            BitwiseNot, // ~
-            PreInc,     // ++x
-            PreDec,     // --x
-            PostInc,    // x++
-            PostDec,    // x--
-            AddrOf,     // &
-            Dereference // *
+#define UN_OP(name, tok, prec, isRight) name,
+#include "operators.def"
         };
+
+        inline static int getPrecedence(UnaryOpExpr::Operator op) {
+            switch (op) {
+#define UN_OP(name, tok, prec, right)                                                              \
+    case UnaryOpExpr::Operator::name: return prec;
+#include "operators.def"
+                default: ERROR("Unknown Operator");
+            }
+        }
+
+        inline static bool isRightAssociative(UnaryOpExpr::Operator op) {
+            switch (op) {
+#define UN_OP(name, tok, prec, right)                                                              \
+    case UnaryOpExpr::Operator::name: return right;
+#include "operators.def"
+                default: ERROR("Unknown operator");
+            }
+        }
 
         UnaryOpExpr(Operator op, std::unique_ptr<SymbolicExpr> expr)
             : SymbolicExpr(ExprType::UnaryOp, expr->getValType()), op_(op), expr_(std::move(expr)) {
@@ -272,13 +300,15 @@ namespace Symbolic {
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        virtual std::string regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const override;
+        virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
+                                        std::optional<std::string_view> suffix = std::nullopt,
+                                        int parentPrec                         = 0,
+                                        bool isRightChild = false) const override;
+        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
-        void collectUsedVars(std::vector<Variable *> &vars) const override;
+        std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override;
         int getMaxDegree() const override;
@@ -298,9 +328,11 @@ namespace Symbolic {
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        virtual std::string regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const override;
+        virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
+                                        std::optional<std::string_view> suffix = std::nullopt,
+                                        int parentPrec                         = 0,
+                                        bool isRightChild = false) const override;
+        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
@@ -327,14 +359,16 @@ namespace Symbolic {
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
-        virtual std::string regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const override;
+        virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
+                                        std::optional<std::string_view> suffix = std::nullopt,
+                                        int parentPrec                         = 0,
+                                        bool isRightChild = false) const override;
+        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         auto getFrom() const -> const auto & { return from_; }
 
-        void collectUsedVars(std::vector<Variable *> &vars) const override;
+        std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 1; }
@@ -399,11 +433,15 @@ namespace Symbolic {
         std::unique_ptr<SymbolicExpr> clone() const override;
         unsigned int getId() const { return id_; }
         std::string dump() const override;
-        virtual std::string regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const override;
+        virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
+                                        std::optional<std::string_view> suffix = std::nullopt,
+                                        int parentPrec                         = 0,
+                                        bool isRightChild = false) const override;
         std::string regularFormOfValue(std::optional<std::string_view> prefix = std::nullopt,
-                                       std::optional<std::string_view> suffix = std::nullopt) const;
+                                       std::optional<std::string_view> suffix = std::nullopt,
+                                       int parentPrec                         = 0,
+                                       bool isRightChild                      = false) const;
+        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
         SymbolicExpr *getOffset() const { return offset_.get(); }

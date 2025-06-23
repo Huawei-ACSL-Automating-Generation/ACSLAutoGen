@@ -9,6 +9,29 @@ using namespace std;
 using namespace Symbolic;
 std::unique_ptr<SymbolicExpr> SymbolicExpr::makeNull() { return std::make_unique<NullExpr>(); }
 
+std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedLinearExpr() const {
+    if (!isLinear())
+        return clone();
+    auto idVarMap   = collectUsedVars();
+    auto linearExpr = toLinearExpr();
+    unique_ptr<SymbolicExpr> result{nullptr};
+    for (auto [id, varPtr] : idVarMap) {
+        using enum BinaryOpExpr::Operator;
+        auto C = linearExpr.coefficient(Parma_Polyhedra_Library::Variable{id}).get_si();
+        unique_ptr<SymbolicExpr> varExpr{nullptr};
+        if (C != 1)
+            varExpr =
+                make_unique<BinaryOpExpr>(make_unique<LiteralExpr>(C), Multiply, varPtr->clone());
+        else
+            varExpr = varPtr->clone();
+        if (result == nullptr)
+            result = std::move(varExpr);
+        else
+            result = make_unique<BinaryOpExpr>(std::move(result), Add, std::move(varExpr));
+    }
+    return result;
+}
+
 std::unique_ptr<SymbolicExpr> LiteralExpr::clone() const {
     switch (getLiteralType()) {
         case LiteralType::Boolean: return std::make_unique<LiteralExpr>(data.boolValue);
@@ -210,7 +233,9 @@ std::string Address::dump() const {
 }
 
 std::string LiteralExpr::regularForm(std::optional<std::string_view>,
-                                     std::optional<std::string_view>) const {
+                                     std::optional<std::string_view>,
+                                     int,
+                                     bool) const {
     std::ostringstream oss;
     switch (getLiteralType()) {
         case LiteralType::Boolean: oss << (data.boolValue ? "true" : "false"); break;
@@ -225,64 +250,65 @@ std::string LiteralExpr::regularForm(std::optional<std::string_view>,
 }
 
 std::string BinaryOpExpr::regularForm(std::optional<std::string_view> prefix,
-                                      std::optional<std::string_view> suffix) const {
+                                      std::optional<std::string_view> suffix,
+                                      int parentPrec,
+                                      bool isRightChild) const {
     std::ostringstream oss;
     std::string opStr;
     switch (op_) {
-        case Operator::Multiply: opStr = "*"; break;
-        case Operator::Divide: opStr = "/"; break;
-        case Operator::Remainder: opStr = "%"; break;
-        case Operator::Add: opStr = "+"; break;
-        case Operator::Subtract: opStr = "-"; break;
-        case Operator::ShiftLeft: opStr = "<<"; break;
-        case Operator::ShiftRight: opStr = ">>"; break;
-        case Operator::LessThan: opStr = "<"; break;
-        case Operator::GreaterThan: opStr = ">"; break;
-        case Operator::LessEqual: opStr = "<="; break;
-        case Operator::GreaterEqual: opStr = ">="; break;
-        case Operator::Equal: opStr = "=="; break;
-        case Operator::NotEqual: opStr = "!="; break;
-        case Operator::BitAnd: opStr = "&"; break;
-        case Operator::BitXor: opStr = "^"; break;
-        case Operator::BitOr: opStr = "|"; break;
-        case Operator::LogicalAnd: opStr = "&&"; break;
-        case Operator::LogicalOr: opStr = "||"; break;
+#define BIN_OP(name, tok, prec, isRight)                                                           \
+    case Operator::name: opStr = tok; break;
+#include "operators.def"
         default: opStr = "?"; break;
     }
-    oss << "(" << left_->regularForm(prefix, suffix) << " " << opStr << " "
-        << right_->regularForm(prefix, suffix) << ")";
+
+    int myPrec = getPrecedence(op_);
+    bool needParens =
+        (myPrec < parentPrec) || (myPrec == parentPrec && isRightChild && !isRightAssociative(op_));
+
+    oss << (needParens ? "(" : "") << left_->regularForm(prefix, suffix, myPrec, false) << " "
+        << opStr << " " << right_->regularForm(prefix, suffix, myPrec, true)
+        << (needParens ? ")" : "");
     return oss.str();
 }
 
 std::string UnaryOpExpr::regularForm(std::optional<std::string_view> prefix,
-                                     std::optional<std::string_view> suffix) const {
+                                     std::optional<std::string_view> suffix,
+                                     int parentPrec,
+                                     bool) const {
     std::ostringstream oss;
     std::string opStr;
     switch (op_) {
-        case Operator::Plus: opStr = "+"; break;
-        case Operator::Minus: opStr = "-"; break;
-        case Operator::LogicalNot: opStr = "!"; break;
-        case Operator::BitwiseNot: opStr = "~"; break;
-        case Operator::PreInc: opStr = "++"; break;
-        case Operator::PreDec: opStr = "--"; break;
-        case Operator::PostInc: opStr = "++"; break;
-        case Operator::PostDec: opStr = "--"; break;
-        case Operator::AddrOf: opStr = "&"; break;
-        case Operator::Dereference: opStr = "*"; break;
+#define UN_OP(name, tok, prec, isRight)                                                            \
+    case Operator::name: opStr = tok; break;
+#include "operators.def"
         default: opStr = "?"; break;
     }
-    oss << opStr << "(" << expr_->regularForm(prefix, suffix) << ")";
+
+    int myPrec      = getPrecedence(op_);
+    bool needParens = myPrec < parentPrec;
+
+    if (op_ == Operator::PostInc || op_ == Operator::PostDec)
+        oss << (needParens ? "(" : "") << expr_->regularForm(prefix, suffix, myPrec, false) << opStr
+            << (needParens ? ")" : "");
+    else
+        oss << (needParens ? "(" : "") << opStr << expr_->regularForm(prefix, suffix, myPrec, true)
+            << (needParens ? ")" : "");
     return oss.str();
 }
 
 std::string NullExpr::regularForm(std::optional<std::string_view>,
-                                  std::optional<std::string_view>) const {
+                                  std::optional<std::string_view>,
+                                  int,
+                                  bool) const {
     WARN("Output NullExpr's regular form, something may go wrong.");
     return "";
 }
 
 std::string Symbolic::Variable::regularForm(std::optional<std::string_view> prefix,
-                                            std::optional<std::string_view> suffix) const {
+                                            std::optional<std::string_view> suffix,
+                                            int,
+                                            bool) const {
     if (from_ == nullptr) {
         ERROR("Trying to get regular form of Variable with nullptr from_.");
     }
@@ -296,7 +322,9 @@ std::string Symbolic::Variable::regularForm(std::optional<std::string_view> pref
 }
 
 std::string Address::regularForm(std::optional<std::string_view> prefix,
-                                 std::optional<std::string_view> suffix) const {
+                                 std::optional<std::string_view> suffix,
+                                 int,
+                                 bool) const {
     if (const auto varDeclPtr = std::get_if<const clang::VarDecl *>(&from_);
         varDeclPtr && *varDeclPtr) {
         if (isOffseted())
@@ -326,7 +354,9 @@ std::string Address::regularForm(std::optional<std::string_view> prefix,
 }
 
 std::string Address::regularFormOfValue(std::optional<std::string_view> prefix,
-                                        std::optional<std::string_view> suffix) const {
+                                        std::optional<std::string_view> suffix,
+                                        int,
+                                        bool) const {
     string s = regularForm(prefix, suffix);
     if (s.empty())
         ERROR("Empty regular from.");
@@ -335,6 +365,33 @@ std::string Address::regularFormOfValue(std::optional<std::string_view> prefix,
     else
         return "*(" + s + ")";
 }
+
+std::unique_ptr<SymbolicExpr> LiteralExpr::simplifiedExpr() const { return clone(); }
+std::unique_ptr<SymbolicExpr> BinaryOpExpr::simplifiedExpr() const {
+    if (isLinear())
+        return simplifiedLinearExpr();
+    auto LHS = left_->simplifiedExpr();
+    auto RHS = right_->simplifiedExpr();
+    return make_unique<BinaryOpExpr>(std::move(LHS), op_, std::move(RHS));
+}
+
+std::unique_ptr<SymbolicExpr> UnaryOpExpr::simplifiedExpr() const {
+    if (isLinear())
+        return simplifiedLinearExpr();
+    auto subExpr = expr_->simplifiedExpr();
+    return make_unique<UnaryOpExpr>(op_, std::move(subExpr));
+}
+
+std::unique_ptr<SymbolicExpr> NullExpr::simplifiedExpr() const {
+    WARN("Met NullExpr in simplifiedExpr, something may go wrong.");
+    return makeNull();
+}
+
+std::unique_ptr<SymbolicExpr> Symbolic::Variable::simplifiedExpr() const {
+    return simplifiedLinearExpr();
+}
+
+std::unique_ptr<SymbolicExpr> Address::simplifiedExpr() const { return clone(); }
 
 bool LiteralExpr::equal(const SymbolicExpr &expr) const {
     const auto liter = dynamic_cast<const LiteralExpr *>(&expr);
@@ -416,17 +473,19 @@ bool Address::equal(const SymbolicExpr &expr) const {
     return true;
 }
 
-void Symbolic::Variable::collectUsedVars(std::vector<Symbolic::Variable *> &vars) const {
-    vars.push_back(const_cast<Symbolic::Variable *>(this));
+unordered_map<unsigned int, const Symbolic::Variable *> Symbolic::Variable::collectUsedVars() const {
+    return unordered_map<unsigned int, const Symbolic::Variable *>{{id_, this}};
 }
 
-void BinaryOpExpr::collectUsedVars(std::vector<Symbolic::Variable *> &vars) const {
-    left_->collectUsedVars(vars);
-    right_->collectUsedVars(vars);
+unordered_map<unsigned int, const Symbolic::Variable *> BinaryOpExpr::collectUsedVars() const {
+    auto lmap = left_->collectUsedVars();
+    auto rmap = right_->collectUsedVars();
+    lmap.insert(make_move_iterator(rmap.begin()), make_move_iterator(rmap.end()));
+    return lmap;
 }
 
-void UnaryOpExpr::collectUsedVars(std::vector<Symbolic::Variable *> &vars) const {
-    expr_->collectUsedVars(vars);
+unordered_map<unsigned int, const Symbolic::Variable *> UnaryOpExpr::collectUsedVars() const {
+    return expr_->collectUsedVars();
 }
 
 // *add*Offset but const func. WithOffset may be better.

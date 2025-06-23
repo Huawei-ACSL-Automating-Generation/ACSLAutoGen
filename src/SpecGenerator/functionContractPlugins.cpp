@@ -98,8 +98,10 @@ class ResultPlugin : public FunctionContractPlugin {
             }
         }
 
-        if (returnExpr != nullptr)
-            return "ensures \\result == " + returnExpr->regularForm("\\old(", ")");
+        if (returnExpr != nullptr) {
+            return "ensures \\result == " +
+                   returnExpr->simplifiedExpr()->regularForm("\\old(", ")");
+        }
         return nullopt;
     }
 
