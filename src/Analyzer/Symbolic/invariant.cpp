@@ -291,11 +291,15 @@ Parma_Polyhedra_Library::C_Polyhedron *convertFormulaToPoly(const Formulas &asse
     return poly;
 }
 
-std::vector<Parma_Polyhedra_Library::C_Polyhedron> computeLinearInv(
-    const vector<string> &locations,
-    const vector<TransRel> &transitions,
-    const InitRel &initial,
-    const VarManager &vm) {
+struct PathsAndExitInvs {
+    std::vector<std::vector<Parma_Polyhedra_Library::C_Polyhedron>> pathsInvs_;
+    std::vector<Parma_Polyhedra_Library::C_Polyhedron> exitInvs_;
+};
+
+PathsAndExitInvs computeLinearInv(const vector<string> &locations,
+                                  const vector<TransRel> &transitions,
+                                  const InitRel &initial,
+                                  const VarManager &vm) {
     auto linTS = std::make_unique<LinTS>();
 
     for (const std::string &name : vm.orderedVars) {
@@ -323,12 +327,29 @@ std::vector<Parma_Polyhedra_Library::C_Polyhedron> computeLinearInv(
     linTS->ComputeLinTSInv();
     auto invariants = linTS->getInvMap();
 
-    std::vector<Parma_Polyhedra_Library::C_Polyhedron> result;
+    PathsAndExitInvs result;
+    for (auto &pathName : locations) {
+        if (pathName == "init" || pathName == "exit")
+            continue;
+
+        std::vector<Parma_Polyhedra_Library::C_Polyhedron> pathInvs;
+
+        for (auto pathInv : invariants[pathName])
+            pathInvs.push_back(*pathInv);
+        result.pathsInvs_.push_back(std::move(pathInvs));
+    }
+
     const auto &exitInvariants = invariants["exit"];
 
     for (const auto *p : exitInvariants) {
-        result.emplace_back(*p);
+        result.exitInvs_.emplace_back(*p);
     }
+
+    if (result.exitInvs_.empty()) {
+        // TODO: exitInvs_.size() is unstable now.
+        result.pathsInvs_.clear();
+    }
+
     return result;
 }
 
@@ -367,6 +388,73 @@ std::unordered_map<std::string, std::unique_ptr<SymbolicExpr>> extractNameMap(co
     }
 
     return nameToExpr;
+}
+
+optional<string> buildInvs(const C_Polyhedron &poly, const VarManager &vm) {
+    string spec;
+    bool firstLine = true;
+    for (auto &constraint : poly.constraints()) {
+        using namespace Parma_Polyhedra_Library;
+        if (!firstLine)
+            spec += "    "; // 4 spaces
+        firstLine = false;
+        spec += "loop invariant ";
+        bool first = true;
+
+        size_t n    = vm.numVars;
+        size_t half = n / 2;
+        size_t dim  = constraint.space_dimension();
+
+        for (size_t i = 0; i < dim; ++i) {
+            Coefficient coeff = constraint.coefficient(Parma_Polyhedra_Library::Variable(i));
+            if (coeff == 0)
+                continue;
+
+            if (!first && coeff > 0)
+                spec += " + ";
+            else if (coeff < 0)
+                spec += " - ";
+            if (abs(coeff) != 1)
+                spec += to_string(abs(coeff.get_si()));
+
+            std::string varName;
+            if (i < half) {
+                varName = vm.orderedVars[i];
+            } else if (i < n) {
+                varName = "\\at(" + vm.orderedVars[i - half] + ",LoopEntry)";
+            } else if (i < n + half) {
+                UNIMPLEMENT("Don't know what this represents.");
+            } else {
+                UNIMPLEMENT("Don't know what this represents.");
+            }
+
+            spec += varName;
+            first = false;
+        }
+
+        Coefficient inhom = constraint.inhomogeneous_term();
+        if (inhom != 0 || first) {
+            if (!first && inhom > 0)
+                spec += " + ";
+            if (inhom < 0)
+                spec += " - ";
+            spec += to_string(abs(inhom.get_si()));
+        }
+
+        switch (constraint.type()) {
+            case Constraint::EQUALITY: spec += " == 0"; break;
+            case Constraint::NONSTRICT_INEQUALITY: spec += " >= 0"; break;
+            case Constraint::STRICT_INEQUALITY: spec += " > 0"; break;
+            default: spec += " ?? 0"; break;
+        }
+
+        spec += '\n';
+    }
+    if (spec.empty())
+        return nullopt;
+    // remove '\n'
+    spec.pop_back();
+    return spec;
 }
 
 std::unique_ptr<Path> buildPostPath(const C_Polyhedron &poly,
@@ -805,11 +893,11 @@ Parma_Polyhedra_Library::C_Polyhedron *buildPathPoly(const Path &path,
 }
 
 // TODO: optimize to one cond, condition won't get multi cases.
-vector<std::unique_ptr<Path>> buildLoopInvariant(Formulas loopCond,
-                                                 const vector<unique_ptr<Path>> &paths,
-                                                 const ProgramState &initState) {
+vector<InvsAndPostStates> buildLoopInvariant(Formulas loopCond,
+                                             const vector<unique_ptr<Path>> &paths,
+                                             const ProgramState &initState) {
     // TODO: process case that paths contain return.
-    vector<unique_ptr<Path>> invariants;
+    vector<InvsAndPostStates> invsAndPostStates;
     VarManager vm = VarManager::fromPaths(paths);
 
     vector<Formulas> processedCond = preprocessLoopCond(std::move(loopCond));
@@ -900,9 +988,22 @@ vector<std::unique_ptr<Path>> buildLoopInvariant(Formulas loopCond,
 
             // === this initPoly as InitRel ===
             InitRel initRel = std::make_pair(initIdx, new C_Polyhedron(*initPoly));
-            auto exit_invs  = computeLinearInv(locations, transitions, initRel, vm);
-            for (const auto &poly : exit_invs) {
-                invariants.push_back(buildPostPath(poly, *initPaths[path_i], vm));
+            auto invs       = computeLinearInv(locations, transitions, initRel, vm);
+
+            if (!invs.exitInvs_.empty() &&
+                (invs.pathsInvs_.size() <= path_i ||
+                 invs.pathsInvs_[path_i].size() != invs.exitInvs_.size())) {
+                ERROR("Wrong? or check computeLinearInv.");
+            }
+
+            for (size_t k = 0; k < invs.exitInvs_.size(); k++) {
+                dump(invs.pathsInvs_[path_i][k], vm);
+                dump(invs.exitInvs_[k], vm);
+
+                auto loopInvs   = buildInvs(invs.pathsInvs_[path_i][k], vm);
+                auto postStates = buildPostPath(invs.exitInvs_[k], *initPaths[path_i], vm);
+
+                invsAndPostStates.emplace_back(std::move(loopInvs), std::move(postStates));
             }
             delete initRel.second;
         }
@@ -914,7 +1015,7 @@ vector<std::unique_ptr<Path>> buildLoopInvariant(Formulas loopCond,
         }
     }
 
-    return invariants;
+    return invsAndPostStates;
 }
 void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm) {
     using namespace Parma_Polyhedra_Library;

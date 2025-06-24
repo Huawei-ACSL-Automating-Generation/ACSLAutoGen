@@ -184,8 +184,13 @@ struct VarManager {
         return it->second;
     }
 };
-std::vector<std::unique_ptr<Path>> buildLoopInvariant(
-    Formulas conds,
-    const std::vector<std::unique_ptr<Path>> &paths,
-    const ProgramState &initState);
+
+struct InvsAndPostStates {
+    std::optional<std::string> invs_;
+    std::unique_ptr<Path> postStates_;
+};
+
+std::vector<InvsAndPostStates> buildLoopInvariant(Formulas conds,
+                                                  const std::vector<std::unique_ptr<Path>> &paths,
+                                                  const ProgramState &initState);
 #endif

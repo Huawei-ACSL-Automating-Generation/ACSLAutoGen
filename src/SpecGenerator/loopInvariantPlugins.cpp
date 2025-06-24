@@ -97,14 +97,29 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
 
         const auto &paths = symbolicState->getPaths();
 
-        vector<unique_ptr<Path>> invariants =
-            buildLoopInvariant(std::move(loopCond), paths, loopEntry);
+        auto invsAndPaths = buildLoopInvariant(std::move(loopCond), paths, loopEntry);
 
-        std::ostringstream oss;
+        if (invsAndPaths.size() != 1)
+            UNIMPLEMENT("Only one path now");
 
-        if (oss.str().empty())
-            return make_tuple(nullopt, true, std::move(invariants));
-        return make_tuple(oss.str(), true, std::move(invariants));
+        string spec;
+        vector<unique_ptr<Path>> postStates;
+        for (auto &[inv, path] : invsAndPaths) {
+            // TODO: use behavior
+            if (inv != nullopt) {
+                spec += *inv;
+                spec += '\n';
+            }
+            postStates.emplace_back(std::move(path));
+        }
+        if (!spec.empty()) {
+            // remove '\n'
+            spec.pop_back();
+        }
+
+        if (spec.empty())
+            return make_tuple(nullopt, true, std::move(postStates));
+        return make_tuple(std::move(spec), true, std::move(postStates));
     }
 
   private:
