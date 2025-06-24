@@ -183,75 +183,77 @@ namespace acslg {
     MF_TRAIT(const volatile &&);
 #undef MF_TRAIT
 
-    // tests:
+    namespace {
+        // tests:
 
-    using T1 = int (*)(...);
-    using T2 = void(int);
-    using T3 = void (&)(int);
+        using T1 = int (*)(...);
+        using T2 = void(int);
+        using T3 = void (&)(int);
 #if __cplusplus >= 201703L
-    using T4 = void(int) noexcept;
+        using T4 = void(int) noexcept;
 #endif
 
-    static_assert(std::is_same<function_traits<T1>::result, int>::value, "");
-    static_assert(std::is_same<function_traits<T2>::result, void>::value, "");
-    static_assert(std::is_same<function_traits<T3>::result, void>::value, "");
+        static_assert(std::is_same<function_traits<T1>::result, int>::value, "");
+        static_assert(std::is_same<function_traits<T2>::result, void>::value, "");
+        static_assert(std::is_same<function_traits<T3>::result, void>::value, "");
 
-    static_assert(function_traits<T1>::arity == 0, "");
-    static_assert(function_traits<T2>::arity == 1, "");
+        static_assert(function_traits<T1>::arity == 0, "");
+        static_assert(function_traits<T2>::arity == 1, "");
 
-    static_assert(std::is_same<function_traits<T2>::argn<0>, int>::value, "");
-    static_assert(std::is_same<function_traits<T3>::argn<0>, int>::value, "");
+        static_assert(std::is_same<function_traits<T2>::argn<0>, int>::value, "");
+        static_assert(std::is_same<function_traits<T3>::argn<0>, int>::value, "");
 
-    static_assert(std::is_same<function_traits<T1>::ptr, T1>::value, "");
-    static_assert(std::is_same<function_traits<T2>::ptr, T2 *>::value, "");
-    static_assert(std::is_same<function_traits<T3>::ptr, T2 *>::value, "");
-
-#if __cplusplus >= 201703L
-    static_assert(!function_traits<T1>::is_noexcept);
-    static_assert(function_traits<T4>::is_noexcept);
-#endif
-
-    struct fwd;
-#if __cplusplus >= 201703L
-    using H1 = int (fwd::*)() noexcept;
-#endif
-    using H2 = int (fwd::*)() const;
-    using H3 = int &(fwd::*)();
-    using H4 = void (fwd::*)(int);
-    using H5 = void (fwd::*)(int, bool, char *);
-    using H6 = int (fwd::*)(...) volatile;
+        static_assert(std::is_same<function_traits<T1>::ptr, T1>::value, "");
+        static_assert(std::is_same<function_traits<T2>::ptr, T2 *>::value, "");
+        static_assert(std::is_same<function_traits<T3>::ptr, T2 *>::value, "");
 
 #if __cplusplus >= 201703L
-    static_assert(function_traits<H1>::is_noexcept);
-    static_assert(!function_traits<H2>::is_noexcept);
+        static_assert(!function_traits<T1>::is_noexcept);
+        static_assert(function_traits<T4>::is_noexcept);
 #endif
 
-    static_assert(std::is_same<function_traits<H2>::result, int>::value, "");
-    static_assert(std::is_same<function_traits<H3>::result, int &>::value, "");
-    static_assert(std::is_same<function_traits<H4>::result, void>::value, "");
-    static_assert(std::is_same<function_traits<H6>::result, int>::value, "");
-
-    static_assert(function_traits<H2>::arity == 0, "");
-    static_assert(function_traits<H4>::arity == 1, "");
-
-    static_assert(std::is_same<function_traits<H4>::argn<0>, int>::value, "");
-    static_assert(std::is_same<function_traits<H5>::argn<2>, char *>::value, "");
-
-    static_assert(std::is_same<function_traits<H2>::owner, const fwd>::value, "");
-    static_assert(std::is_same<function_traits<H3>::owner, fwd>::value, "");
+        struct fwd;
+#if __cplusplus >= 201703L
+        using H1 = int (fwd::*)() noexcept;
+#endif
+        using H2 = int (fwd::*)() const;
+        using H3 = int &(fwd::*)();
+        using H4 = void (fwd::*)(int);
+        using H5 = void (fwd::*)(int, bool, char *);
+        using H6 = int (fwd::*)(...) volatile;
 
 #if __cplusplus >= 201703L
-    static_assert(std::is_same<function_traits<H1>::ptr, int (*)() noexcept>::value);
+        static_assert(function_traits<H1>::is_noexcept);
+        static_assert(!function_traits<H2>::is_noexcept);
 #endif
-    static_assert(std::is_same<function_traits<H2>::ptr, int (*)()>::value, "");
 
-    auto l = [] { return 42; };
-    static_assert(function_traits<decltype(l)>::arity == 0, "");
+        static_assert(std::is_same<function_traits<H2>::result, int>::value, "");
+        static_assert(std::is_same<function_traits<H3>::result, int &>::value, "");
+        static_assert(std::is_same<function_traits<H4>::result, void>::value, "");
+        static_assert(std::is_same<function_traits<H6>::result, int>::value, "");
 
-    struct s {
-        int operator()(bool);
-    };
-    static_assert(function_traits<s>::arity == 1, "");
+        static_assert(function_traits<H2>::arity == 0, "");
+        static_assert(function_traits<H4>::arity == 1, "");
+
+        static_assert(std::is_same<function_traits<H4>::argn<0>, int>::value, "");
+        static_assert(std::is_same<function_traits<H5>::argn<2>, char *>::value, "");
+
+        static_assert(std::is_same<function_traits<H2>::owner, const fwd>::value, "");
+        static_assert(std::is_same<function_traits<H3>::owner, fwd>::value, "");
+
+#if __cplusplus >= 201703L
+        static_assert(std::is_same<function_traits<H1>::ptr, int (*)() noexcept>::value);
+#endif
+        static_assert(std::is_same<function_traits<H2>::ptr, int (*)()>::value, "");
+
+        auto l = [] { return 42; };
+        static_assert(function_traits<decltype(l)>::arity == 0, "");
+
+        struct s {
+            int operator()(bool);
+        };
+        static_assert(function_traits<s>::arity == 1, "");
+    } // namespace
 
     // not_null wrapper
     // from micosoft
@@ -301,7 +303,8 @@ namespace acslg {
         not_null(const not_null &other)            = default;
         not_null &operator=(const not_null &other) = default;
         constexpr details::value_or_reference_return_t<T> get() const
-            noexcept(noexcept(details::value_or_reference_return_t<T>{std::declval<T &>()})) {
+        // noexcept(noexcept(details::value_or_reference_return_t<T>{std::declval<T &>()}))
+        {
             return ptr_;
         }
 
