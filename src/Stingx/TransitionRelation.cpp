@@ -25,6 +25,7 @@
 #include "Elimination.h"
 #include "Macro.h"
 #include "PolyUtils.h"
+#include "LinExpr.h"
 #include "myassertions.h"
 
 void TransitionRelation::initialize(int varsNum,

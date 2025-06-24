@@ -901,7 +901,6 @@ vector<std::unique_ptr<Path>> buildLoopInvariant(Formulas loopCond,
             // === this initPoly as InitRel ===
             InitRel initRel = std::make_pair(initIdx, new C_Polyhedron(*initPoly));
             auto exit_invs  = computeLinearInv(locations, transitions, initRel, vm);
-
             for (const auto &poly : exit_invs) {
                 invariants.push_back(buildPostPath(poly, *initPaths[path_i], vm));
             }

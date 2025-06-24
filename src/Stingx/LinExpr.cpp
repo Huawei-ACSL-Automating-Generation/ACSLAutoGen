@@ -83,7 +83,7 @@ LinExpr::LinExpr(int n, var_info *info) { initialize(n, info); }
 
 void LinExpr::init_set(int n, var_info *info) { initialize(n, info); }
 
-inline Rational &LinExpr::operator[](int i) { return lin[i]; }
+Rational &LinExpr::operator[](int i) { return lin[i]; }
 
 Rational LinExpr::operator()(int i) const { return lin[i]; }
 
