@@ -27,11 +27,11 @@ std::string emitFunctionContract(
 
 struct LoopInfo {
     // SetLoopEntryPlugin
-    std::unique_ptr<const ProgramState> symbolicLoopEntry_;
+    std::unique_ptr<const ProgramState> symbolicLoopEntry_{nullptr};
 
     // SetIndexPlugin
     std::unique_ptr<Symbolic::Address> index_{nullptr};
-    clang::BinaryOperator::Opcode op_;
+    clang::BinaryOperator::Opcode op_{};
     std::unique_ptr<Symbolic::SymbolicExpr> indexBound_{nullptr};
 
     // SetPatternsPlugin
@@ -44,7 +44,7 @@ struct LoopInfo {
     // Address with nullopt means too complex.
     // Other addresses' values hold through loop.
     std::unordered_map<Symbolic::Address, std::optional<const pattern>, Symbolic::AddressHash>
-        patternsMap_;
+        patternsMap_{};
     // TODO(more info to be added)
 };
 

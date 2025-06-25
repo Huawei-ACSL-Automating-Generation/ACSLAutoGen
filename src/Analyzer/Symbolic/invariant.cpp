@@ -1037,7 +1037,7 @@ vector<InvsAndPostStates> buildLoopInvariant(Formulas loopCond,
 
     return invsAndPostStates;
 }
-void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm) {
+inline void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm) {
     using namespace Parma_Polyhedra_Library;
 
     const Constraint_System &cs = poly.constraints();

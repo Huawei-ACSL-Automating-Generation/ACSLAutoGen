@@ -880,12 +880,18 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
     }
 
     auto loopInfo = parseLoopInfo(*this, cond, inc, body);
-    if (!loopInfo) {
-        // TODO(complex loop)
-        UNIMPLEMENT("Loop is too complex!");
-    }
 
-    auto [spec, invs] = emitLoopInvariant(*this, cond, inc, body, *loopInfo);
+    string spec;
+    vector<unique_ptr<Path>> invs;
+    if (loopInfo == nullopt) {
+        // Note: Dangerous! Change this.
+        auto symbolLoopEntry = clone();
+        symbolLoopEntry->resymbolize();
+        loopInfo        = LoopInfo{std::move(symbolLoopEntry)};
+        tie(spec, invs) = emitLoopInvariant(*this, cond, inc, body, *loopInfo, "ComplexLoop");
+    } else {
+        tie(spec, invs) = emitLoopInvariant(*this, cond, inc, body, *loopInfo);
+    }
     INFO(spec);
 
     auto beginLoc = loopStmt->getSourceRange().getBegin();

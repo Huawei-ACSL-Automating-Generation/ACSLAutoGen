@@ -209,8 +209,8 @@ class SetIndexPlugin : public LoopInfoPlugin {
         }; // sameAddressBetweenEveryPaths end
 
         auto hasPattern = [&](const Address &addr) {
-            for (auto &[a, _] : loopInfo.patternsMap_) {
-                if (addr == a)
+            for (auto &[a, pattern] : loopInfo.patternsMap_) {
+                if (addr == a && pattern != nullopt)
                     return true;
             }
             return false;
