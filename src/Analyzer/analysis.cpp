@@ -46,7 +46,20 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
         for (const Stmt *stmt : CS->children())
             state->step(stmt);
         INFO(state->dump());
-        // state->generateFuncACSL();
+
+        bool hasPointer = false, hasLoop = false;
+        for (auto &[_, value] : preState->getPaths()[0]->getMemoryState()) {
+            if (value->getType() == SymbolicExpr::ExprType::SymbolAddress)
+                hasPointer = true;
+        }
+        for (auto stmt : dyn_cast<CompoundStmt>(Body)->children()) {
+            if (isa<ForStmt>(stmt) || isa<WhileStmt>(stmt) || isa<DoStmt>(stmt))
+                hasLoop = true;
+        }
+
+        if (hasPointer && hasLoop)
+            return;
+
         auto spec = emitFunctionContract(*preState, *state);
         INFO(spec);
 
