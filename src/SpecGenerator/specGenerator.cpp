@@ -56,6 +56,12 @@ string emitFunctionContract(const ProgramState &pre,
     auto plugins = getPlugins<FunctionContractPlugin>(groupName, extraPluginIds);
     string spec  = ACSL_HEAD.to_string();
 
+    // Do not emit function contract when pointer/array exist, temporarily...
+    for (auto &[_, value] : pre.getPaths()[0]->getMemoryState()) {
+        if (value->getType() == SymbolicExpr::ExprType::SymbolAddress) {
+            return string{};
+        }
+    }
     for (auto &plugin : plugins) {
         if (plugin == nullptr)
             continue;

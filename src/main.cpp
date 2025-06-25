@@ -38,7 +38,7 @@ class TUASTConsumer : public ASTConsumer {
             auto getFileName = [&]() {
                 auto name   = SM.getFilename(SM.getLocForStartOfFile(SM.getMainFileID()));
                 auto dotPos = name.find_last_of('.');
-                return name.substr(0, dotPos ? dotPos - 1 : name.size()).str();
+                return name.substr(0, dotPos).str();
             };
 
             auto outName = getFileName() + "_with_acsl.c";

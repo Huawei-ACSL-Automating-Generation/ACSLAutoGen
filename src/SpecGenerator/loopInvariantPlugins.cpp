@@ -81,6 +81,13 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
             ERROR("SymbolicLoopEntry_ is in an invalid state");
         }
 
+        // Ban this plugin when pointer/array exist, temporarily...
+        for (auto &[_, value] : loopEntry.getPaths()[0]->getMemoryState()) {
+            if (value->getType() == SymbolicExpr::ExprType::SymbolAddress) {
+                return make_tuple(nullopt, true, std::vector<unique_ptr<Path>>{});
+            }
+        }
+
         auto symbolicState = loopInfo.symbolicLoopEntry_->clone();
 
         auto exprs = symbolicState->stepExpr(cond);

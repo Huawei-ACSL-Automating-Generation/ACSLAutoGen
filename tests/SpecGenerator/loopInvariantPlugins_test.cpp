@@ -121,9 +121,9 @@ TEST(ParadigmMaxMinPluginTest, simple_3) {
             for(int i = 0; i < n; i++){
                 if(p[i] >= mx) {
                     if(p[i] > mx)
-                        count = 1;
+                        cnt = 1;
                     else
-                        count++;
+                        cnt++;
                     mx = p[i];
                 }   
             } 

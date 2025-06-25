@@ -6,6 +6,7 @@
 #include "macros.h"
 #include "state.h"
 #include "utils.h"
+#include "expr.h"
 
 using namespace std;
 using namespace clang;
@@ -89,6 +90,9 @@ class ResultPlugin : public FunctionContractPlugin {
     optional<string> generate(const ProgramState &, const ProgramState &post) const override {
         unique_ptr<SymbolicExpr> returnExpr{nullptr};
         for (auto &path : post.getPaths()) {
+            if (path->getReturnExpr() == nullptr ||
+                *path->getReturnExpr() == *SymbolicExpr::makeNull())
+                continue;
             if (returnExpr == nullptr) {
                 returnExpr = path->getReturnExpr()->clone();
             } else {
