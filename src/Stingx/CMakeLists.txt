@@ -11,7 +11,7 @@ find_library(GMP_LIBRARY NAMES gmp)
 
 find_path(PPL_INCLUDE_DIR ppl.hh)
 include_directories(${PPL_INCLUDE_DIR})
-
+include_directories(${Z3_INCLUDE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 # Add source files
 set(SRC_FILES

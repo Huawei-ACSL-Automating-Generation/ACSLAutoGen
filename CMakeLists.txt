@@ -8,8 +8,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(LLVM 19.1.7 REQUIRED CONFIG)
 find_package(Clang 19.1.7 REQUIRED CONFIG)
 find_package(PkgConfig REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(zstd REQUIRED)
 
-pkg_check_modules(GMP REQUIRED IMPORTED_TARGET gmpxx)  
+find_path(GMP_INCLUDE_DIR gmp.h)
+find_library(GMP_LIBRARY NAMES gmp)
+
+find_path(GMPXX_INCLUDE_DIR gmpxx.h)
+find_library(GMPXX_LIBRARY NAMES gmpxx)
+
+include_directories(${GMP_INCLUDE_DIR} ${GMPXX_INCLUDE_DIR})
 
 find_path( PPL_INCLUDE_DIR
   NAMES     ppl.hh
@@ -59,7 +67,6 @@ separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 target_compile_definitions(ACSLG_compiler_flags INTERFACE
   ${LLVM_DEFINITIONS_LIST}
 )
-
 add_subdirectory(src)
 
 option(BUILD_TESTS "Build tests" OFF)
