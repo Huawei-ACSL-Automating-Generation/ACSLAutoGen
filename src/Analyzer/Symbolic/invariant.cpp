@@ -993,7 +993,27 @@ vector<InvsAndPostStates> buildLoopInvariant(Formulas loopCond,
             if (!invs.exitInvs_.empty() &&
                 (invs.pathsInvs_.size() <= path_i ||
                  invs.pathsInvs_[path_i].size() != invs.exitInvs_.size())) {
-                ERROR("Wrong? or check computeLinearInv.");
+                if (invs.pathsInvs_.size() > path_i) {
+                    for (auto &inv : invs.pathsInvs_[path_i]) {
+                        INFO("invariant");
+                        dump(inv, vm);
+                        INFO("\n");
+                    }
+                }
+                for (auto &inv : invs.exitInvs_) {
+                    INFO("post state");
+                    dump(inv, vm);
+                    INFO("\n");
+                    INFO(buildPostPath(inv, *initPaths[path_i], vm)->dump());
+                }
+                ERROR("Wrong? or check computeLinearInv.\n"
+                      "invariants's size: " +
+                      to_string(invs.pathsInvs_.size()) +
+                      (invs.pathsInvs_.size() <= path_i
+                           ? " less or equal to path_i!\n"
+                           : "\ninvariants[path_i]'s size: " +
+                                 to_string(invs.pathsInvs_[path_i].size()) + "\n") +
+                      "post state's size: " + to_string(invs.exitInvs_.size()) + "\n");
             }
 
             for (size_t k = 0; k < invs.exitInvs_.size(); k++) {
