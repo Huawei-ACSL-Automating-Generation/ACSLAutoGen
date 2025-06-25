@@ -37,17 +37,18 @@ class TUASTConsumer : public ASTConsumer {
 
             auto getFileName = [&]() {
                 auto name   = SM.getFilename(SM.getLocForStartOfFile(SM.getMainFileID()));
-                auto dotPos = name.find('.');
+                auto dotPos = name.find_last_of('.');
                 return name.substr(0, dotPos ? dotPos - 1 : name.size()).str();
             };
 
-            llvm::raw_fd_ostream Out(getFileName() + "with_acsl.c", EC, llvm::sys::fs::OF_None);
+            auto outName = getFileName() + "_with_acsl.c";
+            llvm::raw_fd_ostream Out(outName, EC, llvm::sys::fs::OF_None);
             if (EC)
-                ERROR("Error opening file 'with_acsl.c': " + EC.message());
+                ERROR("Error opening file " + outName + ": " + EC.message());
 
             rewriter.getEditBuffer(SM.getMainFileID()).write(Out);
             if (Out.has_error())
-                ERROR("Error writing to 'with_acsl.c': " + Out.error().message());
+                ERROR("Error writing to " + outName + ": " + Out.error().message());
         }
     }
 };

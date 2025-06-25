@@ -507,6 +507,14 @@ namespace Symbolic {
         bool operator()(const Address &a, const Address &b) const noexcept { return a == b; }
     };
 
+    class AddressRange : public Address {
+      public:
+      private:
+        std::unique_ptr<SymbolicExpr> length_;
+        std::unique_ptr<Variable>
+            index_; ///< Vaule of this AddressRange may rely on this ghost variable.
+    };
+
     std::unique_ptr<SymbolicExpr> createLNotExpr(std::unique_ptr<SymbolicExpr> expr);
     BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
     BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
