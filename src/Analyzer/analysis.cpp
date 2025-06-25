@@ -10,6 +10,7 @@
 using namespace clang;
 using namespace llvm;
 using namespace std;
+
 void ACSLAnalyzer::analyzeFunctions() {
     PROCESS("Running analysis functions...");
     for (auto *func : this->Context.getFunctions()) {
