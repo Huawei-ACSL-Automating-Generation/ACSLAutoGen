@@ -13,7 +13,7 @@ using namespace llvm;
 
 std::unique_ptr<SymbolicExpr> SymbolicExpr::makeNull() { return std::make_unique<NullExpr>(); }
 
-std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedLinearExpr() const {
+std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedExprIfLinear() const {
     if (!isLinear())
         return clone();
     auto idVarMap   = collectUsedVars();
@@ -80,16 +80,15 @@ std::unique_ptr<SymbolicExpr> Symbolic::Variable::clone() const {
 }
 
 std::unique_ptr<SymbolicExpr> Address::clone() const {
-    variant<std::monostate, const clang::VarDecl *, unique_ptr<Address>> from;
     if (auto decl = std::get_if<not_null<const clang::VarDecl *>>(&from_)) {
-        from = *decl;
+        return std::make_unique<Address>(id_, offset_->clone(), *decl);
     } else if (auto addr = std::get_if<not_null<unique_ptr<Address>>>(&from_)) {
-        from = std::unique_ptr<Address>(static_cast<Address *>((*addr)->clone().release()));
+        return std::make_unique<Address>(
+            id_, offset_->clone(),
+            unique_ptr<Address>{static_cast<Address *>((*addr)->clone().release())});
     } else {
-        from = std::monostate{};
+        return std::make_unique<Address>(id_, offset_->clone(), nullopt);
     }
-    auto cloned = std::make_unique<Address>(id_, offset_->clone(), std::move(from));
-    return cloned;
 }
 
 std::size_t LiteralExpr::hash() const {
@@ -386,7 +385,7 @@ std::string Address::regularFormOfValue(std::optional<std::string_view> prefix,
 std::unique_ptr<SymbolicExpr> LiteralExpr::simplifiedExpr() const { return clone(); }
 std::unique_ptr<SymbolicExpr> BinaryOpExpr::simplifiedExpr() const {
     if (isLinear())
-        return simplifiedLinearExpr();
+        return simplifiedExprIfLinear();
     auto LHS = left_->simplifiedExpr();
     auto RHS = right_->simplifiedExpr();
     return make_unique<BinaryOpExpr>(std::move(LHS), op_, std::move(RHS));
@@ -394,7 +393,7 @@ std::unique_ptr<SymbolicExpr> BinaryOpExpr::simplifiedExpr() const {
 
 std::unique_ptr<SymbolicExpr> UnaryOpExpr::simplifiedExpr() const {
     if (isLinear())
-        return simplifiedLinearExpr();
+        return simplifiedExprIfLinear();
     auto subExpr = expr_->simplifiedExpr();
     return make_unique<UnaryOpExpr>(op_, std::move(subExpr));
 }
@@ -405,7 +404,7 @@ std::unique_ptr<SymbolicExpr> NullExpr::simplifiedExpr() const {
 }
 
 std::unique_ptr<SymbolicExpr> Symbolic::Variable::simplifiedExpr() const {
-    return simplifiedLinearExpr();
+    return simplifiedExprIfLinear();
 }
 
 std::unique_ptr<SymbolicExpr> Address::simplifiedExpr() const { return clone(); }

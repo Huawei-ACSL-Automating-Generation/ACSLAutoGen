@@ -5,6 +5,7 @@
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Support/CommandLine.h"
 #include <memory>
+#include <filesystem>
 #include "Context/context.h"
 #include "Analyzer/analysis.h"
 #include "Context/globalSM.h"
@@ -12,6 +13,7 @@
 using namespace clang;
 using namespace clang::tooling;
 using namespace llvm;
+namespace fs = std::filesystem;
 
 static cl::OptionCategory ACSLGCategory("ACSLG options");
 
@@ -33,22 +35,18 @@ class TUASTConsumer : public ASTConsumer {
             auto &SM       = GlobalSM::getSM();
             auto &rewriter = GlobalSM::getRewriter();
             std::error_code EC;
+
             // TODO: replace "with_acsl.c" with user-defined relative path.
-
-            auto getFileName = [&]() {
-                auto name   = SM.getFilename(SM.getLocForStartOfFile(SM.getMainFileID()));
-                auto dotPos = name.find_last_of('.');
-                return name.substr(0, dotPos).str();
-            };
-
-            auto outName = getFileName() + "_with_acsl.c";
-            llvm::raw_fd_ostream Out(outName, EC, llvm::sys::fs::OF_None);
+            auto path = fs::path{SM.getFilename(SM.getLocForStartOfFile(SM.getMainFileID())).str()};
+            path.replace_filename(
+                path.stem().concat("_with_acsl").concat(path.extension().string()));
+            llvm::raw_fd_ostream Out(path.string(), EC, llvm::sys::fs::OF_None);
             if (EC)
-                ERROR("Error opening file " + outName + ": " + EC.message());
+                ERROR("Error opening file " + path.string() + ": " + EC.message());
 
             rewriter.getEditBuffer(SM.getMainFileID()).write(Out);
             if (Out.has_error())
-                ERROR("Error writing to " + outName + ": " + Out.error().message());
+                ERROR("Error writing to " + path.string() + ": " + Out.error().message());
         }
     }
 };

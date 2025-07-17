@@ -1,3 +1,5 @@
+/// \file symbolic.h
+/// @brief Declarations for symbolic expression hierarchy and utilities.
 #ifndef SYMBOLIC_H
 #define SYMBOLIC_H
 
@@ -16,9 +18,12 @@ using namespace acslg;
 namespace Symbolic {
     class Variable;
 
-    // Base class for symbolic expressions.
+    /// @class SymbolicExpr
+    /// @brief Base class for all symbolic expressions.
     class SymbolicExpr {
       public:
+        /// @class SymbolicExpr
+        /// @brief Base class for all symbolic expressions.
         enum class ExprType {
             Literal,
             Variable,
@@ -28,6 +33,8 @@ namespace Symbolic {
             SNULL
         };
 
+        /// @enum ScalarKind
+        /// @brief Scalar data types for expression values.
         enum class ScalarKind {
             Int,
             UInt,
@@ -35,34 +42,52 @@ namespace Symbolic {
             Void,
         };
 
+        /// @struct Type
+        /// @brief Represents a scalar type with bit width.
         struct Type {
-            ScalarKind kind;
-            unsigned bitWidth;
+            ScalarKind kind;   ///< Base scalar kind
+            unsigned bitWidth; ///< Number of bits
             friend bool operator==(const Type &LHS, const Type &RHS) {
                 return LHS.kind == RHS.kind && LHS.bitWidth == RHS.bitWidth;
             }
         };
 
+        /// @brief Construct a symbolic expression.
+        /// @param type Expression type
+        /// @param valueType Underlying value type
         SymbolicExpr(ExprType type, Type valueType) : type_(type), valueType_(valueType) {}
         virtual ~SymbolicExpr() = default;
 
         ExprType getType() const { return type_; }
         Type getValType() const { return valueType_; }
         void setValType(Type newType) { valueType_ = newType; }
+
+        /// @brief Create a null symbolic expression.
+        /// @return Unique pointer to a SNULL expression.
         static std::unique_ptr<SymbolicExpr> makeNull();
+
+        /// @brief Clone the expression.
+        /// @return Deep copy of the expression.
         virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
-        virtual std::string dump() const                    = 0;
-        /// @brief emit symbolic expressions in regular form compliant with ACSL
-        /// @param prefix variables will be prefixed with it.
-        /// @param suffix variables will be suffixed with it.
-        /// @param parentPrec parent operator's priority
-        /// @param isRightChild
-        /// @return string that can be directly output in ACSL
+
+        /// @brief Dump debug string of the expression.
+        /// @return Human-readable representation.
+        virtual std::string dump() const = 0;
+
+        /// @brief Emit expression in ACSL-compliant regular form.
+        /// @param prefix Optional variable prefix.
+        /// @param suffix Optional variable suffix.
+        /// @param parentPrec Precedence of parent operator.
+        /// @param isRightChild Whether this is right operand.
+        /// @return String in ACSL syntax.
         virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
                                         std::optional<std::string_view> suffix = std::nullopt,
                                         int parentPrec                         = 0,
                                         bool isRightChild                      = false) const = 0;
 
+        /// @brief Compare with another expression for structural equality.
+        /// @param other Expression to compare.
+        /// @return True if equal.
         virtual bool equal(const SymbolicExpr &) const = 0;
         virtual std::size_t hash() const               = 0;
 
@@ -80,10 +105,12 @@ namespace Symbolic {
             return !(LHS == RHS);
         }
 
+        /// @brief Get a simplified version of the expression.
+        /// @return Simplified expression.
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const = 0;
 
-        /// @brief collect Variables used in this SymbolicExpr.
-        /// @return key: Variable's id_, value: pointer to the Variable
+        /// @brief Collect variables used in the expression.
+        /// @return Map from variable ID to Variable pointer.
         virtual std::unordered_map<unsigned int, const Variable *> collectUsedVars() const {
             return std::unordered_map<unsigned int, const Variable *>{};
         };
@@ -96,36 +123,44 @@ namespace Symbolic {
         // which synthesizes affine invariants via constraint solving.
         //===----------------------------------------------------------------------===//
 
-        // Returns true if the expression is linear (affine).
+        /// @brief Check if expression is affine (linear).
+        /// @return True if linear.
         virtual bool isLinear() const = 0;
 
-        // Returns the degree of the polynomial represented by this expression.
-        // Constants and variables are degree 0 and 1 respectively.
-        // Nonlinear terms (e.g., x*y) have degree >= 2.
+        /// @brief Maximum polynomial degree of the expression.
+        /// @return Degree (0 for constants, 1 for variables), -1 means invalid or undefined.
         virtual int getMaxDegree() const = 0;
 
-        // Convert this symbolic expression into a PPL Linear_Expression.
-        // Only valid for expressions that are affine (i.e., linear w.r.t. variables).
-        // Throws or fails if the expression is not representable in linear form.
+        /// @brief Convert to PPL linear expression with custom mapping.
+        /// Only valid for expressions that are affine (i.e., linear w.r.t. variables).
+        /// Throws or fails if the expression is not representable in linear form.
+        /// @param varMap Mapping from names to the index of the Cartesian axis.
+        /// @return PPL linear expression.
         virtual Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
             const std::unordered_map<std::string, int> &) const {
             ERROR("not implemented for expression type: ");
         }
 
+        /// @brief Convert to PPL linear expression without custom mapping.
+        /// Use Variable's id_ as its index of the Cartesian axis.
+        /// @return PPL linear expression.
         virtual Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const {
             ERROR("not implemented for expression type: ");
         }
 
       protected:
-        std::unique_ptr<SymbolicExpr> simplifiedLinearExpr() const;
+        /// @brief Simplify expression if it's linear, just call clone() otherwise.
+        std::unique_ptr<SymbolicExpr> simplifiedExprIfLinear() const;
 
       private:
-        ExprType type_;
-        Type valueType_;
+        ExprType type_;  ///< Kind of expression
+        Type valueType_; ///< Underlying type
     };
 
     std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType t);
 
+    /// @class LiteralExpr
+    /// @brief Represents a literal constant value.
     class LiteralExpr : public SymbolicExpr {
       public:
         enum class LiteralType {
@@ -211,6 +246,8 @@ namespace Symbolic {
         } data;
     };
 
+    /// @class BinaryOpExpr
+    /// @brief Represents a binary operation expression.
     class BinaryOpExpr : public SymbolicExpr {
       public:
         enum class Operator {
@@ -236,8 +273,7 @@ namespace Symbolic {
             }
         }
 
-        // Constructor accepting unique_ptr for both operands
-
+        // TODO(style): May use template to unify constructors.
         BinaryOpExpr(std::unique_ptr<SymbolicExpr> left,
                      Operator op,
                      std::unique_ptr<SymbolicExpr> right)
@@ -276,6 +312,8 @@ namespace Symbolic {
         std::unique_ptr<SymbolicExpr> right_;
     };
 
+    /// @class UnaryOpExpr
+    /// @brief Represents a unary operation expression.
     class UnaryOpExpr : public SymbolicExpr {
       public:
         enum class Operator {
@@ -328,6 +366,8 @@ namespace Symbolic {
         std::unique_ptr<SymbolicExpr> expr_;
     };
 
+    /// @class NullExpr
+    /// @brief Represents a null symbolic expression.
     class NullExpr : public SymbolicExpr {
       public:
         NullExpr() : SymbolicExpr(ExprType::SNULL, {ScalarKind::UInt, 64}) {}
@@ -348,51 +388,9 @@ namespace Symbolic {
         int getMaxDegree() const override { return 0; }
     };
 
-    class Address;
-    class Variable : public SymbolicExpr {
-      public:
-        Variable(const std::string &name,
-                 Type varType,
-                 int id,
-                 std::optional<std::unique_ptr<Address>> from)
-            : SymbolicExpr(ExprType::Variable, varType), name_(name), varType_(varType), id_(id),
-              from_(std::move(from)) {}
-
-        Type getVarType() const { return varType_; }
-        void setVarType(Type vt) {
-            varType_ = vt;
-            setValType(vt);
-        }
-
-        const std::string &getName() const { return name_; }
-        int getId() const { return id_; }
-
-        std::unique_ptr<SymbolicExpr> clone() const override;
-        std::string dump() const override;
-        virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
-                                        std::optional<std::string_view> suffix = std::nullopt,
-                                        int parentPrec                         = 0,
-                                        bool isRightChild = false) const override;
-        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
-        std::size_t hash() const override;
-        virtual bool equal(const SymbolicExpr &expr) const override;
-        auto getFrom() const -> const auto & { return from_; }
-
-        std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
-        // StInG: Support functions for affine invariant analysis
-        bool isLinear() const override { return true; }
-        int getMaxDegree() const override { return 1; }
-        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
-            const std::unordered_map<std::string, int> &) const override;
-        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
-
-      private:
-        std::string name_;
-        Type varType_;
-        int id_; // unique identifier to distinguish between variables with the same name
-        std::optional<not_null<std::unique_ptr<Address>>> from_;
-    };
-
+    /// @class Address
+    /// @brief Symbolic address with unique ID, optional offset and origin.
+    /// Origin can't be nullptr, use monostate or nullopt.
     class Address : public SymbolicExpr {
       public:
         Address(const Address &other)
@@ -469,6 +467,8 @@ namespace Symbolic {
                                         std::optional<std::string_view> suffix = std::nullopt,
                                         int parentPrec                         = 0,
                                         bool isRightChild = false) const override;
+
+        /// @brief Get the value's regular form on this address.
         std::string regularFormOfValue(std::optional<std::string_view> prefix = std::nullopt,
                                        std::optional<std::string_view> suffix = std::nullopt,
                                        int parentPrec                         = 0,
@@ -491,12 +491,15 @@ namespace Symbolic {
         int getMaxDegree() const override { return -1; }
 
       private:
-        unsigned int id_;
-        std::unique_ptr<SymbolicExpr> offset_;
+        unsigned int id_; ///< This ID is unique within its path, but not globally unique across
+                          ///< different paths.
+        std::unique_ptr<SymbolicExpr> offset_; ///< Offset relative to an address.
         std::variant<std::monostate,
                      not_null<const clang::VarDecl *>,
                      not_null<std::unique_ptr<Address>>>
-            from_;
+            from_; ///< from a VarDecl* means this is a variable's address, from another Address p
+                   ///< means this is a value(may with offset) of a pointer variable whose address
+                   ///< is p.
     };
 
     struct AddressHash {
@@ -505,6 +508,55 @@ namespace Symbolic {
 
     struct AddressEqual {
         bool operator()(const Address &a, const Address &b) const noexcept { return a == b; }
+    };
+
+    /// @class Symbol value
+    /// @brief Symbolic value with unique ID and optional origin.
+    /// Origin can't be nullptr, use nullopt.
+    class Variable : public SymbolicExpr {
+      public:
+        Variable(const std::string &name,
+                 Type varType,
+                 int id,
+                 std::optional<std::unique_ptr<Address>> from)
+            : SymbolicExpr(ExprType::Variable, varType), name_(name), varType_(varType), id_(id),
+              from_(std::move(from)) {}
+
+        Type getVarType() const { return varType_; }
+        void setVarType(Type vt) {
+            varType_ = vt;
+            setValType(vt);
+        }
+
+        const std::string &getName() const { return name_; }
+        int getId() const { return id_; }
+
+        std::unique_ptr<SymbolicExpr> clone() const override;
+        std::string dump() const override;
+        virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
+                                        std::optional<std::string_view> suffix = std::nullopt,
+                                        int parentPrec                         = 0,
+                                        bool isRightChild = false) const override;
+        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
+        std::size_t hash() const override;
+        virtual bool equal(const SymbolicExpr &expr) const override;
+        auto getFrom() const -> const auto & { return from_; }
+
+        std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
+        // StInG: Support functions for affine invariant analysis
+        bool isLinear() const override { return true; }
+        int getMaxDegree() const override { return 1; }
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
+            const std::unordered_map<std::string, int> &) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
+
+      private:
+        std::string name_; ///< May be incorrect in pointer-related contexts now, use regularForm or
+                           ///< from_ as an alternative.
+        Type varType_;     ///< Symbol value's type.
+        int id_; ///< unique identifier to distinguish between variables with the same name
+        std::optional<not_null<std::unique_ptr<Address>>>
+            from_; ///< The original Address of the value
     };
 
     class AddressRange : public Address {
