@@ -72,23 +72,46 @@ unique_ptr<SymbolicExpr> UnaryOpExpr::clone() const {
 unique_ptr<SymbolicExpr> NullExpr::clone() const { return make_unique<NullExpr>(); }
 
 std::unique_ptr<SymbolicExpr> Symbolic::Variable::clone() const {
-    if (from_)
-        return std::make_unique<Symbolic::Variable>(
-            name_, varType_, id_,
-            std::unique_ptr<Address>(static_cast<Address *>((*from_)->clone().release())));
-    return std::make_unique<Symbolic::Variable>(name_, varType_, id_, std::nullopt);
+    return std::visit(
+        [this](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                return std::make_unique<Symbolic::Variable>(name_, varType_, id_, std::monostate{});
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                return std::make_unique<Symbolic::Variable>(name_, varType_, id_,
+                                                            std::make_unique<Address>(*arg));
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                return std::make_unique<Symbolic::Variable>(name_, varType_, id_, arg);
+            }
+        },
+        from_);
 }
 
 std::unique_ptr<SymbolicExpr> Address::clone() const {
-    if (auto decl = std::get_if<not_null<const clang::VarDecl *>>(&from_)) {
-        return std::make_unique<Address>(id_, offset_->clone(), *decl);
-    } else if (auto addr = std::get_if<not_null<unique_ptr<Address>>>(&from_)) {
-        return std::make_unique<Address>(
-            id_, offset_->clone(),
-            unique_ptr<Address>{static_cast<Address *>((*addr)->clone().release())});
-    } else {
-        return std::make_unique<Address>(id_, offset_->clone(), nullopt);
-    }
+    return std::visit(
+        [this](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                return std::make_unique<Address>(id_, offset_->clone(), std::monostate{});
+            } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                return std::make_unique<Address>(id_, offset_->clone(), arg);
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                return std::make_unique<Address>(
+                    id_, offset_->clone(),
+                    unique_ptr<Address>{static_cast<Address *>(arg->clone().release())});
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                return std::make_unique<Address>(id_, offset_->clone(), arg);
+            }
+        },
+        from_);
+}
+
+std::unique_ptr<SymbolicExpr> Structure::clone() const {
+    return std::make_unique<Structure>(*this);
 }
 
 std::size_t LiteralExpr::hash() const {
@@ -149,6 +172,32 @@ std::size_t Address::hash() const {
     std::size_t seed = static_cast<std::size_t>(getType());
     seed ^= std::hash<unsigned int>{}(id_);
     seed ^= offset_ ? offset_->hash() : 0;
+    return seed;
+}
+
+std::size_t Structure::Info::hash() const {
+    std::size_t seed = acslg::hash_val(definition_.get());
+    std::visit(
+        [&](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                /* do nothing */
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                seed = acslg::hash_val(seed, arg->hash());
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                seed = acslg::hash_val(seed, arg.first->hash(), arg.second);
+            }
+        },
+        from_);
+    return seed;
+}
+
+std::size_t Structure::hash() const {
+    auto seed = info_->hash();
+    for (auto &field : fields_)
+        seed = acslg::hash_val(seed, field->hash());
     return seed;
 }
 
@@ -232,6 +281,7 @@ std::string Symbolic::Variable::dump() const {
         case ScalarKind::UInt: oss << "uint"; break;
         case ScalarKind::Bool: oss << "bool"; break;
         case ScalarKind::Void: oss << "void"; break;
+        case ScalarKind::Structure: ERROR("Variable's ScalarKind should not be Structure");
     }
 
     oss << t.bitWidth << ")";
@@ -245,6 +295,52 @@ std::string Address::dump() const {
     if (dynamic_cast<NullExpr *>(off) == nullptr) {
         oss << "[" << off->dump() << "]";
     }
+    return oss.str();
+}
+
+std::string Structure::Info::dump() const {
+    std::ostringstream oss;
+    std::string structName = definition_->getNameAsString();
+    uint64_t sizeBits      = static_cast<uint64_t>(layout_.getSize().getQuantity()) * 8;
+
+    oss << "Struct(" << structName << ", size=" << sizeBits << " bits";
+
+    std::visit(
+        [&](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                oss << ", from=Null";
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                oss << ", from=" << arg->dump();
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                oss << ", from={" << arg.first->dump() << ", " << arg.second << "}";
+            }
+        },
+        from_);
+    oss << ")";
+
+    return oss.str();
+}
+
+std::string Structure::dump() const {
+    std::ostringstream oss;
+
+    oss << info_->dump();
+    oss << ", fields=[";
+    for (size_t i = 0; i < fields_.size(); ++i) {
+        if (fields_[i]) {
+            oss << fields_[i]->dump();
+        } else {
+            oss << "null";
+        }
+        if (i + 1 < fields_.size()) {
+            oss << ", ";
+        }
+    }
+    oss << "]";
+
     return oss.str();
 }
 
@@ -325,48 +421,105 @@ std::string Symbolic::Variable::regularForm(std::optional<std::string_view> pref
                                             std::optional<std::string_view> suffix,
                                             int,
                                             bool) const {
-    if (from_ == nullopt) {
-        ERROR("Trying to get regular form of Variable with nullptr from_.");
-    }
-    auto addr = (*from_)->regularForm(prefix, suffix);
-    if (addr.length() == 0)
-        ERROR("Empty regular from.");
+    return std::visit(
+        [&](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                ERROR("Trying to get regular form of Variable with nullptr from_.");
+                // This path is unreachable, yet the compiler infers std::visit to return void in
+                // the absence of a return statement—a strange error.
+                return "[If you see this message, check Variable::regularForm.]"s;
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                auto addr = arg->regularForm(prefix, suffix);
+                if (addr.length() == 0) {
+                    ERROR("Empty regular from.");
+                    // This path is unreachable, yet the compiler infers std::visit to return void
+                    // in the absence of a return statement—a strange error.
+                    return "[If you see this message, check Variable::regularForm.]"s;
+                }
 
-    if (addr[0] == '&')
-        return addr.substr(1);
-    return "(*" + addr + ")";
+                if (addr[0] == '&')
+                    return addr.substr(1);
+                return "(*" + addr + ")";
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                auto &[st, index] = arg;
+                return st->regularFormOfField(index, prefix, suffix);
+            }
+        },
+        from_);
 }
 
 std::string Address::regularForm(std::optional<std::string_view> prefix,
                                  std::optional<std::string_view> suffix,
                                  int,
                                  bool) const {
-    if (const auto varDeclPtr = std::get_if<not_null<const clang::VarDecl *>>(&from_);
-        varDeclPtr && *varDeclPtr) {
-        if (isOffseted())
-            ERROR("Address from varDecl should not be offseted.");
-        return "&" + (prefix ? (std::string)*prefix : "") + (*varDeclPtr)->getNameAsString() +
-               (suffix ? (string)*suffix : "");
-    } else if (auto addrPtr = std::get_if<not_null<std::unique_ptr<Address>>>(&from_)) {
-        auto pre = (*addrPtr)->regularForm(prefix, suffix);
-        auto suf = ((isOffseted()) ? offset_->regularForm(prefix, suffix) : "");
-        if (suf == "0")
-            suf = "";
-        if (pre.empty())
-            ERROR("Empty regular from.");
+    return std::visit(
+        [&, this](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                ERROR("Trying to get regular form of address without from_.");
+                // This path is unreachable, yet the compiler infers std::visit to return void in
+                // the absence of a return statement—a strange error.
+                return "[If you see this message, check Address::regularForm.]"s;
+            } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                if (isOffseted()) {
+                    ERROR("Address from varDecl should not be offseted.");
+                    // This path is unreachable, yet the compiler infers std::visit to return void
+                    // in the absence of a return statement—a strange error.
+                    return "[If you see this message, check Address::regularForm.]"s;
+                }
+                return "&" + (prefix ? (std::string)*prefix : "") + arg->getNameAsString() +
+                       (suffix ? (string)*suffix : "");
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                auto nameStr   = arg->regularForm(prefix, suffix);
+                auto offsetStr = ((isOffseted()) ? offset_->regularForm(prefix, suffix) : "");
+                if (offsetStr == "0")
+                    offsetStr = "";
+                if (nameStr.empty()) {
+                    ERROR("Empty regular from.");
+                    // This path is unreachable, yet the compiler infers std::visit to return void
+                    // in the absence of a return statement—a strange error.
+                    return "[If you see this message, check Address::regularForm.]"s;
+                }
 
-        if (pre[0] == '&')
-            pre = pre.substr(1);
-        else
-            pre = "*" + pre;
+                if (nameStr[0] == '&')
+                    nameStr = nameStr.substr(1);
+                else
+                    nameStr = "*" + nameStr;
 
-        if (!suf.empty())
-            return "(" + pre + "+" + suf + ")";
-        else
-            return pre;
-    } else {
-        ERROR("Trying to get regular form of address without from_.");
-    }
+                if (!offsetStr.empty())
+                    return "(" + nameStr + "+" + offsetStr + ")";
+                else
+                    return nameStr;
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                auto &[st, index] = arg;
+                auto nameStr      = st->regularFormOfField(index, prefix, suffix);
+                auto offsetStr    = ((isOffseted()) ? offset_->regularForm(prefix, suffix) : "");
+                if (offsetStr == "0")
+                    offsetStr = "";
+                if (nameStr.empty()) {
+                    ERROR("Empty regular from.");
+                    // This path is unreachable, yet the compiler infers std::visit to return void
+                    // in the absence of a return statement—a strange error.
+                    return "[If you see this message, check Address::regularForm.]"s;
+                }
+
+                if (nameStr[0] == '&')
+                    nameStr = nameStr.substr(1);
+                else
+                    nameStr = "*" + nameStr;
+
+                if (!offsetStr.empty())
+                    return "(" + nameStr + "+" + offsetStr + ")";
+                else
+                    return nameStr;
+            }
+        },
+        from_);
 }
 
 std::string Address::regularFormOfValue(std::optional<std::string_view> prefix,
@@ -375,11 +528,52 @@ std::string Address::regularFormOfValue(std::optional<std::string_view> prefix,
                                         bool) const {
     string s = regularForm(prefix, suffix);
     if (s.empty())
-        ERROR("Empty regular from.");
+        ERROR("Empty regular form.");
     if (s[0] == '&')
         return s.substr(1);
     else
         return "*(" + s + ")";
+}
+
+std::string Symbolic::Structure::Info::regularForm(std::optional<std::string_view> prefix,
+                                                   std::optional<std::string_view> suffix,
+                                                   int,
+                                                   bool) const {
+    return std::visit(
+        [&](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                ERROR("Trying to get regular form of Structure with nullptr from_.");
+                // This path is unreachable, yet the compiler infers std::visit to return void
+                // in the absence of a return statement—a strange error.
+                return "[If you see this message, check Structure::Info::regularForm.]"s;
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                auto addr = arg->regularForm(prefix, suffix);
+                if (addr.length() == 0) {
+                    ERROR("Empty regular from.");
+                    // This path is unreachable, yet the compiler infers std::visit to return void
+                    // in the absence of a return statement—a strange error.
+                    return "[If you see this message, check Structure::Info::regularForm.]"s;
+                }
+
+                if (addr[0] == '&')
+                    return addr.substr(1);
+                return "(*" + addr + ")";
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                auto &[st, index] = arg;
+                return st->regularFormOfField(index, prefix, suffix);
+            }
+        },
+        from_);
+}
+
+std::string Symbolic::Structure::regularForm(std::optional<std::string_view> prefix,
+                                             std::optional<std::string_view> suffix,
+                                             int,
+                                             bool) const {
+    return info_->regularForm(prefix, suffix);
 }
 
 std::unique_ptr<SymbolicExpr> LiteralExpr::simplifiedExpr() const { return clone(); }
@@ -408,6 +602,7 @@ std::unique_ptr<SymbolicExpr> Symbolic::Variable::simplifiedExpr() const {
 }
 
 std::unique_ptr<SymbolicExpr> Address::simplifiedExpr() const { return clone(); }
+std::unique_ptr<SymbolicExpr> Structure::simplifiedExpr() const { return clone(); }
 
 bool LiteralExpr::equal(const SymbolicExpr &expr) const {
     const auto liter = dynamic_cast<const LiteralExpr *>(&expr);
@@ -446,9 +641,28 @@ bool Symbolic::Variable::equal(const SymbolicExpr &expr) const {
     if (!var)
         return false;
 
-    if (from_ == nullopt || var->from_ == nullopt)
-        return false;
-    return **from_ == **var->from_;
+    return std::visit(
+        [&](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                return false;
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                if (auto addr = std::get_if<not_null<std::unique_ptr<const Address>>>(&var->from_))
+                    return *arg == **addr;
+                else
+                    return false;
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                if (auto addr = std::get_if<
+                        std::pair<not_null<std::shared_ptr<const Structure::Info>>, const size_t>>(
+                        &var->from_))
+                    return arg.first->equal(*(addr->first)) && arg.second == addr->second;
+                else
+                    return false;
+            }
+        },
+        from_);
 }
 
 bool Address::equal(const SymbolicExpr &expr) const {
@@ -458,34 +672,93 @@ bool Address::equal(const SymbolicExpr &expr) const {
 
     bool flag = false;
     // compare base
-    if (std::holds_alternative<not_null<std::unique_ptr<Address>>>(from_) &&
-        std::holds_alternative<not_null<std::unique_ptr<Address>>>(addr->from_)) {
-        auto &from     = *std::get<not_null<std::unique_ptr<Address>>>(from_);
-        auto &addrFrom = *std::get<not_null<std::unique_ptr<Address>>>(addr->from_);
-        if (from == addrFrom) {
-            flag = true;
-        }
-    } else if (std::holds_alternative<not_null<const clang::VarDecl *>>(from_) &&
-               std::holds_alternative<not_null<const clang::VarDecl *>>(addr->from_)) {
-        auto &from     = std::get<not_null<const clang::VarDecl *>>(from_);
-        auto &addrFrom = std::get<not_null<const clang::VarDecl *>>(addr->from_);
-        if (from == addrFrom) {
-            flag = true;
-        }
-    }
-    if (!flag)
+    std::visit(
+        [&](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                /* do nothing */
+            } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                ;
+                if (auto varAddr = std::get_if<not_null<const clang::VarDecl *>>(&addr->from_);
+                    varAddr != nullptr && arg == *varAddr) {
+                    ;
+                    flag = true;
+                }
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                ;
+                if (auto ptrAddr =
+                        std::get_if<not_null<std::unique_ptr<const Address>>>(&addr->from_);
+                    ptrAddr != nullptr && *arg == **ptrAddr) {
+                    ;
+                    flag = true;
+                }
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                if (auto pairAddr = std::get_if<
+                        std::pair<not_null<std::shared_ptr<const Structure::Info>>, const size_t>>(
+                        &addr->from_);
+                    pairAddr != nullptr && arg.first->equal(*(pairAddr->first)) &&
+                    arg.second == pairAddr->second)
+                    flag = true;
+            }
+        },
+        from_);
+    ;
+    if (!flag) {
+        ;
         return false;
-
+    };
     // compare offset
     if (isOffseted() && addr->isOffseted()) {
+        ;
         if (*offset_ != *addr->getOffset()) {
+            ;
             return false;
         }
     } else if (isOffseted() ^ addr->isOffseted()) {
+        ;
         return false;
-    }
-
+    };
     return true;
+}
+
+bool Structure::Info::equal(const Structure::Info &other) const {
+    if (definition_ != other.definition_)
+        return false;
+
+    return std::visit(
+        [&](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                return false;
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                if (auto addr = std::get_if<not_null<std::unique_ptr<const Address>>>(&other.from_))
+                    return *arg == **addr;
+                else
+                    return false;
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                if (auto addr = std::get_if<
+                        std::pair<not_null<std::shared_ptr<const Structure::Info>>, const size_t>>(
+                        &other.from_))
+                    return arg.first->equal(*(addr->first)) && arg.second == addr->second;
+                else
+                    return false;
+            }
+        },
+        from_);
+}
+
+bool Structure::equal(const SymbolicExpr &expr) const {
+    const auto st = dynamic_cast<const Structure *>(&expr);
+    if (!st)
+        return false;
+    if (!info_->equal(*(st->info_)))
+        return false;
+    return std::ranges::equal(fields_, st->fields_,
+                              [](auto &lhs, auto &rhs) { return *lhs == *rhs; });
 }
 
 unordered_map<unsigned int, const Symbolic::Variable *> Symbolic::Variable::collectUsedVars() const {
@@ -515,28 +788,131 @@ std::unique_ptr<Address> Address::addOffset(std::unique_ptr<SymbolicExpr> extra)
 }
 
 std::string Address::getBaseName() const {
-    if (const auto varDeclPtr = std::get_if<not_null<const clang::VarDecl *>>(&from_)) {
-        if (offset_ && *offset_ != *SymbolicExpr::makeNull())
-            ERROR("Address from varDecl should not be offseted.");
-        return "&" + (*varDeclPtr)->getNameAsString();
-    } else if (const auto addrPtr = std::get_if<not_null<std::unique_ptr<Address>>>(&from_)) {
-        auto prefix = (*addrPtr)->getBaseName();
-        auto suffix = (offset_ && *offset_ == *makeNull() ? offset_->dump() : "");
-        if (prefix.length() == 0)
-            ERROR("Empty name.");
+    return std::visit(
+        [this](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                // This path is unreachable, yet the compiler infers std::visit to return void in
+                // the absence of a return statement—a strange error.
+                return "[If you see this message, check Address::getBaseName.]"s;
+            } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                if (offset_ && *offset_ != *SymbolicExpr::makeNull()) {
+                    ERROR("Address from varDecl should not be offseted.");
+                    // This path is unreachable, yet the compiler infers std::visit to return void
+                    // in the absence of a return statement—a strange error.
+                    return "[If you see this message, check Address::getBaseName.]"s;
+                }
+                return "&" + arg->getNameAsString();
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                auto nameStr   = arg->getBaseName();
+                auto offsetStr = (offset_ && *offset_ == *makeNull() ? offset_->dump() : "");
+                if (nameStr.length() == 0) {
+                    ERROR("Empty name.");
+                    // This path is unreachable, yet the compiler infers std::visit to return void
+                    // in the absence of a return statement—a strange error.
+                    return "[If you see this message, check Address::getBaseName.]"s;
+                }
 
-        if (prefix[0] == '&')
-            prefix = prefix.substr(1);
-        else
-            prefix = "*" + prefix;
+                if (nameStr[0] == '&')
+                    nameStr = nameStr.substr(1);
+                else
+                    nameStr = "*" + nameStr;
 
-        if (suffix.length())
-            return "(" + prefix.substr(1) + "+" + suffix + ")";
-        else
-            return prefix;
-    } else {
-        ERROR("Trying to get base name of address with bad-defined from_.");
-    }
+                if (offsetStr.length())
+                    return "(" + nameStr.substr(1) + "+" + offsetStr + ")";
+                else
+                    return nameStr;
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                auto &[st, index] = arg;
+                auto nameStr      = st->regularFormOfField(index);
+                auto offsetStr    = (offset_ && *offset_ == *makeNull() ? offset_->dump() : "");
+                if (nameStr.length() == 0) {
+                    ERROR("Empty name.");
+                    // This path is unreachable, yet the compiler infers std::visit to return void
+                    // in the absence of a return statement—a strange error.
+                    return "[If you see this message, check Address::getBaseName.]"s;
+                }
+
+                if (nameStr[0] == '&')
+                    nameStr = nameStr.substr(1);
+                else
+                    nameStr = "*" + nameStr;
+
+                if (offsetStr.length())
+                    return "(" + nameStr.substr(1) + "+" + offsetStr + ")";
+                else
+                    return nameStr;
+            }
+        },
+        from_);
+}
+
+Structure::Info::Info(const Info &other) : definition_(other.definition_), layout_(other.layout_) {
+    std::visit(
+        [this](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                from_ = std::monostate{};
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                from_.emplace<1>(
+                    std::unique_ptr<Address>(static_cast<Address *>((arg)->clone().release())));
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                from_.emplace<2>(arg);
+            }
+        },
+        other.from_);
+}
+
+bool Structure::isComplete() const {
+    for (auto &field : fields_)
+        if (field == nullptr)
+            return false;
+    return true;
+}
+
+void Structure::setFieldValue(size_t index, const SymbolicExpr &expr) {
+    if (index >= fields_.size())
+        ERROR("Out-of-bounds access");
+    fields_[index] = expr.clone();
+}
+
+std::unique_ptr<SymbolicExpr> Structure::getFieldValue(size_t index) const {
+    if (index >= fields_.size())
+        ERROR("Out-of-bounds access");
+    return fields_[index] ? fields_[index]->clone() : nullptr;
+}
+
+std::string Symbolic::Structure::Info::regularFormOfField(size_t index,
+                                                          std::optional<std::string_view> prefix,
+                                                          std::optional<std::string_view> suffix,
+                                                          int,
+                                                          bool) const {
+    string s = regularForm(prefix, suffix);
+    if (s.empty())
+        ERROR("Empty regular form.");
+
+    auto fields = definition_->fields();
+    auto it     = std::ranges::next(fields.begin(), index, fields.end());
+    if (it == fields.end())
+        ERROR("Out-of-bounds access");
+
+    auto fieldName = it->getNameAsString();
+    if (s[0] == '&')
+        return s.substr(1) + "." + fieldName;
+    else
+        return s + "->" + fieldName;
+}
+
+std::string Symbolic::Structure::regularFormOfField(size_t index,
+                                                    std::optional<std::string_view> prefix,
+                                                    std::optional<std::string_view> suffix,
+                                                    int,
+                                                    bool) const {
+    return info_->regularFormOfField(index, prefix, suffix);
 }
 
 namespace std {
@@ -555,6 +931,7 @@ std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType t) {
         case SymbolicExpr::ExprType::BinaryOp: os << "BinaryOp"; break;
         case SymbolicExpr::ExprType::UnaryOp: os << "UnaryOp"; break;
         case SymbolicExpr::ExprType::SNULL: os << "SNULL"; break;
+        case SymbolicExpr::ExprType::Structure: os << "Structure"; break;
     }
     return os;
 }

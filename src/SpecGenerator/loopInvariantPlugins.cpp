@@ -156,7 +156,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
 
         auto isLocal = [&](const Address &addr) {
             auto from = &addr.getFrom();
-            while (auto addr = get_if<not_null<unique_ptr<Address>>>(from)) {
+            while (auto addr = get_if<not_null<unique_ptr<const Address>>>(from)) {
                 from = &(*addr)->getFrom();
             }
             if (auto var = get_if<not_null<const VarDecl *>>(from)) {
@@ -407,9 +407,12 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                     }
 
                     if (auto elementAddr = getAddress(elementExpr)) {
-                        if (auto &maxVarFrom = maxVar->getFrom())
+                        if (auto maxVarFrom =
+                                get_if<not_null<unique_ptr<const Address>>>(&maxVar->getFrom())) {
                             if (**maxVarFrom != *elementAddr)
                                 return;
+                        } else
+                            TODO();
                     } else {
                         return;
                     }

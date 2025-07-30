@@ -8,6 +8,7 @@
 #include "SpecGenerator/specGenerator.h"
 #include "Analyzer/function.h"
 #include "Analyzer/state.h"
+#include "globalSM.h"
 
 using namespace std;
 using namespace llvm;
@@ -17,10 +18,12 @@ namespace {
     tuple<optional<string>, bool, vector<unique_ptr<Path>>> doPluginOnFirstLoop(const string &code,
                                                                                 const string &pid) {
         ASTExtractor e(code);
+        GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
         auto func      = e.findFirstDecl<clang::FunctionDecl>();
         auto loopEntry = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
         clang::Stmt *loopStmt;
         loopEntry->init();
+        DEBUG(loopEntry->dump());
         for (clang::Stmt *stmt : func->getBody()->children()) {
             if (isa<clang::WhileStmt>(stmt) || isa<clang::ForStmt>(stmt) ||
                 isa<clang::DoStmt>(stmt)) {
@@ -28,10 +31,12 @@ namespace {
                 break;
             }
             loopEntry->step(stmt);
+            DEBUG(loopEntry->dump());
         }
 
         if (auto forLoop = dyn_cast<clang::ForStmt>(loopStmt); forLoop && forLoop->getInit()) {
             loopEntry->step(forLoop->getInit());
+            DEBUG(loopEntry->dump());
         }
 
         const clang::Expr *cond = nullptr;

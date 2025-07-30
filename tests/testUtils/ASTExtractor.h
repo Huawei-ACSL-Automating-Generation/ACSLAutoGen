@@ -69,7 +69,7 @@ class ASTExtractor {
     }
 
     clang::ASTContext &getASTContext() const { return AST->getASTContext(); }
-    const clang::LangOptions &getLangOption() const { return AST->getLangOpts(); }
+    const clang::LangOptions &getLangOptions() const { return AST->getLangOpts(); }
     clang::SourceManager &getSourceManager() const { return AST->getSourceManager(); }
 
   private:

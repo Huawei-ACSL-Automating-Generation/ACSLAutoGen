@@ -30,11 +30,25 @@ class AssignsPlugin : public FunctionContractPlugin {
         };
 
         auto isFromPointer = [&](const Address &addr) {
-            if (holds_alternative<not_null<unique_ptr<Address>>>(addr.getFrom()))
-                return true;
-            else if (holds_alternative<monostate>(addr.getFrom()))
-                TODO();
-            return false;
+            return std::visit(
+                [this](auto &&arg) {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, std::monostate>) {
+                        TODO();
+                        return false;
+                    } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                        return false;
+                    } else if constexpr (std::is_same_v<T,
+                                                        not_null<std::unique_ptr<const Address>>>) {
+                        return true;
+                    } else if constexpr (std::is_same_v<T, std::pair<not_null<std::shared_ptr<
+                                                                         const Structure::Info>>,
+                                                                     const size_t>>) {
+                        TODO();
+                        return false;
+                    }
+                },
+                addr.getFrom());
         };
 
         // Function's pre-state should have exactly one path.
@@ -53,8 +67,9 @@ class AssignsPlugin : public FunctionContractPlugin {
                         if (!symbol)
                             ERROR("A SymolicExpr with type 'Variable' but is not a Variable!");
 
-                        if (auto &from = symbol->getFrom()) {
-                            if (**from == addr)
+                        if (auto fromAddr =
+                                get_if<not_null<unique_ptr<const Address>>>(&symbol->getFrom())) {
+                            if ((**fromAddr) == addr)
                                 continue;
                         } else {
                             TODO();

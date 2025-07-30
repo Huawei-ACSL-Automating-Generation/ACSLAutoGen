@@ -13,7 +13,7 @@ class ACSLFunction {
     const clang::FunctionDecl *getFunctionDecl() const { return FuncDecl; }
     std::unique_ptr<ACSLFunction> clone() const;
 
-    bool operator==(const ACSLFunction &RHS) { return FuncDecl == RHS.getFunctionDecl(); }
+    bool operator==(const ACSLFunction &RHS) const { return FuncDecl == RHS.getFunctionDecl(); }
 
   private:
     const clang::FunctionDecl *FuncDecl;

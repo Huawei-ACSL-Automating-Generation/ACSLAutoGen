@@ -11,7 +11,7 @@ using namespace std;
 
 TEST(GlobalSMTest, testing) {
     ASTExtractor e("");
-    GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOption());
+    GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
     auto &SM       = GlobalSM::getSM();
     auto fileID    = SM.getMainFileID();
     auto fileEntry = SM.getFileEntryForID(fileID);
