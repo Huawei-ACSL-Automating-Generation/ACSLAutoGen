@@ -1,4 +1,4 @@
-// tests/SpecGenerator/loopInvariantPlugins_test.cpp
+// tests/unit/SpecGenerator/loopInvariantPlugins_test.cpp
 
 #include <gtest/gtest.h>
 #include <unordered_map>

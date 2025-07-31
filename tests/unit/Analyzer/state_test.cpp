@@ -1,4 +1,4 @@
-// tests/SpecGenerator/state_test.cpp
+// tests/unit/SpecGenerator/state_test.cpp
 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>

@@ -1,4 +1,4 @@
-// tests/context/globalSM_test.cpp
+// tests/unit/context/globalSM_test.cpp
 
 #include <gtest/gtest.h>
 #include <unordered_map>
