@@ -453,13 +453,14 @@ namespace Symbolic {
                                 static_cast<unsigned>(layout.getSize().getQuantity()) *
                                     8 /*By default, char is 8-bit.*/}),
               info_(make_shared<Info>(RD, layout, std::move(from))) {
-            fields_.reserve(info_->layout_.getFieldCount());
+            fields_.resize(info_->layout_.getFieldCount());
         }
 
         Structure(const Structure &other) : SymbolicExpr(other), info_(other.info_) {
-            fields_.reserve(other.fields_.size());
-            std::transform(other.fields_.begin(), other.fields_.end(), std::back_inserter(fields_),
-                           [](auto &field) { return field == nullptr ? nullptr : field->clone(); });
+            fields_.resize(other.fields_.size());
+            std::ranges::transform(other.fields_, fields_.begin(), [](auto &field) {
+                return field == nullptr ? nullptr : field->clone();
+            });
         }
 
         bool isComplete() const;
@@ -632,7 +633,7 @@ namespace Symbolic {
         std::string getBaseName() const;
 
         void setOffset(std::unique_ptr<SymbolicExpr> offset) { offset_ = std::move(offset); }
-        std::unique_ptr<Address> addOffset(std::unique_ptr<SymbolicExpr> extra) const;
+        void addOffset(std::unique_ptr<SymbolicExpr> extra);
         bool isOffseted() const { return offset_ && offset_->getType() != ExprType::SNULL; }
 
         // StInG: Support functions for affine invariant analysis

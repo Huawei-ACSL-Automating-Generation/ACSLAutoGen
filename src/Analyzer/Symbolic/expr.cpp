@@ -23,22 +23,32 @@ std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedExprIfLinear() const {
     using enum BinaryOpExpr::Operator;
     for (auto [id, varPtr] : idVarMap) {
         auto C = linearExpr.coefficient(Parma_Polyhedra_Library::Variable{id}).get_si();
-        unique_ptr<SymbolicExpr> varExpr{nullptr};
-        if (C != 1)
-            varExpr =
-                make_unique<BinaryOpExpr>(make_unique<LiteralExpr>(C), Multiply, varPtr->clone());
-        else
-            varExpr = varPtr->clone();
-        if (result == nullptr)
-            result = std::move(varExpr);
-        else
-            result = make_unique<BinaryOpExpr>(std::move(result), Add, std::move(varExpr));
+        if (C == 0)
+            continue;
+
+        if (result == nullptr) {
+            if (C == 1)
+                result = varPtr->clone();
+            else
+                result = make_unique<BinaryOpExpr>(make_unique<LiteralExpr>(C), Multiply,
+                                                   varPtr->clone());
+        } else {
+            unsigned absC = abs(C);
+            unique_ptr<SymbolicExpr> varExpr{nullptr};
+            if (absC != 1)
+                varExpr = make_unique<BinaryOpExpr>(make_unique<LiteralExpr>(absC), Multiply,
+                                                    varPtr->clone());
+            else
+                varExpr = varPtr->clone();
+            result = make_unique<BinaryOpExpr>(std::move(result), (C > 0 ? Add : Subtract),
+                                               std::move(varExpr));
+        }
     }
     if (auto inhomo = linearExpr.inhomogeneous_term().get_si()) {
-        if (result != nullptr)
-            result = make_unique<BinaryOpExpr>(std::move(result), Add,
-                                               std::make_unique<LiteralExpr>(inhomo));
-        else
+        if (result != nullptr) {
+            result = make_unique<BinaryOpExpr>(std::move(result), (inhomo > 0 ? Add : Subtract),
+                                               std::make_unique<LiteralExpr>(abs(inhomo)));
+        } else
             result = make_unique<LiteralExpr>(inhomo);
     }
     if (result == nullptr) {
@@ -776,15 +786,12 @@ unordered_map<unsigned int, const Symbolic::Variable *> UnaryOpExpr::collectUsed
     return expr_->collectUsedVars();
 }
 
-// *add*Offset but const func. WithOffset may be better.
-std::unique_ptr<Address> Address::addOffset(std::unique_ptr<SymbolicExpr> extra) const {
-    auto result = std::make_unique<Address>(*this);
-    if (result->offset_ && dynamic_cast<NullExpr *>(result->offset_.get()) == nullptr)
-        result->offset_ = std::make_unique<BinaryOpExpr>(
-            std::move(result->offset_), BinaryOpExpr::Operator::Add, std::move(extra));
+void Address::addOffset(std::unique_ptr<SymbolicExpr> extra) {
+    if (offset_ && dynamic_cast<NullExpr *>(offset_.get()) == nullptr)
+        offset_ = std::make_unique<BinaryOpExpr>(std::move(offset_), BinaryOpExpr::Operator::Add,
+                                                 std::move(extra));
     else
-        result->offset_ = std::move(extra);
-    return result;
+        offset_ = std::move(extra);
 }
 
 std::string Address::getBaseName() const {
@@ -901,10 +908,7 @@ std::string Symbolic::Structure::Info::regularFormOfField(size_t index,
         ERROR("Out-of-bounds access");
 
     auto fieldName = it->getNameAsString();
-    if (s[0] == '&')
-        return s.substr(1) + "." + fieldName;
-    else
-        return s + "->" + fieldName;
+    return s + "." + fieldName;
 }
 
 std::string Symbolic::Structure::regularFormOfField(size_t index,

@@ -60,15 +60,13 @@ void Path::resymbolize() {
     }
 }
 
-// Why not always return unique_ptr<Address>?
 LValueTarget Path::extractLValue(const Expr *lhs) {
     const Expr *lexpr = lhs->IgnoreParenImpCasts();
     if (auto *declRef = dyn_cast<DeclRefExpr>(lexpr))
         return dyn_cast<VarDecl>(declRef->getDecl());
-
     if (auto *arr = dyn_cast<ArraySubscriptExpr>(lexpr)) {
         auto baseLVal = extractLValue(arr->getBase());
-        Address *addr;
+        unique_ptr<Address> addr;
         if (auto declPtr = get_if<const VarDecl *>(&baseLVal)) {
             Address *variableAddr;
             if (auto it = varAddr.find(*declPtr); it != varAddr.end()) {
@@ -82,28 +80,38 @@ LValueTarget Path::extractLValue(const Expr *lhs) {
                     ERROR("Value of ArraySubscriptExpr's base is not 'Address', base is neither "
                           "pointer nor "
                           "array?");
-                addr = ptr;
+                addr = make_unique<Address>(*ptr);
             } else {
                 ERROR("memoryState has no ArraySubscriptExpr's base, base is neither pointer nor "
                       "array?");
             }
-        } else
-            addr = get<unique_ptr<Address>>(baseLVal).get();
+        } else {
+            UNIMPLEMENT("Multidimensional pointer is not supported now.");
+            // There is a logical error here regarding multidimensional pointers.
+            // addr = get<unique_ptr<Address>>(baseLVal).get();
+        }
         auto idxEval = evalExpr(arr->getIdx());
+        if (idxEval.second.size() != 1)
+            ERROR("This location does not support control flow branches.");
         auto idxExpr = std::move(idxEval.second[0]);
-        return addr->addOffset(std::move(idxExpr));
+        addr->setOffset(std::move(idxExpr));
+        return addr;
     }
 
     if (auto *uop = dyn_cast<UnaryOperator>(lexpr)) {
         if (uop->getOpcode() == UO_Deref) {
             auto addrEval = evalExpr(uop->getSubExpr());
             if (addrEval.second.empty())
-                UNIMPLEMENT("Failed to evaluate address in deref");
+                ERROR("Failed to evaluate address in deref");
 
-            auto addr = addrEval.second[0]->clone();
-            if (!addr)
-                UNIMPLEMENT("Expected Address in deref, got: " << addrEval.second[0]->dump());
+            auto addr = std::move(addrEval.second[0]);
+            if (addr == nullptr) {
+                ERROR("Met nullptr in EvalResult.");
+            }
+            if (addr->getType() != SymbolicExpr::ExprType::SymbolAddress)
+                ERROR("Expected Address in deref, got: " << addrEval.second[0]->dump());
             auto *raw = static_cast<Address *>(addr.release());
+            raw->setOffset(make_unique<LiteralExpr>(0U));
             return unique_ptr<Address>(raw);
         }
     }
@@ -332,8 +340,9 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                 for (size_t i = 0; i < idx.second.size(); ++i) {
                     auto idxExpr   = std::move(idx.second[i]);
                     string idxDump = idxExpr->dump();
-                    auto newAddr   = addr->addOffset(std::move(idxExpr));
-                    auto it        = memoryState.find(*newAddr);
+                    auto newAddr   = make_unique<Address>(*addr);
+                    newAddr->setOffset(std::move(idxExpr));
+                    auto it = memoryState.find(*newAddr);
                     if (it == memoryState.end()) {
                         string varName = baseName + "[" + idxDump +
                                          "]"; // TODO: impl function to get pointer/array base name.
@@ -434,63 +443,64 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     Path *path  = (i == 0 ? this : operand.first[i - 1].get());
                     auto unExpr = std::move(operand.second[i]);
 
-                    if (op == UnaryOpExpr::Operator::PreInc ||
-                        op == UnaryOpExpr::Operator::PostInc ||
-                        op == UnaryOpExpr::Operator::PreDec ||
-                        op == UnaryOpExpr::Operator::PostDec) {
-                        // ++x / x++ / --x / x--
-                        unique_ptr<Address> addr = extractAddress(uop->getSubExpr());
-                        if (!addr)
-                            ERROR("extractAddress returned null");
-                        // old value
-                        auto oldVal = path->memoryState[*addr]->clone();
-                        // compute new = old +/- 1
-                        auto one   = make_unique<LiteralExpr>(1);
-                        auto binOp = (op == UnaryOpExpr::Operator::PreInc ||
-                                      op == UnaryOpExpr::Operator::PostInc)
-                                         ? BinaryOpExpr::Operator::Add
-                                         : BinaryOpExpr::Operator::Subtract;
-                        auto newVal =
-                            make_unique<BinaryOpExpr>(oldVal->clone(), binOp, std::move(one));
-                        // write back
-                        path->memoryState[*addr] = newVal->clone();
-                        // return pre vs post
+                    // Prevent misuse by not capturing this and operand.
+                    [&path, &unExpr, &op, &outExprs, &uop]() {
                         if (op == UnaryOpExpr::Operator::PreInc ||
-                            op == UnaryOpExpr::Operator::PreDec)
-                            outExprs.emplace_back(std::move(newVal));
+                            op == UnaryOpExpr::Operator::PostInc ||
+                            op == UnaryOpExpr::Operator::PreDec ||
+                            op == UnaryOpExpr::Operator::PostDec) {
+                            // ++x / x++ / --x / x--
+                            unique_ptr<Address> addr = path->extractAddress(uop->getSubExpr());
+                            if (!addr)
+                                ERROR("extractAddress returned null");
+                            // old value
+                            if (!path->memoryState.contains(*addr))
+                                ERROR("MemoryState doesn't contain addr.");
+                            auto oldVal = path->memoryState[*addr]->clone();
+                            // compute new = old +/- 1
+                            auto one   = make_unique<LiteralExpr>(1);
+                            auto binOp = (op == UnaryOpExpr::Operator::PreInc ||
+                                          op == UnaryOpExpr::Operator::PostInc)
+                                             ? BinaryOpExpr::Operator::Add
+                                             : BinaryOpExpr::Operator::Subtract;
+                            auto newVal =
+                                make_unique<BinaryOpExpr>(oldVal->clone(), binOp, std::move(one));
+                            // write back
+                            path->memoryState[*addr] = newVal->clone();
+                            // return pre vs post
+                            if (op == UnaryOpExpr::Operator::PreInc ||
+                                op == UnaryOpExpr::Operator::PreDec)
+                                outExprs.emplace_back(std::move(newVal));
+                            else
+                                outExprs.emplace_back(std::move(oldVal));
+                        } else if (op == UnaryOpExpr::Operator::Dereference) {
+                            // *x
+                            auto addr = dynamic_cast<Address *>(unExpr.get());
+                            if (!addr)
+                                UNIMPLEMENT("Expected Address*, got: " << unExpr->dump());
+                            auto writedAddr = make_unique<Address>(*addr);
+                            writedAddr->setOffset(make_unique<LiteralExpr>(0U));
+                            if (auto it = path->memoryState.find(*writedAddr);
+                                it == path->memoryState.end()) {
+                                SymbolicExpr::Type varType = deriveVarType(uop->getType());
+                                string varName =
+                                    writedAddr->getBaseName() + "[" +
+                                    writedAddr->getOffset()->dump() +
+                                    "]"; // TODO: impl function to get pointer/array base name.
+                                auto varExpr = std::make_unique<Symbolic::Variable>(
+                                    varName, varType, path->getNextSymVarId(),
+                                    std::unique_ptr<Address>(
+                                        static_cast<Address *>(writedAddr->clone().release())));
+                                path->memoryState.emplace(*writedAddr, varExpr->clone());
+                                outExprs.emplace_back(std::move(varExpr));
+                            } else {
+                                outExprs.emplace_back(it->second->clone());
+                            }
+                        } else if (op == UnaryOpExpr::Operator::AddrOf)
+                            TODO();
                         else
-                            outExprs.emplace_back(std::move(oldVal));
-                    } else if (op == UnaryOpExpr::Operator::Dereference) {
-                        // *x
-                        auto se = evalExpr(uop->getSubExpr());
-                        if (!se.first.empty() || se.second.size() != 1)
-                            UNIMPLEMENT("Dereference produced unexpected side paths");
-                        auto addr = dynamic_cast<Address *>(se.second[0].get());
-                        if (!addr)
-                            UNIMPLEMENT("Expected Address*, got: " << se.second[0]->dump());
-
-                        auto writedAddr = addr->addOffset(make_unique<LiteralExpr>(0U));
-
-                        if (auto it = memoryState.find(*writedAddr); it == memoryState.end()) {
-                            SymbolicExpr::Type varType =
-                                deriveVarType(uop->getSubExpr()->getType());
-                            string varName =
-                                writedAddr->getBaseName() + "[" + writedAddr->getOffset()->dump() +
-                                "]"; // TODO: impl function to get pointer/array base name.
-                            auto varExpr = std::make_unique<Symbolic::Variable>(
-                                varName, varType, symbolVarCounter++,
-                                std::unique_ptr<Address>(
-                                    static_cast<Address *>(writedAddr->clone().release())));
-                            it = memoryState.emplace(*writedAddr, varExpr->clone()).first;
-                            outExprs.emplace_back(std::move(varExpr));
-                        } else {
-                            outExprs.emplace_back(it->second->clone());
-                        }
-                    } else if (op == UnaryOpExpr::Operator::AddrOf)
-                        TODO();
-                    else
-                        outExprs.emplace_back(make_unique<UnaryOpExpr>(op, std::move(unExpr)));
-
+                            outExprs.emplace_back(make_unique<UnaryOpExpr>(op, std::move(unExpr)));
+                    }();
                     if (i > 0)
                         outPaths.emplace_back(std::move(operand.first[i - 1]));
                 }
@@ -498,7 +508,10 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                 return {std::move(outPaths), std::move(outExprs)};
             })
             .Case<CastExpr>([this](const CastExpr *castExpr) -> EvalResult {
-                auto sub        = evalExpr(castExpr->getSubExpr());
+                auto sub = evalExpr(castExpr->getSubExpr());
+                if (castExpr->getType()->isStructureType())
+                    return sub;
+
                 auto targetType = deriveVarType(castExpr->getType());
 
                 for (auto &subExpr : sub.second)
@@ -644,7 +657,7 @@ void ProgramState::init() {
             auto &layout = RD->getASTContext().getASTRecordLayout(RD);
             auto st      = make_unique<Structure>(RD, layout, make_unique<Address>(*addr));
 
-            auto structureSymbolizeInit = [&initPath](auto f, Structure &stToInit) {
+            auto structureSymbolizeInit = [&initPath](auto f, Structure &stToInit) -> void {
                 std::ranges::transform(
                     stToInit.getInfo()->definition_->fields(), stToInit.fieldsValues().begin(),
                     [&initPath, &stToInit, &f](const auto &fieldDecl) -> unique_ptr<SymbolicExpr> {
@@ -731,10 +744,8 @@ void ProgramState::step(const Stmt *stmt) {
             vector<const VarDecl *> varDecls;
             for (auto it = declStmt->decl_begin(); it != declStmt->decl_end(); ++it) {
                 Decl *decl = *it;
-                if (!dyn_cast<VarDecl>(decl)) {
-                    WARN(string("Unhandled Decl type: ") + decl->getDeclKindName());
-                    continue;
-                }
+                if (!isa<VarDecl>(decl))
+                    UNIMPLEMENT("Unhandled Decl type: "s + decl->getDeclKindName());
                 varDecls.push_back(dyn_cast<VarDecl>(decl));
             }
             addNewDecls(varDecls);
@@ -747,7 +758,10 @@ void ProgramState::step(const Stmt *stmt) {
                 UNIMPLEMENT("BinaryOperator not implemented: " << binOp->getOpcode());
             updateVarState(binOp);
         })
-        .Case<Expr>([this](const Expr *expr) { stepExpr(expr); })
+        .Case<Expr>([this](const Expr *expr) {
+            DEBUG("stepping Expr...");
+            stepExpr(expr);
+        })
         .Case<ImplicitCastExpr>(
             [](const ImplicitCastExpr *) -> unique_ptr<SymbolicExpr> { UNREACHABLE(); })
         .Case<CaseStmt>([this](const CaseStmt *caseStmt) {
@@ -972,6 +986,15 @@ void ProgramState::setStates(Path::PathState state, const Stmt *stmt) {
 }
 
 void ProgramState::setReturnExpr(const Expr *expr) {
+    if (expr == nullptr) {
+        for (auto &pathPtr : paths) {
+            if (!pathPtr->isActive())
+                continue;
+            pathPtr->setReturnExpr(SymbolicExpr::makeNull());
+        }
+        return;
+    }
+
     vector<unique_ptr<Path>> updatedPaths;
 
     for (auto &pathPtr : paths) {

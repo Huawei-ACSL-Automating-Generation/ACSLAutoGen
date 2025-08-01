@@ -47,7 +47,7 @@ class DeclFinderVisitor : public clang::RecursiveASTVisitor<DeclFinderVisitor<No
 
 class ASTExtractor {
   public:
-    explicit ASTExtractor(const std::string &code);
+    explicit ASTExtractor(const std::string_view code);
 
     ASTExtractor(const ASTExtractor &)            = delete;
     ASTExtractor &operator=(const ASTExtractor &) = delete;

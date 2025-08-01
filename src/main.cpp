@@ -132,6 +132,8 @@ int main(int argc, const char **argv) {
     CommonOptionsParser &OptionsParser = ExpectedParser.get();
 
     ClangTool Tool(OptionsParser.getCompilations(), OptionsParser.getSourcePathList());
-
+    Tool.appendArgumentsAdjuster(getInsertArgumentAdjuster("-xc", ArgumentInsertPosition::BEGIN));
+    Tool.appendArgumentsAdjuster(
+        getInsertArgumentAdjuster("-std=c11", ArgumentInsertPosition::END));
     return Tool.run(newFrontendActionFactory<TUFrontendAction>().get());
 }
