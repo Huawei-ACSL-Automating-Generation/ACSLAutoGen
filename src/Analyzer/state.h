@@ -46,10 +46,10 @@ class Path {
     void updateVarState(const clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
     void insertPathCondition(std::unique_ptr<SymbolicExpr> cond);
 
-    void setReturnExpr(std::unique_ptr<SymbolicExpr> expr) { returnExpr = std::move(expr); };
-    void setPathState(PathState state) { currentState = state; }
+    void setReturnExpr(std::unique_ptr<SymbolicExpr> expr) { returnExpr_ = std::move(expr); };
+    void setPathState(PathState state) { currentState_ = state; }
 
-    bool isActive() const { return currentState == PathState::Step; }
+    bool isActive() const { return currentState_ == PathState::Step; }
     bool isUnchanged(const Address &addr);
     std::unique_ptr<Path> clone() const;
 
@@ -59,33 +59,31 @@ class Path {
     EvalResult evalExpr(const clang::Expr *expr);
     friend class ProgramState;
 
-    auto getVarAddr() const -> const auto & { return varAddr; };
-    auto getMemoryState() const -> const auto & { return memoryState; }
-    int getNextSymVarId() { return symbolVarCounter++; }
-    auto getReturnExpr() const -> const auto & { return returnExpr; }
-    auto getPathState() const -> const auto & { return currentState; }
-    auto getAddrCounter() const -> const auto & { return addrCounter; }
+    auto getVarAddr() const -> const auto & { return varAddr_; };
+    auto getMemoryState() const -> const auto & { return memoryState_; }
+    int getNextSymVarId() { return symbolVarAndAddrCounter_++; }
+    auto getReturnExpr() const -> const auto & { return returnExpr_; }
+    auto getPathState() const -> const auto & { return currentState_; }
+    auto getAddrCounter() const -> const auto & { return symbolVarAndAddrCounter_; }
 
   private:
     // Map: variable record definition ID -> corresponding symbolic address.
-    std::unordered_map<const clang::VarDecl *, std::unique_ptr<Address>> varAddr;
+    std::unordered_map<const clang::VarDecl *, std::unique_ptr<Address>> varAddr_;
 
     // Map: symbolic address -> value stored at that address, separating variable–address mapping
     // from address–value mapping.
     std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>
-        memoryState;
+        memoryState_;
 
     // SET: List of symbolic expressions representing the path condition.
-    Formulas pathConditions;
+    Formulas pathConditions_;
 
     // Holds the current path state. Default is set to Step
-    PathState currentState = PathState::Step;
+    PathState currentState_ = PathState::Step;
 
-    std::unique_ptr<SymbolicExpr> returnExpr = std::make_unique<NullExpr>();
+    std::unique_ptr<SymbolicExpr> returnExpr_ = std::make_unique<NullExpr>();
 
-    unsigned int addrCounter = 0;
-
-    unsigned int symbolVarCounter = 0;
+    unsigned int symbolVarAndAddrCounter_ = 0;
 };
 
 class ProgramState {
@@ -120,8 +118,8 @@ class ProgramState {
     void resetState();
     void resymbolize();
 
-    auto getPaths() const -> const auto & { return paths; }
-    auto getContext() const -> const auto & { return Context; }
+    auto getPaths() const -> const auto & { return paths_; }
+    auto getContext() const -> const auto & { return context_; }
 
     void deriveLinearPostState(std::vector<Formulas> invs);
 
@@ -136,11 +134,9 @@ class ProgramState {
 
     void stepLoop(const clang::Stmt *loopStmt);
 
-    void CollectLoopACSL();
+    std::vector<std::unique_ptr<Path>> paths_{};
 
-    std::vector<std::unique_ptr<Path>> paths{};
-
-    std::unique_ptr<ACSLFunction> Context;
+    std::unique_ptr<ACSLFunction> context_;
 };
 
 struct VarManager {
@@ -158,6 +154,9 @@ struct VarManager {
             for (const auto &[varDecl, addrPtr] : varAddrMap) {
                 if (!varDecl)
                     continue;
+                if (varDecl->getType()->isStructureType()) {
+                    TODO();
+                }
 
                 std::string name = varDecl->getNameAsString();
                 if (auto [_, ok] = vm.varIndexMap.insert({name, varCounter}); ok) {
@@ -176,7 +175,7 @@ struct VarManager {
         return vm;
     }
 
-    int getIndex(const Symbolic::Variable &var) const {
+    [[deprecated("seems to contain an error")]] int getIndex(const Symbolic::Variable &var) const {
         auto it = varIndexMap.find(var.getName());
         if (it == varIndexMap.end()) {
             ERROR("VarManager: Variable name '" + var.getName() + "' not found in index map.");

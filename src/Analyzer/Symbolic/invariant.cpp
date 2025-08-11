@@ -184,6 +184,24 @@ Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr() const {
     ERROR("non-affine or unsupported op");
 }
 
+Parma_Polyhedra_Library::Linear_Expression Symbolic::Address::toLinearExpr(
+    const std::unordered_map<std::string, int> &varIndexMap) const {
+    using namespace Parma_Polyhedra_Library;
+    Linear_Expression e(0);
+    if (getDimension() != 1)
+        ERROR("Only support varDecl's value now.");
+
+    auto varDecl = retrieveVarDecl();
+    if (varDecl == nullopt)
+        ERROR("Failed to retrieve the original varDecl.");
+    auto it = varIndexMap.find(varDecl.value()->getNameAsString());
+    if (it == varIndexMap.end()) {
+        ERROR("Address '" + regularForm() + "' not found in index map.");
+    }
+    e += Parma_Polyhedra_Library::Variable(it->second);
+    return e;
+}
+
 Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr() const {
     auto E = expr_->toLinearExpr();
 
@@ -197,6 +215,13 @@ Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr() const {
 }
 
 Parma_Polyhedra_Library::Linear_Expression Symbolic::Variable::toLinearExpr() const {
+    Parma_Polyhedra_Library::Linear_Expression e(0);
+    auto var = Parma_Polyhedra_Library::Variable(id_);
+    e += var;
+    return e;
+}
+
+Parma_Polyhedra_Library::Linear_Expression Symbolic::Address::toLinearExpr() const {
     Parma_Polyhedra_Library::Linear_Expression e(0);
     auto var = Parma_Polyhedra_Library::Variable(id_);
     e += var;

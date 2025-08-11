@@ -19,6 +19,7 @@
 using namespace acslg;
 
 namespace Symbolic {
+    class Address;
     class Variable;
 
     /// @class SymbolicExpr
@@ -115,6 +116,13 @@ namespace Symbolic {
         /// @return Map from variable ID to Variable pointer.
         virtual std::unordered_map<unsigned int, const Variable *> collectUsedVars() const {
             return std::unordered_map<unsigned int, const Variable *>{};
+        };
+
+        /// @brief Try to evaluate the expression to an address.
+        /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
+        virtual std::optional<std::unique_ptr<Address>> tryEvaluateAsAddress() const {
+            // TODO: cache the result.
+            return std::nullopt;
         };
 
         //===----------------------------------------------------------------------===//
@@ -299,6 +307,7 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
+        virtual std::optional<std::unique_ptr<Address>> tryEvaluateAsAddress() const override;
 
         std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
         // StInG: Support functions for affine invariant analysis
@@ -389,8 +398,6 @@ namespace Symbolic {
         bool isLinear() const override { return false; }
         int getMaxDegree() const override { return 0; }
     };
-
-    class Address;
 
     class Structure : public SymbolicExpr {
       public:
@@ -506,54 +513,8 @@ namespace Symbolic {
     /// Origin can't be nullptr, use monostate or nullopt.
     class Address : public SymbolicExpr {
       public:
-        Address(const Address &other)
-            : SymbolicExpr(other), id_(other.id_),
-              offset_(other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull()) {
-            std::visit(
-                [this](auto &&arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, std::monostate>) {
-                        from_ = std::monostate{};
-                    } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
-                        from_ = arg;
-                    } else if constexpr (std::is_same_v<T,
-                                                        not_null<std::unique_ptr<const Address>>>) {
-                        from_.emplace<2>(std::unique_ptr<Address>{
-                            static_cast<Address *>(arg->clone().release())});
-                    } else if constexpr (std::is_same_v<T, std::pair<not_null<std::shared_ptr<
-                                                                         const Structure::Info>>,
-                                                                     const size_t>>) {
-                        from_.emplace<3>(arg);
-                    }
-                },
-                other.from_);
-        }
-        Address &operator=(const Address &other) {
-            if (this != &other) {
-                SymbolicExpr::operator=(other);
-                id_     = other.id_;
-                offset_ = other.offset_ ? other.offset_->clone() : SymbolicExpr::makeNull();
-                std::visit(
-                    [this](auto &&arg) {
-                        using T = std::decay_t<decltype(arg)>;
-                        if constexpr (std::is_same_v<T, std::monostate>) {
-                            from_ = std::monostate{};
-                        } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
-                            from_ = arg;
-                        } else if constexpr (std::is_same_v<
-                                                 T, not_null<std::unique_ptr<const Address>>>) {
-                            from_.emplace<2>(std::unique_ptr<Address>{
-                                static_cast<Address *>(arg->clone().release())});
-                        } else if constexpr (std::is_same_v<T, std::pair<not_null<std::shared_ptr<
-                                                                             const Structure::Info>>,
-                                                                         const size_t>>) {
-                            from_.emplace<3>(arg);
-                        }
-                    },
-                    other.from_);
-            }
-            return *this;
-        }
+        Address(const Address &other);
+        Address &operator=(const Address &other);
         Address(Address &&)            = delete;
         Address &operator=(Address &&) = delete;
 
@@ -563,52 +524,14 @@ namespace Symbolic {
                 std::variant<std::monostate,
                              const clang::VarDecl *,
                              std::unique_ptr<const Address>,
-                             std::pair<std::shared_ptr<const Structure::Info>, const size_t>> from)
-            : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id),
-              offset_(SymbolicExpr::makeNull()) {
-            std::visit(
-                [this](auto &&arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, std::monostate>) {
-                        from_ = std::monostate{};
-                    } else if constexpr (std::is_same_v<T, const clang::VarDecl *>) {
-                        from_ = arg;
-                    } else if constexpr (std::is_same_v<T, std::unique_ptr<const Address>>) {
-                        from_.emplace<2>(std::move(arg));
-                    } else if constexpr (std::is_same_v<
-                                             T, std::pair<std::shared_ptr<const Structure::Info>,
-                                                          const size_t>>) {
-                        from_.emplace<3>(std::move(arg));
-                    }
-                },
-                from);
-        }
+                             std::pair<std::shared_ptr<const Structure::Info>, const size_t>> from);
 
         Address(unsigned int id,
                 std::unique_ptr<SymbolicExpr> offset,
                 std::variant<std::monostate,
                              const clang::VarDecl *,
                              std::unique_ptr<const Address>,
-                             std::pair<std::shared_ptr<const Structure::Info>, const size_t>> from)
-            : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id),
-              offset_(offset ? std::move(offset) : SymbolicExpr::makeNull()) {
-            std::visit(
-                [this](auto &&arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, std::monostate>) {
-                        from_ = std::monostate{};
-                    } else if constexpr (std::is_same_v<T, const clang::VarDecl *>) {
-                        from_ = arg;
-                    } else if constexpr (std::is_same_v<T, std::unique_ptr<const Address>>) {
-                        from_.emplace<2>(std::move(arg));
-                    } else if constexpr (std::is_same_v<
-                                             T, std::pair<std::shared_ptr<const Structure::Info>,
-                                                          const size_t>>) {
-                        from_.emplace<3>(std::move(arg));
-                    }
-                },
-                from);
-        }
+                             std::pair<std::shared_ptr<const Structure::Info>, const size_t>> from);
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         unsigned int getId() const { return id_; }
@@ -625,20 +548,29 @@ namespace Symbolic {
                                        bool isRightChild                      = false) const;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
+        virtual std::optional<std::unique_ptr<Address>> tryEvaluateAsAddress() const override;
 
         SymbolicExpr *getOffset() const { return offset_.get(); }
         auto getFrom() const -> const auto & { return from_; }
+        int getDimension() const;
         std::size_t hash() const override;
 
         std::string getBaseName() const;
 
-        void setOffset(std::unique_ptr<SymbolicExpr> offset) { offset_ = std::move(offset); }
+        void setOffset(std::unique_ptr<SymbolicExpr> offset);
         void addOffset(std::unique_ptr<SymbolicExpr> extra);
+        void subOffset(std::unique_ptr<SymbolicExpr> extra);
         bool isOffseted() const { return offset_ && offset_->getType() != ExprType::SNULL; }
 
         // StInG: Support functions for affine invariant analysis
-        bool isLinear() const override { return false; }
-        int getMaxDegree() const override { return -1; }
+        bool isLinear() const override { return true; }
+        int getMaxDegree() const override { return 1; }
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
+            const std::unordered_map<std::string, int> &) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
+
+      protected:
+        std::optional<not_null<const clang::VarDecl *>> retrieveVarDecl() const;
 
       private:
         unsigned int id_; ///< This ID is unique within its path, but not globally unique across
@@ -740,6 +672,7 @@ namespace Symbolic {
     BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
     BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
     SymbolicExpr::Type deriveVarType(clang::QualType type);
+    bool isValidOffset(const SymbolicExpr &expr);
 
 } // namespace Symbolic
 

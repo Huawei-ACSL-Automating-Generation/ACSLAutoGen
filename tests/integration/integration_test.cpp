@@ -119,4 +119,44 @@ TEST(IntegrationTest, SyntaxNoDeath) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
+    EXPECT_EXIT(
+        {
+            symbolicExecutionOnFirstFunc(R"(
+    void func(int x, int *pt){
+        x++;
+        ++*(pt+1);
+        int y = *pt + x;
+        return;
+    }
+    )");
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+    EXPECT_EXIT(
+        {
+            symbolicExecutionOnFirstFunc(R"(
+    void func(int x, int *pt){
+        x++;
+        ++pt[2];
+        int y = *pt + x;
+        return;
+    }
+    )");
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+    EXPECT_EXIT(
+        {
+            symbolicExecutionOnFirstFunc(R"(
+    void func(int x, int *pt){
+        x++;
+        pt[1]++;
+        --*(pt+1);
+        int y = ++*(pt+1) + x;
+        return;
+    }
+    )");
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
 }
