@@ -107,7 +107,7 @@ LValueTarget Path::extractLValue(const Expr *lhs) {
             if (addrExpr == nullptr) {
                 ERROR("Met nullptr in EvalResult.");
             }
-            if (auto addr = addrExpr->tryEvaluateAsAddress()) {
+            if (auto addr = addrExpr->tryEvalAsOffsetedAddr()) {
                 if (!memoryState_.contains(*addr.value())) {
                     SymbolicExpr::Type varType = deriveVarType(uop->getType());
                     string varName             = addr.value()->getBaseName() + "[" +
@@ -487,7 +487,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                                 outExprs.emplace_back(std::move(oldVal));
                         } else if (op == UnaryOpExpr::Operator::Dereference) {
                             // *x
-                            auto addr = unExpr->tryEvaluateAsAddress();
+                            auto addr = unExpr->tryEvalAsOffsetedAddr();
                             if (addr == nullopt)
                                 ERROR("Expected Address, got: " << unExpr->dump());
                             if (auto it = path->memoryState_.find(*addr.value());

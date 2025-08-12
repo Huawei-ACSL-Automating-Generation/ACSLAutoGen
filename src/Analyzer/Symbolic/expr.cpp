@@ -44,7 +44,7 @@ std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedExprIfLinear() const {
                                                std::move(varExpr));
         }
     }
-    if (auto inhomo = linearExpr.inhomogeneous_term().get_si()) {
+    if (auto inhomo = linearExpr.inhomogeneous_term().get_si(); inhomo || result == nullptr) {
         if (result != nullptr) {
             result = make_unique<BinaryOpExpr>(std::move(result), (inhomo > 0 ? Add : Subtract),
                                                std::make_unique<LiteralExpr>(abs(inhomo)));
@@ -586,7 +586,9 @@ std::string Symbolic::Structure::regularForm(std::optional<std::string_view> pre
     return info_->regularForm(prefix, suffix);
 }
 
-std::unique_ptr<SymbolicExpr> LiteralExpr::simplifiedExpr() const { return clone(); }
+std::unique_ptr<SymbolicExpr> LiteralExpr::simplifiedExpr() const {
+    return simplifiedExprIfLinear();
+}
 std::unique_ptr<SymbolicExpr> BinaryOpExpr::simplifiedExpr() const {
     if (isLinear())
         return simplifiedExprIfLinear();
@@ -771,8 +773,8 @@ bool Structure::equal(const SymbolicExpr &expr) const {
                               [](auto &lhs, auto &rhs) { return *lhs == *rhs; });
 }
 
-std::optional<std::unique_ptr<Address>> BinaryOpExpr::tryEvaluateAsAddress() const {
-    auto lhs = left_->tryEvaluateAsAddress(), rhs = right_->tryEvaluateAsAddress();
+std::optional<std::unique_ptr<Address>> BinaryOpExpr::tryEvalAsOffsetedAddr() const {
+    auto lhs = left_->tryEvalAsOffsetedAddr(), rhs = right_->tryEvalAsOffsetedAddr();
     if (lhs && rhs)
         return nullopt;
     if (lhs == nullopt && rhs == nullopt)
@@ -806,8 +808,11 @@ std::optional<std::unique_ptr<Address>> BinaryOpExpr::tryEvaluateAsAddress() con
     return addr;
 }
 
-std::optional<std::unique_ptr<Address>> Address::tryEvaluateAsAddress() const {
-    return make_unique<Address>(*this);
+std::optional<std::unique_ptr<Address>> Address::tryEvalAsOffsetedAddr() const {
+    auto result = make_unique<Address>(*this);
+    if (!isOffseted())
+        result->setOffset(make_unique<LiteralExpr>(ZERO_OFFSET));
+    return result;
 }
 
 unordered_map<unsigned int, const Symbolic::Variable *> Symbolic::Variable::collectUsedVars() const {
@@ -1238,7 +1243,7 @@ namespace Symbolic {
     bool isValidOffset(const SymbolicExpr &expr) {
         if (!expr.isLinear())
             return false;
-        if (expr.tryEvaluateAsAddress())
+        if (expr.tryEvalAsOffsetedAddr())
             return false;
         return true;
     }

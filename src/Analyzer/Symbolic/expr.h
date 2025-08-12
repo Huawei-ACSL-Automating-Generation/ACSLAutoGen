@@ -120,7 +120,7 @@ namespace Symbolic {
 
         /// @brief Try to evaluate the expression to an address.
         /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
-        virtual std::optional<std::unique_ptr<Address>> tryEvaluateAsAddress() const {
+        virtual std::optional<std::unique_ptr<Address>> tryEvalAsOffsetedAddr() const {
             // TODO: cache the result.
             return std::nullopt;
         };
@@ -307,7 +307,7 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
-        virtual std::optional<std::unique_ptr<Address>> tryEvaluateAsAddress() const override;
+        virtual std::optional<std::unique_ptr<Address>> tryEvalAsOffsetedAddr() const override;
 
         std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
         // StInG: Support functions for affine invariant analysis
@@ -513,6 +513,11 @@ namespace Symbolic {
     /// Origin can't be nullptr, use monostate or nullopt.
     class Address : public SymbolicExpr {
       public:
+        const signed long ZERO_OFFSET =
+            0; ///< Unify the type of zero under zero offset. This type should be the same as the
+               ///< type of the zero value in SymbolicExpr::simplifiedExprIfLinear, or relax the
+               ///< type comparison in LiteralExpr's equal method.
+
         Address(const Address &other);
         Address &operator=(const Address &other);
         Address(Address &&)            = delete;
@@ -548,7 +553,7 @@ namespace Symbolic {
                                        bool isRightChild                      = false) const;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
-        virtual std::optional<std::unique_ptr<Address>> tryEvaluateAsAddress() const override;
+        virtual std::optional<std::unique_ptr<Address>> tryEvalAsOffsetedAddr() const override;
 
         SymbolicExpr *getOffset() const { return offset_.get(); }
         auto getFrom() const -> const auto & { return from_; }

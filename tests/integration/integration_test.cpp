@@ -14,7 +14,7 @@ using namespace std;
 
 namespace {
     // This code performs minimal safety checks, so please ensure the validity of the input.
-    void symbolicExecutionOnFirstFunc(const string_view code) {
+    unique_ptr<ProgramState> symbolicExecutionOnFirstFunc(const string_view code) {
         ASTExtractor e(code);
         GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
         auto func          = e.findFirstDecl<clang::FunctionDecl>();
@@ -25,6 +25,19 @@ namespace {
             symbolicState->step(stmt);
             DEBUG(symbolicState->dump());
         }
+        return symbolicState;
+    }
+
+    unique_ptr<SymbolicExpr> getReturnExprOfFirstPath(const ProgramState &state) {
+        if (state.getPaths().empty())
+            ERROR("Empty paths_!");
+        auto &firstPath = state.getPaths()[0];
+        if (firstPath == nullptr)
+            ERROR("First path is nullptr!");
+        auto &returnExpr = firstPath->getReturnExpr();
+        if (returnExpr == nullptr)
+            ERROR("ReturnExpr is nullptr!");
+        return returnExpr->clone();
     }
 } // namespace
 
@@ -159,4 +172,26 @@ TEST(IntegrationTest, SyntaxNoDeath) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
+}
+
+TEST(IntegrationTest, CorrectStateWithPointerArithmetic) {
+    auto code = R"(
+    int func(int *pt){
+        *pt = 0;
+        (*pt)++;
+        ++pt;
+        pt -= 1;
+        (*pt)--;
+        return *pt;
+    }
+    )"s;
+    ASSERT_EXIT(
+        {
+            symbolicExecutionOnFirstFunc(code);
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+    auto postState = symbolicExecutionOnFirstFunc(code);
+    ASSERT_EQ(*getReturnExprOfFirstPath(*postState)->simplifiedExpr(),
+              *LiteralExpr{0}.simplifiedExpr());
 }
