@@ -35,7 +35,8 @@ namespace Symbolic {
             BinaryOp,
             UnaryOp,
             SNULL,
-            Structure
+            Structure,
+            Unknown
         };
 
         /// @enum ScalarKind
@@ -68,6 +69,10 @@ namespace Symbolic {
         /// @brief Create a null symbolic expression.
         /// @return Unique pointer to a SNULL expression.
         static std::unique_ptr<SymbolicExpr> makeNull();
+
+        /// @brief Create a unknown symbolic expression.
+        /// @return Unique pointer to a Unknown expression.
+        static std::unique_ptr<SymbolicExpr> makeUnknown();
 
         /// @brief Clone the expression.
         /// @return Deep copy of the expression.
@@ -104,10 +109,6 @@ namespace Symbolic {
             return LHS.equal(RHS);
         }
 
-        friend bool operator!=(const SymbolicExpr &LHS, const SymbolicExpr &RHS) {
-            return !(LHS == RHS);
-        }
-
         /// @brief Get a simplified version of the expression.
         /// @return Simplified expression.
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const = 0;
@@ -124,6 +125,10 @@ namespace Symbolic {
             // TODO: cache the result.
             return std::nullopt;
         };
+
+        /// @brief Is an unknown expression?
+        /// @return
+        virtual bool isUnknown() const { return false; };
 
         //===----------------------------------------------------------------------===//
         // StInG Interface Utilities - Symbolic Expression Adapter
@@ -308,6 +313,9 @@ namespace Symbolic {
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::optional<std::unique_ptr<Address>> tryEvalAsOffsetedAddr() const override;
+        virtual bool isUnknown() const override {
+            return left_->isUnknown() || right_->isUnknown();
+        };
 
         std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
         // StInG: Support functions for affine invariant analysis
@@ -363,6 +371,7 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
+        virtual bool isUnknown() const override { return expr_->isUnknown(); };
 
         std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
         // StInG: Support functions for affine invariant analysis
@@ -393,6 +402,30 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
+
+        // StInG: Support functions for affine invariant analysis
+        bool isLinear() const override { return false; }
+        int getMaxDegree() const override { return 0; }
+    };
+
+    /// @class UnknownExpr
+    /// @brief Represents a unknown symbolic expression, primarily used to denote cases beyond
+    /// capabilities.
+    class UnknownExpr : public SymbolicExpr {
+      public:
+        UnknownExpr() : SymbolicExpr(ExprType::Unknown, {ScalarKind::Void, 0}) {}
+        ~UnknownExpr() = default;
+
+        std::unique_ptr<SymbolicExpr> clone() const override;
+        std::string dump() const override;
+        virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
+                                        std::optional<std::string_view> suffix = std::nullopt,
+                                        int parentPrec                         = 0,
+                                        bool isRightChild = false) const override;
+        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
+        std::size_t hash() const override;
+        virtual bool equal(const SymbolicExpr &expr) const override;
+        virtual bool isUnknown() const override { return true; };
 
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return false; }

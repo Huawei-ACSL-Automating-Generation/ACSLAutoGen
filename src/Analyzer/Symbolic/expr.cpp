@@ -13,6 +13,10 @@ using namespace llvm;
 
 std::unique_ptr<SymbolicExpr> SymbolicExpr::makeNull() { return std::make_unique<NullExpr>(); }
 
+std::unique_ptr<SymbolicExpr> SymbolicExpr::makeUnknown() {
+    return std::make_unique<UnknownExpr>();
+}
+
 std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedExprIfLinear() const {
     if (!isLinear())
         return clone();
@@ -80,6 +84,8 @@ unique_ptr<SymbolicExpr> UnaryOpExpr::clone() const {
 }
 
 unique_ptr<SymbolicExpr> NullExpr::clone() const { return make_unique<NullExpr>(); }
+
+unique_ptr<SymbolicExpr> UnknownExpr::clone() const { return make_unique<UnknownExpr>(); }
 
 std::unique_ptr<SymbolicExpr> Symbolic::Variable::clone() const {
     return std::visit(
@@ -213,6 +219,8 @@ std::size_t Structure::hash() const {
 
 std::size_t NullExpr::hash() const { return static_cast<std::size_t>(getType()); }
 
+std::size_t UnknownExpr::hash() const { return hash_val(getType()); }
+
 std::string LiteralExpr::dump() const {
     std::ostringstream oss;
     switch (getLiteralType()) {
@@ -279,6 +287,8 @@ std::string UnaryOpExpr::dump() const {
 }
 
 std::string NullExpr::dump() const { return "null"; }
+
+std::string UnknownExpr::dump() const { return "{unknown}"; }
 
 std::string Symbolic::Variable::dump() const {
     std::ostringstream oss;
@@ -425,6 +435,14 @@ std::string NullExpr::regularForm(std::optional<std::string_view>,
                                   bool) const {
     WARN("Output NullExpr's regular form, something may go wrong.");
     return "";
+}
+
+std::string UnknownExpr::regularForm(std::optional<std::string_view>,
+                                     std::optional<std::string_view>,
+                                     int,
+                                     bool) const {
+    WARN("Output UnknownExpr's regular form, something may go wrong.");
+    return "{unknown}";
 }
 
 std::string Symbolic::Variable::regularForm(std::optional<std::string_view> prefix,
@@ -589,7 +607,10 @@ std::string Symbolic::Structure::regularForm(std::optional<std::string_view> pre
 std::unique_ptr<SymbolicExpr> LiteralExpr::simplifiedExpr() const {
     return simplifiedExprIfLinear();
 }
+
 std::unique_ptr<SymbolicExpr> BinaryOpExpr::simplifiedExpr() const {
+    if (isUnknown())
+        return makeUnknown();
     if (isLinear())
         return simplifiedExprIfLinear();
     auto LHS = left_->simplifiedExpr();
@@ -598,6 +619,8 @@ std::unique_ptr<SymbolicExpr> BinaryOpExpr::simplifiedExpr() const {
 }
 
 std::unique_ptr<SymbolicExpr> UnaryOpExpr::simplifiedExpr() const {
+    if (isUnknown())
+        return makeUnknown();
     if (isLinear())
         return simplifiedExprIfLinear();
     auto subExpr = expr_->simplifiedExpr();
@@ -608,6 +631,8 @@ std::unique_ptr<SymbolicExpr> NullExpr::simplifiedExpr() const {
     WARN("Met NullExpr in simplifiedExpr, something may go wrong.");
     return makeNull();
 }
+
+std::unique_ptr<SymbolicExpr> UnknownExpr::simplifiedExpr() const { return makeUnknown(); }
 
 std::unique_ptr<SymbolicExpr> Symbolic::Variable::simplifiedExpr() const {
     return simplifiedExprIfLinear();
@@ -647,6 +672,8 @@ bool NullExpr::equal(const SymbolicExpr &expr) const {
 
     return true;
 }
+
+bool UnknownExpr::equal(const SymbolicExpr &) const { return false; }
 
 bool Symbolic::Variable::equal(const SymbolicExpr &expr) const {
     const auto var = dynamic_cast<const Variable *>(&expr);
@@ -1132,13 +1159,15 @@ namespace std {
 
 std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType t) {
     switch (t) {
-        case SymbolicExpr::ExprType::Literal: os << "Literal"; break;
-        case SymbolicExpr::ExprType::Variable: os << "Variable"; break;
-        case SymbolicExpr::ExprType::SymbolAddress: os << "SymbolAddress"; break;
-        case SymbolicExpr::ExprType::BinaryOp: os << "BinaryOp"; break;
-        case SymbolicExpr::ExprType::UnaryOp: os << "UnaryOp"; break;
-        case SymbolicExpr::ExprType::SNULL: os << "SNULL"; break;
-        case SymbolicExpr::ExprType::Structure: os << "Structure"; break;
+        using enum SymbolicExpr::ExprType;
+        case Literal: os << "Literal"; break;
+        case Variable: os << "Variable"; break;
+        case SymbolAddress: os << "SymbolAddress"; break;
+        case BinaryOp: os << "BinaryOp"; break;
+        case UnaryOp: os << "UnaryOp"; break;
+        case SNULL: os << "SNULL"; break;
+        case Structure: os << "Structure"; break;
+        case Unknown: os << "Unknown"; break;
     }
     return os;
 }
