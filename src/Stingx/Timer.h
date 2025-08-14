@@ -32,8 +32,6 @@
 #ifndef __TIMER__H_
 #define __TIMER__H_
 
-using namespace std;
-
 class Timer {
     // implement a rough stop watch capacity to start, stop and freeze.
     // This could of course measure the amount of time doing different things

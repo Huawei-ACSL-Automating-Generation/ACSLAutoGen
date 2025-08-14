@@ -550,6 +550,30 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     ERROR("MemberDecl is not a FieldDecl.");
                 }
             })
+            .Case<ConstantExpr>([this](const ConstantExpr *ce) -> EvalResult {
+                APSInt v;
+                bool ok = false;
+                if (ce->getResultAPValueKind() == APValue::Int) {
+                    v  = ce->getResultAsAPSInt();
+                    ok = (v.getBitWidth() != 0);
+                }
+                if (!ok) {
+                    EvalResult sub = evalExpr(ce->getSubExpr());
+                    if (sub.second.size() != 1)
+                        ERROR("ConstantExpr subExpr produced multiple results");
+                    auto resultTy = deriveVarType(ce->getType());
+                    sub.second[0]->setValType(resultTy);
+                    return {std::move(sub.first), std::move(sub.second)};
+                }
+                auto resultTy = deriveVarType(ce->getType());
+                auto lit      = std::make_unique<LiteralExpr>(
+                    v.isSigned() ? static_cast<int64_t>(v.getSExtValue())
+                                 : static_cast<uint64_t>(v.getZExtValue()));
+                lit->setValType(resultTy);
+                EvalResult r;
+                r.second.emplace_back(std::move(lit));
+                return r;
+            })
             .Default([](const Expr *e) -> EvalResult {
                 UNIMPLEMENT("Unsupported Expr type: " << e->getStmtClassName());
                 return Path::EvalResult{};
@@ -846,6 +870,46 @@ void ProgramState::step(const Stmt *stmt) {
             DEBUG("stepping ContinueStmt...");
             TODO();
         })
+        .Case<NullStmt>([](const NullStmt *) { DEBUG("stepping NullStmt..."); })
+        // .Case<UnaryExprOrTypeTraitExpr>([this](const UnaryExprOrTypeTraitExpr *u) -> EvalResult {
+        //     SymbolicExpr::Type resultTy = deriveVarType(u->getType());
+        //     QualType argTy =
+        //         u->isArgumentType() ? u->getArgumentType() : u->getArgumentExpr()->getType();
+        //     if (argTy->isVariableArrayType())
+        //         UNIMPLEMENT("VLA in sizeof/alignof");
+
+        //     uint64_t value = 0;
+        //     switch (u->getKind()) {
+        //         case UETT_SizeOf:
+        //             value =
+        //                 static_cast<uint64_t>(this->getContext().get(argTy).getQuantity());
+        //             break;
+        //         case UETT_AlignOf:
+        //             value =
+        //                 static_cast<uint64_t>(astContext_.getTypeAlignInChars(argTy).getQuantity());
+        //             break;
+        //         case UETT_PreferredAlignOf:
+        //             value = static_cast<uint64_t>(
+        //                 astContext_.getPreferredTypeAlignInChars(argTy).getQuantity());
+        //             break;
+        //         case UETT_VecStep: {
+        //             if (auto vec = argTy->getAs<VectorType>())
+        //                 value = static_cast<uint64_t>(vec->getNumElements());
+        //             else if (auto ext = argTy->getAs<ExtVectorType>())
+        //                 value = static_cast<uint64_t>(ext->getNumElements());
+        //             else
+        //                 UNIMPLEMENT("vec_step on non-vector");
+        //             break;
+        //         }
+        //         default: UNIMPLEMENT("unsupported unary type trait");
+        //     }
+
+        //     auto lit = std::make_unique<LiteralExpr>(static_cast<uint64_t>(value));
+        //     lit->setValType(resultTy);
+        //     EvalResult R;
+        //     R.second.emplace_back(std::move(lit));
+        //     return R;
+        // })
         .Default(
             [](const Stmt *s) { UNIMPLEMENT("Unsupported Stmt type: " << s->getStmtClassName()); });
     return;
@@ -1125,7 +1189,7 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
                 updatedPaths.push_back(std::move(path));
                 continue;
             }
-            if (auto initListExpr = llvm::dyn_cast<InitListExpr>(initExpr)) {
+            if (auto initListExpr = dyn_cast<InitListExpr>(initExpr)) {
                 auto varType = varDecl->getType();
 
                 if (varType->isAnyPointerType() || varType->isArrayType()) {
@@ -1243,43 +1307,43 @@ void ProgramState::resetState() {
             path->setPathState(Path::PathState::Step);
     }
 }
-
 static void collectCaseBlocks(const CompoundStmt *body,
                               vector<vector<const Stmt *>> &blocks,
                               vector<const Expr *> &conds) {
-    if (!body) {
+    if (!body)
         ERROR("dyn_cast failed for switch body.");
-    }
     blocks.clear();
     conds.clear();
 
-    vector<const Stmt *> currentBlock;
-    const Expr *currentCond = nullptr;
-
-    for (auto *stmt : body->body()) {
-        if (auto *cs = dyn_cast<CaseStmt>(stmt)) {
-            if (!currentBlock.empty()) {
-                blocks.emplace_back(std::move(currentBlock));
-                conds.push_back(currentCond);
-                currentBlock.clear();
+    for (const Stmt *top : body->body()) {
+        if (const CaseStmt *cs = dyn_cast<CaseStmt>(top)) {
+            const CaseStmt *cur = cs;
+            while (cur) {
+                blocks.emplace_back();
+                conds.push_back(cur->getLHS());
+                const Stmt *sub = cur->getSubStmt();
+                if (const CaseStmt *next = dyn_cast<CaseStmt>(sub)) {
+                    cur = next;
+                } else {
+                    if (sub) {
+                        for (size_t i = 0; i < blocks.size(); ++i)
+                            blocks[i].push_back(sub);
+                    }
+                    break;
+                }
             }
-            currentCond = cs->getLHS();
-            currentBlock.push_back(cs->getSubStmt());
-        } else if (auto *ds = dyn_cast<DefaultStmt>(stmt)) {
-            if (!currentBlock.empty()) {
-                blocks.emplace_back(std::move(currentBlock));
-                conds.push_back(currentCond);
-                currentBlock.clear();
+        } else if (const DefaultStmt *ds = dyn_cast<DefaultStmt>(top)) {
+            blocks.emplace_back();
+            conds.push_back(nullptr);
+            const Stmt *sub = ds->getSubStmt();
+            if (sub) {
+                for (size_t i = 0; i < blocks.size(); ++i)
+                    blocks[i].push_back(sub);
             }
-            currentCond = nullptr;
-            currentBlock.push_back(ds->getSubStmt());
         } else {
-            currentBlock.push_back(stmt);
+            for (size_t i = 0; i < blocks.size(); ++i)
+                blocks[i].push_back(top);
         }
-    }
-    if (!currentBlock.empty()) {
-        blocks.emplace_back(std::move(currentBlock));
-        conds.push_back(currentCond);
     }
 }
 
@@ -1306,6 +1370,7 @@ vector<pair<unique_ptr<ProgramState>, unique_ptr<SymbolicExpr>>> ProgramState::s
 
     return result;
 }
+
 void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt) {
     auto partitions = splitStateBySwitchCond(switchStmt->getCond());
     vector<vector<const Stmt *>> blocks;
@@ -1319,7 +1384,6 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt) {
         for (size_t i = 0; i < blocks.size(); ++i) {
             auto &stmts    = blocks[i];
             auto *caseCond = conds[i];
-
             if (caseCond == nullptr) {
                 for (auto *s : stmts)
                     current->step(s);
@@ -1332,6 +1396,7 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt) {
             Path tmpPath;
             auto caseCondEval = tmpPath.evalExpr(caseCond);
             assert(caseCondEval.second.size() == 1);
+
             auto caseSymExpr = std::move(caseCondEval.second[0]);
             auto eqState     = current->clone();
 

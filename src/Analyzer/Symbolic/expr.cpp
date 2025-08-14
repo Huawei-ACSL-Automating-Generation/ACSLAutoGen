@@ -1236,6 +1236,9 @@ namespace Symbolic {
                 }
             })
             .Default([&](QualType QT) -> SymbolicExpr::Type {
+                if (QT->isStructureType()) {
+                    return {SymbolicExpr::ScalarKind::Structure, 0};
+                }
                 UNIMPLEMENT("Unsupported non-builtin type: " << QT.getAsString());
             });
     }
