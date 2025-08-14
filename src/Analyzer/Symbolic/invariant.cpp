@@ -54,18 +54,18 @@ int BinaryOpExpr::getMaxDegree() const {
 Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr(
     const std::unordered_map<std::string, int> &) const {
     using namespace Parma_Polyhedra_Library;
-    switch (type) {
-        case LiteralType::Boolean: return Linear_Expression(data.boolValue ? 1 : 0);
-        case LiteralType::Int: return Linear_Expression(data.intValue);
-        case LiteralType::UnsignedInt: return Linear_Expression(static_cast<int>(data.uintValue));
-        case LiteralType::Short: return Linear_Expression(static_cast<int>(data.shortValue));
+    switch (type_) {
+        case LiteralType::Boolean: return Linear_Expression(data_.boolValue ? 1 : 0);
+        case LiteralType::Int: return Linear_Expression(data_.intValue);
+        case LiteralType::UnsignedInt: return Linear_Expression(static_cast<int>(data_.uintValue));
+        case LiteralType::Short: return Linear_Expression(static_cast<int>(data_.shortValue));
         case LiteralType::UnsignedShort:
-            return Linear_Expression(static_cast<int>(data.ushortValue));
+            return Linear_Expression(static_cast<int>(data_.ushortValue));
         case LiteralType::Int64:
-            return Linear_Expression(static_cast<Coefficient>(data.int64Value));
+            return Linear_Expression(static_cast<Coefficient>(data_.int64Value));
         case LiteralType::UInt64:
-            return Linear_Expression(static_cast<Coefficient>(data.uint64Value));
-        default: throw std::runtime_error("Unsupported LiteralExpr type in toLinearExpr");
+            return Linear_Expression(static_cast<Coefficient>(data_.uint64Value));
+        default: throw std::runtime_error("Unsupported LiteralExpr type_ in toLinearExpr");
     }
 }
 
@@ -129,23 +129,23 @@ Parma_Polyhedra_Library::Linear_Expression Symbolic::Variable::toLinearExpr(
 }
 
 Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr() const {
-    switch (type) {
+    switch (type_) {
         case LiteralType::Boolean:
-            return Parma_Polyhedra_Library::Linear_Expression(data.boolValue ? 1 : 0);
-        case LiteralType::Int: return Parma_Polyhedra_Library::Linear_Expression(data.intValue);
+            return Parma_Polyhedra_Library::Linear_Expression(data_.boolValue ? 1 : 0);
+        case LiteralType::Int: return Parma_Polyhedra_Library::Linear_Expression(data_.intValue);
         case LiteralType::UnsignedInt:
-            return Parma_Polyhedra_Library::Linear_Expression(static_cast<int>(data.uintValue));
+            return Parma_Polyhedra_Library::Linear_Expression(static_cast<int>(data_.uintValue));
         case LiteralType::Short:
-            return Parma_Polyhedra_Library::Linear_Expression(static_cast<int>(data.shortValue));
+            return Parma_Polyhedra_Library::Linear_Expression(static_cast<int>(data_.shortValue));
         case LiteralType::UnsignedShort:
-            return Parma_Polyhedra_Library::Linear_Expression(static_cast<int>(data.ushortValue));
+            return Parma_Polyhedra_Library::Linear_Expression(static_cast<int>(data_.ushortValue));
         case LiteralType::Int64:
             return Parma_Polyhedra_Library::Linear_Expression(
-                static_cast<Parma_Polyhedra_Library::Coefficient>(data.int64Value));
+                static_cast<Parma_Polyhedra_Library::Coefficient>(data_.int64Value));
         case LiteralType::UInt64:
             return Parma_Polyhedra_Library::Linear_Expression(
-                static_cast<Parma_Polyhedra_Library::Coefficient>(data.uint64Value));
-        default: throw std::runtime_error("Unsupported LiteralExpr type in toLinearExpr");
+                static_cast<Parma_Polyhedra_Library::Coefficient>(data_.uint64Value));
+        default: throw std::runtime_error("Unsupported LiteralExpr type_ in toLinearExpr");
     }
 }
 

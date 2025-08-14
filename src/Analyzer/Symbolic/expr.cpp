@@ -63,13 +63,13 @@ std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedExprIfLinear() const {
 
 std::unique_ptr<SymbolicExpr> LiteralExpr::clone() const {
     switch (getLiteralType()) {
-        case LiteralType::Boolean: return std::make_unique<LiteralExpr>(data.boolValue);
-        case LiteralType::Int: return std::make_unique<LiteralExpr>(data.intValue);
-        case LiteralType::UnsignedInt: return std::make_unique<LiteralExpr>(data.uintValue);
-        case LiteralType::Short: return std::make_unique<LiteralExpr>(data.shortValue);
-        case LiteralType::UnsignedShort: return std::make_unique<LiteralExpr>(data.ushortValue);
-        case LiteralType::Int64: return std::make_unique<LiteralExpr>(data.int64Value);
-        case LiteralType::UInt64: return std::make_unique<LiteralExpr>(data.uint64Value);
+        case LiteralType::Boolean: return std::make_unique<LiteralExpr>(data_.boolValue);
+        case LiteralType::Int: return std::make_unique<LiteralExpr>(data_.intValue);
+        case LiteralType::UnsignedInt: return std::make_unique<LiteralExpr>(data_.uintValue);
+        case LiteralType::Short: return std::make_unique<LiteralExpr>(data_.shortValue);
+        case LiteralType::UnsignedShort: return std::make_unique<LiteralExpr>(data_.ushortValue);
+        case LiteralType::Int64: return std::make_unique<LiteralExpr>(data_.int64Value);
+        case LiteralType::UInt64: return std::make_unique<LiteralExpr>(data_.uint64Value);
     }
 
     UNREACHABLE();
@@ -130,68 +130,55 @@ std::unique_ptr<SymbolicExpr> Structure::clone() const {
     return std::make_unique<Structure>(*this);
 }
 
-std::size_t LiteralExpr::hash() const {
-    std::size_t seed = static_cast<std::size_t>(getType());
-    seed ^= static_cast<std::size_t>(type) + 0x9e3779b9;
+std::size_t LiteralExpr::intraPathHash() const {
+    std::size_t seed = hash_val(getType(), type_);
 
-    switch (type) {
-        case LiteralType::Boolean: return seed ^ std::hash<bool>{}(data.boolValue);
-        case LiteralType::Int: return seed ^ std::hash<int>{}(data.intValue);
-        case LiteralType::UnsignedInt: return seed ^ std::hash<unsigned int>{}(data.uintValue);
-        case LiteralType::Short: return seed ^ std::hash<short>{}(data.shortValue);
-        case LiteralType::UnsignedShort:
-            return seed ^ std::hash<unsigned short>{}(data.ushortValue);
-        case LiteralType::Int64: return seed ^ std::hash<int64_t>{}(data.int64Value);
-        case LiteralType::UInt64: return seed ^ std::hash<uint64_t>{}(data.uint64Value);
+    switch (type_) {
+        using enum LiteralType;
+        case Boolean: return acslg::hash_val(seed, data_.boolValue);
+        case Int: return acslg::hash_val(seed, data_.intValue);
+        case UnsignedInt: return acslg::hash_val(seed, data_.uintValue);
+        case Short: return acslg::hash_val(seed, data_.shortValue);
+        case UnsignedShort: return acslg::hash_val(seed, data_.ushortValue);
+        case Int64: return acslg::hash_val(seed, data_.int64Value);
+        case UInt64: return acslg::hash_val(seed, data_.uint64Value);
+        default: ERROR("Wrong type.");
     }
-    return seed;
 }
 
 int64_t LiteralExpr::getLiteralValue() const {
     switch (getLiteralType()) {
-        case LiteralType::Boolean: return data.boolValue;
-        case LiteralType::Int: return data.intValue;
-        case LiteralType::UnsignedInt: return data.uintValue;
-        case LiteralType::Short: return data.shortValue;
-        case LiteralType::UnsignedShort: return data.ushortValue;
-        case LiteralType::Int64: return data.int64Value;
-        case LiteralType::UInt64: return data.uint64Value;
+        case LiteralType::Boolean: return data_.boolValue;
+        case LiteralType::Int: return data_.intValue;
+        case LiteralType::UnsignedInt: return data_.uintValue;
+        case LiteralType::Short: return data_.shortValue;
+        case LiteralType::UnsignedShort: return data_.ushortValue;
+        case LiteralType::Int64: return data_.int64Value;
+        case LiteralType::UInt64: return data_.uint64Value;
     }
 
     UNREACHABLE();
     return 0;
 }
 
-std::size_t Symbolic::Variable::hash() const {
-    std::size_t seed = static_cast<std::size_t>(getType());
-    seed ^= std::hash<int>{}(id_);
-    seed ^= static_cast<std::size_t>(varType_.kind) + varType_.bitWidth;
-    return seed;
+std::size_t Symbolic::Variable::intraPathHash() const {
+    return hash_val(getType(), id_, varType_.kind, varType_.bitWidth);
 }
 
-std::size_t UnaryOpExpr::hash() const {
-    std::size_t seed = static_cast<std::size_t>(getType());
-    seed ^= static_cast<std::size_t>(op_);
-    seed ^= expr_->hash();
-    return seed;
+std::size_t UnaryOpExpr::intraPathHash() const {
+    return hash_val(getType(), static_cast<std::size_t>(op_), expr_->intraPathHash());
 }
 
-std::size_t BinaryOpExpr::hash() const {
-    std::size_t seed = static_cast<std::size_t>(getType());
-    seed ^= left_->hash();
-    seed ^= static_cast<std::size_t>(op_) + 0x9e3779b9;
-    seed ^= right_->hash();
-    return seed;
+std::size_t BinaryOpExpr::intraPathHash() const {
+    return hash_val(getType(), static_cast<std::size_t>(op_), left_->intraPathHash(),
+                    right_->intraPathHash());
 }
 
-std::size_t Address::hash() const {
-    std::size_t seed = static_cast<std::size_t>(getType());
-    seed ^= std::hash<unsigned int>{}(id_);
-    seed ^= offset_ ? offset_->hash() : 0;
-    return seed;
+std::size_t Address::intraPathHash() const {
+    return hash_val(getType(), id_, offset_ ? offset_->intraPathHash() : 0);
 }
 
-std::size_t Structure::Info::hash() const {
+std::size_t Structure::Info::interPathHash() const {
     std::size_t seed = acslg::hash_val(definition_.get());
     std::visit(
         [&](auto &&arg) {
@@ -199,40 +186,117 @@ std::size_t Structure::Info::hash() const {
             if constexpr (std::is_same_v<T, std::monostate>) {
                 /* do nothing */
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                seed = acslg::hash_val(seed, arg->hash());
+                seed = acslg::hash_val(seed, arg->interPathHash());
             } else if constexpr (std::is_same_v<
                                      T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
                                                   const size_t>>) {
-                seed = acslg::hash_val(seed, arg.first->hash(), arg.second);
+                seed = acslg::hash_val(seed, arg.first->interPathHash(), arg.second);
             }
         },
         from_);
     return seed;
 }
 
-std::size_t Structure::hash() const {
-    auto seed = info_->hash();
+std::size_t Structure::intraPathHash() const {
+    auto seed = acslg::hash_val(getType(), info_->definition_.get(), id_);
     for (auto &field : fields_)
-        seed = acslg::hash_val(seed, field->hash());
+        seed = acslg::hash_val(seed, field->intraPathHash());
     return seed;
 }
 
-std::size_t NullExpr::hash() const { return static_cast<std::size_t>(getType()); }
+std::size_t NullExpr::intraPathHash() const { return hash_val(getType()); }
 
-std::size_t UnknownExpr::hash() const { return hash_val(getType()); }
+std::size_t UnknownExpr::intraPathHash() const { return hash_val(getType()); }
+
+std::size_t LiteralExpr::interPathHash() const {
+    std::size_t seed = hash_val(getType(), type_);
+
+    switch (type_) {
+        using enum LiteralType;
+        case Boolean: return acslg::hash_val(seed, data_.boolValue);
+        case Int: return acslg::hash_val(seed, data_.intValue);
+        case UnsignedInt: return acslg::hash_val(seed, data_.uintValue);
+        case Short: return acslg::hash_val(seed, data_.shortValue);
+        case UnsignedShort: return acslg::hash_val(seed, data_.ushortValue);
+        case Int64: return acslg::hash_val(seed, data_.int64Value);
+        case UInt64: return acslg::hash_val(seed, data_.uint64Value);
+        default: ERROR("Wrong type.");
+    }
+}
+
+std::size_t Symbolic::Variable::interPathHash() const {
+    size_t seed = hash_val(getType());
+    std::visit(
+        [&](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                /* do nothing */
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                seed = acslg::hash_val(seed, arg->interPathHash());
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                seed = acslg::hash_val(seed, arg.first->interPathHash(), arg.second);
+            }
+        },
+        from_);
+    return seed;
+}
+
+std::size_t UnaryOpExpr::interPathHash() const {
+    return hash_val(getType(), static_cast<std::size_t>(op_), expr_->interPathHash());
+}
+
+std::size_t BinaryOpExpr::interPathHash() const {
+    return hash_val(getType(), static_cast<std::size_t>(op_), left_->interPathHash(),
+                    right_->interPathHash());
+}
+
+std::size_t Address::interPathHash() const {
+    std::size_t seed = hash_val(getType(), offset_ ? offset_->interPathHash() : 0);
+
+    std::visit(
+        [&](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                /* do nothing */
+            } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                seed = acslg::hash_val(seed, arg.get());
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                seed = acslg::hash_val(seed, arg->interPathHash());
+            } else if constexpr (std::is_same_v<
+                                     T, std::pair<not_null<shared_ptr<const Structure::Info>>,
+                                                  const size_t>>) {
+                seed = acslg::hash_val(seed, arg.first->interPathHash(), arg.second);
+            }
+        },
+        from_);
+    return seed;
+}
+
+std::size_t Structure::interPathHash() const {
+    auto seed = acslg::hash_val(getType(), info_->interPathHash());
+    for (auto &field : fields_)
+        seed = acslg::hash_val(seed, field->interPathHash());
+    return seed;
+}
+
+std::size_t NullExpr::interPathHash() const { return hash_val(getType()); }
+
+std::size_t UnknownExpr::interPathHash() const { return hash_val(getType()); }
 
 std::string LiteralExpr::dump() const {
     std::ostringstream oss;
     switch (getLiteralType()) {
         case LiteralType::Boolean:
-            oss << "Boolean(" << (data.boolValue ? "true" : "false") << ")";
+            oss << "Boolean(" << (data_.boolValue ? "true" : "false") << ")";
             break;
-        case LiteralType::Int: oss << "Int(" << data.intValue << ")"; break;
-        case LiteralType::UnsignedInt: oss << "UnsignedInt(" << data.uintValue << ")"; break;
-        case LiteralType::Short: oss << "Short(" << data.shortValue << ")"; break;
-        case LiteralType::UnsignedShort: oss << "UnsignedShort(" << data.ushortValue << ")"; break;
-        case LiteralType::Int64: oss << "Int64(" << data.int64Value << ")"; break;
-        case LiteralType::UInt64: oss << "Uint64(" << data.uint64Value << ")"; break;
+        case LiteralType::Int: oss << "Int(" << data_.intValue << ")"; break;
+        case LiteralType::UnsignedInt: oss << "UnsignedInt(" << data_.uintValue << ")"; break;
+        case LiteralType::Short: oss << "Short(" << data_.shortValue << ")"; break;
+        case LiteralType::UnsignedShort: oss << "UnsignedShort(" << data_.ushortValue << ")"; break;
+        case LiteralType::Int64: oss << "Int64(" << data_.int64Value << ")"; break;
+        case LiteralType::UInt64: oss << "Uint64(" << data_.uint64Value << ")"; break;
     }
 
     return oss.str();
@@ -370,13 +434,13 @@ std::string LiteralExpr::regularForm(std::optional<std::string_view>,
                                      bool) const {
     std::ostringstream oss;
     switch (getLiteralType()) {
-        case LiteralType::Boolean: oss << (data.boolValue ? "true" : "false"); break;
-        case LiteralType::Int: oss << data.intValue; break;
-        case LiteralType::UnsignedInt: oss << data.uintValue; break;
-        case LiteralType::Short: oss << data.shortValue; break;
-        case LiteralType::UnsignedShort: oss << data.ushortValue; break;
-        case LiteralType::Int64: oss << data.int64Value; break;
-        case LiteralType::UInt64: oss << data.uint64Value; break;
+        case LiteralType::Boolean: oss << (data_.boolValue ? "true" : "false"); break;
+        case LiteralType::Int: oss << data_.intValue; break;
+        case LiteralType::UnsignedInt: oss << data_.uintValue; break;
+        case LiteralType::Short: oss << data_.shortValue; break;
+        case LiteralType::UnsignedShort: oss << data_.ushortValue; break;
+        case LiteralType::Int64: oss << data_.int64Value; break;
+        case LiteralType::UInt64: oss << data_.uint64Value; break;
     }
     return oss.str();
 }
@@ -646,7 +710,7 @@ bool LiteralExpr::equal(const SymbolicExpr &expr) const {
     if (!liter)
         return false;
 
-    return type == liter->type && getLiteralValue() == liter->getLiteralValue();
+    return type_ == liter->type_ && getLiteralValue() == liter->getLiteralValue();
 }
 
 bool BinaryOpExpr::equal(const SymbolicExpr &expr) const {

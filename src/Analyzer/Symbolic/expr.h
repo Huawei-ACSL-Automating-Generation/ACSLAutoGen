@@ -97,7 +97,16 @@ namespace Symbolic {
         /// @param other Expression to compare.
         /// @return True if equal.
         virtual bool equal(const SymbolicExpr &) const = 0;
-        virtual std::size_t hash() const               = 0;
+
+        /// @brief The intra-path hash – leveraging unique IDs of Address and Variable – has lower
+        /// computational overhead.
+        /// @return
+        virtual std::size_t intraPathHash() const = 0;
+
+        /// @brief The inter-path hash – computed recursively via from_ – is used for SymbolicExpr
+        /// comparison/storage between pathes and incurs higher computational cost.
+        /// @return
+        virtual std::size_t interPathHash() const = 0;
 
         friend std::ostream &operator<<(std::ostream &os, const SymbolicExpr &expr) {
             return os << expr.dump();
@@ -189,43 +198,43 @@ namespace Symbolic {
         };
 
         LiteralExpr(bool value)
-            : SymbolicExpr(ExprType::Literal, {ScalarKind::Bool, 1}), type(LiteralType::Boolean) {
-            data.boolValue = value;
+            : SymbolicExpr(ExprType::Literal, {ScalarKind::Bool, 1}), type_(LiteralType::Boolean) {
+            data_.boolValue = value;
         }
 
         LiteralExpr(int value)
-            : SymbolicExpr(ExprType::Literal, {ScalarKind::Int, 32}), type(LiteralType::Int) {
-            data.intValue = value;
+            : SymbolicExpr(ExprType::Literal, {ScalarKind::Int, 32}), type_(LiteralType::Int) {
+            data_.intValue = value;
         }
 
         LiteralExpr(unsigned int value)
             : SymbolicExpr(ExprType::Literal, {ScalarKind::UInt, 32}),
-              type(LiteralType::UnsignedInt) {
-            data.uintValue = value;
+              type_(LiteralType::UnsignedInt) {
+            data_.uintValue = value;
         }
 
         LiteralExpr(short value)
-            : SymbolicExpr(ExprType::Literal, {ScalarKind::Int, 16}), type(LiteralType::Short) {
-            data.shortValue = value;
+            : SymbolicExpr(ExprType::Literal, {ScalarKind::Int, 16}), type_(LiteralType::Short) {
+            data_.shortValue = value;
         }
 
         LiteralExpr(unsigned short value)
             : SymbolicExpr(ExprType::Literal, {ScalarKind::UInt, 16}),
-              type(LiteralType::UnsignedShort) {
-            data.ushortValue = value;
+              type_(LiteralType::UnsignedShort) {
+            data_.ushortValue = value;
         }
 
         LiteralExpr(int64_t value)
-            : SymbolicExpr(ExprType::Literal, {ScalarKind::Int, 64}), type(LiteralType::Int64) {
-            data.int64Value = value;
+            : SymbolicExpr(ExprType::Literal, {ScalarKind::Int, 64}), type_(LiteralType::Int64) {
+            data_.int64Value = value;
         }
 
         LiteralExpr(uint64_t value)
-            : SymbolicExpr(ExprType::Literal, {ScalarKind::UInt, 64}), type(LiteralType::UInt64) {
-            data.uint64Value = value;
+            : SymbolicExpr(ExprType::Literal, {ScalarKind::UInt, 64}), type_(LiteralType::UInt64) {
+            data_.uint64Value = value;
         }
 
-        LiteralType getLiteralType() const { return type; }
+        LiteralType getLiteralType() const { return type_; }
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
@@ -234,7 +243,8 @@ namespace Symbolic {
                                         int parentPrec                         = 0,
                                         bool isRightChild = false) const override;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
-        std::size_t hash() const override;
+        std::size_t intraPathHash() const override;
+        virtual std::size_t interPathHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
         // StInG: Support functions for affine invariant analysis
@@ -246,7 +256,7 @@ namespace Symbolic {
         int64_t getLiteralValue() const;
 
       private:
-        LiteralType type;
+        LiteralType type_;
         union Data {
             bool boolValue;
             int intValue;
@@ -258,7 +268,7 @@ namespace Symbolic {
 
             Data() {}
             ~Data() {}
-        } data;
+        } data_;
     };
 
     /// @class BinaryOpExpr
@@ -310,7 +320,8 @@ namespace Symbolic {
                                         int parentPrec                         = 0,
                                         bool isRightChild = false) const override;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
-        std::size_t hash() const override;
+        std::size_t intraPathHash() const override;
+        virtual std::size_t interPathHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::optional<std::unique_ptr<Address>> tryEvalAsOffsetedAddr() const override;
         virtual bool isUnknown() const override {
@@ -369,7 +380,8 @@ namespace Symbolic {
                                         int parentPrec                         = 0,
                                         bool isRightChild = false) const override;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
-        std::size_t hash() const override;
+        std::size_t intraPathHash() const override;
+        virtual std::size_t interPathHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return expr_->isUnknown(); };
 
@@ -400,7 +412,8 @@ namespace Symbolic {
                                         int parentPrec                         = 0,
                                         bool isRightChild = false) const override;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
-        std::size_t hash() const override;
+        std::size_t intraPathHash() const override;
+        virtual std::size_t interPathHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
         // StInG: Support functions for affine invariant analysis
@@ -423,7 +436,8 @@ namespace Symbolic {
                                         int parentPrec                         = 0,
                                         bool isRightChild = false) const override;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
-        std::size_t hash() const override;
+        std::size_t intraPathHash() const override;
+        virtual std::size_t interPathHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return true; };
 
@@ -478,12 +492,13 @@ namespace Symbolic {
                                            int parentPrec                         = 0,
                                            bool isRightChild                      = false) const;
             bool equal(const Structure::Info &other) const;
-            std::size_t hash() const;
+            std::size_t interPathHash() const;
             std::string dump() const;
             size_t getNumFields() const { return layout_.getFieldCount(); }
         };
 
-        Structure(const clang::RecordDecl *RD,
+        Structure(unsigned int id,
+                  const clang::RecordDecl *RD,
                   const clang::ASTRecordLayout &layout,
                   std::variant<std::monostate,
                                std::unique_ptr<const Address>,
@@ -492,11 +507,12 @@ namespace Symbolic {
                            Type{ScalarKind::Structure,
                                 static_cast<unsigned>(layout.getSize().getQuantity()) *
                                     8 /*By default, char is 8-bit.*/}),
-              info_(make_shared<Info>(RD, layout, std::move(from))) {
+              id_(id), info_(make_shared<Info>(RD, layout, std::move(from))) {
             fields_.resize(info_->layout_.getFieldCount());
         }
 
-        Structure(const Structure &other) : SymbolicExpr(other), info_(other.info_) {
+        Structure(const Structure &other)
+            : SymbolicExpr(other), id_(other.id_), info_(other.info_) {
             fields_.resize(other.fields_.size());
             std::ranges::transform(other.fields_, fields_.begin(), [](auto &field) {
                 return field == nullptr ? nullptr : field->clone();
@@ -523,7 +539,8 @@ namespace Symbolic {
                                 int parentPrec                         = 0,
                                 bool isRightChild                      = false) const override;
         std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
-        std::size_t hash() const override;
+        std::size_t intraPathHash() const override;
+        virtual std::size_t interPathHash() const override;
         bool equal(const SymbolicExpr &expr) const override;
 
         // StInG: Support functions for affine invariant analysis
@@ -537,6 +554,7 @@ namespace Symbolic {
         }
 
       private:
+        unsigned int id_;
         not_null<std::shared_ptr<Info>> info_;
         std::vector<std::unique_ptr<SymbolicExpr>> fields_;
     };
@@ -591,8 +609,8 @@ namespace Symbolic {
         SymbolicExpr *getOffset() const { return offset_.get(); }
         auto getFrom() const -> const auto & { return from_; }
         int getDimension() const;
-        std::size_t hash() const override;
-
+        std::size_t intraPathHash() const override;
+        virtual std::size_t interPathHash() const override;
         std::string getBaseName() const;
 
         void setOffset(std::unique_ptr<SymbolicExpr> offset);
@@ -624,7 +642,7 @@ namespace Symbolic {
     };
 
     struct AddressHash {
-        std::size_t operator()(const Address &addr) const noexcept { return addr.hash(); }
+        std::size_t operator()(const Address &addr) const noexcept { return addr.intraPathHash(); }
     };
 
     struct AddressEqual {
@@ -675,7 +693,8 @@ namespace Symbolic {
                                         int parentPrec                         = 0,
                                         bool isRightChild = false) const override;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
-        std::size_t hash() const override;
+        std::size_t intraPathHash() const override;
+        virtual std::size_t interPathHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         auto getFrom() const -> const auto & { return from_; }
 

@@ -688,7 +688,8 @@ void ProgramState::init() {
                 ERROR("Incomplete definited structure.");
             RD           = RD->getDefinition();
             auto &layout = RD->getASTContext().getASTRecordLayout(RD);
-            auto st      = make_unique<Structure>(RD, layout, make_unique<Address>(*addr));
+            auto st      = make_unique<Structure>(initPath->getNextStructureId(), RD, layout,
+                                                  make_unique<Address>(*addr));
 
             auto structureSymbolizeInit = [&initPath](auto f, Structure &stToInit) -> void {
                 std::ranges::transform(
@@ -702,7 +703,7 @@ void ProgramState::init() {
                             auto &layout_nested =
                                 RD_nested->getASTContext().getASTRecordLayout(RD_nested);
                             auto st_nested = make_unique<Structure>(
-                                RD_nested, layout_nested,
+                                initPath->getNextStructureId(), RD_nested, layout_nested,
                                 make_pair<std::shared_ptr<const Structure::Info>, const size_t>(
                                     stToInit.getInfo().get(), fieldDecl->getFieldIndex()));
                             f(f, *st_nested);
@@ -1181,7 +1182,8 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
                         ERROR("Struct with incomplete definition!");
 
                     RD      = RD->getDefinition();
-                    auto st = make_unique<Structure>(RD, RD->getASTContext().getASTRecordLayout(RD),
+                    auto st = make_unique<Structure>(path->getNextStructureId(), RD,
+                                                     RD->getASTContext().getASTRecordLayout(RD),
                                                      make_unique<Address>(*varAddr_));
                     path->updateVarState(varDecl, std::move(st));
                 }
@@ -1200,7 +1202,8 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
                         ERROR("Struct with incomplete definition!");
 
                     RD      = RD->getDefinition();
-                    auto st = make_unique<Structure>(RD, RD->getASTContext().getASTRecordLayout(RD),
+                    auto st = make_unique<Structure>(path->getNextStructureId(), RD,
+                                                     RD->getASTContext().getASTRecordLayout(RD),
                                                      make_unique<Address>(*varAddr_));
                     if (initListExpr->getNumInits() != st->getNumFields())
                         ERROR("Initializer list size mismatches the struct's field count.");

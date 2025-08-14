@@ -65,6 +65,7 @@ class Path {
     auto getReturnExpr() const -> const auto & { return returnExpr_; }
     auto getPathState() const -> const auto & { return currentState_; }
     auto getAddrCounter() const -> const auto & { return symbolVarAndAddrCounter_; }
+    auto getNextStructureId() { return structureCounter_++; }
 
   private:
     // Map: variable record definition ID -> corresponding symbolic address.
@@ -84,6 +85,10 @@ class Path {
     std::unique_ptr<SymbolicExpr> returnExpr_ = std::make_unique<NullExpr>();
 
     unsigned int symbolVarAndAddrCounter_ = 0;
+
+    // The Structure's counter is decoupled from the Variable and Address's counter to prevent
+    // interference with the ppl library's computations.
+    unsigned int structureCounter_ = 0;
 };
 
 class ProgramState {
