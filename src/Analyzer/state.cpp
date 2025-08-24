@@ -27,8 +27,11 @@ Path::Path(const Path &other, bool shallowCopy) {
         for (const auto &cond : other.pathConditions_) {
             pathConditions_.push_back(cond->clone());
         }
-        currentState_            = other.currentState_;
-        returnExpr_              = other.returnExpr_->clone();
+        currentState_ = other.currentState_;
+        if (other.returnExpr_)
+            returnExpr_.emplace(other.returnExpr_.value()->clone());
+        else
+            returnExpr_ = std::nullopt;
         symbolVarAndAddrCounter_ = other.symbolVarAndAddrCounter_;
     } else {
         TODO();
@@ -49,10 +52,10 @@ void Path::resymbolize() {
                 varDecl->getNameAsString(), derived, symbolVarAndAddrCounter_++,
                 std::unique_ptr<Address>(static_cast<Address *>(addr->clone().release())));
 
-            memoryState_[*addr] = std::move(newExpr);
+            memoryState_.write(*addr, std::move(newExpr));
         } else if (varType->isPointerType()) {
-            auto pointeeAddr    = allocMemory(*addr);
-            memoryState_[*addr] = std::move(pointeeAddr);
+            auto pointeeAddr = allocMemory(*addr);
+            memoryState_.write(*addr, std::move(pointeeAddr));
         } else {
             TODO();
         }
@@ -73,13 +76,13 @@ LValueTarget Path::extractLValue(const Expr *lhs) {
             } else {
                 ERROR("varState has no ArraySubscriptExpr's base, undefined variable?");
             }
-            if (auto symbol = memoryState_.find(*variableAddr); symbol != memoryState_.end()) {
-                auto ptr = dynamic_cast<Address *>(symbol->second.get());
+            if (auto symbol = memoryState_.read(*variableAddr)) {
+                auto ptr = dynamic_cast<Address *>(symbol.get());
                 if (ptr == nullptr)
                     ERROR("Value of ArraySubscriptExpr's base is not 'Address', base is neither "
                           "pointer nor "
                           "array?");
-                addr = make_unique<Address>(*ptr);
+                addr = unique_ptr<Address>{static_cast<Address *>(symbol.release())};
             } else {
                 ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither pointer nor "
                       "array?");
@@ -108,16 +111,15 @@ LValueTarget Path::extractLValue(const Expr *lhs) {
                 ERROR("Met nullptr in EvalResult.");
             }
             if (auto addr = addrExpr->tryEvalAsOffsetedAddr()) {
-                if (!memoryState_.contains(*addr.value())) {
+                if (memoryState_.read(*addr) == nullptr) {
                     SymbolicExpr::Type varType = deriveVarType(uop->getType());
-                    string varName             = addr.value()->getBaseName() + "[" +
-                                     addr.value()->getOffset()->dump() +
+                    string varName = addr->getBaseName() + "[" + addr->getOffset()->dump() +
                                      "]"; // TODO: impl function to get pointer/array base name.
                     auto varExpr = std::make_unique<Symbolic::Variable>(
-                        varName, varType, getNextSymVarId(), make_unique<Address>(*addr.value()));
-                    memoryState_.emplace(*addr.value(), std::move(varExpr));
+                        varName, varType, getNextSymVarId(), make_unique<Address>(*addr));
+                    memoryState_.write(*addr, std::move(varExpr));
                 }
-                return std::move(addr.value());
+                return addr;
             } else {
                 ERROR("Expected Address in deref, got: " << addrExpr->dump());
             }
@@ -129,11 +131,12 @@ LValueTarget Path::extractLValue(const Expr *lhs) {
 
 unique_ptr<Address> Path::extractAddress(const Expr *lhs) {
     auto lv = extractLValue(lhs);
-    if (auto varPtr = get_if<const VarDecl *>(&lv))
+    if (auto varPtr = get_if<const VarDecl *>(&lv)) {
+        assert(*varPtr != nullptr);
         return unique_ptr<Address>(static_cast<Address *>(varAddr_[*varPtr]->clone().release()));
+    }
     if (auto addrPtr = get_if<unique_ptr<Address>>(&lv)) {
-        if (!memoryState_.contains(**addrPtr)) {}
-
+        assert(*addrPtr != nullptr);
         return std::move(*addrPtr);
     }
     UNIMPLEMENT("extractAddress: unsupported lvalue for address");
@@ -145,11 +148,11 @@ unique_ptr<SymbolicExpr> Path::getVarState(const VarDecl *var) const {
     if (varIt == varAddr_.end())
         ERROR("Variable '" + canonicalVar->getNameAsString() + "' has no allocated address");
     auto addr  = varIt->second.get();
-    auto memIt = memoryState_.find(*addr);
-    if (memIt == memoryState_.end())
+    auto value = memoryState_.read(*addr);
+    if (value == nullptr)
         ERROR("Variable '" + canonicalVar->getNameAsString() +
               "' has no memory state entry for allocated address");
-    return memIt->second->clone();
+    return value;
 }
 
 const Formulas &Path::getPathConditions() const { return pathConditions_; }
@@ -162,36 +165,33 @@ Address *Path::allocMemory(const VarDecl *var) {
     Address *rawPtr = newAddr.get();
     varAddr_.emplace(canonicalVar, std::move(newAddr));
 
-    memoryState_.emplace(*rawPtr, make_unique<NullExpr>());
+    // Prevent uninitialized variables.
+    memoryState_.write(*rawPtr, SymbolicExpr::makeUnknown());
     return rawPtr;
 }
 
 unique_ptr<Address> Path::allocMemory(const Address &from) {
-    return make_unique<Address>(
-        symbolVarAndAddrCounter_++,
-        std::unique_ptr<Address>(static_cast<Address *>(from.clone().release())));
+    return make_unique<Address>(symbolVarAndAddrCounter_++,
+                                std::unique_ptr<Address>(make_unique<Address>(from)));
 }
 
 void Path::updateMemory(Address *addr, unique_ptr<SymbolicExpr> expr) {
-    if (!expr)
-        expr = make_unique<NullExpr>();
-    memoryState_[*addr] = std::move(expr);
+    if (expr == nullptr)
+        ERROR("Expr is nullptr!");
+    memoryState_.write(*addr, std::move(expr));
 }
 
 void Path::updateVarState(const VarDecl *var, unique_ptr<SymbolicExpr> expr) {
-    unique_ptr<SymbolicExpr> exprPtr;
-    if (expr)
-        exprPtr = std::move(expr);
-    else
-        exprPtr = make_unique<NullExpr>();
+    if (expr == nullptr)
+        ERROR("Expr is nullptr!");
 
     auto canonicalVar = var->getCanonicalDecl();
     auto addrIt       = varAddr_.find(canonicalVar);
     if (addrIt == varAddr_.end())
         ERROR("Variable has no allocated address");
 
-    auto &addr          = addrIt->second;
-    memoryState_[*addr] = std::move(exprPtr);
+    auto &addr = addrIt->second;
+    memoryState_.write(*addr, std::move(expr));
 }
 
 void Path::insertPathCondition(unique_ptr<SymbolicExpr> cond) {
@@ -206,11 +206,13 @@ unique_ptr<Path> Path::clone() const {
     for (const auto &entry : varAddr_)
         cloned->varAddr_.emplace(entry.first, unique_ptr<Address>(static_cast<Address *>(
                                                   entry.second->clone().release())));
-    for (const auto &entry : memoryState_)
-        cloned->memoryState_.emplace(entry.first, entry.second->clone());
+    cloned->memoryState_ = memoryState_;
     for (const auto &cond : pathConditions_)
         cloned->pathConditions_.push_back(cond->clone());
-    cloned->returnExpr_              = returnExpr_->clone();
+    if (returnExpr_)
+        cloned->returnExpr_.emplace(returnExpr_.value()->clone());
+    else
+        cloned->returnExpr_ = nullopt;
     cloned->symbolVarAndAddrCounter_ = symbolVarAndAddrCounter_;
     cloned->StmtCtx                  = StmtCtx;
     return cloned;
@@ -330,14 +332,14 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
 
                 unique_ptr<Address> variableAddr = extractAddress(arrSub->getBase());
                 unique_ptr<Address> addr;
-                if (auto symbol = memoryState_.find(*variableAddr); symbol != memoryState_.end()) {
-                    auto ptr = dynamic_cast<Address *>(symbol->second.get());
+                if (auto symbol = memoryState_.read(*variableAddr)) {
+                    auto ptr = dynamic_cast<const Address *>(symbol.get());
                     if (ptr == nullptr)
                         ERROR(
                             "Value of ArraySubscriptExpr's base is not 'Address', base is neither "
                             "pointer nor "
                             "array?");
-                    addr = unique_ptr<Address>(static_cast<Address *>(ptr->clone().release()));
+                    addr = unique_ptr<Address>{static_cast<Address *>(symbol.release())};
                 } else {
                     ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither pointer "
                           "nor "
@@ -354,18 +356,17 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     string idxDump = idxExpr->dump();
                     auto newAddr   = make_unique<Address>(*addr);
                     newAddr->setOffset(std::move(idxExpr));
-                    auto it = memoryState_.find(*newAddr);
-                    if (it == memoryState_.end()) {
+                    if (auto value = memoryState_.read(*newAddr); value == nullptr) {
                         string varName = baseName + "[" + idxDump +
                                          "]"; // TODO: impl function to get pointer/array base name.
                         auto varExpr = make_unique<Symbolic::Variable>(
                             varName, varType, symbolVarAndAddrCounter_++,
                             unique_ptr<Address>(
                                 static_cast<Address *>(newAddr->clone().release())));
-                        it = memoryState_.emplace(*newAddr, varExpr->clone()).first;
+                        memoryState_.write(*newAddr, varExpr->clone());
                         outExprs.emplace_back(std::move(varExpr));
                     } else {
-                        outExprs.emplace_back(it->second->clone());
+                        outExprs.emplace_back(std::move(value));
                     }
                     if (i > 0)
                         outPaths.emplace_back(std::move(idx.first[i - 1]));
@@ -466,9 +467,9 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                             if (!addr)
                                 ERROR("extractAddress returned null");
                             // old value
-                            if (!path->memoryState_.contains(*addr))
+                            auto oldVal = path->memoryState_.read(*addr);
+                            if (oldVal == nullptr)
                                 ERROR("memoryState_ doesn't contain addr.");
-                            auto oldVal = path->memoryState_[*addr]->clone();
                             // compute new = old +/- 1
                             auto one   = make_unique<LiteralExpr>(1);
                             auto binOp = (op == UnaryOpExpr::Operator::PreInc ||
@@ -478,7 +479,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                             auto newVal =
                                 make_unique<BinaryOpExpr>(oldVal->clone(), binOp, std::move(one));
                             // write back
-                            path->memoryState_[*addr] = newVal->clone();
+                            path->memoryState_.write(*addr, newVal->clone());
                             // return pre vs post
                             if (op == UnaryOpExpr::Operator::PreInc ||
                                 op == UnaryOpExpr::Operator::PreDec)
@@ -488,22 +489,20 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                         } else if (op == UnaryOpExpr::Operator::Dereference) {
                             // *x
                             auto addr = unExpr->tryEvalAsOffsetedAddr();
-                            if (addr == nullopt)
+                            if (addr == nullptr)
                                 ERROR("Expected Address, got: " << unExpr->dump());
-                            if (auto it = path->memoryState_.find(*addr.value());
-                                it == path->memoryState_.end()) {
+                            if (auto value = path->memoryState_.read(*addr); value == nullptr) {
                                 SymbolicExpr::Type varType = deriveVarType(uop->getType());
                                 string varName =
-                                    addr.value()->getBaseName() + "[" +
-                                    addr.value()->getOffset()->dump() +
+                                    addr->getBaseName() + "[" + addr->getOffset()->dump() +
                                     "]"; // TODO: impl function to get pointer/array base name.
                                 auto varExpr = std::make_unique<Symbolic::Variable>(
                                     varName, varType, path->getNextSymVarId(),
-                                    make_unique<Address>(*addr.value()));
-                                path->memoryState_.emplace(*addr.value(), varExpr->clone());
+                                    make_unique<Address>(*addr));
+                                path->memoryState_.write(*addr, varExpr->clone());
                                 outExprs.emplace_back(std::move(varExpr));
                             } else {
-                                outExprs.emplace_back(it->second->clone());
+                                outExprs.emplace_back(std::move(value));
                             }
                         } else if (op == UnaryOpExpr::Operator::AddrOf)
                             TODO();
@@ -597,7 +596,7 @@ string Path::dump() const {
 
     oss << "Return Expression: ";
     if (returnExpr_)
-        oss << returnExpr_->dump();
+        oss << returnExpr_.value()->dump();
     else
         oss << "null";
     oss << "\n";
@@ -608,21 +607,19 @@ string Path::dump() const {
             << "\n";
     }
 
-    unordered_set<Address, AddressHash> printedAddrs;
+    unordered_set<Address, AddressIntraPathHash> printedAddrs;
 
     oss << "Variable Address Mapping:\n";
-    for (auto const &pair : varAddr_) {
-        const VarDecl *vd = pair.first;
+    for (auto &[varDecl, addr] : varAddr_) {
         string name;
-        if (auto opt = GlobalSM::getDeclInfo(vd))
+        if (auto opt = GlobalSM::getDeclInfo(varDecl))
             tie(name, ignore, ignore, ignore, ignore) = *opt;
 
-        oss << "  @" << name << " -> " << pair.second->dump();
+        oss << "  @" << name << " -> " << addr->dump();
 
-        auto memIt = memoryState_.find(*pair.second);
-        if (memIt != memoryState_.end() && memIt->second) {
-            oss << " -> " << memIt->second->dump();
-            printedAddrs.insert(memIt->first);
+        if (auto value = memoryState_.read(*addr)) {
+            oss << " -> " << value->dump();
+            printedAddrs.insert(*addr);
         } else {
             oss << " -> null";
         }
@@ -631,10 +628,9 @@ string Path::dump() const {
 
     if (printedAddrs.size() < memoryState_.size()) {
         oss << "Memory State:\n";
-        for (auto const &pair : memoryState_) {
-            if (!printedAddrs.contains(pair.first)) {
-                oss << "  " << pair.first.dump() << " -> "
-                    << (pair.second ? pair.second->dump() : "null") << "\n";
+        for (auto &&[addr, value] : memoryState_.flat()) {
+            if (!printedAddrs.contains(addr)) {
+                oss << "  " << addr.dump() << " -> " << (value ? value->dump() : "null") << "\n";
             }
         }
     }
@@ -651,14 +647,14 @@ string Path::dump() const {
     return oss.str();
 }
 
-bool Path::isUnchanged(const Address &addr) {
-    auto memIt = memoryState_.find(addr);
-    if (memIt == memoryState_.end())
+bool Path::isUnchanged(const Address &addr) const {
+    auto value = memoryState_.read(addr);
+    if (value == nullptr)
         return false;
 
-    if (memIt->second->getType() == SymbolicExpr::ExprType::Variable) {
-        auto var = unique_ptr<Symbolic::Variable>(
-            static_cast<Symbolic::Variable *>(memIt->second->clone().release()));
+    if (value->getType() == SymbolicExpr::ExprType::Variable) {
+        auto var =
+            unique_ptr<Symbolic::Variable>(static_cast<Symbolic::Variable *>(value.release()));
         if (auto fromAddr = get_if<not_null<unique_ptr<const Address>>>(&var->getFrom())) {
             if (**fromAddr == addr)
                 return true;
@@ -666,6 +662,156 @@ bool Path::isUnchanged(const Address &addr) {
             TODO();
     }
     return false;
+}
+
+MemoryModel::MemoryModel(const MemoryModel &other) {
+    for (auto &[addr, value] : other.memoryMap_noOffset_) {
+        memoryMap_noOffset_.emplace(addr, value->clone());
+    }
+    for (auto &[idAddr, rangeValueMap] : other.memoryMap_constantRange_) {
+        auto &mapToFill = memoryMap_constantRange_[idAddr];
+        for (auto &[range, value] : rangeValueMap)
+            mapToFill.emplace(range, value->clone());
+    }
+
+    for (auto &[idAddr, rangeValueMap] : other.memoryMap_symbolicRange_) {
+        auto &mapToFill = memoryMap_symbolicRange_[idAddr];
+        for (auto &[range, value] : rangeValueMap)
+            mapToFill.emplace(range, value->clone());
+    }
+}
+
+MemoryModel &MemoryModel::operator=(const MemoryModel &other) {
+    if (this == &other)
+        return *this;
+
+    clear();
+
+    for (auto &[addr, value] : other.memoryMap_noOffset_) {
+        memoryMap_noOffset_.emplace(addr, value->clone());
+    }
+
+    for (auto &[idAddr, rangeValueMap] : other.memoryMap_constantRange_) {
+        auto &mapToFill = memoryMap_constantRange_[idAddr];
+        for (auto &[range, value] : rangeValueMap)
+            mapToFill.emplace(range, value->clone());
+    }
+
+    for (auto &[idAddr, rangeValueMap] : other.memoryMap_symbolicRange_) {
+        auto &mapToFill = memoryMap_symbolicRange_[idAddr];
+        for (auto &[range, value] : rangeValueMap)
+            mapToFill.emplace(range, value->clone());
+    }
+
+    return *this;
+}
+
+unique_ptr<SymbolicExpr> MemoryModel::read(const Address &addr) const {
+    if (!addr.isOffseted()) {
+        if (memoryMap_noOffset_.contains(addr))
+            return memoryMap_noOffset_.at(addr)->clone();
+        return nullptr;
+    }
+
+    auto idAddr = make_unique<Address>(addr);
+    idAddr->resetOffset();
+    idAddr->resetRange();
+
+    auto offset = addr.getOffset();
+    if (auto constOffset = offset->tryEvalAsConstant(); constOffset && !addr.isRange()) {
+        if (constOffset.value() < 0)
+            ERROR("Negetive offset.");
+        if (!memoryMap_constantRange_.contains(*idAddr))
+            return nullptr;
+        auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
+        auto &rangeExprMap  = memoryMap_constantRange_.at(*idAddr);
+        auto range          = pair{unsignedOffset, unsignedOffset + 1};
+        auto upperBoundIt   = rangeExprMap.upper_bound(range);
+        auto firstLEIt =
+            upperBoundIt == rangeExprMap.begin() ? rangeExprMap.end() : prev(upperBoundIt);
+        if (firstLEIt == rangeExprMap.end() || firstLEIt->first.second <= unsignedOffset)
+            return nullptr;
+        return firstLEIt->second->clone();
+    } else if (constOffset && addr.isRange() && addr.getLength()->tryEvalAsConstant()) {
+        UNIMPLEMENT("There doesn't appear to be a need for constant-range range queries at "
+                    "this time.");
+    }
+
+    if (!memoryMap_symbolicRange_.contains(*idAddr))
+        return nullptr;
+    auto &rangeExprMap = memoryMap_symbolicRange_.at(*idAddr);
+    auto it            = rangeExprMap.find(addr);
+    if (it == rangeExprMap.end())
+        return nullptr;
+    return it->second->clone();
+}
+
+void MemoryModel::write(const Address &addr, unique_ptr<const SymbolicExpr> value) {
+    if (value == nullptr)
+        ERROR("Value is nullptr!");
+
+    if (!addr.isOffseted()) {
+        memoryMap_noOffset_[addr] = std::move(value);
+        return;
+    }
+
+    auto idAddr = make_unique<Address>(addr);
+    idAddr->resetOffset();
+    idAddr->resetRange();
+
+    auto constOffset = addr.getOffset()->tryEvalAsConstant();
+    auto constLen    = addr.isRange() ? addr.getLength()->tryEvalAsConstant() : nullopt;
+
+    if (constOffset && (!addr.isRange() || constLen)) {
+        if (constOffset.value() < 0 || (constLen && constLen.value() <= 0))
+            ERROR("Constant offset must be greater or equal to zero and length must be "
+                  "greater than zero.");
+        // constant range
+        auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
+        auto unsignedLen    = constLen ? static_cast<uint64_t>(constLen.value()) : uint64_t{1};
+        auto &rangeExprMap  = memoryMap_constantRange_[*idAddr];
+        auto range          = pair{unsignedOffset, unsignedOffset + unsignedLen};
+        auto endIt          = rangeExprMap.end();
+        auto upperBoundIt   = rangeExprMap.upper_bound(range);
+        auto firstLEIt      = upperBoundIt == rangeExprMap.begin() ? endIt : prev(upperBoundIt);
+        if (firstLEIt != endIt && firstLEIt->first.second > range.first) {
+            if (firstLEIt->first.first < range.first) {
+                auto leftRange          = pair{firstLEIt->first.first, range.first};
+                rangeExprMap[leftRange] = firstLEIt->second->clone();
+            }
+            if (firstLEIt->first.second > range.second) {
+                auto rightRange          = pair{range.second, firstLEIt->first.second};
+                rangeExprMap[rightRange] = firstLEIt->second->clone();
+            }
+            rangeExprMap.erase(firstLEIt);
+        }
+        if (upperBoundIt != endIt && upperBoundIt->first.first < range.second) {
+            if (upperBoundIt->first.second > range.second) {
+                auto rightRange          = pair{range.second, upperBoundIt->first.second};
+                rangeExprMap[rightRange] = upperBoundIt->second->clone();
+            }
+            rangeExprMap.erase(upperBoundIt);
+        }
+        rangeExprMap[range] = std::move(value);
+        return;
+    }
+    // symbolic range
+    auto &rangeExprMap = memoryMap_symbolicRange_[*idAddr];
+    rangeExprMap[addr] = std::move(value);
+}
+
+size_t MemoryModel::size() const {
+    size_t sum = 0;
+    for (auto &[_, map] : memoryMap_constantRange_)
+        sum += map.size();
+    for (auto &[_, map] : memoryMap_symbolicRange_)
+        sum += map.size();
+    return sum;
+}
+
+MemoryModel::flat_view MemoryModel::flat() { return MemoryModel::flat_view{*this}; }
+const MemoryModel::flat_view MemoryModel::flat() const {
+    return MemoryModel::flat_view{const_cast<MemoryModel &>(*this)};
 }
 
 ProgramState::ProgramState(unique_ptr<Path> initialPath, unique_ptr<ACSLFunction> context) {
@@ -1064,7 +1210,7 @@ void ProgramState::setReturnExpr(const Expr *expr) {
         for (auto &pathPtr : paths_) {
             if (!pathPtr->isActive())
                 continue;
-            pathPtr->setReturnExpr(SymbolicExpr::makeNull());
+            pathPtr->setReturnExpr(nullptr);
         }
         return;
     }

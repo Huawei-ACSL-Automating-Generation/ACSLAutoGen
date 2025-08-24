@@ -103,9 +103,9 @@ std::tuple<std::string, std::vector<unique_ptr<Path>>> emitLoopInvariant(
             UNREACHABLE();
         auto [s, continueFlag, exit_invs] = plugin->generate(loopEntry, cond, inc, body, loopInfo);
 
-        for (auto &inv : exit_invs) {
-            invariants.push_back(std::move(inv));
-        }
+        // for (auto &inv : exit_invs) {
+        //     invariants.push_back(std::move(inv));
+        // }
         if (s) {
             spec += "    " /*4 spaces*/ + *s + "\n";
         }

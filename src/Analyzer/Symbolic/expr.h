@@ -60,7 +60,12 @@ namespace Symbolic {
         /// @param type Expression type
         /// @param valueType Underlying value type
         SymbolicExpr(ExprType type, Type valueType) : type_(type), valueType_(valueType) {}
-        virtual ~SymbolicExpr() = default;
+
+        virtual ~SymbolicExpr()                       = default;
+        SymbolicExpr(const SymbolicExpr &)            = default;
+        SymbolicExpr &operator=(const SymbolicExpr &) = default;
+        SymbolicExpr(SymbolicExpr &&)                 = default;
+        SymbolicExpr &operator=(SymbolicExpr &&)      = default;
 
         ExprType getType() const { return type_; }
         Type getValType() const { return valueType_; }
@@ -68,6 +73,9 @@ namespace Symbolic {
 
         /// @brief Create a null symbolic expression.
         /// @return Unique pointer to a SNULL expression.
+        [[deprecated("This is used solely for representing an empty offset or returnExpr now. "
+                     "Its current usage leads to incorrect hash values. Adopting the Optional "
+                     "type would provide clearer semantics.")]]
         static std::unique_ptr<SymbolicExpr> makeNull();
 
         /// @brief Create a unknown symbolic expression.
@@ -101,12 +109,19 @@ namespace Symbolic {
         /// @brief The intra-path hash – leveraging unique IDs of Address and Variable – has lower
         /// computational overhead.
         /// @return
+        [[deprecated("In most cases, interPathHash and fromHash should be used.")]]
         virtual std::size_t intraPathHash() const = 0;
 
         /// @brief The inter-path hash – computed recursively via from_ – is used for SymbolicExpr
         /// comparison/storage between pathes and incurs higher computational cost.
         /// @return
-        virtual std::size_t interPathHash() const = 0;
+        virtual std::size_t interPathHash() const = 0; // todo: cache the result
+
+        /// @brief Almost identical to interPathHash, except that the hash of the Address does not
+        /// include information about the offset and range (i.e., it only contains the base address
+        /// information).
+        /// @return
+        virtual size_t fromHash() const = 0;
 
         friend std::ostream &operator<<(std::ostream &os, const SymbolicExpr &expr) {
             return os << expr.dump();
@@ -124,14 +139,32 @@ namespace Symbolic {
 
         /// @brief Collect variables used in the expression.
         /// @return Map from variable ID to Variable pointer.
+        [[deprecated("Use collectUsedVarsAndAddrs to support pointer.")]]
         virtual std::unordered_map<unsigned int, const Variable *> collectUsedVars() const {
             return std::unordered_map<unsigned int, const Variable *>{};
         };
 
+        /// @brief Collect Variables and Addresses used in the expression.
+        /// @return Map from ID to Variable and Address pointer.
+        virtual std::unordered_map<unsigned int, std::variant<const Variable *, const Address *>> collectUsedVarsAndAddrs()
+            const {
+            return {};
+        };
+
         /// @brief Try to evaluate the expression to an address.
-        /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
-        virtual std::optional<std::unique_ptr<Address>> tryEvalAsOffsetedAddr() const {
+        /// @return Returning `std::nullptr` indicates that the expression is not a valid address.
+        virtual std::unique_ptr<Address> tryEvalAsOffsetedAddr() const {
             // TODO: cache the result.
+            return nullptr;
+        };
+
+        std::optional<int64_t> tryEvalAsConstant() const {
+            // TODO: cache the result.
+            if (!isLinear())
+                return std::nullopt;
+            auto linearExpr = toLinearExpr();
+            if (linearExpr.all_homogeneous_terms_are_zero())
+                return linearExpr.inhomogeneous_term().get_si();
             return std::nullopt;
         };
 
@@ -245,6 +278,7 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t intraPathHash() const override;
         virtual std::size_t interPathHash() const override;
+        virtual size_t fromHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
         // StInG: Support functions for affine invariant analysis
@@ -322,14 +356,17 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t intraPathHash() const override;
         virtual std::size_t interPathHash() const override;
+        virtual size_t fromHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
-        virtual std::optional<std::unique_ptr<Address>> tryEvalAsOffsetedAddr() const override;
+        virtual std::unique_ptr<Address> tryEvalAsOffsetedAddr() const override;
         virtual bool isUnknown() const override {
             return left_->isUnknown() || right_->isUnknown();
         };
 
-        std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
         // StInG: Support functions for affine invariant analysis
+        std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
+        std::unordered_map<unsigned int, std::variant<const Variable *, const Address *>> collectUsedVarsAndAddrs()
+            const override;
         bool isLinear() const override;
         int getMaxDegree() const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
@@ -382,11 +419,14 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t intraPathHash() const override;
         virtual std::size_t interPathHash() const override;
+        virtual size_t fromHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return expr_->isUnknown(); };
 
-        std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
         // StInG: Support functions for affine invariant analysis
+        std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
+        std::unordered_map<unsigned int, std::variant<const Variable *, const Address *>> collectUsedVarsAndAddrs()
+            const override;
         bool isLinear() const override;
         int getMaxDegree() const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
@@ -400,7 +440,9 @@ namespace Symbolic {
 
     /// @class NullExpr
     /// @brief Represents a null symbolic expression.
-    class NullExpr : public SymbolicExpr {
+    class [[deprecated("This is used solely for representing an empty offset or returnExpr now. "
+                       "Its current usage leads to incorrect hash values. Adopting the Optional "
+                       "type would provide clearer semantics.")]] NullExpr : public SymbolicExpr {
       public:
         NullExpr() : SymbolicExpr(ExprType::SNULL, {ScalarKind::UInt, 64}) {}
         ~NullExpr() = default;
@@ -414,6 +456,7 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t intraPathHash() const override;
         virtual std::size_t interPathHash() const override;
+        virtual size_t fromHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
 
         // StInG: Support functions for affine invariant analysis
@@ -438,6 +481,7 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t intraPathHash() const override;
         virtual std::size_t interPathHash() const override;
+        virtual size_t fromHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return true; };
 
@@ -493,8 +537,11 @@ namespace Symbolic {
                                            bool isRightChild                      = false) const;
             bool equal(const Structure::Info &other) const;
             std::size_t interPathHash() const;
+            size_t fromHash() const;
             std::string dump() const;
             size_t getNumFields() const { return layout_.getFieldCount(); }
+            auto getFrom() const -> const auto & { return from_; }
+            const clang::VarDecl *getFromRoot() const;
         };
 
         Structure(unsigned int id,
@@ -541,6 +588,7 @@ namespace Symbolic {
         std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t intraPathHash() const override;
         virtual std::size_t interPathHash() const override;
+        virtual size_t fromHash() const override;
         bool equal(const SymbolicExpr &expr) const override;
 
         // StInG: Support functions for affine invariant analysis
@@ -563,75 +611,125 @@ namespace Symbolic {
     /// @brief Symbolic address with unique ID, optional offset and origin.
     /// Origin can't be nullptr, use monostate or nullopt.
     class Address : public SymbolicExpr {
+      private:
+        struct Range {
+            not_null<std::unique_ptr<const SymbolicExpr>>
+                len_; ///< The length of an address. The Address type does not store pointer types
+                      ///< currently, thus it does not support C-style pointer conversion.
+            not_null<std::unique_ptr<const Variable>>
+                index_; ///< Vaule of this AddressRange may rely on this ghost variable.
+
+            Range(unsigned long id, std::unique_ptr<const SymbolicExpr> len)
+                : len_(std::move(len)),
+                  index_(make_unique<Variable>("index of AddressRange{" + std::to_string(id) + "}",
+                                               SymbolicExpr::Type{ScalarKind::UInt, 32},
+                                               id,
+                                               std::monostate{})) {}
+
+            Range(const Range &other)
+                : len_(other.len_->clone()), index_(std::make_unique<Variable>(*other.index_)) {}
+            Range &operator=(const Range &other) {
+                len_   = other.len_->clone();
+                index_ = std::make_unique<Variable>(*other.index_);
+                return *this;
+            }
+        };
+
       public:
-        const signed long ZERO_OFFSET =
+        inline static constexpr signed long ZERO_OFFSET =
             0; ///< Unify the type of zero under zero offset. This type should be the same as the
                ///< type of the zero value in SymbolicExpr::simplifiedExprIfLinear, or relax the
                ///< type comparison in LiteralExpr's equal method.
 
         Address(const Address &other);
         Address &operator=(const Address &other);
-        Address(Address &&)            = delete;
-        Address &operator=(Address &&) = delete;
-
-        Address() = delete;
+        Address(Address &&);
+        Address &operator=(Address &&);
 
         Address(unsigned int id,
                 std::variant<std::monostate,
                              const clang::VarDecl *,
                              std::unique_ptr<const Address>,
-                             std::pair<std::shared_ptr<const Structure::Info>, const size_t>> from);
-
-        Address(unsigned int id,
-                std::unique_ptr<SymbolicExpr> offset,
-                std::variant<std::monostate,
-                             const clang::VarDecl *,
-                             std::unique_ptr<const Address>,
-                             std::pair<std::shared_ptr<const Structure::Info>, const size_t>> from);
+                             std::pair<std::shared_ptr<const Structure::Info>, const size_t>> from,
+                std::unique_ptr<SymbolicExpr> offset = nullptr,
+                std::unique_ptr<SymbolicExpr> length = nullptr);
 
         std::unique_ptr<SymbolicExpr> clone() const override;
-        unsigned int getId() const { return id_; }
         std::string dump() const override;
         virtual std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
                                         std::optional<std::string_view> suffix = std::nullopt,
                                         int parentPrec                         = 0,
                                         bool isRightChild = false) const override;
+        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
+        virtual bool equal(const SymbolicExpr &expr) const override;
+        virtual std::unique_ptr<Address> tryEvalAsOffsetedAddr() const override;
+        virtual std::size_t intraPathHash() const override;
+        virtual std::size_t interPathHash() const override;
+        virtual size_t fromHash() const override;
 
+        unsigned int getId() const { return id_; }
         /// @brief Get the value's regular form on this address.
         std::string regularFormOfValue(std::optional<std::string_view> prefix = std::nullopt,
                                        std::optional<std::string_view> suffix = std::nullopt,
                                        int parentPrec                         = 0,
                                        bool isRightChild                      = false) const;
-        virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
-        virtual bool equal(const SymbolicExpr &expr) const override;
-        virtual std::optional<std::unique_ptr<Address>> tryEvalAsOffsetedAddr() const override;
-
-        SymbolicExpr *getOffset() const { return offset_.get(); }
+        not_null<const SymbolicExpr *> getOffset() const {
+            if (offset_ == std::nullopt)
+                ERROR("There is no offset, call isOffseted first.");
+            return offset_.value().get().get();
+        }
         auto getFrom() const -> const auto & { return from_; }
+        const clang::VarDecl *getFromRoot() const;
         int getDimension() const;
-        std::size_t intraPathHash() const override;
-        virtual std::size_t interPathHash() const override;
         std::string getBaseName() const;
 
         void setOffset(std::unique_ptr<SymbolicExpr> offset);
         void addOffset(std::unique_ptr<SymbolicExpr> extra);
         void subOffset(std::unique_ptr<SymbolicExpr> extra);
-        bool isOffseted() const { return offset_ && offset_->getType() != ExprType::SNULL; }
+        void resetOffset() { offset_ = std::nullopt; }
+        bool isOffseted() const { return offset_ != std::nullopt; }
+
+        void setLength(std::unique_ptr<SymbolicExpr> len);
+        auto getLength() const -> const auto & {
+            if (range_ == std::nullopt)
+                ERROR("Is not a range! Do isRange first.");
+            return range_.value().len_;
+        }
+        auto getIndex() const -> const auto & {
+            if (range_ == std::nullopt)
+                ERROR("Is not a range! Do isRange first.");
+            return range_.value().index_;
+        }
+        bool isRange() const { return range_ != std::nullopt; }
+        void resetRange() { range_ = std::nullopt; }
 
         // StInG: Support functions for affine invariant analysis
-        bool isLinear() const override { return true; }
-        int getMaxDegree() const override { return 1; }
+        std::unordered_map<unsigned int, std::variant<const Variable *, const Address *>> collectUsedVarsAndAddrs()
+            const override;
+        bool isLinear() const override {
+            if (isRange())
+                ERROR("Address range is solely for address representation and should not be "
+                      "used as an expression.");
+            return true;
+        }
+        int getMaxDegree() const override {
+            if (isRange())
+                ERROR("Address range is solely for address representation and should not be "
+                      "used as an expression.");
+            return 1;
+        }
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
             const std::unordered_map<std::string, int> &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       protected:
-        std::optional<not_null<const clang::VarDecl *>> retrieveVarDecl() const;
+        const clang::VarDecl *retrieveVarDecl() const;
 
       private:
         unsigned int id_; ///< This ID is unique within its path, but not globally unique across
                           ///< different paths.
-        std::unique_ptr<SymbolicExpr> offset_; ///< Offset relative to an address.
+        std::optional<not_null<std::unique_ptr<const SymbolicExpr>>>
+            offset_; ///< Offset relative to an address.
         std::variant<std::monostate,
                      not_null<const clang::VarDecl *>,
                      not_null<std::unique_ptr<const Address>>,
@@ -639,10 +737,19 @@ namespace Symbolic {
             from_; ///< from a VarDecl* means this is a variable's address, from another Address p
                    ///< means this is a value(may with offset) of a pointer variable whose address
                    ///< is p, from {Structure::Info, size_t} means this is a field.
+        std::optional<Range> range_;
     };
 
-    struct AddressHash {
+    struct AddressIntraPathHash {
         std::size_t operator()(const Address &addr) const noexcept { return addr.intraPathHash(); }
+    };
+
+    struct AddressInterPathHash {
+        std::size_t operator()(const Address &addr) const noexcept { return addr.interPathHash(); }
+    };
+
+    struct AddressFromHash {
+        std::size_t operator()(const Address &addr) const noexcept { return addr.fromHash(); }
     };
 
     struct AddressEqual {
@@ -677,6 +784,8 @@ namespace Symbolic {
                 from);
         }
 
+        Variable(const Variable &other);
+
         Type getVarType() const { return varType_; }
         void setVarType(Type vt) {
             varType_ = vt;
@@ -695,11 +804,15 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         std::size_t intraPathHash() const override;
         virtual std::size_t interPathHash() const override;
+        virtual size_t fromHash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         auto getFrom() const -> const auto & { return from_; }
+        const clang::VarDecl *getFromRoot() const;
 
-        std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
         // StInG: Support functions for affine invariant analysis
+        std::unordered_map<unsigned int, const Variable *> collectUsedVars() const override;
+        std::unordered_map<unsigned int, std::variant<const Variable *, const Address *>> collectUsedVarsAndAddrs()
+            const override;
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 1; }
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
@@ -707,8 +820,8 @@ namespace Symbolic {
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
-        std::string name_; ///< May be incorrect in pointer-related contexts now, use regularForm or
-                           ///< from_ as an alternative.
+        std::string name_; ///< May be incorrect in pointer-related contexts now, use
+                           ///< regularForm or from_ as an alternative.
         Type varType_;     ///< Symbol value's type.
         int id_; ///< unique identifier to distinguish between variables with the same name
         std::variant<std::monostate,
@@ -717,19 +830,15 @@ namespace Symbolic {
             from_; ///< The original Address of the value or the Structure it belongs.
     };
 
-    class AddressRange : public Address {
-      public:
-      private:
-        std::unique_ptr<SymbolicExpr> length_;
-        std::unique_ptr<Variable>
-            index_; ///< Vaule of this AddressRange may rely on this ghost variable.
-    };
-
     std::unique_ptr<SymbolicExpr> createLNotExpr(std::unique_ptr<SymbolicExpr> expr);
     BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
     BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
     SymbolicExpr::Type deriveVarType(clang::QualType type);
-    bool isValidOffset(const SymbolicExpr &expr);
+    bool isValidOffsetOrLength(const SymbolicExpr &expr);
+    bool isFrom(const Symbolic::Address &addr,
+                std::variant<not_null<const Symbolic::Variable *>,
+                             not_null<const Symbolic::Address *>,
+                             not_null<const Symbolic::Structure::Info *>> symbol);
 
 } // namespace Symbolic
 

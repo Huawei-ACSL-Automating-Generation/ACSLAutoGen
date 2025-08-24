@@ -35,9 +35,9 @@ namespace {
         if (firstPath == nullptr)
             ERROR("First path is nullptr!");
         auto &returnExpr = firstPath->getReturnExpr();
-        if (returnExpr == nullptr)
-            ERROR("ReturnExpr is nullptr!");
-        return returnExpr->clone();
+        if (returnExpr == nullopt)
+            ERROR("There is no returnExpr!");
+        return returnExpr.value()->clone();
     }
 } // namespace
 
@@ -64,14 +64,19 @@ TEST(IntegrationTest, SyntaxNoDeath) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
-    EXPECT_NO_THROW(symbolicExecutionOnFirstFunc(R"(
+    EXPECT_EXIT(
+        {
+            symbolicExecutionOnFirstFunc(R"(
     void func(int x, int *pt){
         x++;
         ++(*pt);
         int y = *pt + x;
         return;
     }
-    )"));
+    )");
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
     EXPECT_EXIT(
         {
             symbolicExecutionOnFirstFunc(R"(

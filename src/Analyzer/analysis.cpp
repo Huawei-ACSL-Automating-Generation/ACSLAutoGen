@@ -51,7 +51,7 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
         INFO(state->dump());
 
         bool hasPointer = false, hasLoop = false;
-        for (auto &[_, value] : preState->getPaths()[0]->getMemoryState()) {
+        for (auto &&[_, value] : preState->getPaths()[0]->getMemoryState().flat()) {
             if (value->getType() == SymbolicExpr::ExprType::SymbolAddress)
                 hasPointer = true;
         }

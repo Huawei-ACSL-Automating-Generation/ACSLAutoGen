@@ -58,7 +58,7 @@ class AssignsPlugin : public FunctionContractPlugin {
             // For every post-state path
             for (auto &postPath : post.getPaths()) {
                 // and every Address in the path's memoryState.
-                for (auto &[addr, value] : postPath->getMemoryState()) {
+                for (auto &&[addr, value] : postPath->getMemoryState().flat()) {
                     if (!isFromPointer(addr))
                         continue;
                     if (value->getType() == SymbolicExpr::ExprType::Variable) {
@@ -105,17 +105,16 @@ class ResultPlugin : public FunctionContractPlugin {
     optional<string> generate(const ProgramState &, const ProgramState &post) const override {
         unique_ptr<SymbolicExpr> returnExpr{nullptr};
         for (auto &path : post.getPaths()) {
-            if (path->getReturnExpr() == nullptr ||
-                *path->getReturnExpr() == *SymbolicExpr::makeNull())
+            if (path->getReturnExpr() == nullopt)
                 continue;
             if (returnExpr == nullptr) {
-                returnExpr = path->getReturnExpr()->clone();
+                returnExpr = path->getReturnExpr().value()->clone();
             } else {
                 auto &pathReturnExpr = path->getReturnExpr();
-                if (pathReturnExpr == nullptr) {
+                if (pathReturnExpr == nullopt) {
                     ERROR("Some paths reach the end of the function without a return statement.");
                 }
-                if (*pathReturnExpr != *returnExpr) {
+                if (*pathReturnExpr.value() != *returnExpr) {
                     returnExpr = nullptr;
                     break;
                 }

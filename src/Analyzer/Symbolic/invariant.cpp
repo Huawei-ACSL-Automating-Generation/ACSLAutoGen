@@ -186,15 +186,18 @@ Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr() const {
 
 Parma_Polyhedra_Library::Linear_Expression Symbolic::Address::toLinearExpr(
     const std::unordered_map<std::string, int> &varIndexMap) const {
+    if (range_ != nullopt)
+        ERROR("Address range is solely for address representation and should not be "
+              "used as an expression.");
     using namespace Parma_Polyhedra_Library;
     Linear_Expression e(0);
     if (getDimension() != 1)
         ERROR("Only support varDecl's value now.");
 
     auto varDecl = retrieveVarDecl();
-    if (varDecl == nullopt)
+    if (varDecl == nullptr)
         ERROR("Failed to retrieve the original varDecl.");
-    auto it = varIndexMap.find(varDecl.value()->getNameAsString());
+    auto it = varIndexMap.find(varDecl->getNameAsString());
     if (it == varIndexMap.end()) {
         ERROR("Address '" + regularForm() + "' not found in index map.");
     }
@@ -222,6 +225,9 @@ Parma_Polyhedra_Library::Linear_Expression Symbolic::Variable::toLinearExpr() co
 }
 
 Parma_Polyhedra_Library::Linear_Expression Symbolic::Address::toLinearExpr() const {
+    if (range_ != nullopt)
+        ERROR("Address range is solely for address representation and should not be "
+              "used as an expression.");
     Parma_Polyhedra_Library::Linear_Expression e(0);
     auto var = Parma_Polyhedra_Library::Variable(id_);
     e += var;
@@ -406,9 +412,9 @@ std::unordered_map<std::string, std::unique_ptr<SymbolicExpr>> extractNameMap(co
     for (const auto &[decl, addr] : varAddrMap) {
         if (!decl || !addr)
             continue;
-        auto it = memoryState.find(*addr);
-        if (it != memoryState.end()) {
-            nameToExpr[decl->getNameAsString()] = it->second->clone();
+
+        if (auto value = memoryState.read(*addr)) {
+            nameToExpr[decl->getNameAsString()] = std::move(value);
         }
     }
 

@@ -135,6 +135,6 @@ class StringTemplate {
 };
 
 /// @brief Literal operator for construct template from C-string literal easily.
-StringTemplate operator"" _st(const char *, size_t);
+StringTemplate operator""_st(const char *, size_t);
 
 #endif

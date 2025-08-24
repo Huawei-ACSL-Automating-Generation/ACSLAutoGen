@@ -2,6 +2,7 @@
 #define STATE_H
 
 #include <unordered_map>
+#include <map>
 #include <variant>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Stmt.h>
@@ -11,10 +12,267 @@
 #include "function.h"
 
 using namespace Symbolic;
+using namespace std;
 using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>>;
 using Formulas     = std::vector<std::unique_ptr<SymbolicExpr>>;
 using TransRel     = std::tuple<int, int, Parma_Polyhedra_Library::C_Polyhedron *>;
 using InitRel      = std::pair<int, Parma_Polyhedra_Library::C_Polyhedron *>;
+
+class MemoryModel {
+  public:
+    struct flat_view;
+    MemoryModel() = default;
+    MemoryModel(const MemoryModel &);
+    MemoryModel &operator=(const MemoryModel &);
+    MemoryModel(MemoryModel &&)            = default;
+    MemoryModel &operator=(MemoryModel &&) = default;
+    unique_ptr<SymbolicExpr> read(const Address &addr) const;
+    void write(const Address &address, unique_ptr<const SymbolicExpr> value);
+    size_t size() const;
+    void clear() {
+        memoryMap_noOffset_.clear();
+        memoryMap_constantRange_.clear();
+        memoryMap_symbolicRange_.clear();
+    }
+
+    flat_view flat();
+    const flat_view flat() const;
+
+  private:
+    friend struct flat_view;
+
+    struct RangeCmp {
+        bool operator()(const pair<uint64_t, uint64_t> &LHS,
+                        const pair<uint64_t, uint64_t> &RHS) const {
+            return LHS.first < RHS.first;
+        }
+    };
+
+    unordered_map<Address, unique_ptr<const SymbolicExpr>, AddressFromHash> memoryMap_noOffset_;
+
+    unordered_map<Address,
+                  map<pair<uint64_t, uint64_t>, unique_ptr<const SymbolicExpr>, RangeCmp>,
+                  AddressFromHash>
+        memoryMap_constantRange_; ///< Ranges(pair<uint64_t, uint64_t>) must be non-overlapping
+                                  ///< and non-zero-length.
+    unordered_map<Address,
+                  unordered_map<Address, unique_ptr<const SymbolicExpr>, AddressInterPathHash>,
+                  AddressFromHash>
+        memoryMap_symbolicRange_;
+};
+
+struct MemoryModel::flat_view {
+  private:
+    static Address compose_address(const Address &base, uint64_t off, uint64_t len) {
+        auto result = base;
+        result.setOffset(make_unique<LiteralExpr>(off));
+        if (len == 0)
+            ERROR("Length should not be 0, something goes wrong.");
+        if (len > 1)
+            result.setLength(make_unique<LiteralExpr>(len));
+
+        return result;
+    }
+    template <class Owner> static auto &no_offset_map(Owner &mm) { return mm.memoryMap_noOffset_; }
+    template <class Owner> static auto &const_range_map(Owner &mm) {
+        return mm.memoryMap_constantRange_;
+    }
+    template <class Owner> static auto &symb_range_map(Owner &mm) {
+        return mm.memoryMap_symbolicRange_;
+    }
+
+  public:
+    using UPtr = std::unique_ptr<const SymbolicExpr>;
+    template <bool IsConst> class flat_iterator {
+        using Owner   = std::conditional_t<IsConst, const MemoryModel, MemoryModel>;
+        using NoOuter = decltype(no_offset_map(std::declval<Owner &>()).begin());
+        using COuter  = decltype(const_range_map(std::declval<Owner &>()).begin());
+        using CInner  = decltype(const_range_map(std::declval<Owner &>()).begin()->second.begin());
+
+        using SOuter = decltype(symb_range_map(std::declval<Owner &>()).begin());
+        using SInner = decltype(symb_range_map(std::declval<Owner &>()).begin()->second.begin());
+
+        using UPtrRef = std::conditional_t<IsConst, const UPtr &, UPtr &>;
+
+      public:
+        using difference_type   = std::ptrdiff_t;
+        using value_type        = std::pair<Address, UPtr>;
+        using reference         = std::pair<Address, UPtrRef>;
+        using rvalue_reference  = value_type;
+        using iterator_category = std::input_iterator_tag;
+        using iterator_concept  = std::input_iterator_tag;
+
+        flat_iterator() = default;
+        flat_iterator(Owner &o, bool to_begin) : owner_(o) {
+            no_outer_     = no_offset_map(owner_).begin();
+            no_outer_end_ = no_offset_map(owner_).end();
+
+            c_outer_     = const_range_map(owner_).begin();
+            c_outer_end_ = const_range_map(owner_).end();
+
+            s_outer_     = symb_range_map(owner_).begin();
+            s_outer_end_ = symb_range_map(owner_).end();
+
+            if (to_begin)
+                advance_to_first();
+            else
+                phase_ = Phase::End;
+        }
+
+        reference operator*() const {
+            switch (phase_) {
+                case Phase::NoOff: {
+                    const Address &key = no_outer_->first;
+                    return reference{key, no_outer_->second};
+                }
+                case Phase::Const: {
+                    const Address &base   = c_outer_->first;
+                    const auto [off, len] = c_inner_->first;
+                    Address composed      = compose_address(base, off, len);
+                    return reference{std::move(composed), c_inner_->second};
+                }
+                case Phase::Symb: {
+                    const Address &key = s_inner_->first;
+                    return reference{key, s_inner_->second};
+                }
+                default: break;
+            }
+            UNREACHABLE();
+        }
+
+        flat_iterator &operator++() {
+            advance();
+            return *this;
+        }
+        flat_iterator operator++(int) {
+            auto tmp = *this;
+            ++*this;
+            return tmp;
+        }
+
+        friend bool operator==(const flat_iterator &a, const flat_iterator &b) {
+            if (&a.owner_ != &b.owner_)
+                return false;
+            if (a.phase_ == Phase::End && b.phase_ == Phase::End)
+                return true;
+            if (a.phase_ != b.phase_)
+                return false;
+
+            switch (a.phase_) {
+                case Phase::NoOff: return a.no_outer_ == b.no_outer_;
+                case Phase::Const:
+                    return a.c_outer_ == b.c_outer_ &&
+                           (a.c_outer_ == a.c_outer_end_ || a.c_inner_ == b.c_inner_);
+                case Phase::Symb:
+                    return a.s_outer_ == b.s_outer_ &&
+                           (a.s_outer_ == a.s_outer_end_ || a.s_inner_ == b.s_inner_);
+                default: return true;
+            }
+        }
+
+      private:
+        enum class Phase {
+            NoOff,
+            Const,
+            Symb,
+            End
+        };
+        Owner &owner_;
+        Phase phase_ = Phase::End;
+
+        NoOuter no_outer_{}, no_outer_end_{};
+        COuter c_outer_{}, c_outer_end_{};
+        CInner c_inner_{};
+        SOuter s_outer_{}, s_outer_end_{};
+        SInner s_inner_{};
+
+        void advance_to_first() {
+            if (no_outer_ != no_outer_end_) {
+                phase_ = Phase::NoOff;
+                return;
+            }
+
+            for (; c_outer_ != c_outer_end_; ++c_outer_) {
+                c_inner_ = c_outer_->second.begin();
+                if (c_inner_ != c_outer_->second.end()) {
+                    phase_ = Phase::Const;
+                    return;
+                }
+            }
+            for (; s_outer_ != s_outer_end_; ++s_outer_) {
+                s_inner_ = s_outer_->second.begin();
+                if (s_inner_ != s_outer_->second.end()) {
+                    phase_ = Phase::Symb;
+                    return;
+                }
+            }
+            phase_ = Phase::End;
+        }
+
+        void advance() {
+            if (phase_ == Phase::NoOff) {
+                ++no_outer_;
+                if (no_outer_ != no_outer_end_)
+                    return;
+
+                for (; c_outer_ != c_outer_end_; ++c_outer_) {
+                    c_inner_ = c_outer_->second.begin();
+                    if (c_inner_ != c_outer_->second.end()) {
+                        phase_ = Phase::Const;
+                        return;
+                    }
+                }
+                for (; s_outer_ != s_outer_end_; ++s_outer_) {
+                    s_inner_ = s_outer_->second.begin();
+                    if (s_inner_ != s_outer_->second.end()) {
+                        phase_ = Phase::Symb;
+                        return;
+                    }
+                }
+                phase_ = Phase::End;
+            } else if (phase_ == Phase::Const) {
+                ++c_inner_;
+                while (c_outer_ != c_outer_end_ && c_inner_ == c_outer_->second.end()) {
+                    ++c_outer_;
+                    if (c_outer_ != c_outer_end_)
+                        c_inner_ = c_outer_->second.begin();
+                }
+                if (c_outer_ != c_outer_end_)
+                    return;
+                for (; s_outer_ != s_outer_end_; ++s_outer_) {
+                    s_inner_ = s_outer_->second.begin();
+                    if (s_inner_ != s_outer_->second.end()) {
+                        phase_ = Phase::Symb;
+                        return;
+                    }
+                }
+                phase_ = Phase::End;
+            } else if (phase_ == Phase::Symb) {
+                ++s_inner_;
+                while (s_outer_ != s_outer_end_ && s_inner_ == s_outer_->second.end()) {
+                    ++s_outer_;
+                    if (s_outer_ != s_outer_end_)
+                        s_inner_ = s_outer_->second.begin();
+                }
+                if (s_outer_ == s_outer_end_)
+                    phase_ = Phase::End;
+            }
+        }
+    }; // flat_iterator
+
+    using iterator       = flat_iterator<false>;
+    using const_iterator = flat_iterator<true>;
+
+    explicit flat_view(MemoryModel &p) : owner_(p) {}
+
+    iterator begin() { return iterator{owner_, true}; }
+    iterator end() { return iterator{owner_, false}; }
+    const_iterator begin() const { return const_iterator{owner_, true}; }
+    const_iterator end() const { return const_iterator{owner_, false}; }
+
+  private:
+    MemoryModel &owner_;
+};
 
 class Path {
   public:
@@ -46,11 +304,16 @@ class Path {
     void updateVarState(const clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
     void insertPathCondition(std::unique_ptr<SymbolicExpr> cond);
 
-    void setReturnExpr(std::unique_ptr<SymbolicExpr> expr) { returnExpr_ = std::move(expr); };
+    void setReturnExpr(std::unique_ptr<SymbolicExpr> expr) {
+        if (expr == nullptr)
+            returnExpr_ = std::nullopt;
+        else
+            returnExpr_.emplace(std::move(expr));
+    };
     void setPathState(PathState state) { currentState_ = state; }
 
     bool isActive() const { return currentState_ == PathState::Step; }
-    bool isUnchanged(const Address &addr);
+    bool isUnchanged(const Address &addr) const;
     std::unique_ptr<Path> clone() const;
 
     const clang::Stmt *StmtCtx = nullptr;
@@ -71,10 +334,7 @@ class Path {
     // Map: variable record definition ID -> corresponding symbolic address.
     std::unordered_map<const clang::VarDecl *, std::unique_ptr<Address>> varAddr_;
 
-    // Map: symbolic address -> value stored at that address, separating variable–address mapping
-    // from address–value mapping.
-    std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>
-        memoryState_;
+    MemoryModel memoryState_;
 
     // SET: List of symbolic expressions representing the path condition.
     Formulas pathConditions_;
@@ -82,7 +342,7 @@ class Path {
     // Holds the current path state. Default is set to Step
     PathState currentState_ = PathState::Step;
 
-    std::unique_ptr<SymbolicExpr> returnExpr_ = std::make_unique<NullExpr>();
+    optional<not_null<std::unique_ptr<const SymbolicExpr>>> returnExpr_ = std::nullopt;
 
     unsigned int symbolVarAndAddrCounter_ = 0;
 

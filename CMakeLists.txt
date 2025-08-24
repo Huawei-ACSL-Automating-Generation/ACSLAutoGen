@@ -41,6 +41,9 @@ target_compile_options(ACSLG_strict_flags INTERFACE
   -Wshadow
   -Wformat=2
   -Wunused
+  $<$<COMPILE_LANG_AND_ID:C,CXX,Clang,AppleClang,GNU>:-Wdeprecated-declarations>
+  $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Wdeprecated>
+  $<$<CXX_COMPILER_ID:MSVC>:/W4>
 )
 
 if(NOT CMAKE_BUILD_TYPE)

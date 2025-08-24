@@ -113,4 +113,4 @@ string StringTemplate::to_string() const {
     return this->to_string(emptyMap);
 }
 
-StringTemplate operator"" _st(const char *str, size_t) { return StringTemplate(str); }
+StringTemplate operator""_st(const char *str, size_t) { return StringTemplate(str); }

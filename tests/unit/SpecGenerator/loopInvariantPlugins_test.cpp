@@ -14,9 +14,12 @@ using namespace std;
 using namespace llvm;
 
 namespace {
+    using mem_map_vector =
+        vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressInterPathHash, AddressEqual>>;
     // This code performs minimal safety checks, so please ensure the validity of the input.
-    tuple<optional<string>, bool, vector<unique_ptr<Path>>> doPluginOnFirstLoop(const string &code,
-                                                                                const string &pid) {
+    std::tuple<std::optional<std::string>, bool, mem_map_vector> doPluginOnFirstLoop(
+        const string &code,
+        const string &pid) {
         ASTExtractor e(code);
         GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
         auto func      = e.findFirstDecl<clang::FunctionDecl>();
@@ -69,7 +72,7 @@ namespace {
     }
 } // namespace
 
-TEST(ParadigmMaxMinPluginTest, simple_0) {
+TEST(ParadigmMaxMinPluginTest, Simple_0) {
     auto pluginId                = "paradigmMaxMin";
     auto code                    = R"(
         void func(int *p, int n){
@@ -85,7 +88,7 @@ TEST(ParadigmMaxMinPluginTest, simple_0) {
     EXPECT_EQ(continueFlag, true);
 }
 
-TEST(ParadigmMaxMinPluginTest, simple_1) {
+TEST(ParadigmMaxMinPluginTest, Simple_1) {
     auto pluginId                = "paradigmMaxMin";
     auto code                    = R"(
         void func(int *p, int n){
@@ -101,7 +104,7 @@ TEST(ParadigmMaxMinPluginTest, simple_1) {
     EXPECT_EQ(continueFlag, true);
 }
 
-TEST(ParadigmMaxMinPluginTest, simple_2) {
+TEST(ParadigmMaxMinPluginTest, Simple_2) {
     auto pluginId                = "paradigmMaxMin";
     auto code                    = R"(
         void func(int *p, int n){
@@ -117,7 +120,7 @@ TEST(ParadigmMaxMinPluginTest, simple_2) {
     EXPECT_EQ(continueFlag, true);
 }
 
-TEST(ParadigmMaxMinPluginTest, simple_3) {
+TEST(ParadigmMaxMinPluginTest, Simple_3) {
     auto pluginId                = "paradigmMaxMin";
     auto code                    = R"(
         void func(int *p, int n){
@@ -139,7 +142,7 @@ TEST(ParadigmMaxMinPluginTest, simple_3) {
     EXPECT_EQ(continueFlag, true);
 }
 
-TEST(ParadigmMaxMinPluginTest, simple_4) {
+TEST(ParadigmMaxMinPluginTest, Simple_4) {
     auto pluginId                = "paradigmMaxMin";
     auto code                    = R"(
         void func(int *p, int n){
@@ -157,7 +160,7 @@ TEST(ParadigmMaxMinPluginTest, simple_4) {
     EXPECT_EQ(continueFlag, true);
 }
 
-TEST(ParadigmMaxMinPluginTest, simple_5) {
+TEST(ParadigmMaxMinPluginTest, Simple_5) {
     auto pluginId                = "paradigmMaxMin";
     auto code                    = R"(
         void func(int *p, int n){
@@ -176,7 +179,7 @@ TEST(ParadigmMaxMinPluginTest, simple_5) {
     EXPECT_EQ(continueFlag, true);
 }
 
-TEST(ParadigmMaxMinPluginTest, simple_6) {
+TEST(ParadigmMaxMinPluginTest, Simple_6) {
     auto pluginId                = "paradigmMaxMin";
     auto code                    = R"(
         void func(int *p, int n){
