@@ -11,8 +11,6 @@ using namespace Symbolic;
 using namespace clang;
 using namespace llvm;
 
-std::unique_ptr<SymbolicExpr> SymbolicExpr::makeNull() { return std::make_unique<NullExpr>(); }
-
 std::unique_ptr<SymbolicExpr> SymbolicExpr::makeUnknown() {
     return std::make_unique<UnknownExpr>();
 }
@@ -20,33 +18,37 @@ std::unique_ptr<SymbolicExpr> SymbolicExpr::makeUnknown() {
 std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedExprIfLinear() const {
     if (!isLinear())
         return clone();
-    auto idVarMap   = collectUsedVars();
-    auto linearExpr = toLinearExpr();
+    auto idVarAndAddrMap = collectUsedVarsAndAddrs();
+    auto linearExpr      = toLinearExpr();
     unique_ptr<SymbolicExpr> result{nullptr};
 
     using enum BinaryOpExpr::Operator;
-    for (auto [id, varPtr] : idVarMap) {
-        auto C = linearExpr.coefficient(Parma_Polyhedra_Library::Variable{id}).get_si();
-        if (C == 0)
-            continue;
+    for (auto [id, varOrAddr] : idVarAndAddrMap) {
+        std::visit(
+            [&](auto &&arg) {
+                auto C = linearExpr.coefficient(Parma_Polyhedra_Library::Variable{id}).get_si();
+                if (C == 0)
+                    return;
 
-        if (result == nullptr) {
-            if (C == 1)
-                result = varPtr->clone();
-            else
-                result = make_unique<BinaryOpExpr>(make_unique<LiteralExpr>(C), Multiply,
-                                                   varPtr->clone());
-        } else {
-            unsigned absC = abs(C);
-            unique_ptr<SymbolicExpr> varExpr{nullptr};
-            if (absC != 1)
-                varExpr = make_unique<BinaryOpExpr>(make_unique<LiteralExpr>(absC), Multiply,
-                                                    varPtr->clone());
-            else
-                varExpr = varPtr->clone();
-            result = make_unique<BinaryOpExpr>(std::move(result), (C > 0 ? Add : Subtract),
-                                               std::move(varExpr));
-        }
+                if (result == nullptr) {
+                    if (C == 1)
+                        result = arg->clone();
+                    else
+                        result = make_unique<BinaryOpExpr>(make_unique<LiteralExpr>(C), Multiply,
+                                                           arg->clone());
+                } else {
+                    unsigned absC = abs(C);
+                    unique_ptr<SymbolicExpr> varExpr{nullptr};
+                    if (absC != 1)
+                        varExpr = make_unique<BinaryOpExpr>(make_unique<LiteralExpr>(absC),
+                                                            Multiply, arg->clone());
+                    else
+                        varExpr = arg->clone();
+                    result = make_unique<BinaryOpExpr>(std::move(result), (C > 0 ? Add : Subtract),
+                                                       std::move(varExpr));
+                }
+            },
+            varOrAddr);
     }
     if (auto inhomo = linearExpr.inhomogeneous_term().get_si(); inhomo || result == nullptr) {
         if (result != nullptr) {
@@ -83,8 +85,6 @@ unique_ptr<SymbolicExpr> UnaryOpExpr::clone() const {
     return make_unique<UnaryOpExpr>(op_, expr_->clone());
 }
 
-unique_ptr<SymbolicExpr> NullExpr::clone() const { return make_unique<NullExpr>(); }
-
 unique_ptr<SymbolicExpr> UnknownExpr::clone() const { return make_unique<UnknownExpr>(); }
 
 std::unique_ptr<SymbolicExpr> Symbolic::Variable::clone() const {
@@ -111,22 +111,6 @@ std::unique_ptr<SymbolicExpr> Structure::clone() const {
     return std::make_unique<Structure>(*this);
 }
 
-std::size_t LiteralExpr::intraPathHash() const {
-    std::size_t seed = hash_val(getType(), type_);
-
-    switch (type_) {
-        using enum LiteralType;
-        case Boolean: return acslg::hash_val(seed, data_.boolValue);
-        case Int: return acslg::hash_val(seed, data_.intValue);
-        case UnsignedInt: return acslg::hash_val(seed, data_.uintValue);
-        case Short: return acslg::hash_val(seed, data_.shortValue);
-        case UnsignedShort: return acslg::hash_val(seed, data_.ushortValue);
-        case Int64: return acslg::hash_val(seed, data_.int64Value);
-        case UInt64: return acslg::hash_val(seed, data_.uint64Value);
-        default: ERROR("Wrong type.");
-    }
-}
-
 int64_t LiteralExpr::getLiteralValue() const {
     switch (getLiteralType()) {
         case LiteralType::Boolean: return data_.boolValue;
@@ -142,36 +126,7 @@ int64_t LiteralExpr::getLiteralValue() const {
     return 0;
 }
 
-std::size_t Symbolic::Variable::intraPathHash() const {
-    return hash_val(getType(), id_, varType_.kind, varType_.bitWidth);
-}
-
-std::size_t UnaryOpExpr::intraPathHash() const {
-    return hash_val(getType(), static_cast<std::size_t>(op_), expr_->intraPathHash());
-}
-
-std::size_t BinaryOpExpr::intraPathHash() const {
-    return hash_val(getType(), static_cast<std::size_t>(op_), left_->intraPathHash(),
-                    right_->intraPathHash());
-}
-
-std::size_t Address::intraPathHash() const {
-    return hash_val(getType(), id_, offset_ ? offset_.value()->intraPathHash() : 0,
-                    range_ ? range_.value().len_->intraPathHash() : 0);
-}
-
-std::size_t Structure::intraPathHash() const {
-    auto seed = acslg::hash_val(getType(), info_->definition_.get(), id_);
-    for (auto &field : fields_)
-        seed = acslg::hash_val(seed, field->intraPathHash());
-    return seed;
-}
-
-std::size_t NullExpr::intraPathHash() const { return hash_val(getType()); }
-
-std::size_t UnknownExpr::intraPathHash() const { return hash_val(getType()); }
-
-std::size_t LiteralExpr::interPathHash() const {
+std::size_t LiteralExpr::hash() const {
     std::size_t seed = hash_val(getType(), type_);
 
     switch (type_) {
@@ -187,7 +142,7 @@ std::size_t LiteralExpr::interPathHash() const {
     }
 }
 
-std::size_t Symbolic::Variable::interPathHash() const {
+std::size_t Symbolic::Variable::hash() const {
     size_t seed = hash_val(getType());
     std::visit(
         [&](auto &&arg) {
@@ -195,29 +150,28 @@ std::size_t Symbolic::Variable::interPathHash() const {
             if constexpr (std::is_same_v<T, std::monostate>) {
                 /* do nothing */
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                seed = acslg::hash_val(seed, arg->interPathHash());
+                seed = acslg::hash_val(seed, arg->hash());
             } else if constexpr (std::is_same_v<
                                      T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
                                                   const size_t>>) {
-                seed = acslg::hash_val(seed, arg.first->interPathHash(), arg.second);
+                seed = acslg::hash_val(seed, arg.first->hash(), arg.second);
             }
         },
         from_);
     return seed;
 }
 
-std::size_t UnaryOpExpr::interPathHash() const {
-    return hash_val(getType(), static_cast<std::size_t>(op_), expr_->interPathHash());
+std::size_t UnaryOpExpr::hash() const {
+    return hash_val(getType(), static_cast<std::size_t>(op_), expr_->hash());
 }
 
-std::size_t BinaryOpExpr::interPathHash() const {
-    return hash_val(getType(), static_cast<std::size_t>(op_), left_->interPathHash(),
-                    right_->interPathHash());
+std::size_t BinaryOpExpr::hash() const {
+    return hash_val(getType(), static_cast<std::size_t>(op_), left_->hash(), right_->hash());
 }
 
-std::size_t Address::interPathHash() const {
-    std::size_t seed = hash_val(getType(), offset_ ? offset_.value()->interPathHash() : 0,
-                                range_ ? range_.value().len_->interPathHash() : 0);
+std::size_t Address::hash() const {
+    std::size_t seed = hash_val(getType(), offset_ ? offset_.value()->hash() : 0,
+                                range_ ? range_.value().len_->hash() : 0);
 
     std::visit(
         [&](auto &&arg) {
@@ -227,18 +181,18 @@ std::size_t Address::interPathHash() const {
             } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
                 seed = acslg::hash_val(seed, arg.get());
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                seed = acslg::hash_val(seed, arg->interPathHash());
+                seed = acslg::hash_val(seed, arg->hash());
             } else if constexpr (std::is_same_v<
                                      T, std::pair<not_null<shared_ptr<const Structure::Info>>,
                                                   const size_t>>) {
-                seed = acslg::hash_val(seed, arg.first->interPathHash(), arg.second);
+                seed = acslg::hash_val(seed, arg.first->hash(), arg.second);
             }
         },
         from_);
     return seed;
 }
 
-std::size_t Structure::Info::interPathHash() const {
+std::size_t Structure::Info::hash() const {
     std::size_t seed = acslg::hash_val(definition_.get());
     std::visit(
         [&](auto &&arg) {
@@ -246,124 +200,25 @@ std::size_t Structure::Info::interPathHash() const {
             if constexpr (std::is_same_v<T, std::monostate>) {
                 /* do nothing */
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                seed = acslg::hash_val(seed, arg->interPathHash());
+                seed = acslg::hash_val(seed, arg->hash());
             } else if constexpr (std::is_same_v<
                                      T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
                                                   const size_t>>) {
-                seed = acslg::hash_val(seed, arg.first->interPathHash(), arg.second);
+                seed = acslg::hash_val(seed, arg.first->hash(), arg.second);
             }
         },
         from_);
     return seed;
 }
 
-std::size_t Structure::interPathHash() const {
-    auto seed = acslg::hash_val(getType(), info_->interPathHash());
+std::size_t Structure::hash() const {
+    auto seed = acslg::hash_val(getType(), info_->hash());
     for (auto &field : fields_)
-        seed = acslg::hash_val(seed, field->interPathHash());
+        seed = acslg::hash_val(seed, field->hash());
     return seed;
 }
 
-std::size_t NullExpr::interPathHash() const { return hash_val(getType()); }
-
-std::size_t UnknownExpr::interPathHash() const { return hash_val(getType()); }
-
-std::size_t LiteralExpr::fromHash() const {
-    std::size_t seed = hash_val(getType(), type_);
-
-    switch (type_) {
-        using enum LiteralType;
-        case Boolean: return acslg::hash_val(seed, data_.boolValue);
-        case Int: return acslg::hash_val(seed, data_.intValue);
-        case UnsignedInt: return acslg::hash_val(seed, data_.uintValue);
-        case Short: return acslg::hash_val(seed, data_.shortValue);
-        case UnsignedShort: return acslg::hash_val(seed, data_.ushortValue);
-        case Int64: return acslg::hash_val(seed, data_.int64Value);
-        case UInt64: return acslg::hash_val(seed, data_.uint64Value);
-        default: ERROR("Wrong type.");
-    }
-}
-
-std::size_t Symbolic::Variable::fromHash() const {
-    size_t seed = hash_val(getType());
-    std::visit(
-        [&](auto &&arg) {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, std::monostate>) {
-                /* do nothing */
-            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                seed = acslg::hash_val(seed, arg->fromHash());
-            } else if constexpr (std::is_same_v<
-                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
-                                                  const size_t>>) {
-                seed = acslg::hash_val(seed, arg.first->fromHash(), arg.second);
-            }
-        },
-        from_);
-    return seed;
-}
-
-std::size_t UnaryOpExpr::fromHash() const {
-    return hash_val(getType(), static_cast<std::size_t>(op_), expr_->fromHash());
-}
-
-std::size_t BinaryOpExpr::fromHash() const {
-    return hash_val(getType(), static_cast<std::size_t>(op_), left_->fromHash(),
-                    right_->fromHash());
-}
-
-std::size_t Address::fromHash() const {
-    std::size_t seed = hash_val(getType());
-
-    std::visit(
-        [&](auto &&arg) {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, std::monostate>) {
-                /* do nothing */
-            } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
-                seed = acslg::hash_val(seed, arg.get());
-            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                seed = acslg::hash_val(seed, arg->fromHash());
-            } else if constexpr (std::is_same_v<
-                                     T, std::pair<not_null<shared_ptr<const Structure::Info>>,
-                                                  const size_t>>) {
-                seed = acslg::hash_val(seed, arg.first->fromHash(), arg.second);
-            }
-        },
-        from_);
-    return seed;
-}
-
-std::size_t Structure::Info::fromHash() const {
-    std::size_t seed = acslg::hash_val(definition_.get());
-    std::visit(
-        [&](auto &&arg) {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, std::monostate>) {
-                /* do nothing */
-            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                seed = acslg::hash_val(seed, arg->fromHash());
-            } else if constexpr (std::is_same_v<
-                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
-                                                  const size_t>>) {
-                seed = acslg::hash_val(seed, arg.first->fromHash(), arg.second);
-            }
-        },
-        from_);
-    return seed;
-}
-
-std::size_t Structure::fromHash() const {
-    WARN("Should not be called");
-    auto seed = acslg::hash_val(getType(), info_->fromHash());
-    for (auto &field : fields_)
-        seed = acslg::hash_val(seed, field->fromHash());
-    return seed;
-}
-
-std::size_t NullExpr::fromHash() const { return hash_val(getType()); }
-
-std::size_t UnknownExpr::fromHash() const { return hash_val(getType()); }
+std::size_t UnknownExpr::hash() const { return hash_val(getType()); }
 
 std::string LiteralExpr::dump() const {
     std::ostringstream oss;
@@ -429,8 +284,6 @@ std::string UnaryOpExpr::dump() const {
     oss << opStr << "(" << expr_->dump() << ")";
     return oss.str();
 }
-
-std::string NullExpr::dump() const { return "null"; }
 
 std::string UnknownExpr::dump() const { return "{unknown}"; }
 
@@ -574,14 +427,6 @@ std::string UnaryOpExpr::regularForm(std::optional<std::string_view> prefix,
         oss << (needParens ? "(" : "") << opStr << expr_->regularForm(prefix, suffix, myPrec, true)
             << (needParens ? ")" : "");
     return oss.str();
-}
-
-std::string NullExpr::regularForm(std::optional<std::string_view>,
-                                  std::optional<std::string_view>,
-                                  int,
-                                  bool) const {
-    WARN("Output NullExpr's regular form, something may go wrong.");
-    return "";
 }
 
 std::string UnknownExpr::regularForm(std::optional<std::string_view>,
@@ -811,11 +656,6 @@ std::unique_ptr<SymbolicExpr> UnaryOpExpr::simplifiedExpr() const {
     return make_unique<UnaryOpExpr>(op_, std::move(subExpr));
 }
 
-std::unique_ptr<SymbolicExpr> NullExpr::simplifiedExpr() const {
-    WARN("Met NullExpr in simplifiedExpr, something may go wrong.");
-    return makeNull();
-}
-
 std::unique_ptr<SymbolicExpr> UnknownExpr::simplifiedExpr() const { return makeUnknown(); }
 
 std::unique_ptr<SymbolicExpr> Symbolic::Variable::simplifiedExpr() const {
@@ -852,14 +692,6 @@ bool UnaryOpExpr::equal(const SymbolicExpr &expr) const {
         return false;
 
     return op_ == unary->op_ && *expr_ == *(unary->expr_);
-}
-
-bool NullExpr::equal(const SymbolicExpr &expr) const {
-    const auto null = dynamic_cast<const NullExpr *>(&expr);
-    if (!null)
-        return false;
-
-    return true;
 }
 
 bool UnknownExpr::equal(const SymbolicExpr &) const { return false; }
@@ -1082,21 +914,6 @@ std::unique_ptr<Address> Address::tryEvalAsOffsetedAddr() const {
     return result;
 }
 
-unordered_map<unsigned int, const Symbolic::Variable *> Symbolic::Variable::collectUsedVars() const {
-    return unordered_map<unsigned int, const Symbolic::Variable *>{{id_, this}};
-}
-
-unordered_map<unsigned int, const Symbolic::Variable *> BinaryOpExpr::collectUsedVars() const {
-    auto lmap = left_->collectUsedVars();
-    auto rmap = right_->collectUsedVars();
-    lmap.insert(make_move_iterator(rmap.begin()), make_move_iterator(rmap.end()));
-    return lmap;
-}
-
-unordered_map<unsigned int, const Symbolic::Variable *> UnaryOpExpr::collectUsedVars() const {
-    return expr_->collectUsedVars();
-}
-
 unordered_map<unsigned int, std::variant<const Symbolic::Variable *, const Symbolic::Address *>> Symbolic::
     Variable::collectUsedVarsAndAddrs() const {
     return {{id_, this}};
@@ -1123,7 +940,8 @@ unordered_map<unsigned int, std::variant<const Symbolic::Variable *, const Symbo
     return {{id_, this}};
 }
 
-Address::Address(const Address &other) : SymbolicExpr(other), id_(other.id_), offset_(nullopt) {
+Address::Address(const Address &other)
+    : SymbolicExpr(other), id_(other.id_), offset_(nullopt), range_(other.range_) {
     if (other.offset_)
         offset_.emplace(other.offset_.value()->clone());
     std::visit(
@@ -1175,7 +993,8 @@ Address &Address::operator=(const Address &other) {
     return *this;
 }
 
-Address::Address(Address &&other) : SymbolicExpr(other), id_(std::move(other.id_)) {
+Address::Address(Address &&other)
+    : SymbolicExpr(other), id_(std::move(other.id_)), range_(std::move(other.range_)) {
     if (other.offset_)
         offset_.emplace(std::move(other.offset_.value()).into_underlying());
     std::visit(
@@ -1203,6 +1022,7 @@ Address &Address::operator=(Address &&other) {
     id_ = std::move(other.id_);
     if (other.offset_)
         offset_.emplace(std::move(other.offset_.value()).into_underlying());
+    range_ = std::move(other.range_);
     std::visit(
         [this](auto &&arg) {
             using T = std::decay_t<decltype(arg)>;
@@ -1227,15 +1047,14 @@ Address::Address(unsigned int id,
                               const clang::VarDecl *,
                               std::unique_ptr<const Address>,
                               std::pair<std::shared_ptr<const Structure::Info>, const size_t>> from,
-                 std::unique_ptr<SymbolicExpr> offset,
-                 std::unique_ptr<SymbolicExpr> length)
+                 std::unique_ptr<const SymbolicExpr> offset,
+                 std::unique_ptr<const SymbolicExpr> length)
     : SymbolicExpr(ExprType::SymbolAddress, {ScalarKind::UInt, 64}), id_(id), offset_(nullopt) {
     if (offset != nullptr)
         offset_.emplace(std::move(offset));
-    if (length == nullptr || length->getType() == SymbolicExpr::ExprType::SNULL) {
+    if (length == nullptr) {
         // Normal address.
-    } else if (!(offset == nullptr || offset->getType() == SymbolicExpr::ExprType::SNULL) &&
-               !(length == nullptr || length->getType() == SymbolicExpr::ExprType::SNULL)) {
+    } else if (offset_ != nullopt) {
         // Address Range.
         range_ = Range{id, std::move(length)};
     } else {
@@ -1261,7 +1080,7 @@ Address::Address(unsigned int id,
 void Address::setOffset(std::unique_ptr<SymbolicExpr> offset) {
     if (offset == nullptr || !isValidOffsetOrLength(*offset))
         ERROR("Invalid offset.");
-    offset_ = offset->simplifiedExpr();
+    offset_ = std::move(offset);
 }
 
 void Address::addOffset(std::unique_ptr<SymbolicExpr> extra) {
@@ -1496,7 +1315,6 @@ std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType t) {
         case SymbolAddress: os << "SymbolAddress"; break;
         case BinaryOp: os << "BinaryOp"; break;
         case UnaryOp: os << "UnaryOp"; break;
-        case SNULL: os << "SNULL"; break;
         case Structure: os << "Structure"; break;
         case Unknown: os << "Unknown"; break;
     }

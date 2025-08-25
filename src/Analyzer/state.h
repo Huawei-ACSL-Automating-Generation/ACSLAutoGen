@@ -35,29 +35,22 @@ class MemoryModel {
         memoryMap_symbolicRange_.clear();
     }
 
-    flat_view flat();
+    // flat_view flat();
     const flat_view flat() const;
 
   private:
     friend struct flat_view;
 
-    struct RangeCmp {
-        bool operator()(const pair<uint64_t, uint64_t> &LHS,
-                        const pair<uint64_t, uint64_t> &RHS) const {
-            return LHS.first < RHS.first;
-        }
-    };
-
-    unordered_map<Address, unique_ptr<const SymbolicExpr>, AddressFromHash> memoryMap_noOffset_;
+    unordered_map<Address, unique_ptr<const SymbolicExpr>, AddressHash> memoryMap_noOffset_;
 
     unordered_map<Address,
-                  map<pair<uint64_t, uint64_t>, unique_ptr<const SymbolicExpr>, RangeCmp>,
-                  AddressFromHash>
+                  map<pair<uint64_t, uint64_t>, unique_ptr<const SymbolicExpr>>,
+                  AddressHash>
         memoryMap_constantRange_; ///< Ranges(pair<uint64_t, uint64_t>) must be non-overlapping
                                   ///< and non-zero-length.
     unordered_map<Address,
-                  unordered_map<Address, unique_ptr<const SymbolicExpr>, AddressInterPathHash>,
-                  AddressFromHash>
+                  unordered_map<Address, unique_ptr<const SymbolicExpr>, AddressHash>,
+                  AddressHash>
         memoryMap_symbolicRange_;
 };
 
@@ -126,9 +119,9 @@ struct MemoryModel::flat_view {
                     return reference{key, no_outer_->second};
                 }
                 case Phase::Const: {
-                    const Address &base   = c_outer_->first;
-                    const auto [off, len] = c_inner_->first;
-                    Address composed      = compose_address(base, off, len);
+                    const Address &base          = c_outer_->first;
+                    const auto [off, offPlusLen] = c_inner_->first;
+                    Address composed             = compose_address(base, off, offPlusLen - off);
                     return reference{std::move(composed), c_inner_->second};
                 }
                 case Phase::Symb: {

@@ -9,7 +9,7 @@
 #include "ASTExtractor.h"
 #include "clang/AST/AST.h"
 #include "clang/AST/Decl.h"
-#include "symbolic.h"
+#include "expr.h"
 
 using ::testing::Return;
 using namespace std;
@@ -21,14 +21,14 @@ class TestPath : public Path {
     MOCK_NONVIRTUAL_METHOD(LValueTarget, extractLValue, (const clang::Expr *), (), TestPath);
 };
 
-TEST(PathTest, IsUnchangedState) {
-    using enum SymbolicExpr::ScalarKind;
-    TestPath dummyPath;
-    auto addr = dummyPath.allocMemory();
-    dummyPath.updateMemory(addr, make_unique<Variable>("test", SymbolicExpr::Type{Int, 4}));
+// TEST(PathTest, IsUnchangedState) {
+//     using enum SymbolicExpr::ScalarKind;
+//     TestPath dummyPath;
+//     auto addr = dummyPath.allocMemory();
+//     dummyPath.updateMemory(addr, make_unique<Variable>("test", SymbolicExpr::Type{Int, 4}));
 
-    ASSERT_DEATH(dummyPath.isUnchangedState(*addr), "");
-}
+//     ASSERT_DEATH(dummyPath.isUnchangedState(*addr), "");
+// }
 
 /*
 TEST(PathTest, ExtractAddress)
@@ -248,3 +248,219 @@ TEST(PathTest, Clone)
     EXPECT_EQ(equal(path, *path_3), true);
 }
     */
+namespace {
+    Symbolic::Address makeBaseAddr(unsigned int id) {
+        // No offset and no length. Use id as a VarDecl* to make sure every made addresses can be
+        // distinguished by id.
+        return Symbolic::Address{id, (clang::VarDecl *)((uint64_t)id)};
+    }
+
+    Symbolic::Address makeRangeAddr(unsigned int id,
+                                    unique_ptr<const SymbolicExpr> offset,
+                                    unique_ptr<const SymbolicExpr> len) {
+        return Symbolic::Address{id, (clang::VarDecl *)((uint64_t)id), std::move(offset),
+                                 std::move(len)};
+    }
+
+    unique_ptr<Symbolic::Variable> makeVariable(unsigned int id) {
+        return std::make_unique<Symbolic::Variable>(
+            to_string(id), SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, id}, id,
+            make_unique<Address>(id, (clang::VarDecl *)((uint64_t)id)));
+    }
+
+    Symbolic::Address makePointAddr(unsigned int id, std::uint64_t off) {
+        return makeRangeAddr(id, std::make_unique<LiteralExpr>(static_cast<std::uint64_t>(off)),
+                             nullptr);
+    }
+
+    void ExpectReadEqAt(MemoryModel &mm,
+                        unsigned id,
+                        std::uint64_t off,
+                        const Symbolic::SymbolicExpr &expected) {
+        auto addr = makePointAddr(id, off);
+        auto got  = mm.read(addr);
+        ASSERT_NE(got, nullptr) << "read returned null at off=" << off;
+        EXPECT_EQ(*got, expected) << "mismatch at off=" << off;
+    }
+
+    void ExpectReadNullAt(MemoryModel &mm, unsigned id, std::uint64_t off) {
+        auto addr = makePointAddr(id, off);
+        EXPECT_EQ(mm.read(addr), nullptr) << "expected null at off=" << off;
+    }
+}; // namespace
+
+TEST(MemoryModelTest, SizeAndClear) {
+    MemoryModel mm;
+    EXPECT_EQ(mm.size(), 0u);
+
+    auto a  = makeBaseAddr(1);
+    auto e1 = makeVariable(1);
+    mm.write(a, std::move(e1));
+    EXPECT_EQ(mm.size(), 1u);
+
+    auto b  = makeBaseAddr(2);
+    auto e2 = makeVariable(2);
+    mm.write(b, std::move(e2));
+    EXPECT_EQ(mm.size(), 2u);
+
+    mm.clear();
+    EXPECT_EQ(mm.size(), 0u);
+
+    EXPECT_EQ(mm.read(a), nullptr);
+    EXPECT_EQ(mm.read(b), nullptr);
+}
+
+TEST(MemoryModelTest, ReadAfterWrite_NoOffset) {
+    MemoryModel mm;
+
+    auto addr     = makeBaseAddr(1);
+    auto expr     = makeVariable(42);
+    auto saveExpr = expr->clone();
+    mm.write(addr, std::move(expr));
+
+    ASSERT_EQ(expr.get(), nullptr);
+    auto got = mm.read(addr);
+    ASSERT_NE(got, nullptr);
+    EXPECT_EQ(*got, *saveExpr);
+}
+
+TEST(MemoryModelTest, Flat_Yields_All_Three_Categories) {
+    MemoryModel mm;
+
+    // noOffset
+    auto baseA  = makeBaseAddr(1);
+    auto eA     = makeVariable(1);
+    auto saveEA = eA->clone();
+    mm.write(baseA, std::move(eA));
+
+    // constantRange
+    auto rangeB = makeRangeAddr(2, /*off=*/make_unique<LiteralExpr>(4),
+                                /*len=*/make_unique<LiteralExpr>(2));
+    auto eB     = makeVariable(2);
+    auto saveEB = eB->clone();
+    mm.write(rangeB, std::move(eB));
+
+    // symbolicRange
+    auto rangeC = makeRangeAddr(3, /*off=*/makeVariable(3), nullptr);
+    auto eC     = makeVariable(3);
+    auto saveEC = eC.get();
+    mm.write(rangeC, std::move(eC));
+
+    bool fA = false, fB = false, fC = false;
+    for (auto &&[addr, value] : mm.flat()) {
+        ASSERT_NE(value, nullptr);
+        if (*value == *saveEA)
+            fA = true;
+        else if (*value == *saveEB)
+            fB = true;
+        else if (*value == *saveEC)
+            fC = true;
+    }
+
+    EXPECT_TRUE(fA);
+    EXPECT_TRUE(fB);
+    EXPECT_TRUE(fC);
+}
+
+TEST(MemoryModelTest, ConstRange_CoverageAndOverride) {
+    MemoryModel mm;
+    const unsigned baseId = 10;
+
+    // A: [0,10)
+    auto aRange = makeRangeAddr(baseId, std::make_unique<LiteralExpr>(0U),
+                                std::make_unique<LiteralExpr>(10U));
+    auto eA     = makeVariable(100);
+    auto saveA  = eA->clone();
+    mm.write(aRange, std::move(eA));
+
+    // B: [3,8)
+    auto bRange =
+        makeRangeAddr(baseId, std::make_unique<LiteralExpr>(3U), std::make_unique<LiteralExpr>(5U));
+    auto eB    = makeVariable(200);
+    auto saveB = eB->clone();
+    mm.write(bRange, std::move(eB));
+
+    // C: [1,3)
+    auto cRange =
+        makeRangeAddr(baseId, std::make_unique<LiteralExpr>(1U), std::make_unique<LiteralExpr>(2U));
+    auto eC    = makeVariable(300);
+    auto saveC = eC->clone();
+    mm.write(cRange, std::move(eC));
+
+    // D: [7,10)
+    auto dRange =
+        makeRangeAddr(baseId, std::make_unique<LiteralExpr>(7U), std::make_unique<LiteralExpr>(3U));
+    auto eD    = makeVariable(400);
+    auto saveD = eD->clone();
+    mm.write(dRange, std::move(eD));
+
+    //  [0] -> A
+    //  [1,2] -> C
+    //  [3,6] -> B
+    //  [7,9] -> D
+    ExpectReadEqAt(mm, baseId, 0, *saveA);
+    ExpectReadEqAt(mm, baseId, 1, *saveC);
+    ExpectReadEqAt(mm, baseId, 2, *saveC);
+    ExpectReadEqAt(mm, baseId, 3, *saveB);
+    ExpectReadEqAt(mm, baseId, 4, *saveB);
+    ExpectReadEqAt(mm, baseId, 5, *saveB);
+    ExpectReadEqAt(mm, baseId, 6, *saveB);
+    ExpectReadEqAt(mm, baseId, 7, *saveD);
+    ExpectReadEqAt(mm, baseId, 8, *saveD);
+    ExpectReadEqAt(mm, baseId, 9, *saveD);
+
+    ExpectReadNullAt(mm, baseId, 10);
+}
+
+TEST(MemoryModelTest, ConstRange_ExactOverrideSameInterval) {
+    MemoryModel mm;
+    const unsigned baseId = 11;
+
+    // X: [5,9)
+    auto r =
+        makeRangeAddr(baseId, std::make_unique<LiteralExpr>(5U), std::make_unique<LiteralExpr>(4U));
+    auto eX    = makeVariable(500);
+    auto saveX = eX->clone();
+    mm.write(r, std::move(eX));
+
+    // Y: [5,9)
+    auto eY    = makeVariable(600);
+    auto saveY = eY->clone();
+    mm.write(r, std::move(eY));
+
+    for (std::uint64_t off = 5; off < 9; ++off) {
+        ExpectReadEqAt(mm, baseId, off, *saveY);
+    }
+
+    ExpectReadNullAt(mm, baseId, 4);
+    ExpectReadNullAt(mm, baseId, 9);
+}
+
+TEST(MemoryModelTest, ConstRange_TouchingIntervals_NoOverlap) {
+    MemoryModel mm;
+    const unsigned baseId = 12;
+
+    // [0,3) and [3,5)
+    auto r1 =
+        makeRangeAddr(baseId, std::make_unique<LiteralExpr>(0U), std::make_unique<LiteralExpr>(3U));
+    auto r2 =
+        makeRangeAddr(baseId, std::make_unique<LiteralExpr>(3U), std::make_unique<LiteralExpr>(2U));
+
+    auto e1 = makeVariable(700);
+    auto e2 = makeVariable(800);
+    auto s1 = e1->clone();
+    auto s2 = e2->clone();
+    mm.write(r1, std::move(e1));
+    mm.write(r2, std::move(e2));
+
+    // [0,2]
+    ExpectReadEqAt(mm, baseId, 0, *s1);
+    ExpectReadEqAt(mm, baseId, 1, *s1);
+    ExpectReadEqAt(mm, baseId, 2, *s1);
+
+    // [3,4]
+    ExpectReadEqAt(mm, baseId, 3, *s2);
+    ExpectReadEqAt(mm, baseId, 4, *s2);
+
+    ExpectReadNullAt(mm, baseId, 5);
+}

@@ -53,7 +53,7 @@ class SetPatternsPlugin : public LoopInfoPlugin {
         loopCurrent->step(inc);
 
         auto getPatternsFromPath = [&](const Path &currentEntry) {
-            unordered_map<Address, optional<const pattern>, AddressInterPathHash> patterns;
+            unordered_map<Address, optional<const pattern>, AddressHash> patterns;
             auto &preVA = loopInfo.symbolicLoopEntry_->getPaths()[0]->getVarAddr();
             auto &preMS = loopInfo.symbolicLoopEntry_->getPaths()[0]->getMemoryState();
             for (auto &&[addr, currentExpr] : currentEntry.getMemoryState().flat()) {
@@ -140,7 +140,7 @@ class SetPatternsPlugin : public LoopInfoPlugin {
             return patterns;
         }; // getPatternsFromPath end
 
-        unordered_map<Address, optional<const pattern>, AddressInterPathHash> patterns;
+        unordered_map<Address, optional<const pattern>, AddressHash> patterns;
 
         for (auto &path : loopCurrent->getPaths()) {
             switch (path->getPathState()) {

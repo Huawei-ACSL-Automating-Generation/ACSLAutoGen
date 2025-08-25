@@ -14,7 +14,7 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
   public:
     CheckAndDumpLoopInfoPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool, vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressInterPathHash, AddressEqual>>> generate(
+    tuple<optional<string>, bool, vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>> generate(
         const ProgramState &,
         const clang::Expr *,
         const clang::Stmt *,
@@ -58,9 +58,9 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
             }
         }
         INFO(oss.str());
-        return make_tuple(nullopt, true,
-                          vector<unordered_map<Address, unique_ptr<SymbolicExpr>,
-                                               AddressInterPathHash, AddressEqual>>{});
+        return make_tuple(
+            nullopt, true,
+            vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>{});
     }
 
   private:
@@ -72,7 +72,8 @@ REGISTER_ACSL_PLUGIN(CheckAndDumpLoopInfoPlugin, "checkAndDumpLoopInfo");
 //   public:
 //     LinearInvariantPlugin(const string &ID) : id_(ID) {}
 //     string_view id() const override { return id_; }
-//     tuple<optional<string>, bool, vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressInterPathHash, AddressEqual>>> generate(
+//     tuple<optional<string>, bool, vector<unordered_map<Address, unique_ptr<SymbolicExpr>,
+//     AddressHash, AddressEqual>>> generate(
 //         const ProgramState &loopEntry,
 //         const clang::Expr *cond,
 //         const clang::Stmt *inc,
@@ -84,7 +85,7 @@ REGISTER_ACSL_PLUGIN(CheckAndDumpLoopInfoPlugin, "checkAndDumpLoopInfo");
 //         }
 
 //         using mem_map_vector = vector<
-//             unordered_map<Address, unique_ptr<SymbolicExpr>, AddressInterPathHash, AddressEqual>>;
+//             unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>;
 
 //         // Ban this plugin when pointer/array exist, temporarily...
 //         for (auto &[_, value] : loopEntry.getPaths()[0]->getMemoryState()) {
@@ -143,7 +144,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
   public:
     LoopAssignsPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool, vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressInterPathHash, AddressEqual>>> generate(
+    tuple<optional<string>, bool, vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>> generate(
         const ProgramState &preState,
         const clang::Expr *cond,
         const clang::Stmt *inc,
@@ -154,8 +155,8 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         loopCurrent->step(body);
         loopCurrent->step(inc);
 
-        using mem_map_vector = vector<
-            unordered_map<Address, unique_ptr<SymbolicExpr>, AddressInterPathHash, AddressEqual>>;
+        using mem_map_vector =
+            vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>;
         auto &entryMS = loopInfo.symbolicLoopEntry_->getPaths()[0]->getMemoryState();
 
         string spec;
@@ -205,14 +206,14 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
   public:
     ParadigmMaxMinPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool, vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressInterPathHash, AddressEqual>>> generate(
+    tuple<optional<string>, bool, vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>> generate(
         const ProgramState &,
         const clang::Expr *,
         const clang::Stmt *,
         const clang::Stmt *body,
         const LoopInfo &loopInfo) const override {
-        using mem_map_vector = vector<
-            unordered_map<Address, unique_ptr<SymbolicExpr>, AddressInterPathHash, AddressEqual>>;
+        using mem_map_vector =
+            vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>;
         // Only work when loop is 1-step.
         int64_t indexStep;
         if (loopInfo.index_ == nullptr)

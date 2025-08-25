@@ -15,7 +15,7 @@ using namespace llvm;
 
 namespace {
     using mem_map_vector =
-        vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressInterPathHash, AddressEqual>>;
+        vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>;
     // This code performs minimal safety checks, so please ensure the validity of the input.
     std::tuple<std::optional<std::string>, bool, mem_map_vector> doPluginOnFirstLoop(
         const string &code,

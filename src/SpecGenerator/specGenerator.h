@@ -43,7 +43,7 @@ struct LoopInfo {
     // Address with pattern has constant step.
     // Address with nullopt means too complex.
     // Other addresses' values hold through loop.
-    std::unordered_map<Symbolic::Address, std::optional<const pattern>, Symbolic::AddressInterPathHash>
+    std::unordered_map<Symbolic::Address, std::optional<const pattern>, Symbolic::AddressHash>
         patternsMap_{};
     // TODO(more info to be added)
 };
@@ -117,7 +117,7 @@ class LoopInvariantPlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
 
-    virtual std::tuple<std::optional<std::string>, bool, std::vector<std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressInterPathHash, AddressEqual>>> generate(
+    virtual std::tuple<std::optional<std::string>, bool, std::vector<std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>> generate(
         const ProgramState &loopEntry,
         const clang::Expr *cond,
         const clang::Stmt *inc,

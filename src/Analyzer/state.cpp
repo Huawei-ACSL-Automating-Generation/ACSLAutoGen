@@ -607,7 +607,7 @@ string Path::dump() const {
             << "\n";
     }
 
-    unordered_set<Address, AddressIntraPathHash> printedAddrs;
+    unordered_set<Address, AddressHash> printedAddrs;
 
     oss << "Variable Address Mapping:\n";
     for (auto &[varDecl, addr] : varAddr_) {
@@ -726,7 +726,8 @@ unique_ptr<SymbolicExpr> MemoryModel::read(const Address &addr) const {
         auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
         auto &rangeExprMap  = memoryMap_constantRange_.at(*idAddr);
         auto range          = pair{unsignedOffset, unsignedOffset + 1};
-        auto upperBoundIt   = rangeExprMap.upper_bound(range);
+        auto rangeForSearch = pair{unsignedOffset, numeric_limits<uint64_t>::max()};
+        auto upperBoundIt   = rangeExprMap.upper_bound(rangeForSearch);
         auto firstLEIt =
             upperBoundIt == rangeExprMap.begin() ? rangeExprMap.end() : prev(upperBoundIt);
         if (firstLEIt == rangeExprMap.end() || firstLEIt->first.second <= unsignedOffset)
@@ -771,8 +772,9 @@ void MemoryModel::write(const Address &addr, unique_ptr<const SymbolicExpr> valu
         auto unsignedLen    = constLen ? static_cast<uint64_t>(constLen.value()) : uint64_t{1};
         auto &rangeExprMap  = memoryMap_constantRange_[*idAddr];
         auto range          = pair{unsignedOffset, unsignedOffset + unsignedLen};
+        auto rangeForSearch = pair{unsignedOffset, numeric_limits<uint64_t>::max()};
         auto endIt          = rangeExprMap.end();
-        auto upperBoundIt   = rangeExprMap.upper_bound(range);
+        auto upperBoundIt   = rangeExprMap.upper_bound(rangeForSearch);
         auto firstLEIt      = upperBoundIt == rangeExprMap.begin() ? endIt : prev(upperBoundIt);
         if (firstLEIt != endIt && firstLEIt->first.second > range.first) {
             if (firstLEIt->first.first < range.first) {
@@ -801,7 +803,7 @@ void MemoryModel::write(const Address &addr, unique_ptr<const SymbolicExpr> valu
 }
 
 size_t MemoryModel::size() const {
-    size_t sum = 0;
+    size_t sum = memoryMap_noOffset_.size();
     for (auto &[_, map] : memoryMap_constantRange_)
         sum += map.size();
     for (auto &[_, map] : memoryMap_symbolicRange_)
@@ -809,7 +811,7 @@ size_t MemoryModel::size() const {
     return sum;
 }
 
-MemoryModel::flat_view MemoryModel::flat() { return MemoryModel::flat_view{*this}; }
+// MemoryModel::flat_view MemoryModel::flat() { return MemoryModel::flat_view{*this}; }
 const MemoryModel::flat_view MemoryModel::flat() const {
     return MemoryModel::flat_view{const_cast<MemoryModel &>(*this)};
 }
