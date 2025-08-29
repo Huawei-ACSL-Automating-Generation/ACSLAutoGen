@@ -16,6 +16,7 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
     string_view id() const override { return id_; }
     tuple<optional<string>, bool, vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>> generate(
         const ProgramState &,
+        const ProgramState &,
         const clang::Expr *,
         const clang::Stmt *,
         const clang::Stmt *,
@@ -146,6 +147,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
     string_view id() const override { return id_; }
     tuple<optional<string>, bool, vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>> generate(
         const ProgramState &preState,
+        const ProgramState &,
         const clang::Expr *cond,
         const clang::Stmt *inc,
         const clang::Stmt *body,
@@ -155,38 +157,110 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         loopCurrent->step(body);
         loopCurrent->step(inc);
 
+        using mem_map = unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>;
         using mem_map_vector =
             vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>;
-        auto &entryMS = loopInfo.symbolicLoopEntry_->getPaths()[0]->getMemoryState();
+        auto &entryMS = loopInfo.symbolicLoopEntry_->getPaths().at(0)->getMemoryState();
 
         string spec;
-        vector<const Address *> assignedAddrs;
+        vector<Address> assignedAddrs;
+        mem_map_vector postState;
+
+        // This plugin does not produce branches.
+        postState.emplace_back();
 
         auto isLocal = [&](const Address &addr) {
-            auto from = &addr.getFrom();
-            while (auto addr = get_if<not_null<unique_ptr<const Address>>>(from)) {
-                from = &(*addr)->getFrom();
-            }
-            if (auto var = get_if<not_null<const VarDecl *>>(from)) {
-                if (loopInfo.symbolicLoopEntry_ == nullptr ||
-                    loopInfo.symbolicLoopEntry_->getPaths().size() != 1)
-                    ERROR("SymbolicLoopEntry_ is in an invaild state");
-                if (!loopInfo.symbolicLoopEntry_->getPaths()[0]->getVarAddr().contains(*var))
-                    return true;
-            } else {
-                TODO();
-            }
+            auto root        = addr.getFromRoot();
+            auto &varAddrMap = preState.getPaths().at(0)->getVarAddr();
+            if (!varAddrMap.contains(root))
+                return true;
             return false;
         }; // isLocal end
 
-        for (auto &[addr, _] : loopInfo.patternsMap_) {
+        auto tryGetAsRange = [&](const Address &addr) -> optional<Address> {
+            if (!addr.isOffseted())
+                return nullopt;
+            auto &from = addr.getFrom();
+            if (auto range = std::visit(
+                    [&](auto &&arg) -> optional<Address> {
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, std::monostate>) {
+                            ERROR("Invalid state");
+                        } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                            ERROR("Invalid state.");
+                        } else if constexpr (std::is_same_v<
+                                                 T, not_null<std::unique_ptr<const Address>>>) {
+                            if (auto it = loopInfo.patternsMap_.find(*arg);
+                                it != loopInfo.patternsMap_.end()) {
+                                auto &pattern = it->second;
+                                if (pattern == nullopt)
+                                    TODO();
+                                if (pattern.value().step_ != 1)
+                                    TODO();
+                                auto result = addr;
+                                result.setOffset(pattern.value().initialValue_->clone());
+                                result.setLength(loopInfo.loopCount_->simplifiedExpr());
+                                return result;
+                            }
+                        } else if constexpr (std::is_same_v<
+                                                 T, std::pair<
+                                                        not_null<shared_ptr<const Structure::Info>>,
+                                                        const size_t>>) {
+                            TODO();
+                        }
+                        return nullopt;
+                    },
+                    from))
+                return range;
+            auto offset = addr.getOffset();
+            if (auto var = dynamic_cast<const Symbolic::Variable *>(offset.get())) {
+                if (auto fromAddr =
+                        std::get_if<not_null<std::unique_ptr<const Address>>>(&var->getFrom())) {
+                    if (auto it = loopInfo.patternsMap_.find(**fromAddr);
+                        it != loopInfo.patternsMap_.end()) {
+                        auto &pattern = it->second;
+                        if (pattern == nullopt)
+                            TODO();
+                        if (pattern.value().step_ != 1)
+                            TODO();
+                        auto result = addr;
+                        result.setOffset(pattern.value().initialValue_->clone());
+                        result.setLength(loopInfo.loopCount_->simplifiedExpr());
+                        return result;
+                    }
+                }
+            }
+            return nullopt;
+        }; // tryGetAsRange end
+
+        for (auto &[addr, pattern] : loopInfo.patternsMap_) {
+            using enum BinaryOpExpr::Operator;
             if (isLocal(addr))
                 continue;
-            assignedAddrs.push_back(&addr);
+            if (auto range = tryGetAsRange(addr)) {
+                if (pattern) {
+                    postState.at(0)[range.value()] =
+                        make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(), Add,
+                                                  make_unique<LiteralExpr>(pattern.value().step_));
+                } else {
+                    postState.at(0)[range.value()] = UnknownExpr::makeUnknown();
+                }
+                assignedAddrs.push_back(std::move(range.value()));
+            } else {
+                if (pattern) {
+                    postState.at(0)[addr] = make_unique<BinaryOpExpr>(
+                        pattern.value().initialValue_->clone(), Add,
+                        make_unique<BinaryOpExpr>(make_unique<LiteralExpr>(pattern.value().step_),
+                                                  Multiply, loopInfo.loopCount_->clone()));
+                } else {
+                    postState.at(0)[addr] = UnknownExpr::makeUnknown();
+                }
+                assignedAddrs.push_back(addr);
+            }
         }
 
         for (auto &addr : assignedAddrs) {
-            auto valueForm = addr->regularFormOfValue();
+            auto valueForm = addr.regularFormOfValue();
             spec += valueForm + ", ";
         }
 
@@ -194,7 +268,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
             return make_tuple(R"(loop assigns \nothing;)", true, mem_map_vector{});
         else
             return make_tuple("loop assigns " + spec.substr(0, spec.length() - 2) + ";", true,
-                              mem_map_vector{});
+                              std::move(postState));
     }
 
   private:
@@ -207,6 +281,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
     ParadigmMaxMinPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
     tuple<optional<string>, bool, vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>> generate(
+        const ProgramState &,
         const ProgramState &,
         const clang::Expr *,
         const clang::Stmt *,

@@ -1,6 +1,7 @@
 // tests/unit/SpecGenerator/loopInvariantPlugins_test.cpp
 
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include <unordered_map>
 #include <string>
 #include <llvm/Support/Casting.h>
@@ -22,21 +23,22 @@ namespace {
         const string &pid) {
         ASTExtractor e(code);
         GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
-        auto func      = e.findFirstDecl<clang::FunctionDecl>();
-        auto loopEntry = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
+        auto func     = e.findFirstDecl<clang::FunctionDecl>();
+        auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
         clang::Stmt *loopStmt;
-        loopEntry->init();
-        DEBUG(loopEntry->dump());
+        preState->init();
+        DEBUG(preState->dump());
         for (clang::Stmt *stmt : func->getBody()->children()) {
             if (isa<clang::WhileStmt>(stmt) || isa<clang::ForStmt>(stmt) ||
                 isa<clang::DoStmt>(stmt)) {
                 loopStmt = stmt;
                 break;
             }
-            loopEntry->step(stmt);
-            DEBUG(loopEntry->dump());
+            preState->step(stmt);
+            DEBUG(preState->dump());
         }
 
+        auto loopEntry = preState->clone();
         if (auto forLoop = dyn_cast<clang::ForStmt>(loopStmt); forLoop && forLoop->getInit()) {
             loopEntry->step(forLoop->getInit());
             DEBUG(loopEntry->dump());
@@ -57,7 +59,7 @@ namespace {
             UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
         }
 
-        auto loopInfo = parseLoopInfo(*loopEntry, cond, inc, body);
+        auto loopInfo = parseLoopInfo(*preState, *loopEntry, cond, inc, body);
         if (!loopInfo) {
             // TODO(complex loop)
             UNIMPLEMENT("Loop is too complex!");
@@ -68,9 +70,99 @@ namespace {
             ERROR("Plugin with id " + pid + " does not exist!");
         auto *fcp = dynamic_cast<const LoopInvariantPlugin *>(pl);
 
-        return fcp->generate(*loopEntry, cond, inc, body, *loopInfo);
+        return fcp->generate(*preState, *loopEntry, cond, inc, body, *loopInfo);
     }
 } // namespace
+
+namespace Symbolic {
+    std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType e) {
+        using enum SymbolicExpr::ExprType;
+        switch (e) {
+            case Literal: return os << "Literal";
+            case Variable: return os << "Variable";
+            case SymbolAddress: return os << "SymbolAddress";
+            case BinaryOp: return os << "BinaryOp";
+            case UnaryOp: return os << "UnaryOp";
+            case Structure: return os << "Structure";
+            case Unknown: return os << "Unknown";
+        }
+        return os << static_cast<std::underlying_type_t<SymbolicExpr::ExprType>>(e);
+    }
+} // namespace Symbolic
+
+using ::testing::HasSubstr;
+using ::testing::MatchesRegex;
+
+TEST(LoopAssignsPluginTest, Simple_0) {
+    auto pluginId                        = "loopAssigns";
+    auto code                            = R"(
+        void func(int *p, int n){
+            int mx = 0;
+            for(int i = 0; i < n; i++){
+                if(mx < p[i])
+                    mx = p[i];
+            } 
+        }
+    )";
+    auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
+    EXPECT_NE(spec, nullopt);
+    EXPECT_THAT(*spec, HasSubstr("mx"));
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_EQ(postState.size(), 1);
+    ASSERT_EQ(postState.at(0).size(), 1);
+    EXPECT_EQ(postState.at(0).begin()->second->getType(), SymbolicExpr::ExprType::Unknown);
+}
+
+TEST(LoopAssignsPluginTest, Simple_1) {
+    auto pluginId                        = "loopAssigns";
+    auto code                            = R"(
+        void func(int *p, int n){
+            int cnt = 0;
+            for(int i = 0; i < n; i++){
+                p[i]++;
+                cnt -= 1;
+            } 
+        }
+    )";
+    auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
+    EXPECT_NE(spec, nullopt);
+    EXPECT_THAT(*spec, HasSubstr("cnt"));
+    EXPECT_THAT(*spec, HasSubstr("p[0...n]"));
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_EQ(postState.size(), 1);
+    ASSERT_EQ(postState.at(0).size(), 2);
+    for (auto &[addr, value] : postState.at(0)) {
+        DEBUG(addr.dump());
+        DEBUG(value->dump());
+    }
+}
+
+TEST(LoopAssignsPluginTest, Simple_2) {
+    auto pluginId                        = "loopAssigns";
+    auto code                            = R"(
+        void func(int *p, int n){
+            int cnt = 0;
+            int i = 0;
+            while(i < n){
+                p[i]++;
+                cnt -= 1;
+                i++;
+            } 
+        }
+    )";
+    auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
+    EXPECT_NE(spec, nullopt);
+    EXPECT_THAT(*spec, HasSubstr("i"));
+    EXPECT_THAT(*spec, HasSubstr("cnt"));
+    EXPECT_THAT(*spec, HasSubstr("p[0...n]"));
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_EQ(postState.size(), 1);
+    ASSERT_EQ(postState.at(0).size(), 3);
+    for (auto &[addr, value] : postState.at(0)) {
+        DEBUG(addr.dump());
+        DEBUG(value->dump());
+    }
+}
 
 TEST(ParadigmMaxMinPluginTest, Simple_0) {
     auto pluginId                = "paradigmMaxMin";

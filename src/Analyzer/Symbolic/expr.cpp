@@ -11,9 +11,7 @@ using namespace Symbolic;
 using namespace clang;
 using namespace llvm;
 
-std::unique_ptr<SymbolicExpr> SymbolicExpr::makeUnknown() {
-    return std::make_unique<UnknownExpr>();
-}
+std::unique_ptr<UnknownExpr> UnknownExpr::makeUnknown() { return std::make_unique<UnknownExpr>(); }
 
 std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedExprIfLinear() const {
     if (!isLinear())
@@ -567,9 +565,14 @@ std::string Address::regularFormOfValue(std::optional<std::string_view> prefix,
                 } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
                     ERROR("Address range should not from varDecl*.");
                 } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                    auto nameStr   = arg->regularForm(prefix, suffix);
-                    auto offsetStr = "[" + getOffset()->regularForm(prefix, suffix) + "..." +
-                                     range_.value().len_->regularForm(prefix, suffix) + "]";
+                    auto nameStr = arg->regularFormOfValue(prefix, suffix);
+                    auto offsetStr =
+                        "[" + getOffset()->regularForm(prefix, suffix) + "..." +
+                        make_unique<BinaryOpExpr>(getOffset()->clone(), BinaryOpExpr::Operator::Add,
+                                                  range_.value().len_->clone())
+                            ->simplifiedExpr()
+                            ->regularForm() +
+                        "]";
                     if (nameStr.empty())
                         ERROR("Empty regular from.");
 
@@ -639,7 +642,7 @@ std::unique_ptr<SymbolicExpr> LiteralExpr::simplifiedExpr() const {
 
 std::unique_ptr<SymbolicExpr> BinaryOpExpr::simplifiedExpr() const {
     if (isUnknown())
-        return makeUnknown();
+        return UnknownExpr::makeUnknown();
     if (isLinear())
         return simplifiedExprIfLinear();
     auto LHS = left_->simplifiedExpr();
@@ -649,7 +652,7 @@ std::unique_ptr<SymbolicExpr> BinaryOpExpr::simplifiedExpr() const {
 
 std::unique_ptr<SymbolicExpr> UnaryOpExpr::simplifiedExpr() const {
     if (isUnknown())
-        return makeUnknown();
+        return UnknownExpr::makeUnknown();
     if (isLinear())
         return simplifiedExprIfLinear();
     auto subExpr = expr_->simplifiedExpr();

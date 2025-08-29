@@ -18,21 +18,22 @@ namespace {
     auto doPluginOnFirstLoop(const string &code, const string &pid) {
         ASTExtractor e(code);
         GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
-        auto func      = e.findFirstDecl<clang::FunctionDecl>();
-        auto loopEntry = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
+        auto func     = e.findFirstDecl<clang::FunctionDecl>();
+        auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
         clang::Stmt *loopStmt;
-        loopEntry->init();
-        DEBUG(loopEntry->dump());
+        preState->init();
+        DEBUG(preState->dump());
         for (clang::Stmt *stmt : func->getBody()->children()) {
             if (isa<clang::WhileStmt>(stmt) || isa<clang::ForStmt>(stmt) ||
                 isa<clang::DoStmt>(stmt)) {
                 loopStmt = stmt;
                 break;
             }
-            loopEntry->step(stmt);
-            DEBUG(loopEntry->dump());
+            preState->step(stmt);
+            DEBUG(preState->dump());
         }
 
+        auto loopEntry = preState->clone();
         if (auto forLoop = dyn_cast<clang::ForStmt>(loopStmt); forLoop && forLoop->getInit()) {
             loopEntry->step(forLoop->getInit());
             DEBUG(loopEntry->dump());
@@ -58,7 +59,7 @@ namespace {
         if (auto *pl = ACSLPluginRegistry::instance().get("setLoopEntry")) {
             auto *setLoopEntryPlugin = dynamic_cast<const LoopInfoPlugin *>(pl);
 
-            if (!setLoopEntryPlugin->parse(*loopEntry, cond, inc, body, loopInfo))
+            if (!setLoopEntryPlugin->parse(*preState, *loopEntry, cond, inc, body, loopInfo))
                 ERROR("Set loop entry fail.");
         } else {
             ERROR("Set loop entry fail.");
@@ -68,7 +69,7 @@ namespace {
         if (!pl)
             ERROR("Plugin with id " + pid + " does not exist!");
         auto *fcp   = dynamic_cast<const LoopInfoPlugin *>(pl);
-        auto result = fcp->parse(*loopEntry, cond, inc, body, loopInfo);
+        auto result = fcp->parse(*preState, *loopEntry, cond, inc, body, loopInfo);
         return pair{std::move(loopInfo), result};
     }
 } // namespace
@@ -149,5 +150,29 @@ TEST(SetPatternsPluginTest, SimpleLoop_3) {
             DEBUG("too complex");
             EXPECT_EQ(addr.isOffseted(), true);
         }
+    }
+}
+
+TEST(SetPatternsPluginTest, SimpleLoop_4) {
+    auto pluginId                 = "setPatterns";
+    auto code                     = R"(
+        int* func(int *x, int n){
+            for(int i = 0; i < n; i++){
+                x[i]--;
+            } 
+            return x;
+        }
+    )";
+    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginId);
+    EXPECT_EQ(continueFlag, true);
+    EXPECT_EQ(loopInfo.patternsMap_.size(), 2);
+    for (auto &[addr, pattern] : loopInfo.patternsMap_) {
+        DEBUG(addr.dump());
+        DEBUG(pattern.value().initialValue_->dump() +
+              ", step: " + to_string(pattern.value().step_));
+        if (addr.isOffseted())
+            EXPECT_EQ(pattern.value().step_, -1);
+        else
+            EXPECT_EQ(pattern.value().step_, 1);
     }
 }

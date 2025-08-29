@@ -15,13 +15,14 @@
 #include "groups.h"
 #include "Analyzer/Symbolic/expr.h"
 #include "Analyzer/state.h"
+#include "Utils/utils.h"
 
 class ProgramState;
 
 std::string emitFunctionContract(
     const ProgramState &pre,
     const ProgramState &post,
-    const std::string &groupName = DEFAULT_FUNC_CONTRACT_PLUGINS,
+    std::string_view groupName = DEFAULT_FUNC_CONTRACT_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
 
@@ -33,42 +34,60 @@ struct LoopInfo {
     std::unique_ptr<Symbolic::Address> index_{nullptr};
     clang::BinaryOperator::Opcode op_{};
     std::unique_ptr<Symbolic::SymbolicExpr> indexBound_{nullptr};
+    std::unique_ptr<Symbolic::SymbolicExpr> loopCount_{nullptr};
 
     // SetPatternsPlugin
-    struct pattern {
+    struct Pattern {
         std::unique_ptr<const Symbolic::SymbolicExpr> initialValue_{nullptr};
         int64_t step_;
+        Pattern() = default;
+        Pattern(std::unique_ptr<const Symbolic::SymbolicExpr> initialValue, int64_t step)
+            : initialValue_(std::move(initialValue)), step_(step) {}
+        Pattern(const Pattern &other)
+            : initialValue_(other.initialValue_ ? other.initialValue_->clone() : nullptr),
+              step_(other.step_) {}
+        Pattern &operator=(const Pattern &other) {
+            if (this == &other)
+                return *this;
+            initialValue_ = other.initialValue_ ? other.initialValue_->clone() : nullptr;
+            step_         = other.step_;
+            return *this;
+        }
+        Pattern(Pattern &&)            = default;
+        Pattern &operator=(Pattern &&) = default;
     };
 
     // Address with pattern has constant step.
     // Address with nullopt means too complex.
     // Other addresses' values hold through loop.
-    std::unordered_map<Symbolic::Address, std::optional<const pattern>, Symbolic::AddressHash>
+    std::unordered_map<Symbolic::Address, std::optional<const Pattern>, Symbolic::AddressHash>
         patternsMap_{};
     // TODO(more info to be added)
 };
 
 std::optional<LoopInfo> parseLoopInfo(
+    const ProgramState &preState,
     const ProgramState &loopEntry,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
-    const std::string &groupName = DEFAULT_LOOP_INFO_PLUGINS,
+    std::string_view groupName = DEFAULT_LOOP_INFO_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
 
 std::tuple<std::string, std::vector<std::unique_ptr<Path>>> emitLoopInvariant(
     const ProgramState &preState,
+    const ProgramState &loopEntry,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
     const LoopInfo &loopInfo,
-    const std::string &groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
+    std::string_view groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
 
 std::string emitInlineContract(const ProgramState &state,
-                               const std::string &groupName,
+                               std::string_view groupName,
                                const std::vector<std::string> &extraPluginIds);
 
 /*---------------------------------------*/
@@ -106,7 +125,8 @@ class LoopInfoPlugin : public ACSLPlugin {
     /// @param body
     /// @param loopInfo info to be filled in
     /// @return return false means this loop is too complex and will abort whole parsing!
-    virtual bool parse(const ProgramState &loopEntry,
+    virtual bool parse(const ProgramState &preState,
+                       const ProgramState &loopEntry,
                        const clang::Expr *cond,
                        const clang::Stmt *inc,
                        const clang::Stmt *body,
@@ -118,6 +138,7 @@ class LoopInvariantPlugin : public ACSLPlugin {
     Kind kind() const override { return Kind::LoopInvariant; }
 
     virtual std::tuple<std::optional<std::string>, bool, std::vector<std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>> generate(
+        const ProgramState &preState,
         const ProgramState &loopEntry,
         const clang::Expr *cond,
         const clang::Stmt *inc,
@@ -140,7 +161,7 @@ class ACSLPluginRegistry {
 
     void registerPlugin(std::unique_ptr<ACSLPlugin> P) { plugins_.emplace(P->id(), std::move(P)); }
 
-    ACSLPlugin *get(const std::string &id) const {
+    ACSLPlugin *get(std::string_view id) const {
         auto it = plugins_.find(id);
         return it == plugins_.end() ? nullptr : it->second.get();
     }
@@ -154,7 +175,11 @@ class ACSLPluginRegistry {
     }
 
   private:
-    std::unordered_map<std::string, std::unique_ptr<ACSLPlugin>> plugins_;
+    std::unordered_map<std::string,
+                       std::unique_ptr<ACSLPlugin>,
+                       TransparentStringHash,
+                       TransparentStringEqual>
+        plugins_;
 };
 
 #define REGISTER_ACSL_PLUGIN(PluginType, PluginID)                                                 \
@@ -182,7 +207,7 @@ class ACSLPluginGroupRegistry {
 
     void registerGroup(ACSLPluginGroup G) { groups_.emplace(G.name, std::move(G)); }
 
-    const ACSLPluginGroup *getGroup(const std::string &name) const {
+    const ACSLPluginGroup *getGroup(std::string_view name) const {
         auto it = groups_.find(name);
         return it == groups_.end() ? nullptr : &it->second;
     }
@@ -195,7 +220,8 @@ class ACSLPluginGroupRegistry {
     }
 
   private:
-    std::unordered_map<std::string, ACSLPluginGroup> groups_;
+    std::unordered_map<std::string, ACSLPluginGroup, TransparentStringHash, TransparentStringEqual>
+        groups_;
 };
 
 #define REGISTER_ACSL_GROUP(GroupName, ...)                                                        \

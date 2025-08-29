@@ -70,10 +70,6 @@ namespace Symbolic {
         Type getValType() const { return valueType_; }
         void setValType(Type newType) { valueType_ = newType; }
 
-        /// @brief Create a unknown symbolic expression.
-        /// @return Unique pointer to a Unknown expression.
-        static std::unique_ptr<SymbolicExpr> makeUnknown();
-
         /// @brief Clone the expression.
         /// @return Deep copy of the expression.
         virtual std::unique_ptr<SymbolicExpr> clone() const = 0;
@@ -410,6 +406,10 @@ namespace Symbolic {
       public:
         UnknownExpr() : SymbolicExpr(ExprType::Unknown, {ScalarKind::Void, 0}) {}
         ~UnknownExpr() = default;
+
+        /// @brief Create a unknown symbolic expression.
+        /// @return Unique pointer to a Unknown expression.
+        static std::unique_ptr<UnknownExpr> makeUnknown();
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;

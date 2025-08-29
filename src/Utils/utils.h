@@ -347,6 +347,20 @@ namespace acslg {
     };
 } // namespace acslg
 
+struct TransparentStringHash {
+    using is_transparent           = void;
+    using is_transparent_key_equal = void;
+
+    size_t operator()(std::string_view sv) const noexcept {
+        return std::hash<std::string_view>{}(sv);
+    }
+};
+
+struct TransparentStringEqual {
+    using is_transparent = void;
+    bool operator()(std::string_view a, std::string_view b) const noexcept { return a == b; }
+};
+
 template <typename StmtType, typename CallbackType>
 class StmtVisitor : public clang::RecursiveASTVisitor<StmtVisitor<StmtType, CallbackType>> {
   public:

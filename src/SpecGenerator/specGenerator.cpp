@@ -11,7 +11,7 @@ using namespace clang;
 namespace {
     // auxiliary function
     template <typename T>
-    vector<const T *> getPlugins(const string &groupName,
+    vector<const T *> getPlugins(std::string_view groupName,
                                  optional<reference_wrapper<const vector<string>>> extraPluginIds) {
         const ACSLPluginGroup *group = ACSLPluginGroupRegistry::instance().getGroup(groupName);
         if (!group) {
@@ -28,7 +28,8 @@ namespace {
                 allName.pop_back();
             }
             allName += "]";
-            ERROR("Unknown ACSL group: " + groupName + ". All registered groups: " + allName);
+            ERROR("Unknown ACSL group: " + string{groupName} +
+                  ". All registered groups: " + allName);
         }
 
         vector<string> ids = group->pluginIds;
@@ -51,7 +52,7 @@ namespace {
 
 string emitFunctionContract(const ProgramState &pre,
                             const ProgramState &post,
-                            const string &groupName,
+                            std::string_view groupName,
                             optional<reference_wrapper<const vector<string>>> extraPluginIds) {
     auto plugins = getPlugins<FunctionContractPlugin>(groupName, extraPluginIds);
     string spec  = ACSL_HEAD.to_string();
@@ -67,11 +68,12 @@ string emitFunctionContract(const ProgramState &pre,
 }
 
 std::optional<LoopInfo> parseLoopInfo(
+    const ProgramState &preState,
     const ProgramState &loopEntry,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
-    const string &groupName,
+    std::string_view groupName,
     optional<reference_wrapper<const vector<string>>> extraPluginIds) {
     auto plugins = getPlugins<LoopInfoPlugin>(groupName, extraPluginIds);
 
@@ -79,19 +81,20 @@ std::optional<LoopInfo> parseLoopInfo(
     for (auto &plugin : plugins) {
         if (plugin == nullptr)
             continue;
-        if (!plugin->parse(loopEntry, cond, inc, body, loopInfo))
+        if (!plugin->parse(preState, loopEntry, cond, inc, body, loopInfo))
             return nullopt;
     }
     return loopInfo;
 }
 
 std::tuple<std::string, std::vector<unique_ptr<Path>>> emitLoopInvariant(
+    const ProgramState &preState,
     const ProgramState &loopEntry,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
     const LoopInfo &loopInfo,
-    const std::string &groupName,
+    std::string_view groupName,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
     auto plugins = getPlugins<LoopInvariantPlugin>(groupName, extraPluginIds);
     vector<unique_ptr<Path>> invariants;
@@ -101,7 +104,8 @@ std::tuple<std::string, std::vector<unique_ptr<Path>>> emitLoopInvariant(
     for (auto &plugin : plugins) {
         if (plugin == nullptr)
             UNREACHABLE();
-        auto [s, continueFlag, exit_invs] = plugin->generate(loopEntry, cond, inc, body, loopInfo);
+        auto [s, continueFlag, exit_invs] =
+            plugin->generate(preState, loopEntry, cond, inc, body, loopInfo);
 
         // for (auto &inv : exit_invs) {
         //     invariants.push_back(std::move(inv));

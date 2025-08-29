@@ -166,7 +166,7 @@ Address *Path::allocMemory(const VarDecl *var) {
     varAddr_.emplace(canonicalVar, std::move(newAddr));
 
     // Prevent uninitialized variables.
-    memoryState_.write(*rawPtr, SymbolicExpr::makeUnknown());
+    memoryState_.write(*rawPtr, UnknownExpr::makeUnknown());
     return rawPtr;
 }
 
@@ -1157,8 +1157,10 @@ void ProgramState::stepBranch(const vector<const Expr *> &branchConds,
 }
 
 void ProgramState::stepLoop(const Stmt *loopStmt) {
+    auto &preState = *this;
+    auto loopEntry = preState.clone();
     if (auto forLoop = dyn_cast<ForStmt>(loopStmt); forLoop && forLoop->getInit())
-        this->step(forLoop->getInit());
+        loopEntry->step(forLoop->getInit());
 
     const Expr *cond = nullptr;
     const Stmt *inc  = nullptr;
@@ -1175,7 +1177,7 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
         UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
     }
 
-    auto loopInfo = parseLoopInfo(*this, cond, inc, body);
+    auto loopInfo = parseLoopInfo(preState, *loopEntry, cond, inc, body);
 
     string spec;
     vector<unique_ptr<Path>> invs;
@@ -1183,10 +1185,11 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
         // Note: Dangerous! Change this.
         auto symbolLoopEntry = clone();
         symbolLoopEntry->resymbolize();
-        loopInfo        = LoopInfo{std::move(symbolLoopEntry)};
-        tie(spec, invs) = emitLoopInvariant(*this, cond, inc, body, *loopInfo, "ComplexLoop");
+        loopInfo = LoopInfo{std::move(symbolLoopEntry)};
+        tie(spec, invs) =
+            emitLoopInvariant(preState, *loopEntry, cond, inc, body, *loopInfo, "ComplexLoop");
     } else {
-        tie(spec, invs) = emitLoopInvariant(*this, cond, inc, body, *loopInfo);
+        tie(spec, invs) = emitLoopInvariant(preState, *loopEntry, cond, inc, body, *loopInfo);
     }
     INFO(spec);
 
