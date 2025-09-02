@@ -258,7 +258,7 @@ namespace acslg {
     // not_null wrapper
     // from micosoft
     // see https://github.com/microsoft/GSL/blob/main/include/gsl/pointers
-
+    // NOTE: allow move constructor
     namespace details {
         template <typename T, typename = void> struct is_comparable_to_nullptr : std::false_type {};
 
@@ -302,6 +302,8 @@ namespace acslg {
 
         not_null(const not_null &other)            = default;
         not_null &operator=(const not_null &other) = default;
+        not_null(not_null &&other)                 = default;
+        not_null &operator=(not_null &&other)      = default;
 
         template <typename U, typename = std::enable_if_t<std::is_convertible<U, T>::value>>
         not_null &operator=(U &&u) {
@@ -309,15 +311,6 @@ namespace acslg {
             ptr_ = std::forward<U>(u);
             return *this;
         }
-
-        [[nodiscard]]
-        constexpr T into_underlying() && noexcept(std::is_nothrow_move_constructible_v<T>) {
-            auto out = std::move(ptr_);
-            return out;
-        }
-        T into_underlying() &        = delete;
-        T into_underlying() const &  = delete;
-        T into_underlying() const && = delete;
 
         constexpr details::value_or_reference_return_t<T> get() const
         // noexcept(noexcept(details::value_or_reference_return_t<T>{std::declval<T &>()}))

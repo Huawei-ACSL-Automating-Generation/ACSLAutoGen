@@ -550,13 +550,16 @@ LinTS *LinTS::projectSubTS(vector<int> projectLocs, int initIndex, C_Polyhedron 
     return subRoot;
 }
 
-void LinTS::addVariable(char *var) {
+void LinTS::addVariable(const char *var) {
     info->searchElseInsert(var);
     varNum = info->getDim();
     return;
 }
 
-void LinTS::addTransRel(char *transName, char *preLoc, char *postLoc, C_Polyhedron *poly) {
+void LinTS::addTransRel(const char *transName,
+                        const char *preLoc,
+                        const char *postLoc,
+                        C_Polyhedron *poly) {
     if (poly->is_empty())
         return;
     TransitionRelation *trans =
@@ -570,7 +573,7 @@ void LinTS::addTransRel(char *transName, char *preLoc, char *postLoc, C_Polyhedr
     return;
 }
 
-void LinTS::addLocInit(char *locName, C_Polyhedron *poly) {
+void LinTS::addLocInit(const char *locName, const C_Polyhedron *poly) {
     Location *loc = new Location(varNum, info, coefInfo, lambdaInfo, locName);
     if (poly && !poly->is_empty())
         loc->setPoly(poly);
@@ -578,18 +581,18 @@ void LinTS::addLocInit(char *locName, C_Polyhedron *poly) {
     locList->push_back(loc);
     return;
 }
-void LinTS::setLocPreInv(char *locName, C_Polyhedron *inv) {
+void LinTS::setLocPreInv(const char *locName, C_Polyhedron *inv) {
     Location *loc = SearchLoc(locName);
     loc->setPreInvPoly(inv);
     return;
 }
-void LinTS::setLocAssert(char *locName, vector<C_Polyhedron *> polys) {
+void LinTS::setLocAssert(const char *locName, vector<C_Polyhedron *> polys) {
     Location *loc = SearchLoc(locName);
     loc->setAssertion(polys);
     return;
 }
 
-Location *LinTS::SearchLoc(string name) {
+Location *LinTS::SearchLoc(const string &name) {
     for (int i = 0; i < locList->size(); i++) {
         string res = (*locList)[i]->getName();
         if (res == name)
@@ -597,7 +600,7 @@ Location *LinTS::SearchLoc(string name) {
     }
     return NULL;
 }
-Location *LinTS::SearchLoc(char *name) {
+Location *LinTS::SearchLoc(const char *name) {
     for (int i = 0; i < locList->size(); i++) {
         string res = (*locList)[i]->getName();
         if (res == string(name))

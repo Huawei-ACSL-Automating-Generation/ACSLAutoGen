@@ -14,11 +14,16 @@
 using namespace std;
 using namespace llvm;
 
+using ::testing::AllOf;
+using ::testing::AnyOf;
+using ::testing::Eq;
+using ::testing::HasSubstr;
+using ::testing::StartsWith;
+using ::testing::StrEq;
+
 namespace {
-    using mem_map_vector =
-        vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>;
     // This code performs minimal safety checks, so please ensure the validity of the input.
-    std::tuple<std::optional<std::string>, bool, mem_map_vector> doPluginOnFirstLoop(
+    std::tuple<std::optional<std::string>, bool, vector<PostState>> doPluginOnFirstLoop(
         const string &code,
         const string &pid) {
         ASTExtractor e(code);
@@ -109,8 +114,9 @@ TEST(LoopAssignsPluginTest, Simple_0) {
     EXPECT_THAT(*spec, HasSubstr("mx"));
     EXPECT_EQ(continueFlag, true);
     ASSERT_EQ(postState.size(), 1);
-    ASSERT_EQ(postState.at(0).size(), 1);
-    EXPECT_EQ(postState.at(0).begin()->second->getType(), SymbolicExpr::ExprType::Unknown);
+    ASSERT_EQ(postState.at(0).memoryMap_.size(), 1);
+    EXPECT_EQ(postState.at(0).memoryMap_.begin()->second->getType(),
+              SymbolicExpr::ExprType::Unknown);
 }
 
 TEST(LoopAssignsPluginTest, Simple_1) {
@@ -130,8 +136,8 @@ TEST(LoopAssignsPluginTest, Simple_1) {
     EXPECT_THAT(*spec, HasSubstr("p[0...n]"));
     EXPECT_EQ(continueFlag, true);
     ASSERT_EQ(postState.size(), 1);
-    ASSERT_EQ(postState.at(0).size(), 2);
-    for (auto &[addr, value] : postState.at(0)) {
+    ASSERT_EQ(postState.at(0).memoryMap_.size(), 2);
+    for (auto &[addr, value] : postState.at(0).memoryMap_) {
         DEBUG(addr.dump());
         DEBUG(value->dump());
     }
@@ -157,8 +163,8 @@ TEST(LoopAssignsPluginTest, Simple_2) {
     EXPECT_THAT(*spec, HasSubstr("p[0...n]"));
     EXPECT_EQ(continueFlag, true);
     ASSERT_EQ(postState.size(), 1);
-    ASSERT_EQ(postState.at(0).size(), 3);
-    for (auto &[addr, value] : postState.at(0)) {
+    ASSERT_EQ(postState.at(0).memoryMap_.size(), 3);
+    for (auto &[addr, value] : postState.at(0).memoryMap_) {
         DEBUG(addr.dump());
         DEBUG(value->dump());
     }
@@ -291,3 +297,115 @@ TEST(ParadigmMaxMinPluginTest, Simple_6) {
     EXPECT_NE(spec, nullopt);
     EXPECT_EQ(continueFlag, true);
 }
+
+TEST(LinearInvariantPluginTest, Simple_1) {
+    auto pluginId                         = "StInGXPlugin";
+    auto code                             = R"(
+        void func(int n){
+            int x = 0, y = n, z = 10;
+            for(int i = 0; i < n; i++){
+                x++;
+                y--;
+                z--;
+            } 
+        }
+    )";
+    auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
+    EXPECT_NE(spec, nullopt);
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_EQ(postStates.size(), 1);
+    auto &postState = postStates.at(0);
+    for (auto &[addr, value] : postState.memoryMap_) {
+        if (addr.regularFormOfValue() == "x") {
+            EXPECT_THAT(value->simplifiedExpr()->regularForm(),
+                        AllOf(AnyOf(StartsWith("x"), HasSubstr("+ x")),
+                              AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
+                              AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        } else if (addr.regularFormOfValue() == "y") {
+            EXPECT_THAT(value->simplifiedExpr()->regularForm(),
+                        AllOf(AnyOf(StartsWith("y"), HasSubstr("+ y")),
+                              AnyOf(StartsWith("i"), HasSubstr("+ i")),
+                              AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
+        } else if (addr.regularFormOfValue() == "z") {
+            EXPECT_THAT(value->simplifiedExpr()->regularForm(),
+                        AllOf(AnyOf(StartsWith("z"), HasSubstr("+ z")),
+                              AnyOf(StartsWith("i"), HasSubstr("+ i")),
+                              AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
+        }
+    }
+}
+
+TEST(LinearInvariantPluginTest, Simple_2) {
+    auto pluginId                         = "StInGXPlugin";
+    auto code                             = R"(
+        void func(int n){
+            int x = 0, sum = 0;
+            for(int i = 0; i < n; i++){
+                x++;
+                sum += x;
+            } 
+        }
+    )";
+    auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
+    EXPECT_NE(spec, nullopt);
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_EQ(postStates.size(), 1);
+    auto &postState = postStates.at(0);
+    for (auto &[addr, value] : postState.memoryMap_) {
+        if (addr.regularFormOfValue() == "x") {
+            EXPECT_THAT(value->simplifiedExpr()->regularForm(),
+                        AllOf(AnyOf(StartsWith("x"), HasSubstr("+ x")),
+                              AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
+                              AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        } else if (addr.regularFormOfValue() == "sum") {
+            FAIL();
+        }
+    }
+}
+
+TEST(LinearInvariantPluginTest, Simple_3) {
+    auto pluginId                         = "StInGXPlugin";
+    auto code                             = R"(
+    int func() {
+        int i, j;
+        i = 1;
+        j = 10;
+        while (j >= -10) {
+            i = i + 2;
+            j = -1 + j;
+        }
+        return 0;
+    }
+    )";
+    auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
+    EXPECT_NE(spec, nullopt);
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_EQ(postStates.size(), 1);
+    auto &postState = postStates.at(0);
+    for (auto &[addr, value] : postState.memoryMap_) {
+        if (addr.regularFormOfValue() == "i") {
+            EXPECT_THAT(value->simplifiedExpr()->regularForm(),
+                        AllOf(AnyOf(StartsWith("i"), HasSubstr("+ i")),
+                              AnyOf(StartsWith("2 * j"), HasSubstr("+ 2 * j")),
+                              AnyOf(StartsWith("22"), HasSubstr("+ 22"))));
+        } else if (addr.regularFormOfValue() == "j") {
+            EXPECT_THAT(value->simplifiedExpr()->regularForm(), "-11");
+        }
+    }
+}
+
+// TEST(LinearInvariantPluginTest, Simple_4) {
+//     auto pluginId                = "StInGXPlugin";
+//     auto code                    = R"(
+//         void func(int *p, int n){
+//             int mx = 0;
+//             for(int i = 0; i < n; i++){
+//                 if(mx < p[i])
+//                     mx = p[i];
+//             }
+//         }
+//     )";
+//     auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
+//     EXPECT_NE(spec, nullopt);
+//     EXPECT_EQ(continueFlag, true);
+// }

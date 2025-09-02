@@ -27,41 +27,58 @@ std::string emitFunctionContract(
         std::nullopt);
 
 struct LoopInfo {
-    // SetLoopEntryPlugin
-    std::unique_ptr<const ProgramState> symbolicLoopEntry_{nullptr};
-
-    // SetIndexPlugin
-    std::unique_ptr<Symbolic::Address> index_{nullptr};
-    clang::BinaryOperator::Opcode op_{};
-    std::unique_ptr<Symbolic::SymbolicExpr> indexBound_{nullptr};
-    std::unique_ptr<Symbolic::SymbolicExpr> loopCount_{nullptr};
-
-    // SetPatternsPlugin
     struct Pattern {
-        std::unique_ptr<const Symbolic::SymbolicExpr> initialValue_{nullptr};
+        not_null<std::unique_ptr<const Symbolic::SymbolicExpr>> initialValue_;
         int64_t step_;
-        Pattern() = default;
         Pattern(std::unique_ptr<const Symbolic::SymbolicExpr> initialValue, int64_t step)
             : initialValue_(std::move(initialValue)), step_(step) {}
         Pattern(const Pattern &other)
-            : initialValue_(other.initialValue_ ? other.initialValue_->clone() : nullptr),
-              step_(other.step_) {}
+            : initialValue_(other.initialValue_->clone()), step_(other.step_) {}
         Pattern &operator=(const Pattern &other) {
             if (this == &other)
                 return *this;
-            initialValue_ = other.initialValue_ ? other.initialValue_->clone() : nullptr;
+            initialValue_ = other.initialValue_->clone();
             step_         = other.step_;
             return *this;
         }
-        Pattern(Pattern &&)            = default;
-        Pattern &operator=(Pattern &&) = default;
+        Pattern(Pattern &&other)            = default;
+        Pattern &operator=(Pattern &&other) = default;
+        string dump() const {
+            ostringstream oss;
+            oss << "initialValue_: " << initialValue_->dump() << "\n";
+            oss << "step_: " << to_string(step_) << "\n";
+            return oss.str();
+        }
     };
 
+    // SetLoopEntryPlugin
+    struct LoopEntryInfo {
+        not_null<std::unique_ptr<const ProgramState>> symbolicLoopEntry_;
+    };
+    optional<LoopEntryInfo> loopEntryInfo_;
+
+    // SetIndexPlugin
+    struct IndexInfo {
+        not_null<std::unique_ptr<Symbolic::Address>> indexAddr_;
+        not_null<std::unique_ptr<Symbolic::SymbolicExpr>> indexSymbolicValue_; // Varibale or Address
+        clang::BinaryOperator::Opcode op_;
+        not_null<std::unique_ptr<Symbolic::SymbolicExpr>> indexBound_; // exclusive bound
+        not_null<std::unique_ptr<Symbolic::SymbolicExpr>> loopCount_;
+        Pattern indexPattern_;
+        bool isLocal_;
+    };
+    optional<IndexInfo> indexInfo_;
+
+    // SetPatternsPlugin
     // Address with pattern has constant step.
     // Address with nullopt means too complex.
     // Other addresses' values hold through loop.
-    std::unordered_map<Symbolic::Address, std::optional<const Pattern>, Symbolic::AddressHash>
-        patternsMap_{};
+    struct PatternInfo {
+        std::unordered_map<Symbolic::Address, std::optional<const Pattern>, Symbolic::AddressHash>
+            patternsMap_;
+    };
+    optional<PatternInfo> patternInfo_;
+
     // TODO(more info to be added)
 };
 
@@ -133,11 +150,15 @@ class LoopInfoPlugin : public ACSLPlugin {
                        LoopInfo &loopInfo) const = 0;
 };
 
+struct PostState {
+    std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash> memoryMap_;
+    vector<unique_ptr<SymbolicExpr>> pathConds_;
+};
 class LoopInvariantPlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
 
-    virtual std::tuple<std::optional<std::string>, bool, std::vector<std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash, AddressEqual>>> generate(
+    virtual std::tuple<std::optional<std::string>, bool, std::vector<PostState>> generate(
         const ProgramState &preState,
         const ProgramState &loopEntry,
         const clang::Expr *cond,

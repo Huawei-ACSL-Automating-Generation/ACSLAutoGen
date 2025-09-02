@@ -96,7 +96,7 @@ Location::Location(int varsNum,
     initFlag = false;
 }
 
-void Location::setPoly(C_Polyhedron *q) {
+void Location::setPoly(const C_Polyhedron *q) {
     if (!initFlag) {
         poly->intersection_assign(*q);
         initFlag = true;

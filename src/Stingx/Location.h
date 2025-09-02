@@ -123,7 +123,7 @@ class Location {
              int left);
 
     // set the initial polyhedron from q into p
-    void setPoly(C_Polyhedron *q);
+    void setPoly(const C_Polyhedron *q);
     // set the initial-value polyhedron from q to this
     void setInitPoly(C_Polyhedron &q);
     bool isInitLoc();

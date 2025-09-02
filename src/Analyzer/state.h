@@ -29,6 +29,8 @@ class MemoryModel {
     unique_ptr<SymbolicExpr> read(const Address &addr) const;
     void write(const Address &address, unique_ptr<const SymbolicExpr> value);
     size_t size() const;
+    bool contains(const Address &addr) const;
+
     void clear() {
         memoryMap_noOffset_.clear();
         memoryMap_constantRange_.clear();
@@ -398,14 +400,15 @@ class ProgramState {
 };
 
 struct VarManager {
-    int numVars = 0;
-    std::unordered_map<std::string, int> varIndexMap;
+    size_t numVars = 0;
+    std::unordered_map<std::string, size_t> varIndexMap;
     std::vector<std::string> orderedVars;
+    std::vector<const clang::VarDecl *> varDecls;
 
     static VarManager fromPaths(const std::vector<std::unique_ptr<Path>> &paths) {
         VarManager vm;
-        std::vector<std::string> rawVars;
-        int varCounter = 0;
+        std::vector<pair<std::string, const clang::VarDecl *>> rawVars;
+        size_t varCounter = 0;
 
         for (const auto &path : paths) {
             const auto &varAddrMap = path->getVarAddr();
@@ -418,18 +421,20 @@ struct VarManager {
 
                 std::string name = varDecl->getNameAsString();
                 if (auto [_, ok] = vm.varIndexMap.insert({name, varCounter}); ok) {
-                    rawVars.push_back(name);
+                    rawVars.push_back({name, varDecl->getCanonicalDecl()});
                     ++varCounter;
                 }
             }
         }
 
-        for (const auto &name : rawVars)
+        for (const auto &[name, varDecl] : rawVars) {
             vm.orderedVars.push_back(name);
-        for (const auto &name : rawVars)
+            vm.varDecls.push_back(varDecl);
+        }
+        for (const auto &[name, _] : rawVars)
             vm.orderedVars.push_back(name + "_init");
 
-        vm.numVars = static_cast<int>(rawVars.size() * 2);
+        vm.numVars = rawVars.size() * 2;
         return vm;
     }
 
@@ -444,10 +449,16 @@ struct VarManager {
 
 struct InvsAndPostStates {
     std::optional<std::string> invs_;
-    std::unique_ptr<Path> postStates_;
+    pair<std::unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash>,
+         vector<unique_ptr<SymbolicExpr>>>
+        postStates_;
 };
 
-std::vector<InvsAndPostStates> buildLoopInvariant(Formulas conds,
+std::vector<InvsAndPostStates> buildLoopInvariant(unique_ptr<SymbolicExpr> loopCond,
                                                   const std::vector<std::unique_ptr<Path>> &paths,
                                                   const ProgramState &initState);
+
+vector<InvsAndPostStates> buildLoopInvariant(unique_ptr<SymbolicExpr> loopCond,
+                                             const ProgramState &loopEntry,
+                                             const ProgramState &loopCurrent);
 #endif

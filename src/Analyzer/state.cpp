@@ -811,6 +811,21 @@ size_t MemoryModel::size() const {
     return sum;
 }
 
+bool MemoryModel::contains(const Address &addr) const {
+    auto addrInfo = addr;
+    addrInfo.resetOffset();
+    addrInfo.resetRange();
+    if (memoryMap_noOffset_.contains(addrInfo))
+        return true;
+    if (auto it = memoryMap_constantRange_.find(addrInfo);
+        it != memoryMap_constantRange_.end() && !it->second.empty())
+        return true;
+    if (auto it = memoryMap_symbolicRange_.find(addrInfo);
+        it != memoryMap_symbolicRange_.end() && !it->second.empty())
+        return true;
+    return false;
+}
+
 // MemoryModel::flat_view MemoryModel::flat() { return MemoryModel::flat_view{*this}; }
 const MemoryModel::flat_view MemoryModel::flat() const {
     return MemoryModel::flat_view{const_cast<MemoryModel &>(*this)};
@@ -1185,7 +1200,7 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
         // Note: Dangerous! Change this.
         auto symbolLoopEntry = clone();
         symbolLoopEntry->resymbolize();
-        loopInfo = LoopInfo{std::move(symbolLoopEntry)};
+        loopInfo = LoopInfo{LoopInfo::LoopEntryInfo{std::move(symbolLoopEntry)}, nullopt, nullopt};
         tie(spec, invs) =
             emitLoopInvariant(preState, *loopEntry, cond, inc, body, *loopInfo, "ComplexLoop");
     } else {

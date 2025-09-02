@@ -160,10 +160,13 @@ namespace Symbolic {
         /// @brief Convert to PPL linear expression with custom mapping.
         /// Only valid for expressions that are affine (i.e., linear w.r.t. variables).
         /// Throws or fails if the expression is not representable in linear form.
+        /// Only support varDecl's value(`Address` and `Variable`, see their `toLinearExpr` for more
+        /// details), return nullopt otherwise.
         /// @param varMap Mapping from names to the index of the Cartesian axis.
-        /// @return PPL linear expression.
-        virtual Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
-            const std::unordered_map<std::string, int> &) const {
+        /// @return PPL linear expression or nullopt if contains symbolic value from pointer, array,
+        /// etc.
+        virtual std::optional<Parma_Polyhedra_Library::Linear_Expression> toLinearExpr(
+            const std::unordered_map<std::string, size_t> &) const {
             ERROR("not implemented for expression type: ");
         }
 
@@ -251,8 +254,8 @@ namespace Symbolic {
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 0; }
-        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
-            const std::unordered_map<std::string, int> &) const override;
+        std::optional<Parma_Polyhedra_Library::Linear_Expression> toLinearExpr(
+            const std::unordered_map<std::string, size_t> &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
         int64_t getLiteralValue() const;
 
@@ -333,8 +336,8 @@ namespace Symbolic {
             const override;
         bool isLinear() const override;
         int getMaxDegree() const override;
-        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
-            const std::unordered_map<std::string, int> &) const override;
+        std::optional<Parma_Polyhedra_Library::Linear_Expression> toLinearExpr(
+            const std::unordered_map<std::string, size_t> &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
@@ -390,8 +393,8 @@ namespace Symbolic {
             const override;
         bool isLinear() const override;
         int getMaxDegree() const override;
-        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
-            const std::unordered_map<std::string, int> &) const override;
+        std::optional<Parma_Polyhedra_Library::Linear_Expression> toLinearExpr(
+            const std::unordered_map<std::string, size_t> &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
@@ -462,6 +465,7 @@ namespace Symbolic {
                     from);
             }
             Info(const Info &other);
+            Info(Info &&) = default;
 
             std::string regularForm(std::optional<std::string_view> prefix = std::nullopt,
                                     std::optional<std::string_view> suffix = std::nullopt,
@@ -567,10 +571,8 @@ namespace Symbolic {
                 index_ = std::make_unique<Variable>(*other.index_);
                 return *this;
             }
-            Range(Range &&other)
-                : len_(std::move(other).len_.into_underlying()),
-                  index_(std::move(other).index_.into_underlying()) {}
-            Range &operator=(Range &&) = delete;
+            Range(Range &&other)       = default;
+            Range &operator=(Range &&) = default;
         };
 
       public:
@@ -581,7 +583,7 @@ namespace Symbolic {
 
         Address(const Address &other);
         Address &operator=(const Address &other);
-        Address(Address &&);
+        Address(Address &&) = default;
         Address &operator=(Address &&);
 
         Address(unsigned int id,
@@ -654,11 +656,12 @@ namespace Symbolic {
                       "used as an expression.");
             return 1;
         }
-        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
-            const std::unordered_map<std::string, int> &) const override;
+        std::optional<Parma_Polyhedra_Library::Linear_Expression> toLinearExpr(
+            const std::unordered_map<std::string, size_t> &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       protected:
+        [[deprecated("use `getFromRoot`")]]
         const clang::VarDecl *retrieveVarDecl() const;
 
       private:
@@ -678,10 +681,6 @@ namespace Symbolic {
 
     struct AddressHash {
         std::size_t operator()(const Address &addr) const noexcept { return addr.hash(); }
-    };
-
-    struct AddressEqual {
-        bool operator()(const Address &a, const Address &b) const noexcept { return a == b; }
     };
 
     /// @class Symbol value
@@ -740,8 +739,8 @@ namespace Symbolic {
             const override;
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 1; }
-        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
-            const std::unordered_map<std::string, int> &) const override;
+        std::optional<Parma_Polyhedra_Library::Linear_Expression> toLinearExpr(
+            const std::unordered_map<std::string, size_t> &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:

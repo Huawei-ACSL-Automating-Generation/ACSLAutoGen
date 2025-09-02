@@ -38,14 +38,17 @@ class LinTS {
     void MergeSubMap(std::map<string, vector<C_Polyhedron *>> subMap);
     LinTS *projectSubTS(vector<int> projectLocs, int index, C_Polyhedron *poly);
 
-    void addVariable(char *var);
-    void addTransRel(char *transName, char *preLoc, char *postLoc, C_Polyhedron *poly);
-    void addLocInit(char *locName, C_Polyhedron *poly);
-    void setLocPreInv(char *locName, C_Polyhedron *inv);
-    void setLocAssert(char *locName, vector<C_Polyhedron *> polys);
+    void addVariable(const char *var);
+    void addTransRel(const char *transName,
+                     const char *preLoc,
+                     const char *postLoc,
+                     C_Polyhedron *poly);
+    void addLocInit(const char *locName, const C_Polyhedron *poly);
+    void setLocPreInv(const char *locName, C_Polyhedron *inv);
+    void setLocAssert(const char *locName, vector<C_Polyhedron *> polys);
 
-    Location *SearchLoc(string name);
-    Location *SearchLoc(char *name);
+    Location *SearchLoc(const string &name);
+    Location *SearchLoc(const char *name);
     int SearchLocIndex(string name);
 
     int getVarNum() { return varNum; }

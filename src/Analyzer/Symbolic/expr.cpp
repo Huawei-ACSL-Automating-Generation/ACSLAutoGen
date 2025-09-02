@@ -996,36 +996,13 @@ Address &Address::operator=(const Address &other) {
     return *this;
 }
 
-Address::Address(Address &&other)
-    : SymbolicExpr(other), id_(std::move(other.id_)), range_(std::move(other.range_)) {
-    if (other.offset_)
-        offset_.emplace(std::move(other.offset_.value()).into_underlying());
-    std::visit(
-        [this](auto &&arg) {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, std::monostate>) {
-                from_ = std::monostate{};
-            } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
-                from_ = arg;
-            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                from_.emplace<2>(std::forward<T>(arg).into_underlying());
-            } else if constexpr (std::is_same_v<
-                                     T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
-                                                  const size_t>>) {
-                from_.emplace<3>(std::move(arg));
-            }
-        },
-        other.from_);
-}
-
 Address &Address::operator=(Address &&other) {
     if (this == &other)
         return *this;
     SymbolicExpr::operator=(other);
-    id_ = std::move(other.id_);
-    if (other.offset_)
-        offset_.emplace(std::move(other.offset_.value()).into_underlying());
-    range_ = std::move(other.range_);
+    id_     = std::move(other.id_);
+    offset_ = std::move(other.offset_);
+    range_  = std::move(other.range_);
     std::visit(
         [this](auto &&arg) {
             using T = std::decay_t<decltype(arg)>;
@@ -1034,7 +1011,7 @@ Address &Address::operator=(Address &&other) {
             } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
                 from_ = arg;
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                from_.emplace<2>(std::forward<T>(arg).into_underlying());
+                from_.emplace<2>(std::move(arg));
             } else if constexpr (std::is_same_v<
                                      T, std::pair<not_null<std::shared_ptr<const Structure::Info>>,
                                                   const size_t>>) {

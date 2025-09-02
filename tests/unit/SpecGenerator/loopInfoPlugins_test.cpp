@@ -1,6 +1,7 @@
 // tests/unit/SpecGenerator/loopInfoPlugins_test.cpp
 
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include <unordered_map>
 #include <string>
 #include <llvm/Support/Casting.h>
@@ -13,9 +14,13 @@
 using namespace std;
 using namespace llvm;
 
+using ::testing::AnyOf;
+using ::testing::Eq;
+using ::testing::StrEq;
+
 namespace {
     // This code performs minimal safety checks, so please ensure the validity of the input.
-    auto doPluginOnFirstLoop(const string &code, const string &pid) {
+    auto doPluginOnFirstLoop(string_view code, const vector<string> pids) {
         ASTExtractor e(code);
         GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
         auto func     = e.findFirstDecl<clang::FunctionDecl>();
@@ -65,17 +70,20 @@ namespace {
             ERROR("Set loop entry fail.");
         }
 
-        auto *pl = ACSLPluginRegistry::instance().get(pid);
-        if (!pl)
-            ERROR("Plugin with id " + pid + " does not exist!");
-        auto *fcp   = dynamic_cast<const LoopInfoPlugin *>(pl);
-        auto result = fcp->parse(*preState, *loopEntry, cond, inc, body, loopInfo);
+        bool result;
+        for (auto &pid : pids) {
+            auto *pl = ACSLPluginRegistry::instance().get(pid);
+            if (!pl)
+                ERROR("Plugin with id " + pid + " does not exist!");
+            auto *fcp = dynamic_cast<const LoopInfoPlugin *>(pl);
+            result    = fcp->parse(*preState, *loopEntry, cond, inc, body, loopInfo);
+        }
         return pair{std::move(loopInfo), result};
     }
 } // namespace
 
 TEST(SetPatternsPluginTest, SimpleLoop_1) {
-    auto pluginId                 = "setPatterns";
+    auto pluginIds                = vector{"setPatterns"s};
     auto code                     = R"(
         int func(int x, int n){
             for(int i = 0; i < n; i++){
@@ -84,10 +92,12 @@ TEST(SetPatternsPluginTest, SimpleLoop_1) {
             return x;
         }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginId);
+    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
     EXPECT_EQ(continueFlag, true);
-    EXPECT_EQ(loopInfo.patternsMap_.size(), 2);
-    for (auto &[addr, pattern] : loopInfo.patternsMap_) {
+    ASSERT_NE(loopInfo.patternInfo_, nullopt);
+    auto &patternInfo = loopInfo.patternInfo_.value();
+    EXPECT_EQ(patternInfo.patternsMap_.size(), 2);
+    for (auto &[addr, pattern] : patternInfo.patternsMap_) {
         DEBUG(addr.dump());
         if (pattern != nullopt) {
             DEBUG(pattern.value().initialValue_->dump() +
@@ -101,7 +111,7 @@ TEST(SetPatternsPluginTest, SimpleLoop_1) {
 }
 
 TEST(SetPatternsPluginTest, SimpleLoop_2) {
-    auto pluginId                 = "setPatterns";
+    auto pluginId                 = vector{"setPatterns"s};
     auto code                     = R"(
         int* func(int *x, int n){
             for(int i = 0; i < n; i++){
@@ -112,8 +122,10 @@ TEST(SetPatternsPluginTest, SimpleLoop_2) {
     )";
     auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginId);
     EXPECT_EQ(continueFlag, true);
-    EXPECT_EQ(loopInfo.patternsMap_.size(), 2);
-    for (auto &[addr, pattern] : loopInfo.patternsMap_) {
+    ASSERT_NE(loopInfo.patternInfo_, nullopt);
+    auto &patternInfo = loopInfo.patternInfo_.value();
+    EXPECT_EQ(patternInfo.patternsMap_.size(), 2);
+    for (auto &[addr, pattern] : patternInfo.patternsMap_) {
         DEBUG(addr.dump());
         if (pattern != nullopt) {
             DEBUG(pattern.value().initialValue_->dump() +
@@ -127,7 +139,7 @@ TEST(SetPatternsPluginTest, SimpleLoop_2) {
 }
 
 TEST(SetPatternsPluginTest, SimpleLoop_3) {
-    auto pluginId                 = "setPatterns";
+    auto pluginId                 = vector{"setPatterns"s};
     auto code                     = R"(
         int* func(int *x, int n){
             for(int i = 0; i < n; i++){
@@ -139,8 +151,10 @@ TEST(SetPatternsPluginTest, SimpleLoop_3) {
     )";
     auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginId);
     EXPECT_EQ(continueFlag, true);
-    EXPECT_EQ(loopInfo.patternsMap_.size(), 3);
-    for (auto &[addr, pattern] : loopInfo.patternsMap_) {
+    ASSERT_NE(loopInfo.patternInfo_, nullopt);
+    auto &patternInfo = loopInfo.patternInfo_.value();
+    EXPECT_EQ(patternInfo.patternsMap_.size(), 3);
+    for (auto &[addr, pattern] : patternInfo.patternsMap_) {
         DEBUG(addr.dump());
         if (pattern != nullopt) {
             DEBUG(pattern.value().initialValue_->dump() +
@@ -154,7 +168,7 @@ TEST(SetPatternsPluginTest, SimpleLoop_3) {
 }
 
 TEST(SetPatternsPluginTest, SimpleLoop_4) {
-    auto pluginId                 = "setPatterns";
+    auto pluginId                 = vector{"setPatterns"s};
     auto code                     = R"(
         int* func(int *x, int n){
             for(int i = 0; i < n; i++){
@@ -165,8 +179,10 @@ TEST(SetPatternsPluginTest, SimpleLoop_4) {
     )";
     auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginId);
     EXPECT_EQ(continueFlag, true);
-    EXPECT_EQ(loopInfo.patternsMap_.size(), 2);
-    for (auto &[addr, pattern] : loopInfo.patternsMap_) {
+    ASSERT_NE(loopInfo.patternInfo_, nullopt);
+    auto &patternInfo = loopInfo.patternInfo_.value();
+    EXPECT_EQ(patternInfo.patternsMap_.size(), 2);
+    for (auto &[addr, pattern] : patternInfo.patternsMap_) {
         DEBUG(addr.dump());
         DEBUG(pattern.value().initialValue_->dump() +
               ", step: " + to_string(pattern.value().step_));
@@ -175,4 +191,113 @@ TEST(SetPatternsPluginTest, SimpleLoop_4) {
         else
             EXPECT_EQ(pattern.value().step_, 1);
     }
+}
+
+TEST(SetIndexPluginTest, SimpleLoop_1) {
+    auto pluginIds                = vector{"setPatterns"s, "setIndex"s};
+    auto code                     = R"(
+        int func(int x, int n){
+            for(int i = 0; i < n; i++){
+                x++;
+            } 
+            return x;
+        }
+    )";
+    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_NE(loopInfo.indexInfo_, nullopt);
+    auto &indexInfo = loopInfo.indexInfo_.value();
+    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot()->getNameAsString(), "i");
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Variable);
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "i");
+    EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
+    EXPECT_EQ(indexInfo.indexBound_->regularForm(), "n");
+    EXPECT_EQ(indexInfo.loopCount_->simplifiedExpr()->regularForm(), "n");
+}
+
+TEST(SetIndexPluginTest, SimpleLoop_2) {
+    auto pluginIds                = vector{"setPatterns"s, "setIndex"s};
+    auto code                     = R"(
+        int func(int x, int n){
+            for(int i = n; i; i--){
+                x++;
+            } 
+            return x;
+        }
+    )";
+    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_NE(loopInfo.indexInfo_, nullopt);
+    auto &indexInfo = loopInfo.indexInfo_.value();
+    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot()->getNameAsString(), "i");
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Variable);
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "i");
+    EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_NE);
+    EXPECT_EQ(indexInfo.indexBound_->regularForm(), "0");
+    EXPECT_EQ(indexInfo.loopCount_->simplifiedExpr()->regularForm(), "n");
+}
+
+TEST(SetIndexPluginTest, SimpleLoop_3) {
+    auto pluginIds                = vector{"setPatterns"s, "setIndex"s};
+    auto code                     = R"(
+        int func(int x, int n){
+            int i = n;
+            while(i >= 0){
+                x++;
+                i--;
+            }
+            return x;
+        }
+    )";
+    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_NE(loopInfo.indexInfo_, nullopt);
+    auto &indexInfo = loopInfo.indexInfo_.value();
+    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot()->getNameAsString(), "i");
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Variable);
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "i");
+    EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_GE);
+    EXPECT_EQ(indexInfo.indexBound_->regularForm(), "0");
+    EXPECT_EQ(indexInfo.loopCount_->simplifiedExpr()->regularForm(), "n + 1");
+}
+
+TEST(SetIndexPluginTest, SimpleLoop_4) {
+    auto pluginIds                = vector{"setPatterns"s, "setIndex"s};
+    auto code                     = R"(
+        void func(int* start, int* end){
+            for(int* pt = start; pt < end; pt++){
+                *pt = 0;
+            } 
+        }
+    )";
+    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_NE(loopInfo.indexInfo_, nullopt);
+    auto &indexInfo = loopInfo.indexInfo_.value();
+    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot()->getNameAsString(), "pt");
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::SymbolAddress);
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "pt");
+    EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
+    EXPECT_EQ(indexInfo.indexBound_->regularForm(), "end");
+    EXPECT_THAT(indexInfo.loopCount_->simplifiedExpr()->regularForm(),
+                AnyOf("end - start", "-1 * start + end"));
+}
+
+TEST(SetIndexPluginTest, ComplexLoop_1) {
+    auto pluginIds                = vector{"setPatterns"s, "setIndex"s};
+    auto code                     = R"(
+    int func() {
+        int i, j;
+        i = 1;
+        j = 10;
+        while (j >= i) {
+            i = i + 2;
+            j = -1 + j;
+        }
+        return 0;
+    }
+    )";
+    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    EXPECT_EQ(continueFlag, false);
+    EXPECT_EQ(loopInfo.indexInfo_, nullopt);
 }
