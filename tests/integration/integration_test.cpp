@@ -1,6 +1,7 @@
 // tests/integration/integration_test.cpp
 
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include <unordered_map>
 #include <string>
 #include <llvm/Support/Casting.h>
@@ -12,9 +13,16 @@
 
 using namespace std;
 
+using ::testing::AllOf;
+using ::testing::AnyOf;
+using ::testing::Eq;
+using ::testing::HasSubstr;
+using ::testing::StartsWith;
+using ::testing::StrEq;
+
 namespace {
     // This code performs minimal safety checks, so please ensure the validity of the input.
-    unique_ptr<ProgramState> symbolicExecutionOnFirstFunc(const string_view code) {
+    not_null<unique_ptr<ProgramState>> symbolicExecutionOnFirstFunc(const string_view code) {
         ASTExtractor e(code);
         GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
         auto func          = e.findFirstDecl<clang::FunctionDecl>();
@@ -28,16 +36,32 @@ namespace {
         return symbolicState;
     }
 
-    unique_ptr<SymbolicExpr> getReturnExprOfFirstPath(const ProgramState &state) {
+    not_null<unique_ptr<SymbolicExpr>> getReturnExprOfFirstPath(const ProgramState &state) {
         if (state.getPaths().empty())
             ERROR("Empty paths_!");
-        auto &firstPath = state.getPaths()[0];
-        if (firstPath == nullptr)
-            ERROR("First path is nullptr!");
+        auto &firstPath  = state.getPaths()[0];
         auto &returnExpr = firstPath->getReturnExpr();
         if (returnExpr == nullopt)
             ERROR("There is no returnExpr!");
         return returnExpr.value()->clone();
+    }
+
+    not_null<unique_ptr<ProgramState>> getPostStateOfFirstLoop(const string_view code) {
+        ASTExtractor e(code);
+        GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
+        auto func          = e.findFirstDecl<clang::FunctionDecl>();
+        auto symbolicState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
+        symbolicState->init();
+        DEBUG(symbolicState->dump());
+        for (clang::Stmt *stmt : func->getBody()->children()) {
+            symbolicState->step(stmt);
+            if (isa<clang::WhileStmt>(stmt) || isa<clang::ForStmt>(stmt) ||
+                isa<clang::DoStmt>(stmt)) {
+                DEBUG(symbolicState->dump());
+                break;
+            }
+        }
+        return symbolicState;
     }
 } // namespace
 
@@ -199,4 +223,42 @@ TEST(IntegrationTest, CorrectStateWithPointerArithmetic) {
     auto postState = symbolicExecutionOnFirstFunc(code);
     ASSERT_EQ(*getReturnExprOfFirstPath(*postState)->simplifiedExpr(),
               *LiteralExpr{0}.simplifiedExpr());
+}
+
+TEST(IntegrationTest, CorrectPostStateOfLoop_1) {
+    auto code = R"(
+        void func(int n){
+            int x = 0, y = n, z = 10;
+            for(int i = 0; i < n; i++){
+                x++;
+                y--;
+                z--;
+            } 
+        }
+    )";
+    ASSERT_EXIT(
+        {
+            getPostStateOfFirstLoop(code);
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+    auto postState = getPostStateOfFirstLoop(code);
+    auto &paths    = postState->getPaths();
+    ASSERT_EQ(paths.size(), 1);
+    for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
+        auto var  = addr.regularFormOfValue();
+        auto expr = value->simplifiedExpr()->regularForm();
+        if (var == "x") {
+            EXPECT_EQ(expr, "n");
+        } else if (var == "y") {
+            EXPECT_EQ(expr, "0");
+        } else if (var == "z") {
+            EXPECT_THAT(expr, AllOf(AnyOf(StartsWith("10"), HasSubstr("+ 10")),
+                                    AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
+        } else if (var == "n") {
+            EXPECT_EQ(expr, "n");
+        } else {
+            FAIL() << var << ": " << expr;
+        }
+    }
 }

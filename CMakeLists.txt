@@ -41,8 +41,8 @@ target_compile_options(ACSLG_strict_flags INTERFACE
   -Wshadow
   -Wformat=2
   -Wunused
-  $<$<COMPILE_LANG_AND_ID:C,CXX,Clang,AppleClang,GNU>:-Wdeprecated-declarations>
-  $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Wdeprecated>
+  $<$<COMPILE_LANG_AND_ID:C,CXX,Clang,AppleClang,GNU>:-Wdeprecated-declarations -Wimplicit-fallthrough=5>
+  $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Wdeprecated -Wimplicit-fallthrough>
   $<$<CXX_COMPILER_ID:MSVC>:/W4>
 )
 

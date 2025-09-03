@@ -23,7 +23,7 @@ using ::testing::StrEq;
 
 namespace {
     // This code performs minimal safety checks, so please ensure the validity of the input.
-    std::tuple<std::optional<std::string>, bool, vector<PostState>> doPluginOnFirstLoop(
+    std::tuple<std::optional<std::string>, bool, vector<PostInfo>> doPluginOnFirstLoop(
         const string &code,
         const string &pid) {
         ASTExtractor e(code);
@@ -316,21 +316,24 @@ TEST(LinearInvariantPluginTest, Simple_1) {
     ASSERT_EQ(postStates.size(), 1);
     auto &postState = postStates.at(0);
     for (auto &[addr, value] : postState.memoryMap_) {
-        if (addr.regularFormOfValue() == "x") {
+        auto var = addr.regularFormOfValue();
+        if (var == "x") {
             EXPECT_THAT(value->simplifiedExpr()->regularForm(),
                         AllOf(AnyOf(StartsWith("x"), HasSubstr("+ x")),
                               AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
                               AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-        } else if (addr.regularFormOfValue() == "y") {
+        } else if (var == "y") {
             EXPECT_THAT(value->simplifiedExpr()->regularForm(),
                         AllOf(AnyOf(StartsWith("y"), HasSubstr("+ y")),
                               AnyOf(StartsWith("i"), HasSubstr("+ i")),
                               AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
-        } else if (addr.regularFormOfValue() == "z") {
+        } else if (var == "z") {
             EXPECT_THAT(value->simplifiedExpr()->regularForm(),
                         AllOf(AnyOf(StartsWith("z"), HasSubstr("+ z")),
                               AnyOf(StartsWith("i"), HasSubstr("+ i")),
                               AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
+        } else if (var != "i" && var != "n") {
+            FAIL() << var;
         }
     }
 }
@@ -352,13 +355,14 @@ TEST(LinearInvariantPluginTest, Simple_2) {
     ASSERT_EQ(postStates.size(), 1);
     auto &postState = postStates.at(0);
     for (auto &[addr, value] : postState.memoryMap_) {
-        if (addr.regularFormOfValue() == "x") {
+        auto var = addr.regularFormOfValue();
+        if (var == "x") {
             EXPECT_THAT(value->simplifiedExpr()->regularForm(),
                         AllOf(AnyOf(StartsWith("x"), HasSubstr("+ x")),
                               AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
                               AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-        } else if (addr.regularFormOfValue() == "sum") {
-            FAIL();
+        } else if (var != "i" && var != "n") {
+            FAIL() << var;
         }
     }
 }
@@ -383,13 +387,16 @@ TEST(LinearInvariantPluginTest, Simple_3) {
     ASSERT_EQ(postStates.size(), 1);
     auto &postState = postStates.at(0);
     for (auto &[addr, value] : postState.memoryMap_) {
-        if (addr.regularFormOfValue() == "i") {
+        auto var = addr.regularFormOfValue();
+        if (var == "i") {
             EXPECT_THAT(value->simplifiedExpr()->regularForm(),
                         AllOf(AnyOf(StartsWith("i"), HasSubstr("+ i")),
                               AnyOf(StartsWith("2 * j"), HasSubstr("+ 2 * j")),
                               AnyOf(StartsWith("22"), HasSubstr("+ 22"))));
-        } else if (addr.regularFormOfValue() == "j") {
+        } else if (var == "j") {
             EXPECT_THAT(value->simplifiedExpr()->regularForm(), "-11");
+        } else {
+            FAIL() << var;
         }
     }
 }

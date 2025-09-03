@@ -322,11 +322,7 @@ optional<Parma_Polyhedra_Library::C_Polyhedron> convertFormulaToPoly(const Formu
     auto poly = Parma_Polyhedra_Library::C_Polyhedron{dimension, Parma_Polyhedra_Library::UNIVERSE};
 
     for (const auto &assertion : assertions) {
-        if (!assertion) {
-            ERROR("convertFormulaToPoly: null assertion expression encountered");
-        }
-
-        const Symbolic::SymbolicExpr *rawExpr = assertion.get();
+        const Symbolic::SymbolicExpr *rawExpr = assertion.get().get();
         auto constraint                       = toConstraint(rawExpr, vm);
         if (constraint == nullopt)
             return nullopt;
@@ -475,24 +471,6 @@ Formulas cloneFormulas(const Formulas &input) {
  *  verification-based consumption.                                           *
 \******************************************************************************/
 
-[[deprecated("use `varDecls` in `VarManager`")]]
-std::unordered_map<std::string, std::unique_ptr<SymbolicExpr>> extractNameMap(const Path &path) {
-    std::unordered_map<std::string, std::unique_ptr<SymbolicExpr>> nameToExpr;
-    const auto &varAddrMap  = path.getVarAddr();
-    const auto &memoryState = path.getMemoryState();
-
-    for (const auto &[decl, addr] : varAddrMap) {
-        if (!decl || !addr)
-            continue;
-
-        if (auto value = memoryState.read(*addr)) {
-            nameToExpr[decl->getNameAsString()] = std::move(value);
-        }
-    }
-
-    return nameToExpr;
-}
-
 optional<string> buildInvs(const C_Polyhedron &poly, const VarManager &vm) {
     string spec;
     bool firstLine = true;
@@ -558,22 +536,22 @@ optional<string> buildInvs(const C_Polyhedron &poly, const VarManager &vm) {
     return spec;
 }
 
-pair<std::unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash>, vector<unique_ptr<SymbolicExpr>>> buildPostState(
+pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash>, vector<not_null<unique_ptr<SymbolicExpr>>>> buildPostState(
     const C_Polyhedron &poly,
     const Path &initPath,
     const VarManager &vm) {
     using namespace Parma_Polyhedra_Library;
-    using R = pair<std::unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash>,
-                   vector<unique_ptr<SymbolicExpr>>>;
+    using R = pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash>,
+                   vector<not_null<unique_ptr<SymbolicExpr>>>>;
     // TODO: whether clone from initPath? or select some field from initPath.
     auto newPath = std::make_unique<Path>(initPath, true);
     auto n       = vm.numVars;
     auto half    = n / 2;
 
-    std::unordered_map<int, std::unique_ptr<SymbolicExpr>> resolvedExprs;
+    std::unordered_map<int, not_null<std::unique_ptr<SymbolicExpr>>> resolvedExprs;
     for (size_t i = half; i < n; ++i) {
-        auto trueDecl    = vm.varDecls.at(i - half);
-        resolvedExprs[i] = initPath.getVarState(trueDecl);
+        auto trueDecl = vm.varDecls.at(i - half);
+        resolvedExprs.emplace(i, initPath.getVarState(trueDecl));
     }
 
     auto &cs = poly.constraints();
@@ -617,7 +595,7 @@ pair<std::unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash>, vector<
                 if (idx == target)
                     continue;
 
-                SymbolicExpr *base = resolvedExprs[idx].get();
+                SymbolicExpr *base = resolvedExprs.at(idx).get().get();
 
                 auto term = base->clone();
                 if (coeff != 1) {
@@ -639,14 +617,16 @@ pair<std::unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash>, vector<
                     std::make_unique<LiteralExpr>(coeffs[target].get_si()));
             }
 
-            resolvedExprs[target] = std::move(rhs);
+            auto [_, ok] = resolvedExprs.emplace(target, std::move(rhs));
+            if (!ok)
+                UNREACHABLE();
 
             changed = true;
         }
     }
 
-    std::unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash> newVars;
-    vector<unique_ptr<SymbolicExpr>> conds;
+    std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash> newVars;
+    vector<not_null<unique_ptr<SymbolicExpr>>> conds;
 
     for (size_t i = 0; i < half; ++i) {
         auto varDecl = vm.varDecls.at(i);
@@ -654,7 +634,9 @@ pair<std::unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash>, vector<
         if (addr == nullptr)
             UNREACHABLE();
         if (resolvedExprs.contains(i)) {
-            newVars[*addr] = resolvedExprs[i]->clone();
+            auto [_, ok] = newVars.emplace(*addr, resolvedExprs.at(i)->clone());
+            if (!ok)
+                UNREACHABLE();
         }
     }
 
@@ -668,7 +650,7 @@ pair<std::unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash>, vector<
 
             SymbolicExpr *base = nullptr;
             if (resolvedExprs.contains(i))
-                base = resolvedExprs[i].get();
+                base = resolvedExprs.at(i).get().get();
             else {
                 // Unresolved expression is too complex (because of non-linear or pointer), just
                 // ignore it.
@@ -757,7 +739,7 @@ std::vector<Formulas> negateFormulas(Formulas input) {
         bool expanded = false;
 
         for (size_t i = startIdx; i < current.size(); ++i) {
-            auto *bin = dynamic_cast<Symbolic::BinaryOpExpr *>(current[i].get());
+            auto *bin = dynamic_cast<Symbolic::BinaryOpExpr *>(current[i].get().get());
             if (!bin) {
                 ERROR("negateFormulas: input[" + std::to_string(i) + "] is not a BinaryOpExpr");
             }
@@ -839,7 +821,7 @@ std::vector<Formulas> preprocessLoopCond(Formulas loopCond) {
         bool expanded = false;
 
         for (size_t i = startIdx; i < current.size(); ++i) {
-            auto *bin = dynamic_cast<Symbolic::BinaryOpExpr *>(current[i].get());
+            auto *bin = dynamic_cast<Symbolic::BinaryOpExpr *>(current[i].get().get());
             if (!bin) {
                 ERROR("preprocessLoopCond: loopCond[" + std::to_string(i) +
                       "] is not a BinaryOpExpr");
@@ -927,8 +909,6 @@ Parma_Polyhedra_Library::C_Polyhedron buildPathPoly(const Path &path,
         std::string varName = varDecl->getNameAsString();
 
         auto expr = path.getVarState(varDecl);
-        if (!expr)
-            UNREACHABLE();
 
         auto varIt = vm.varIndexMap.find(varName);
         if (varIt == vm.varIndexMap.end())
@@ -1145,10 +1125,7 @@ vector<InvsAndPostStates> buildLoopInvariant(unique_ptr<SymbolicExpr> loopCond,
 
     std::vector<Parma_Polyhedra_Library::C_Polyhedron> transPolys;
     for (const auto &path : paths) {
-        if (path)
-            transPolys.push_back(buildPathPoly(*path, vm));
-        else
-            UNREACHABLE();
+        transPolys.push_back(buildPathPoly(*path, vm));
     }
 
     std::vector<std::string> locations;

@@ -279,13 +279,13 @@ namespace {
                         const Symbolic::SymbolicExpr &expected) {
         auto addr = makePointAddr(id, off);
         auto got  = mm.read(addr);
-        ASSERT_NE(got, nullptr) << "read returned null at off=" << off;
-        EXPECT_EQ(*got, expected) << "mismatch at off=" << off;
+        ASSERT_NE(got, nullopt) << "read returned null at off=" << off;
+        EXPECT_EQ(*got.value(), expected) << "mismatch at off=" << off;
     }
 
     void ExpectReadNullAt(MemoryModel &mm, unsigned id, std::uint64_t off) {
         auto addr = makePointAddr(id, off);
-        EXPECT_EQ(mm.read(addr), nullptr) << "expected null at off=" << off;
+        EXPECT_EQ(mm.read(addr), nullopt) << "expected null at off=" << off;
     }
 }; // namespace
 
@@ -306,8 +306,8 @@ TEST(MemoryModelTest, SizeAndClear) {
     mm.clear();
     EXPECT_EQ(mm.size(), 0u);
 
-    EXPECT_EQ(mm.read(a), nullptr);
-    EXPECT_EQ(mm.read(b), nullptr);
+    EXPECT_EQ(mm.read(a), nullopt);
+    EXPECT_EQ(mm.read(b), nullopt);
 }
 
 TEST(MemoryModelTest, ReadAfterWrite_NoOffset) {
@@ -320,8 +320,8 @@ TEST(MemoryModelTest, ReadAfterWrite_NoOffset) {
 
     ASSERT_EQ(expr.get(), nullptr);
     auto got = mm.read(addr);
-    ASSERT_NE(got, nullptr);
-    EXPECT_EQ(*got, *saveExpr);
+    ASSERT_NE(got, nullopt);
+    EXPECT_EQ(*got.value(), *saveExpr);
 }
 
 TEST(MemoryModelTest, Flat_Yields_All_Three_Categories) {
@@ -348,7 +348,6 @@ TEST(MemoryModelTest, Flat_Yields_All_Three_Categories) {
 
     bool fA = false, fB = false, fC = false;
     for (auto &&[addr, value] : mm.flat()) {
-        ASSERT_NE(value, nullptr);
         if (*value == *saveEA)
             fA = true;
         else if (*value == *saveEB)

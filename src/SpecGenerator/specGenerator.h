@@ -65,7 +65,7 @@ struct LoopInfo {
         not_null<std::unique_ptr<Symbolic::SymbolicExpr>> indexBound_; // exclusive bound
         not_null<std::unique_ptr<Symbolic::SymbolicExpr>> loopCount_;
         Pattern indexPattern_;
-        bool isLocal_;
+        bool isLocal_; // Useless, delete this.
     };
     optional<IndexInfo> indexInfo_;
 
@@ -92,7 +92,7 @@ std::optional<LoopInfo> parseLoopInfo(
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
 
-std::tuple<std::string, std::vector<std::unique_ptr<Path>>> emitLoopInvariant(
+std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
     const ProgramState &preState,
     const ProgramState &loopEntry,
     const clang::Expr *cond,
@@ -150,15 +150,15 @@ class LoopInfoPlugin : public ACSLPlugin {
                        LoopInfo &loopInfo) const = 0;
 };
 
-struct PostState {
-    std::unordered_map<Address, std::unique_ptr<SymbolicExpr>, AddressHash> memoryMap_;
-    vector<unique_ptr<SymbolicExpr>> pathConds_;
+struct PostInfo {
+    std::unordered_map<Address, not_null<std::unique_ptr<SymbolicExpr>>, AddressHash> memoryMap_;
+    vector<not_null<unique_ptr<SymbolicExpr>>> pathConds_;
 };
 class LoopInvariantPlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
 
-    virtual std::tuple<std::optional<std::string>, bool, std::vector<PostState>> generate(
+    virtual std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
         const ProgramState &preState,
         const ProgramState &loopEntry,
         const clang::Expr *cond,

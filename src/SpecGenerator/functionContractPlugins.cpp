@@ -62,7 +62,7 @@ class AssignsPlugin : public FunctionContractPlugin {
                     if (!isFromPointer(addr))
                         continue;
                     if (value->getType() == SymbolicExpr::ExprType::Variable) {
-                        auto symbol = dynamic_cast<const Symbolic::Variable *>(value.get());
+                        auto symbol = dynamic_cast<const Symbolic::Variable *>(value.get().get());
 
                         if (!symbol)
                             ERROR("A SymolicExpr with type 'Variable' but is not a Variable!");

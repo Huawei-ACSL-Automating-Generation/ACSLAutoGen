@@ -14,7 +14,7 @@
 using namespace Symbolic;
 using namespace std;
 using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>>;
-using Formulas     = std::vector<std::unique_ptr<SymbolicExpr>>;
+using Formulas     = std::vector<not_null<std::unique_ptr<SymbolicExpr>>>;
 using TransRel     = std::tuple<int, int, Parma_Polyhedra_Library::C_Polyhedron *>;
 using InitRel      = std::pair<int, Parma_Polyhedra_Library::C_Polyhedron *>;
 
@@ -26,8 +26,8 @@ class MemoryModel {
     MemoryModel &operator=(const MemoryModel &);
     MemoryModel(MemoryModel &&)            = default;
     MemoryModel &operator=(MemoryModel &&) = default;
-    unique_ptr<SymbolicExpr> read(const Address &addr) const;
-    void write(const Address &address, unique_ptr<const SymbolicExpr> value);
+    optional<not_null<unique_ptr<SymbolicExpr>>> read(const Address &addr) const;
+    void write(const Address &address, not_null<unique_ptr<const SymbolicExpr>> value);
     size_t size() const;
     bool contains(const Address &addr) const;
 
@@ -43,15 +43,16 @@ class MemoryModel {
   private:
     friend struct flat_view;
 
-    unordered_map<Address, unique_ptr<const SymbolicExpr>, AddressHash> memoryMap_noOffset_;
+    unordered_map<Address, not_null<unique_ptr<const SymbolicExpr>>, AddressHash>
+        memoryMap_noOffset_;
 
     unordered_map<Address,
-                  map<pair<uint64_t, uint64_t>, unique_ptr<const SymbolicExpr>>,
+                  map<pair<uint64_t, uint64_t>, not_null<unique_ptr<const SymbolicExpr>>>,
                   AddressHash>
         memoryMap_constantRange_; ///< Ranges(pair<uint64_t, uint64_t>) must be non-overlapping
                                   ///< and non-zero-length.
     unordered_map<Address,
-                  unordered_map<Address, unique_ptr<const SymbolicExpr>, AddressHash>,
+                  unordered_map<Address, not_null<unique_ptr<const SymbolicExpr>>, AddressHash>,
                   AddressHash>
         memoryMap_symbolicRange_;
 };
@@ -77,7 +78,7 @@ struct MemoryModel::flat_view {
     }
 
   public:
-    using UPtr = std::unique_ptr<const SymbolicExpr>;
+    using UPtr = not_null<std::unique_ptr<const SymbolicExpr>>;
     template <bool IsConst> class flat_iterator {
         using Owner   = std::conditional_t<IsConst, const MemoryModel, MemoryModel>;
         using NoOuter = decltype(no_offset_map(std::declval<Owner &>()).begin());
@@ -271,7 +272,7 @@ struct MemoryModel::flat_view {
 
 class Path {
   public:
-    using EvalResult = std::pair<std::vector<std::unique_ptr<Path>>, Formulas>;
+    using EvalResult = std::pair<std::vector<not_null<std::unique_ptr<Path>>>, Formulas>;
 
     Path()  = default;
     ~Path() = default;
@@ -289,15 +290,16 @@ class Path {
     LValueTarget extractLValue(const clang::Expr *lhs);
     std::unique_ptr<Address> extractAddress(const clang::Expr *lhs);
 
-    std::unique_ptr<SymbolicExpr> getVarState(const clang::VarDecl *var) const;
+    not_null<std::unique_ptr<SymbolicExpr>> getVarState(const clang::VarDecl *var) const;
     const Formulas &getPathConditions() const;
 
-    Address *allocMemory(const clang::VarDecl *);
+    not_null<Address *> allocMemory(const clang::VarDecl *);
     std::unique_ptr<Address> allocMemory(const Address &from);
 
-    void updateMemory(Address *addr, std::unique_ptr<SymbolicExpr> expr);
-    void updateVarState(const clang::VarDecl *var, std::unique_ptr<SymbolicExpr> expr);
-    void insertPathCondition(std::unique_ptr<SymbolicExpr> cond);
+    void updateMemory(const Address &addr, not_null<std::unique_ptr<SymbolicExpr>> expr);
+    void updateVarState(not_null<const clang::VarDecl *> var,
+                        not_null<std::unique_ptr<SymbolicExpr>> expr);
+    void insertPathCondition(not_null<std::unique_ptr<SymbolicExpr>> cond);
 
     void setReturnExpr(std::unique_ptr<SymbolicExpr> expr) {
         if (expr == nullptr)
@@ -350,7 +352,9 @@ class ProgramState {
   public:
     ProgramState(std::unique_ptr<Path> initialPath, std::unique_ptr<ACSLFunction> context);
     ProgramState(std::unique_ptr<ACSLFunction> context);
-    ~ProgramState() = default;
+    ~ProgramState()                          = default;
+    ProgramState(ProgramState &&)            = default;
+    ProgramState &operator=(ProgramState &&) = default;
 
     void init();
 
@@ -379,6 +383,7 @@ class ProgramState {
     void resymbolize();
 
     auto getPaths() const -> const auto & { return paths_; }
+    auto getPaths() -> auto & { return paths_; }
     auto getContext() const -> const auto & { return context_; }
 
     void deriveLinearPostState(std::vector<Formulas> invs);
@@ -394,7 +399,7 @@ class ProgramState {
 
     void stepLoop(const clang::Stmt *loopStmt);
 
-    std::vector<std::unique_ptr<Path>> paths_{};
+    std::vector<not_null<std::unique_ptr<Path>>> paths_{};
 
     std::unique_ptr<ACSLFunction> context_;
 };
@@ -405,7 +410,7 @@ struct VarManager {
     std::vector<std::string> orderedVars;
     std::vector<const clang::VarDecl *> varDecls;
 
-    static VarManager fromPaths(const std::vector<std::unique_ptr<Path>> &paths) {
+    static VarManager fromPaths(const std::vector<not_null<std::unique_ptr<Path>>> &paths) {
         VarManager vm;
         std::vector<pair<std::string, const clang::VarDecl *>> rawVars;
         size_t varCounter = 0;
@@ -449,8 +454,8 @@ struct VarManager {
 
 struct InvsAndPostStates {
     std::optional<std::string> invs_;
-    pair<std::unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash>,
-         vector<unique_ptr<SymbolicExpr>>>
+    pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash>,
+         vector<not_null<unique_ptr<SymbolicExpr>>>>
         postStates_;
 };
 

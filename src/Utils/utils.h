@@ -322,6 +322,13 @@ namespace acslg {
         constexpr decltype(auto) operator->() const { return get(); }
         constexpr decltype(auto) operator*() const { return *get(); }
 
+        [[nodiscard]]
+        T into_underlying() && noexcept(std::is_nothrow_move_constructible_v<T>) {
+            static_assert(std::is_move_constructible_v<T>,
+                          "T must be move-constructible for into_underlying()");
+            return std::move(ptr_);
+        }
+
         // prevents compilation when someone attempts to assign a null pointer constant
         not_null(std::nullptr_t)            = delete;
         not_null &operator=(std::nullptr_t) = delete;

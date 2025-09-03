@@ -210,9 +210,11 @@ std::size_t Structure::Info::hash() const {
 }
 
 std::size_t Structure::hash() const {
+    if (!isComplete())
+        ERROR("Should only hash complete structure");
     auto seed = acslg::hash_val(getType(), info_->hash());
     for (auto &field : fields_)
-        seed = acslg::hash_val(seed, field->hash());
+        seed = acslg::hash_val(seed, field.value()->hash());
     return seed;
 }
 
@@ -349,7 +351,7 @@ std::string Structure::dump() const {
     oss << ", fields=[";
     for (size_t i = 0; i < fields_.size(); ++i) {
         if (fields_[i]) {
-            oss << fields_[i]->dump();
+            oss << fields_[i].value()->dump();
         } else {
             oss << "null";
         }
@@ -871,8 +873,10 @@ bool Structure::equal(const SymbolicExpr &expr) const {
         return false;
     if (!info_->equal(*(st->info_)))
         return false;
+    if (!isComplete() || !st->isComplete())
+        ERROR("Should only compare complete structure");
     return std::ranges::equal(fields_, st->fields_,
-                              [](auto &lhs, auto &rhs) { return *lhs == *rhs; });
+                              [](auto &lhs, auto &rhs) { return *lhs.value() == *rhs.value(); });
 }
 
 std::unique_ptr<Address> BinaryOpExpr::tryEvalAsOffsetedAddr() const {
@@ -1057,14 +1061,14 @@ Address::Address(unsigned int id,
         from);
 }
 
-void Address::setOffset(std::unique_ptr<SymbolicExpr> offset) {
-    if (offset == nullptr || !isValidOffsetOrLength(*offset))
+void Address::setOffset(not_null<std::unique_ptr<SymbolicExpr>> offset) {
+    if (!isValidOffsetOrLength(*offset))
         ERROR("Invalid offset.");
-    offset_ = std::move(offset);
+    offset_ = std::move(offset).into_underlying();
 }
 
-void Address::addOffset(std::unique_ptr<SymbolicExpr> extra) {
-    if (extra == nullptr || !isValidOffsetOrLength(*extra))
+void Address::addOffset(not_null<std::unique_ptr<SymbolicExpr>> extra) {
+    if (!isValidOffsetOrLength(*extra))
         ERROR("Invalid offset.");
     if (isOffseted())
         offset_.emplace(std::make_unique<BinaryOpExpr>(
@@ -1074,8 +1078,8 @@ void Address::addOffset(std::unique_ptr<SymbolicExpr> extra) {
         offset_.emplace(extra->simplifiedExpr());
 }
 
-void Address::subOffset(std::unique_ptr<SymbolicExpr> extra) {
-    if (extra == nullptr || !isValidOffsetOrLength(*extra))
+void Address::subOffset(not_null<std::unique_ptr<SymbolicExpr>> extra) {
+    if (!isValidOffsetOrLength(*extra))
         ERROR("Invalid offset.");
     if (isOffseted())
         offset_.emplace(std::make_unique<BinaryOpExpr>(offset_.value()->clone(),
@@ -1220,7 +1224,7 @@ Structure::Info::Info(const Info &other) : definition_(other.definition_), layou
 
 bool Structure::isComplete() const {
     for (auto &field : fields_)
-        if (field == nullptr)
+        if (field == nullopt)
             return false;
     return true;
 }
@@ -1234,7 +1238,7 @@ void Structure::setFieldValue(size_t index, const SymbolicExpr &expr) {
 std::unique_ptr<SymbolicExpr> Structure::getFieldValue(size_t index) const {
     if (index >= fields_.size())
         ERROR("Out-of-bounds access");
-    return fields_[index] ? fields_[index]->clone() : nullptr;
+    return fields_[index] ? fields_[index].value()->clone() : nullptr;
 }
 
 std::string Symbolic::Structure::Info::regularFormOfField(size_t index,
@@ -1302,7 +1306,7 @@ std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType t) {
 }
 
 namespace Symbolic {
-    unique_ptr<SymbolicExpr> createLNotExpr(unique_ptr<SymbolicExpr> expr) {
+    unique_ptr<SymbolicExpr> createLNotExpr(not_null<unique_ptr<SymbolicExpr>> expr) {
         return make_unique<UnaryOpExpr>(UnaryOpExpr::Operator::LogicalNot, std::move(expr));
     }
 

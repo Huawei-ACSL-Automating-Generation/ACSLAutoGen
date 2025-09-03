@@ -14,7 +14,7 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
   public:
     CheckAndDumpLoopInfoPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool, vector<PostState>> generate(
+    tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
         const clang::Expr *,
@@ -65,7 +65,7 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
             INFO("patternInfo_ isn't set.");
         }
 
-        return make_tuple(nullopt, true, vector<PostState>{});
+        return make_tuple(nullopt, true, vector<PostInfo>{});
     }
 
   private:
@@ -77,7 +77,7 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
   public:
     LinearInvariantPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool, vector<PostState>> generate(
+    tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
         const clang::Expr *cond,
@@ -163,14 +163,14 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
             UNIMPLEMENT("Only support one path now");
 
         string spec;
-        vector<PostState> postStates;
-        for (auto &[inv, postState] : invsAndPaths) {
+        vector<PostInfo> postStates;
+        for (auto &[inv, postInfo] : invsAndPaths) {
             // TODO: use behavior
             if (inv != nullopt) {
                 spec += *inv;
                 spec += '\n';
             }
-            postStates.emplace_back(std::move(postState.first), std::move(postState.second));
+            postStates.emplace_back(std::move(postInfo.first), std::move(postInfo.second));
         }
         if (!spec.empty()) {
             // remove '\n'
@@ -192,7 +192,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
   public:
     LoopAssignsPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool, vector<PostState>> generate(
+    tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &preState,
         const ProgramState &,
         const clang::Expr *cond,
@@ -220,11 +220,11 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
 
         string spec;
         vector<Address> assignedAddrs;
-        vector<PostState> postState;
+        vector<PostInfo> postInfo;
 
         // This plugin does not produce branches.
-        postState.emplace_back();
-        auto &memoryMap = postState.at(0).memoryMap_;
+        postInfo.emplace_back();
+        auto &memoryMap = postInfo.at(0).memoryMap_;
 
         auto isLocal = [&](const Address &addr) {
             auto root = addr.getFromRoot();
@@ -298,21 +298,32 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                 continue;
             if (auto range = tryGetAsRange(addr)) {
                 if (pattern) {
-                    memoryMap[range.value()] =
+                    auto [_, ok] = memoryMap.emplace(
+                        range.value(),
                         make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(), Add,
-                                                  make_unique<LiteralExpr>(pattern.value().step_));
+                                                  make_unique<LiteralExpr>(pattern.value().step_)));
+                    if (!ok)
+                        UNREACHABLE();
                 } else {
-                    memoryMap[range.value()] = UnknownExpr::makeUnknown();
+                    auto [_, ok] = memoryMap.emplace(range.value(), UnknownExpr::makeUnknown());
+                    if (!ok)
+                        UNREACHABLE();
                 }
                 assignedAddrs.push_back(std::move(range.value()));
             } else {
                 if (pattern) {
-                    memoryMap[addr] = make_unique<BinaryOpExpr>(
-                        pattern.value().initialValue_->clone(), Add,
-                        make_unique<BinaryOpExpr>(make_unique<LiteralExpr>(pattern.value().step_),
-                                                  Multiply, indexInfo.loopCount_->clone()));
+                    auto [_, ok] = memoryMap.emplace(
+                        addr, make_unique<BinaryOpExpr>(
+                                  pattern.value().initialValue_->clone(), Add,
+                                  make_unique<BinaryOpExpr>(
+                                      make_unique<LiteralExpr>(pattern.value().step_), Multiply,
+                                      indexInfo.loopCount_->clone())));
+                    if (!ok)
+                        UNREACHABLE();
                 } else {
-                    memoryMap[addr] = UnknownExpr::makeUnknown();
+                    auto [_, ok] = memoryMap.emplace(addr, UnknownExpr::makeUnknown());
+                    if (!ok)
+                        UNREACHABLE();
                 }
                 assignedAddrs.push_back(addr);
             }
@@ -324,10 +335,10 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         }
 
         if (spec.empty())
-            return make_tuple(R"(loop assigns \nothing;)", true, vector<PostState>{});
+            return make_tuple(R"(loop assigns \nothing;)", true, vector<PostInfo>{});
         else
             return make_tuple("loop assigns " + spec.substr(0, spec.length() - 2) + ";", true,
-                              std::move(postState));
+                              std::move(postInfo));
     }
 
   private:
@@ -339,7 +350,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
   public:
     ParadigmMaxMinPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    tuple<optional<string>, bool, vector<PostState>> generate(
+    tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
         const clang::Expr *,
@@ -365,7 +376,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
             if (it->second == nullopt)
                 ERROR("PatternsMap_ is in an invalid state");
             if ((*it->second).step_ != 1 && (*it->second).step_ != -1)
-                return make_tuple(nullopt, true, vector<PostState>{});
+                return make_tuple(nullopt, true, vector<PostInfo>{});
             else
                 indexStep = (*it->second).step_;
         } else {
@@ -546,9 +557,9 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                 for (auto &path : symbolState->getPaths()) {
                     unique_ptr<Symbolic::Variable> maxVar{nullptr};
                     if (auto maxValue = path->getVarState(maxDecl);
-                        maxValue && maxValue->getType() == SymbolicExpr::ExprType::Variable) {
-                        maxVar = unique_ptr<Symbolic::Variable>(
-                            static_cast<Symbolic::Variable *>(maxValue.release()));
+                        maxValue->getType() == SymbolicExpr::ExprType::Variable) {
+                        maxVar = unique_ptr<Symbolic::Variable>(static_cast<Symbolic::Variable *>(
+                            std::move(maxValue).into_underlying().release()));
                     } else {
                         return;
                     }
@@ -597,10 +608,10 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
         ifVisitor.runOn(body);
 
         if (spec.empty())
-            return make_tuple(nullopt, true, vector<PostState>{});
+            return make_tuple(nullopt, true, vector<PostInfo>{});
         else {
             spec.pop_back(); // earse \n
-            return make_tuple(spec, true, vector<PostState>{});
+            return make_tuple(spec, true, vector<PostInfo>{});
         }
     }
 

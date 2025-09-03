@@ -303,18 +303,21 @@ namespace Symbolic {
         }
 
         // TODO(style): May use template to unify constructors.
-        BinaryOpExpr(std::unique_ptr<SymbolicExpr> left,
+        BinaryOpExpr(not_null<std::unique_ptr<SymbolicExpr>> left,
                      Operator op,
-                     std::unique_ptr<SymbolicExpr> right)
+                     not_null<std::unique_ptr<SymbolicExpr>> right)
             : SymbolicExpr(ExprType::BinaryOp, left->getValType()), left_(std::move(left)), op_(op),
               right_(std::move(right)) {}
 
-        BinaryOpExpr(SymbolicExpr *left, Operator op, SymbolicExpr *right)
-            : SymbolicExpr(ExprType::BinaryOp, left->getValType()), left_(left), op_(op),
-              right_(right) {}
+        BinaryOpExpr(not_null<SymbolicExpr *> left, Operator op, not_null<SymbolicExpr *> right)
+            : SymbolicExpr(ExprType::BinaryOp, left->getValType()),
+              left_(std::unique_ptr<SymbolicExpr>{left}), op_(op),
+              right_(std::unique_ptr<SymbolicExpr>{right}) {}
 
-        const std::unique_ptr<SymbolicExpr> &getLeft() const { return left_; }
-        const std::unique_ptr<SymbolicExpr> &getRight() const { return right_; }
+        not_null<const SymbolicExpr *> getLeft() const { return left_.get().get(); }
+        not_null<const SymbolicExpr *> getRight() const { return right_.get().get(); }
+        auto getLeft() -> auto & { return left_; }
+        auto getRight() -> auto & { return right_; }
         Operator getOperator() const { return op_; }
 
         std::unique_ptr<SymbolicExpr> clone() const override;
@@ -341,9 +344,9 @@ namespace Symbolic {
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr() const override;
 
       private:
-        std::unique_ptr<SymbolicExpr> left_;
+        not_null<std::unique_ptr<SymbolicExpr>> left_;
         Operator op_;
-        std::unique_ptr<SymbolicExpr> right_;
+        not_null<std::unique_ptr<SymbolicExpr>> right_;
     };
 
     /// @class UnaryOpExpr
@@ -373,9 +376,13 @@ namespace Symbolic {
             }
         }
 
-        UnaryOpExpr(Operator op, std::unique_ptr<SymbolicExpr> expr)
+        UnaryOpExpr(Operator op, not_null<std::unique_ptr<SymbolicExpr>> expr)
             : SymbolicExpr(ExprType::UnaryOp, expr->getValType()), op_(op), expr_(std::move(expr)) {
         }
+
+        not_null<const SymbolicExpr *> getSub() const { return expr_.get().get(); }
+        auto getSub() -> auto & { return expr_; }
+        Operator getOperator() const { return op_; }
 
         std::unique_ptr<SymbolicExpr> clone() const override;
         std::string dump() const override;
@@ -399,7 +406,7 @@ namespace Symbolic {
 
       private:
         Operator op_;
-        std::unique_ptr<SymbolicExpr> expr_;
+        not_null<std::unique_ptr<SymbolicExpr>> expr_;
     };
 
     /// @class UnknownExpr
@@ -501,9 +508,13 @@ namespace Symbolic {
         Structure(const Structure &other)
             : SymbolicExpr(other), id_(other.id_), info_(other.info_) {
             fields_.resize(other.fields_.size());
-            std::ranges::transform(other.fields_, fields_.begin(), [](auto &field) {
-                return field == nullptr ? nullptr : field->clone();
-            });
+            std::ranges::transform(
+                other.fields_, fields_.begin(),
+                [](auto &field) -> std::optional<not_null<std::unique_ptr<SymbolicExpr>>> {
+                    if (field == std::nullopt)
+                        return std::nullopt;
+                    return field.value()->clone();
+                });
         }
 
         bool isComplete() const;
@@ -542,7 +553,7 @@ namespace Symbolic {
       private:
         unsigned int id_;
         not_null<std::shared_ptr<Info>> info_;
-        std::vector<std::unique_ptr<SymbolicExpr>> fields_;
+        std::vector<std::optional<not_null<std::unique_ptr<SymbolicExpr>>>> fields_;
     };
 
     /// @class Address
@@ -621,9 +632,9 @@ namespace Symbolic {
         int getDimension() const;
         std::string getBaseName() const;
 
-        void setOffset(std::unique_ptr<SymbolicExpr> offset);
-        void addOffset(std::unique_ptr<SymbolicExpr> extra);
-        void subOffset(std::unique_ptr<SymbolicExpr> extra);
+        void setOffset(not_null<std::unique_ptr<SymbolicExpr>> offset);
+        void addOffset(not_null<std::unique_ptr<SymbolicExpr>> extra);
+        void subOffset(not_null<std::unique_ptr<SymbolicExpr>> extra);
         void resetOffset() { offset_ = std::nullopt; }
         bool isOffseted() const { return offset_ != std::nullopt; }
 
@@ -754,7 +765,7 @@ namespace Symbolic {
             from_; ///< The original Address of the value or the Structure it belongs.
     };
 
-    std::unique_ptr<SymbolicExpr> createLNotExpr(std::unique_ptr<SymbolicExpr> expr);
+    std::unique_ptr<SymbolicExpr> createLNotExpr(not_null<std::unique_ptr<SymbolicExpr>> expr);
     BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
     BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
     SymbolicExpr::Type deriveVarType(clang::QualType type);

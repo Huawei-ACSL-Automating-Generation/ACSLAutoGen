@@ -67,7 +67,7 @@ class SetPatternsPlugin : public LoopInfoPlugin {
                     rootDecl == nullptr || !preVA.contains(rootDecl))
                     continue; // local variable
                 if (auto preValue = preMS.read(addr)) {
-                    if (*preValue == *currentExpr)
+                    if (*preValue.value() == *currentExpr)
                         continue; // unchanged
                 } else {
                     if (currentEntry.isUnchanged(addr))
@@ -77,7 +77,7 @@ class SetPatternsPlugin : public LoopInfoPlugin {
                 try {
                     unique_ptr<SymbolicExpr> entryExpr;
                     if (auto preValue = preMS.read(addr)) {
-                        entryExpr = std::move(preValue);
+                        entryExpr = std::move(preValue).value().into_underlying();
                     } else {
                         auto varsAddrsMap = currentExpr->collectUsedVarsAndAddrs();
                         if (varsAddrsMap.size() != 1) {
@@ -290,20 +290,20 @@ class SetIndexPlugin : public LoopInfoPlugin {
             return true;
         }; // unchangedAfterOneRound end
 
-        optional<unique_ptr<Address>> indexAddr;
-        optional<unique_ptr<Symbolic::SymbolicExpr>> indexValue;
+        optional<not_null<unique_ptr<Address>>> indexAddr;
+        optional<not_null<unique_ptr<Symbolic::SymbolicExpr>>> indexValue;
         optional<BinaryOperator::Opcode> opCode;
-        optional<unique_ptr<SymbolicExpr>> boundValue;
-        optional<unique_ptr<SymbolicExpr>> loopCount;
+        optional<not_null<unique_ptr<SymbolicExpr>>> boundValue;
+        optional<not_null<unique_ptr<SymbolicExpr>>> loopCount;
         optional<LoopInfo::Pattern> indexPattern;
         optional<bool> isLocal;
 
         if (auto binExpr = dyn_cast<BinaryOperator>(cond->IgnoreParenImpCasts())) {
             auto sameValueBetweenEveryPaths =
-                [&](const Expr *expr) -> optional<unique_ptr<SymbolicExpr>> {
-                unique_ptr<SymbolicExpr> value;
+                [&](const Expr *expr) -> optional<not_null<unique_ptr<SymbolicExpr>>> {
+                optional<not_null<unique_ptr<SymbolicExpr>>> value;
                 for (auto &path : loopEntry.getPaths()) {
-                    if (value == nullptr) {
+                    if (value == nullopt) {
                         // value is empty
                         auto [_, valueVector] = path->evalExpr(expr);
                         if (valueVector.size() != 1)
@@ -316,7 +316,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
                     if (valueVector.size() != 1)
                         return nullopt;
 
-                    if (*value != *valueVector[0])
+                    if (*value.value() != *valueVector[0])
                         return nullopt;
                 }
                 return value;
