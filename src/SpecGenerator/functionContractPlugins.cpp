@@ -132,3 +132,103 @@ class ResultPlugin : public FunctionContractPlugin {
     string id_;
 };
 REGISTER_ACSL_PLUGIN(ResultPlugin, "result");
+
+class PostStatePlugin : public FunctionContractPlugin {
+  public:
+    PostStatePlugin(const std::string &ID) : id_(ID) {}
+    std::string_view id() const override { return id_; }
+
+    std::optional<std::string> generate(const ProgramState &,
+                                        const ProgramState &post) const override {
+        std::vector<std::string> behaviors;
+        int idx = 0;
+
+        for (auto &pathPtr : post.getPaths()) {
+            const auto &path = *pathPtr;
+            if (path.getPathState() != Path::PathState::Return)
+                continue;
+
+            std::string assumes = joinConj(path.getPathConditions());
+            std::vector<std::string> ensures;
+
+            if (auto &ret = path.getReturnExpr()) {
+                ensures.push_back("\\result == " +
+                                  ret.value()->simplifiedExpr()->regularForm("\\old(", ")"));
+            }
+
+            for (const auto &kv : path.getVarAddr()) {
+                const clang::VarDecl *vd = kv.first;
+                const auto &addrUP       = kv.second;
+                if (!vd || !addrUP)
+                    continue;
+                auto it = path.getMemoryState().read(*addrUP);
+                if (it == nullopt)
+                    continue;
+                const auto &finalVal = *it;
+                if (finalVal->isUnknown())
+                    continue;
+                std::string varName = vd->getNameAsString();
+                std::string rhs     = finalVal->simplifiedExpr()->regularForm("\\old(", ")");
+                ensures.push_back(varName + " == " + rhs);
+            }
+
+            if (assumes.empty() && ensures.empty())
+                continue;
+
+            std::string bname = "b" + std::to_string(idx++);
+            std::string block;
+            block += "behavior " + bname + ":\n";
+            if (!assumes.empty())
+                block += "  assumes " + assumes + ";\n";
+            for (auto &e : ensures)
+                block += "  ensures " + e + ";\n";
+            behaviors.push_back(std::move(block));
+        }
+
+        if (behaviors.empty())
+            return std::nullopt;
+
+        std::string out;
+        for (auto &b : behaviors)
+            out += b;
+
+        std::vector<std::string> names;
+        for (int i = 0; i < (int)behaviors.size(); ++i)
+            names.push_back("b" + std::to_string(i));
+
+        out += "complete behaviors " + joinCSV(names) + ";\n";
+
+        return out;
+    }
+
+  private:
+    std::string id_;
+
+    static std::string joinConj(const Formulas &conds) {
+        std::string s;
+        for (size_t i = 0; i < conds.size(); ++i) {
+            const auto &c = conds[i];
+            if (c->isUnknown())
+                continue;
+            std::string ci = c->simplifiedExpr()->regularForm("", "");
+            if (ci.empty())
+                continue;
+            if (!s.empty())
+                s += " && ";
+            s += "(" + ci + ")";
+        }
+        return s;
+    }
+
+    static std::string joinCSV(const std::vector<std::string> &v) {
+        std::string s;
+        for (size_t i = 0; i < v.size(); ++i) {
+            if (i)
+                s += ", ";
+            s += v[i];
+        }
+        return s;
+    }
+};
+
+REGISTER_ACSL_PLUGIN(PostStatePlugin, "poststate");
