@@ -1,8 +1,6 @@
 // src/SpecGenerator/functionContractPlugins.cpp
 
-#include <unordered_set>
 #include "specGenerator.h"
-#include "stringTemplate.h"
 #include "macros.h"
 #include "state.h"
 #include "utils.h"
@@ -137,11 +135,12 @@ class PostStatePlugin : public FunctionContractPlugin {
   public:
     PostStatePlugin(const std::string &ID) : id_(ID) {}
     std::string_view id() const override { return id_; }
-
     std::optional<std::string> generate(const ProgramState &,
                                         const ProgramState &post) const override {
         std::vector<std::string> behaviors;
         int idx = 0;
+
+        const auto *FD = post.getContext()->getFunctionDecl();
 
         for (auto &pathPtr : post.getPaths()) {
             const auto &path = *pathPtr;
@@ -156,20 +155,55 @@ class PostStatePlugin : public FunctionContractPlugin {
                                   ret.value()->simplifiedExpr()->regularForm("\\old(", ")"));
             }
 
-            for (const auto &kv : path.getVarAddr()) {
-                const clang::VarDecl *vd = kv.first;
-                const auto &addrUP       = kv.second;
-                if (!vd || !addrUP)
+            auto emitStruct = [&](auto &&self, const std::string &base, const Structure &st,
+                                  bool topPtr) -> void {
+                auto RD = st.getInfo()->definition_;
+                for (const auto *fieldDecl : RD->fields()) {
+                    size_t fidx = fieldDecl->getFieldIndex();
+                    auto fv     = st.getFieldValue(fidx);
+                    if (!fv)
+                        continue;
+                    std::string lhs = base + (topPtr ? "->" : ".") + fieldDecl->getNameAsString();
+                    if (fv->getType() == SymbolicExpr::ExprType::Structure) {
+                        self(self, lhs, *static_cast<const Structure *>(fv.get()), false);
+                    } else {
+                        std::string rhs = fv->simplifiedExpr()->regularForm("\\old(", ")");
+                        ensures.push_back(lhs + " == " + rhs);
+                    }
+                }
+            };
+
+            for (const clang::ParmVarDecl *param : FD->parameters()) {
+                auto itAddr = path.getVarAddr().find(param);
+                if (itAddr == path.getVarAddr().end() || !itAddr->second)
                     continue;
-                auto it = path.getMemoryState().read(*addrUP);
-                if (it == nullopt)
+
+                auto value = path.getMemoryState().read(*itAddr->second);
+                if (value == nullopt)
                     continue;
-                const auto &finalVal = *it;
-                if (finalVal->isUnknown())
+
+                auto &finalVal = *value.value();
+                if (finalVal.isUnknown())
                     continue;
-                std::string varName = vd->getNameAsString();
-                std::string rhs     = finalVal->simplifiedExpr()->regularForm("\\old(", ")");
-                ensures.push_back(varName + " == " + rhs);
+
+                std::string varName = param->getNameAsString();
+                std::string rhsTop  = finalVal.simplifiedExpr()->regularForm("\\old(", ")");
+                ensures.push_back(varName + " == " + rhsTop);
+
+                if (param->getType()->isPointerType()) {
+                    auto baseTy = param->getType()->getPointeeType();
+                    if (baseTy->isStructureType() &&
+                        finalVal.getType() == SymbolicExpr::ExprType::SymbolAddress) {
+                        auto addr    = static_cast<const Address &>(finalVal);
+                        auto pointee = path.getMemoryState().read(addr);
+                        if (pointee &&
+                            pointee.value()->getType() == SymbolicExpr::ExprType::Structure) {
+                            emitStruct(emitStruct, varName,
+                                       *static_cast<const Structure *>(pointee.value().get()),
+                                       true);
+                        }
+                    }
+                }
             }
 
             if (assumes.empty() && ensures.empty())
@@ -195,7 +229,6 @@ class PostStatePlugin : public FunctionContractPlugin {
         std::vector<std::string> names;
         for (int i = 0; i < (int)behaviors.size(); ++i)
             names.push_back("b" + std::to_string(i));
-
         out += "complete behaviors " + joinCSV(names) + ";\n";
 
         return out;

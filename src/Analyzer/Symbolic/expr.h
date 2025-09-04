@@ -533,7 +533,7 @@ namespace Symbolic {
         std::unique_ptr<SymbolicExpr> getFieldValue(size_t index) const;
         auto fieldsValues() { return std::span{fields_}; }
         auto fieldsValues() const { return std::span{fields_}; }
-        auto getInfo() -> const auto & { return info_; }
+        auto getInfo() const -> const auto & { return info_; }
         std::string regularFormOfField(size_t index,
                                        std::optional<std::string_view> prefix = std::nullopt,
                                        std::optional<std::string_view> suffix = std::nullopt,
