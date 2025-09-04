@@ -573,6 +573,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                             (p->getReturnExpr() ? p->getReturnExpr().value()->clone()
                                                 : UnknownExpr::makeUnknown());
 
+                        p->setPathState(PathState::Step);
                         if (!firstTaken) {
                             this->swap(*p);
                             outExprs.emplace_back(std::move(ret));
@@ -1345,8 +1346,19 @@ void ProgramState::stepBranch(const vector<const Expr *> &branchConds,
             size_t m = eval.second.size();
             for (size_t j = 0; j < m; ++j) {
                 auto newPath = (j == 0) ? std::move(path) : std::move(eval.first[j - 1]);
+                auto cond    = std::move(eval.second[j]);
+                if (auto lit = cond->evalToConstExpr()) {
+                    const bool isTrue = (lit->getLiteralValue() != 0);
 
-                newPath->insertPathCondition(std::move(eval.second[j]));
+                    if (!isTrue) {
+                        continue;
+                    } else {
+                        updatedPaths.push_back(std::move(newPath));
+                        continue;
+                    }
+                }
+
+                newPath->insertPathCondition(std::move(cond));
                 updatedPaths.push_back(std::move(newPath));
             }
         }
@@ -1379,8 +1391,19 @@ void ProgramState::stepBranch(const vector<const Expr *> &branchConds,
 
         for (size_t j = 0; j < eval.second.size(); ++j) {
             auto newPath = (j == 0) ? std::move(path) : std::move(eval.first[j - 1]);
+            auto cond    = std::move(eval.second[j]);
 
-            newPath->insertPathCondition(createLNotExpr(std::move(eval.second[j])));
+            if (auto lit = cond->evalToConstExpr()) {
+                const bool isTrue = (lit->getLiteralValue() != 0);
+                if (isTrue) {
+                    continue;
+                } else {
+                    worklist.emplace(std::move(newPath), idx + 1);
+                    continue;
+                }
+            }
+
+            newPath->insertPathCondition(createLNotExpr(std::move(cond)));
             worklist.emplace(std::move(newPath), idx + 1);
         }
     }
@@ -1467,10 +1490,11 @@ void ProgramState::setReturnExpr(const Expr *expr) {
         for (auto &pathPtr : paths_) {
             if (!pathPtr->isActive())
                 continue;
-            pathPtr->setReturnExpr(nullptr);
+            pathPtr->setReturnExpr(nullopt);
         }
         return;
     }
+    expr = expr->IgnoreParenImpCasts();
 
     vector<not_null<unique_ptr<Path>>> updatedPaths;
 
@@ -1488,7 +1512,7 @@ void ProgramState::setReturnExpr(const Expr *expr) {
         for (size_t i = 0; i < n; ++i) {
             auto newPath = i == 0 ? std::move(pathPtr) : std::move(generatedPaths[i - 1]);
 
-            newPath->setReturnExpr(std::move(results[i]).into_underlying());
+            newPath->setReturnExpr(std::move(results[i]));
             updatedPaths.emplace_back(std::move(newPath));
         }
     }

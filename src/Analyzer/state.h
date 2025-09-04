@@ -323,11 +323,12 @@ class Path {
                            not_null<std::unique_ptr<SymbolicExpr>> value);
     void insertPathCondition(not_null<std::unique_ptr<SymbolicExpr>> cond);
 
-    void setReturnExpr(std::unique_ptr<SymbolicExpr> expr) {
-        if (expr == nullptr)
-            returnExpr_ = std::nullopt;
-        else
-            returnExpr_.emplace(std::move(expr));
+    void setReturnExpr(std::optional<not_null<std::unique_ptr<SymbolicExpr>>> expr) {
+        if (expr == nullopt) {
+            returnExpr_ = nullopt;
+            return;
+        }
+        returnExpr_.emplace(std::move(expr).value().into_underlying());
     };
     void setPathState(PathState state) { currentState_ = state; }
 

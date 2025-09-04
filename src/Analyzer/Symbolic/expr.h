@@ -21,6 +21,7 @@ using namespace acslg;
 namespace Symbolic {
     class Address;
     class Variable;
+    class LiteralExpr;
 
     /// @class SymbolicExpr
     /// @brief Base class for all symbolic expressions.
@@ -127,6 +128,7 @@ namespace Symbolic {
             return std::nullopt;
         };
 
+        // May merge `tryEvalAsConstant` and `evalToConstExpr` into one.
         std::optional<int64_t> tryEvalAsConstant() const {
             // TODO: cache the result.
             if (!isLinear())
@@ -136,6 +138,7 @@ namespace Symbolic {
                 return linearExpr.inhomogeneous_term().get_si();
             return std::nullopt;
         };
+        virtual std::unique_ptr<LiteralExpr> evalToConstExpr() const { return nullptr; }
 
         /// @brief Is an unknown expression?
         /// @return
@@ -249,6 +252,8 @@ namespace Symbolic {
                                         bool isRightChild = false) const override;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
+        std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
+
         virtual bool equal(const SymbolicExpr &expr) const override;
 
         // StInG: Support functions for affine invariant analysis
@@ -328,6 +333,8 @@ namespace Symbolic {
                                         bool isRightChild = false) const override;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
+        std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
+
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::optional<not_null<std::unique_ptr<Address>>> tryEvalAsOffsetedAddr()
             const override;
@@ -393,6 +400,8 @@ namespace Symbolic {
                                         bool isRightChild = false) const override;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
+        std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
+
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return expr_->isUnknown(); };
 

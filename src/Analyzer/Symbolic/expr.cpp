@@ -11,6 +11,87 @@ using namespace Symbolic;
 using namespace clang;
 using namespace llvm;
 
+namespace {
+    using Type       = Symbolic::SymbolicExpr::Type;
+    using ScalarKind = Symbolic::SymbolicExpr::ScalarKind;
+
+    inline bool isIntLike(ScalarKind k) {
+        return k == ScalarKind::Int || k == ScalarKind::UInt || k == ScalarKind::Bool;
+    }
+
+    inline uint64_t maskN(unsigned n) {
+        return (n >= 64) ? ~uint64_t(0) : ((uint64_t(1) << n) - 1);
+    }
+
+    inline Type unify(Type a, Type b) {
+        if (!isIntLike(a.kind) || !isIntLike(b.kind))
+            return {ScalarKind::Void, 0};
+        unsigned bw = std::max(a.bitWidth ? a.bitWidth : 1u, b.bitWidth ? b.bitWidth : 1u);
+        if (bw <= 8)
+            bw = 8;
+        else if (bw <= 16)
+            bw = 16;
+        else if (bw <= 32)
+            bw = 32;
+        else
+            bw = 64;
+        bool uns = (a.kind == ScalarKind::UInt) || (b.kind == ScalarKind::UInt);
+        return {uns ? ScalarKind::UInt : ScalarKind::Int, bw};
+    }
+
+    inline uint64_t coerceU(unsigned bw, uint64_t x) { return x & maskN(bw ? bw : 64); }
+    inline int64_t coerceS(unsigned bw, uint64_t x) {
+        x &= maskN(bw ? bw : 64);
+        if (bw < 64 && (x & (uint64_t(1) << (bw - 1))))
+            x |= ~maskN(bw);
+        return (int64_t)x;
+    }
+
+    inline std::unique_ptr<Symbolic::LiteralExpr> makeLiteralFromUnifiedType(Type t,
+                                                                             bool asBool,
+                                                                             uint64_t raw) {
+        if (asBool)
+            return std::make_unique<Symbolic::LiteralExpr>(asBool);
+
+        unsigned bw = t.bitWidth ? t.bitWidth : 64;
+        if (t.kind == ScalarKind::UInt) {
+            uint64_t u = coerceU(bw, raw);
+            if (bw <= 16)
+                return std::make_unique<Symbolic::LiteralExpr>((unsigned short)u);
+            if (bw <= 32)
+                return std::make_unique<Symbolic::LiteralExpr>((unsigned int)u);
+            return std::make_unique<Symbolic::LiteralExpr>((uint64_t)u);
+        } else { // Int
+            int64_t s = coerceS(bw, raw);
+            if (bw <= 16)
+                return std::make_unique<Symbolic::LiteralExpr>((short)s);
+            if (bw <= 32)
+                return std::make_unique<Symbolic::LiteralExpr>((int)s);
+            return std::make_unique<Symbolic::LiteralExpr>((int64_t)s);
+        }
+    }
+
+    inline uint64_t literalRawU(const Symbolic::LiteralExpr &L) {
+        switch (L.getLiteralType()) {
+            case Symbolic::LiteralExpr::LiteralType::Boolean:
+                return L.getLiteralValue() != 0 ? 1u : 0u;
+            case Symbolic::LiteralExpr::LiteralType::Int:
+                return (uint64_t)(int64_t)L.getLiteralValue();
+            case Symbolic::LiteralExpr::LiteralType::UnsignedInt:
+                return (uint64_t)L.getLiteralValue();
+            case Symbolic::LiteralExpr::LiteralType::Short:
+                return (uint64_t)(int64_t)L.getLiteralValue();
+            case Symbolic::LiteralExpr::LiteralType::UnsignedShort:
+                return (uint64_t)L.getLiteralValue();
+            case Symbolic::LiteralExpr::LiteralType::Int64:
+                return (uint64_t)(int64_t)L.getLiteralValue();
+            case Symbolic::LiteralExpr::LiteralType::UInt64: return (uint64_t)L.getLiteralValue();
+        }
+        return 0;
+    }
+    inline bool literalAsBool(const Symbolic::LiteralExpr &L) { return L.getLiteralValue() != 0; }
+} // namespace
+
 std::unique_ptr<UnknownExpr> UnknownExpr::makeUnknown() { return std::make_unique<UnknownExpr>(); }
 
 std::unique_ptr<SymbolicExpr> SymbolicExpr::simplifiedExprIfLinear() const {
@@ -674,6 +755,178 @@ std::unique_ptr<SymbolicExpr> Address::simplifiedExpr() const {
     return clone();
 }
 std::unique_ptr<SymbolicExpr> Structure::simplifiedExpr() const { return clone(); }
+
+std::unique_ptr<LiteralExpr> LiteralExpr::evalToConstExpr() const {
+    switch (type_) {
+        case LiteralType::Boolean: return std::make_unique<LiteralExpr>(data_.boolValue);
+        case LiteralType::Int: return std::make_unique<LiteralExpr>(data_.intValue);
+        case LiteralType::UnsignedInt: return std::make_unique<LiteralExpr>(data_.uintValue);
+        case LiteralType::Short: return std::make_unique<LiteralExpr>(data_.shortValue);
+        case LiteralType::UnsignedShort: return std::make_unique<LiteralExpr>(data_.ushortValue);
+        case LiteralType::Int64: return std::make_unique<LiteralExpr>(data_.int64Value);
+        case LiteralType::UInt64: return std::make_unique<LiteralExpr>(data_.uint64Value);
+    }
+    return nullptr;
+}
+
+std::unique_ptr<LiteralExpr> UnaryOpExpr::evalToConstExpr() const {
+    auto C = expr_->evalToConstExpr();
+    if (!C)
+        return nullptr;
+
+    using Op    = UnaryOpExpr::Operator;
+    auto vt     = expr_->getValType();
+    unsigned bw = std::max(vt.bitWidth ? vt.bitWidth : 32u, 32u);
+
+    switch (op_) {
+        case Op::LogicalNot: {
+            bool r = !literalAsBool(*C);
+            return std::make_unique<LiteralExpr>(r);
+        }
+        case Op::BitwiseNot: {
+            uint64_t x = coerceU(bw, literalRawU(*C));
+            return makeLiteralFromUnifiedType({ScalarKind::UInt, bw}, false, (~x) & maskN(bw));
+        }
+        case Op::Plus: {
+            if (vt.kind == ScalarKind::UInt)
+                return makeLiteralFromUnifiedType({ScalarKind::UInt, bw}, false,
+                                                  coerceU(bw, literalRawU(*C)));
+            else
+                return makeLiteralFromUnifiedType({ScalarKind::Int, bw}, false,
+                                                  (uint64_t)coerceS(bw, literalRawU(*C)));
+        }
+        case Op::Minus: {
+            int64_t s = -coerceS(bw, literalRawU(*C));
+            return makeLiteralFromUnifiedType({ScalarKind::Int, bw}, false, (uint64_t)s);
+        }
+        case Op::PreInc:
+        case Op::PreDec:
+        case Op::PostInc:
+        case Op::PostDec:
+        case Op::AddrOf:
+        case Op::Dereference:
+        default: return nullptr;
+    }
+}
+
+std::unique_ptr<LiteralExpr> BinaryOpExpr::evalToConstExpr() const {
+    using BO = BinaryOpExpr::Operator;
+
+    auto Lc = left_->evalToConstExpr();
+    if (!Lc)
+        return nullptr;
+
+    if (op_ == BO::LogicalAnd) {
+        if (!literalAsBool(*Lc))
+            return std::make_unique<LiteralExpr>(false);
+        auto Rc = right_->evalToConstExpr();
+        if (!Rc)
+            return nullptr;
+        return std::make_unique<LiteralExpr>(literalAsBool(*Rc));
+    }
+    if (op_ == BO::LogicalOr) {
+        if (literalAsBool(*Lc))
+            return std::make_unique<LiteralExpr>(true);
+        auto Rc = right_->evalToConstExpr();
+        if (!Rc)
+            return nullptr;
+        return std::make_unique<LiteralExpr>(literalAsBool(*Rc));
+    }
+
+    auto Rc = right_->evalToConstExpr();
+    if (!Rc)
+        return nullptr;
+
+    auto tgt = unify(left_->getValType(), right_->getValType());
+    if (tgt.kind == ScalarKind::Void)
+        return nullptr;
+    unsigned bw = tgt.bitWidth ? tgt.bitWidth : 64;
+
+    auto emitBool = [](bool b) { return std::make_unique<LiteralExpr>(b); };
+
+    if (tgt.kind == ScalarKind::UInt) {
+        uint64_t L = coerceU(bw, literalRawU(*Lc));
+        uint64_t R = coerceU(bw, literalRawU(*Rc));
+
+        switch (op_) {
+            case BO::Equal: return emitBool(L == R);
+            case BO::NotEqual: return emitBool(L != R);
+            case BO::LessThan: return emitBool(L < R);
+            case BO::LessEqual: return emitBool(L <= R);
+            case BO::GreaterThan: return emitBool(L > R);
+            case BO::GreaterEqual: return emitBool(L >= R);
+
+            case BO::Add: return makeLiteralFromUnifiedType(tgt, false, (L + R) & maskN(bw));
+            case BO::Subtract: return makeLiteralFromUnifiedType(tgt, false, (L - R) & maskN(bw));
+            case BO::Multiply: return makeLiteralFromUnifiedType(tgt, false, (L * R) & maskN(bw));
+            case BO::Divide:
+                if (R == 0)
+                    return nullptr;
+                return makeLiteralFromUnifiedType(tgt, false, L / R);
+            case BO::Remainder:
+                if (R == 0)
+                    return nullptr;
+                return makeLiteralFromUnifiedType(tgt, false, L % R);
+
+            case BO::ShiftLeft:
+                if (R >= 64)
+                    return nullptr;
+                return makeLiteralFromUnifiedType(tgt, false, (L << (unsigned)R) & maskN(bw));
+            case BO::ShiftRight:
+                if (R >= 64)
+                    return nullptr;
+                return makeLiteralFromUnifiedType(tgt, false, (L >> (unsigned)R));
+
+            case BO::BitAnd: return makeLiteralFromUnifiedType(tgt, false, L & R);
+            case BO::BitOr: return makeLiteralFromUnifiedType(tgt, false, L | R);
+            case BO::BitXor: return makeLiteralFromUnifiedType(tgt, false, L ^ R);
+
+            default: return nullptr;
+        }
+    } else {
+        int64_t L = coerceS(bw, literalRawU(*Lc));
+        int64_t R = coerceS(bw, literalRawU(*Rc));
+
+        switch (op_) {
+            case BO::Equal: return emitBool(L == R);
+            case BO::NotEqual: return emitBool(L != R);
+            case BO::LessThan: return emitBool(L < R);
+            case BO::LessEqual: return emitBool(L <= R);
+            case BO::GreaterThan: return emitBool(L > R);
+            case BO::GreaterEqual: return emitBool(L >= R);
+
+            case BO::Add: return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L + R));
+            case BO::Subtract: return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L - R));
+            case BO::Multiply: return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L * R));
+            case BO::Divide:
+                if (R == 0)
+                    return nullptr;
+                return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L / R));
+            case BO::Remainder:
+                if (R == 0)
+                    return nullptr;
+                return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L % R));
+
+            case BO::ShiftLeft:
+                if ((uint64_t)R >= 64)
+                    return nullptr;
+                return makeLiteralFromUnifiedType(tgt, false, (uint64_t(L) << (unsigned)R));
+            case BO::ShiftRight:
+                if ((uint64_t)R >= 64)
+                    return nullptr;
+                return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L >> (unsigned)R));
+
+            case BO::BitAnd:
+                return makeLiteralFromUnifiedType(tgt, false, uint64_t(L) & uint64_t(R));
+            case BO::BitOr:
+                return makeLiteralFromUnifiedType(tgt, false, uint64_t(L) | uint64_t(R));
+            case BO::BitXor:
+                return makeLiteralFromUnifiedType(tgt, false, uint64_t(L) ^ uint64_t(R));
+
+            default: return nullptr;
+        }
+    }
+}
 
 bool LiteralExpr::equal(const SymbolicExpr &expr) const {
     const auto liter = dynamic_cast<const LiteralExpr *>(&expr);

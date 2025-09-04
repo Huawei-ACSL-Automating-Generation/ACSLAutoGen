@@ -48,7 +48,7 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
 
         for (const Stmt *stmt : CS->children())
             state->step(stmt);
-        INFO(state->dump());
+        // INFO(state->dump());
 
         bool hasPointer = false, hasLoop = false;
         for (auto &&[_, value] : preState->getPaths()[0]->getMemoryState().flat()) {
