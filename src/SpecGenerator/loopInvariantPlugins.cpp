@@ -14,6 +14,8 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
   public:
     CheckAndDumpLoopInfoPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
+    bool needSubstituteAddress() const override { return false; }
+    bool needSubstituteExpr() const override { return false; }
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
@@ -77,6 +79,8 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
   public:
     LinearInvariantPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
+    bool needSubstituteAddress() const override { return true; }
+    bool needSubstituteExpr() const override { return true; }
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
@@ -192,6 +196,8 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
   public:
     LoopAssignsPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
+    bool needSubstituteAddress() const override { return true; }
+    bool needSubstituteExpr() const override { return false; }
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &preState,
         const ProgramState &,
@@ -240,6 +246,8 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
             if (!addr.isOffseted())
                 return nullopt;
             auto &from = addr.getFrom();
+            // If the base address itself is x-step, then there is no need to check the
+            // offset (or to check it for reliability).
             if (auto range = std::visit(
                     [&](auto &&arg) -> optional<Address> {
                         using T = std::decay_t<decltype(arg)>;
@@ -257,7 +265,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                                 if (pattern.value().step_ != 1)
                                     TODO();
                                 auto result = addr;
-                                result.setOffset(pattern.value().initialValue_->clone());
+                                result.setOffset(make_unique<LiteralExpr>(Address::ZERO_OFFSET));
                                 result.setLength(indexInfo.loopCount_->simplifiedExpr());
                                 return result;
                             }
@@ -272,6 +280,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                     from))
                 return range;
             auto offset = addr.getOffset();
+            // Is offset x-step?
             if (auto var = dynamic_cast<const Symbolic::Variable *>(offset.get())) {
                 if (auto fromAddr =
                         std::get_if<not_null<std::unique_ptr<const Address>>>(&var->getFrom())) {
@@ -298,10 +307,10 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                 continue;
             if (auto range = tryGetAsRange(addr)) {
                 if (pattern) {
-                    auto [_, ok] = memoryMap.emplace(
-                        range.value(),
-                        make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(), Add,
-                                                  make_unique<LiteralExpr>(pattern.value().step_)));
+                    auto [_, ok] = memoryMap.emplace(range.value(), UnknownExpr::makeUnknown());
+                    // todo
+                    // make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(), Add,
+                    //                           make_unique<LiteralExpr>(pattern.value().step_)));
                     if (!ok)
                         UNREACHABLE();
                 } else {
@@ -350,6 +359,8 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
   public:
     ParadigmMaxMinPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
+    bool needSubstituteAddress() const override { return true; }
+    bool needSubstituteExpr() const override { return false; }
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,

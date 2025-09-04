@@ -568,7 +568,7 @@ namespace Symbolic {
             not_null<std::unique_ptr<const Variable>>
                 index_; ///< Vaule of this AddressRange may rely on this ghost variable.
 
-            Range(unsigned long id, std::unique_ptr<const SymbolicExpr> len)
+            Range(unsigned long id, not_null<std::unique_ptr<const SymbolicExpr>> len)
                 : len_(std::move(len)),
                   index_(make_unique<Variable>("index of AddressRange{" + std::to_string(id) + "}",
                                                SymbolicExpr::Type{ScalarKind::UInt, 32},
@@ -631,6 +631,7 @@ namespace Symbolic {
         const clang::VarDecl *getFromRoot() const;
         int getDimension() const;
         std::string getBaseName() const;
+        not_null<std::unique_ptr<Address>> getBaseAddr() const;
 
         void setOffset(not_null<std::unique_ptr<SymbolicExpr>> offset);
         void addOffset(not_null<std::unique_ptr<SymbolicExpr>> extra);
@@ -638,7 +639,7 @@ namespace Symbolic {
         void resetOffset() { offset_ = std::nullopt; }
         bool isOffseted() const { return offset_ != std::nullopt; }
 
-        void setLength(std::unique_ptr<SymbolicExpr> len);
+        void setLength(not_null<std::unique_ptr<SymbolicExpr>> len);
         auto getLength() const -> const auto & {
             if (range_ == std::nullopt)
                 ERROR("Is not a range! Do isRange first.");

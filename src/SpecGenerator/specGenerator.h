@@ -157,6 +157,10 @@ struct PostInfo {
 class LoopInvariantPlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
+    // Do addresses in PostInfo need to be substituted by true address?
+    virtual bool needSubstituteAddress() const = 0;
+    // Do expressions in PostInfo need to be substituted with true variable or address?
+    virtual bool needSubstituteExpr() const = 0;
 
     virtual std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
         const ProgramState &preState,

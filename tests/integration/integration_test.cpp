@@ -262,3 +262,78 @@ TEST(IntegrationTest, CorrectPostStateOfLoop_1) {
         }
     }
 }
+
+TEST(IntegrationTest, CorrectPostStateOfLoop_2) {
+    auto code = R"(
+    void func(int *p, int n) {
+        int *pt = p;
+        for(int i = 0; i < n; ++i){
+            *pt = 0;
+            ++pt;
+        }
+    }
+    )";
+    ASSERT_EXIT(
+        {
+            getPostStateOfFirstLoop(code);
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+    auto postState = getPostStateOfFirstLoop(code);
+    auto &paths    = postState->getPaths();
+    ASSERT_EQ(paths.size(), 1);
+    for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
+        auto var  = addr.regularFormOfValue();
+        auto expr = value->simplifiedExpr()->regularForm();
+        if (var == "p") {
+            EXPECT_EQ(expr, "p");
+        } else if (var == "n") {
+            EXPECT_EQ(expr, "n");
+        } else if (var == "pt") {
+            EXPECT_THAT(expr, AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
+                                    AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        } else if (var == "p[0...n]") {
+            EXPECT_TRUE(value->isUnknown());
+        } else {
+            FAIL() << var << ": " << expr;
+        }
+    }
+}
+
+TEST(IntegrationTest, CorrectPostStateOfLoop_3) {
+    auto code = R"(
+    void func(int *p, int n) {
+        int *pt = p + 1;
+        for(int i = 0; i < n; ++i){
+            *pt = 0;
+            ++pt;
+        }
+    }
+    )";
+    ASSERT_EXIT(
+        {
+            getPostStateOfFirstLoop(code);
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+    auto postState = getPostStateOfFirstLoop(code);
+    auto &paths    = postState->getPaths();
+    ASSERT_EQ(paths.size(), 1);
+    for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
+        auto var  = addr.regularFormOfValue();
+        auto expr = value->simplifiedExpr()->regularForm();
+        if (var == "p") {
+            EXPECT_EQ(expr, "p");
+        } else if (var == "n") {
+            EXPECT_EQ(expr, "n");
+        } else if (var == "pt") {
+            EXPECT_THAT(expr, AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
+                                    AnyOf(StartsWith("n"), HasSubstr("+ n")),
+                                    AnyOf(StartsWith("1"), HasSubstr("+ 1"))));
+        } else if (var == "p[1...n + 1]") {
+            EXPECT_TRUE(value->isUnknown());
+        } else {
+            FAIL() << var << ": " << expr;
+        }
+    }
+}

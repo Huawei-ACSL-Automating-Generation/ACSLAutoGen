@@ -181,13 +181,53 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
         UNREACHABLE();
     }; // substituteVariables
 
+    auto getSubstitutedAddr = [&](const Address &addr,
+                                  const Path &loopEntryPath) -> not_null<unique_ptr<Address>> {
+        if (addr.getDimension() == 0)
+            return make_unique<Address>(addr);
+        auto &mem = loopEntryPath.getMemoryState();
+        return std::visit(
+            [&](auto &&arg) -> not_null<unique_ptr<Address>> {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, std::monostate>) {
+                    TODO();
+                } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                    UNREACHABLE();
+                } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                    if (auto value = mem.read(*arg)) {
+                        auto realAddr = value.value()->tryEvalAsOffsetedAddr();
+                        if (realAddr == nullptr)
+                            ERROR("This expr should be a address");
+                        if (addr.isOffseted()) {
+                            realAddr->addOffset(addr.getOffset()->clone());
+                            if (addr.isRange())
+                                realAddr->setLength(addr.getLength()->clone());
+                        }
+                        return realAddr;
+                    } else {
+                        // This address may originate from an address on this path (at loop
+                        // entry) that has not yet been accessed; retain this address
+                        // without substitution.
+                        return make_unique<Address>(addr);
+                    }
+                } else if constexpr (std::is_same_v<
+                                         T,
+                                         std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                   const size_t>>) {
+                    TODO();
+                }
+            },
+            addr.getFrom());
+    }; // getSubstitutedAddr
+
     auto postState   = preState.clone();
     auto &postPaths  = postState->getPaths();
     auto pathNum     = postPaths.size();
     auto resultInfos = vector<vector<PostInfo>>{pathNum};
 
     // Update the resultInfos with a plugin's postInfo.
-    auto updateResultInfos = [&](vector<PostInfo> &infos) {
+    auto updateResultInfos = [&](vector<PostInfo> &infos, bool substituteAddr,
+                                 bool substituteExpr) {
         if (infos.empty())
             return;
         if (preState.getPaths().size() != loopEntry.getPaths().size()) {
@@ -208,13 +248,18 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
             auto &postBranchInfo = postBranchesInfos.at(0);
 
             for (auto &[addr, value] : info.memoryMap_) {
-                substituteVariables(substituteVariables, value, entryPath);
-                if (postBranchInfo.memoryMap_.contains(addr)) {
+                auto subedAddr = substituteAddr
+                                     ? getSubstitutedAddr(addr, entryPath).into_underlying()
+                                     : make_unique<Address>(addr);
+                if (substituteExpr)
+                    substituteVariables(substituteVariables, value, entryPath);
+                if (auto it = postBranchInfo.memoryMap_.find(*subedAddr);
+                    it != postBranchInfo.memoryMap_.end() && !it->second->isUnknown()) {
                     WARN("Another plugin has already updated this address. The new value: {" +
                          value->simplifiedExpr()->regularForm() + "} is discarded.");
                     continue;
                 }
-                auto [_, ok] = postBranchInfo.memoryMap_.emplace(addr, std::move(value));
+                auto [_, ok] = postBranchInfo.memoryMap_.emplace(*subedAddr, std::move(value));
                 if (!ok)
                     UNREACHABLE();
             }
@@ -235,7 +280,7 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
             spec += "    " /*4 spaces*/ + *s + "\n";
         }
 
-        updateResultInfos(postInfos);
+        updateResultInfos(postInfos, plugin->needSubstituteAddress(), plugin->needSubstituteExpr());
 
         if (!continueFlag)
             break;

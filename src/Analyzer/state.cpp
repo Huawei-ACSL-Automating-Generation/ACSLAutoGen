@@ -702,9 +702,7 @@ optional<not_null<unique_ptr<SymbolicExpr>>> MemoryModel::read(const Address &ad
         return nullopt;
     }
 
-    auto idAddr = make_unique<Address>(addr);
-    idAddr->resetOffset();
-    idAddr->resetRange();
+    auto idAddr = addr.getBaseAddr();
 
     auto offset = addr.getOffset();
     if (auto constOffset = offset->tryEvalAsConstant(); constOffset && !addr.isRange()) {
@@ -742,9 +740,7 @@ void MemoryModel::write(const Address &addr, not_null<unique_ptr<const SymbolicE
         return;
     }
 
-    auto idAddr = make_unique<Address>(addr);
-    idAddr->resetOffset();
-    idAddr->resetRange();
+    auto idAddr = addr.getBaseAddr();
 
     auto constOffset = addr.getOffset()->tryEvalAsConstant();
     auto constLen    = addr.isRange() ? addr.getLength()->tryEvalAsConstant() : nullopt;
@@ -798,15 +794,13 @@ size_t MemoryModel::size() const {
 }
 
 bool MemoryModel::contains(const Address &addr) const {
-    auto addrInfo = addr;
-    addrInfo.resetOffset();
-    addrInfo.resetRange();
-    if (memoryMap_noOffset_.contains(addrInfo))
+    auto addrInfo = addr.getBaseAddr();
+    if (memoryMap_noOffset_.contains(*addrInfo))
         return true;
-    if (auto it = memoryMap_constantRange_.find(addrInfo);
+    if (auto it = memoryMap_constantRange_.find(*addrInfo);
         it != memoryMap_constantRange_.end() && !it->second.empty())
         return true;
-    if (auto it = memoryMap_symbolicRange_.find(addrInfo);
+    if (auto it = memoryMap_symbolicRange_.find(*addrInfo);
         it != memoryMap_symbolicRange_.end() && !it->second.empty())
         return true;
     return false;

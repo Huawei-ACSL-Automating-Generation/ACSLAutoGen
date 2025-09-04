@@ -1090,14 +1090,14 @@ void Address::subOffset(not_null<std::unique_ptr<SymbolicExpr>> extra) {
         offset_.emplace(extra->simplifiedExpr());
 }
 
-void Address::setLength(std::unique_ptr<SymbolicExpr> len) {
-    if (len == nullptr || !isValidOffsetOrLength(*len))
+void Address::setLength(not_null<std::unique_ptr<SymbolicExpr>> len) {
+    if (!isValidOffsetOrLength(*len))
         ERROR("Invalid Length.");
     if (range_ == nullopt) {
-        range_.emplace(id_, std::move(len));
+        range_.emplace(id_, std::move(len).into_underlying());
         return;
     }
-    range_.value().len_ = std::move(len);
+    range_.value().len_ = std::move(len).into_underlying();
 }
 
 int Address::getDimension() const {
@@ -1120,6 +1120,13 @@ int Address::getDimension() const {
             }
         },
         from_);
+}
+
+not_null<unique_ptr<Address>> Address::getBaseAddr() const {
+    auto baseAddr = make_unique<Address>(*this);
+    baseAddr->resetOffset();
+    baseAddr->resetRange();
+    return baseAddr;
 }
 
 const clang::VarDecl *Address::retrieveVarDecl() const {

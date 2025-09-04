@@ -136,10 +136,17 @@ TEST(LoopAssignsPluginTest, Simple_1) {
     EXPECT_THAT(*spec, HasSubstr("p[0...n]"));
     EXPECT_EQ(continueFlag, true);
     ASSERT_EQ(postState.size(), 1);
-    ASSERT_EQ(postState.at(0).memoryMap_.size(), 2);
+    EXPECT_EQ(postState.at(0).memoryMap_.size(), 2);
     for (auto &[addr, value] : postState.at(0).memoryMap_) {
-        DEBUG(addr.dump());
-        DEBUG(value->dump());
+        auto addrStr  = addr.regularFormOfValue();
+        auto valueStr = value->simplifiedExpr()->regularForm();
+        if (addrStr == "p[0...n]") {
+            EXPECT_TRUE(value->isUnknown()) << valueStr;
+        } else if (addrStr == "cnt") {
+            EXPECT_EQ(valueStr, "-1 * n");
+        } else {
+            FAIL() << addrStr << valueStr;
+        }
     }
 }
 
@@ -163,10 +170,59 @@ TEST(LoopAssignsPluginTest, Simple_2) {
     EXPECT_THAT(*spec, HasSubstr("p[0...n]"));
     EXPECT_EQ(continueFlag, true);
     ASSERT_EQ(postState.size(), 1);
-    ASSERT_EQ(postState.at(0).memoryMap_.size(), 3);
+    EXPECT_EQ(postState.at(0).memoryMap_.size(), 3);
     for (auto &[addr, value] : postState.at(0).memoryMap_) {
-        DEBUG(addr.dump());
-        DEBUG(value->dump());
+        auto addrStr  = addr.regularFormOfValue();
+        auto valueStr = value->simplifiedExpr()->regularForm();
+        if (addrStr == "p[0...n]") {
+            EXPECT_TRUE(value->isUnknown()) << valueStr;
+        } else if (addrStr == "cnt") {
+            EXPECT_EQ(valueStr, "-1 * n");
+        } else if (addrStr == "i") {
+            EXPECT_EQ(valueStr, "n");
+        } else {
+            FAIL() << addrStr << valueStr;
+        }
+    }
+}
+
+TEST(LoopAssignsPluginTest, Simple_3) {
+    auto pluginId                        = "loopAssigns";
+    auto code                            = R"(
+        void func(int *p, int n){
+            int cnt = 0;
+            int i = 0;
+            while(i < n){
+                *p += 1;
+                cnt -= 1;
+                i++;
+                p++;
+            } 
+        }
+    )";
+    auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
+    EXPECT_NE(spec, nullopt);
+    EXPECT_THAT(*spec, HasSubstr("i"));
+    EXPECT_THAT(*spec, HasSubstr("cnt"));
+    EXPECT_THAT(*spec, HasSubstr("p[0...n]"));
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_EQ(postState.size(), 1);
+    EXPECT_EQ(postState.at(0).memoryMap_.size(), 4);
+    for (auto &[addr, value] : postState.at(0).memoryMap_) {
+        auto addrStr  = addr.regularFormOfValue();
+        auto valueStr = value->simplifiedExpr()->regularForm();
+        if (addrStr == "p") {
+            EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
+                                        AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        } else if (addrStr == "p[0...n]") {
+            EXPECT_TRUE(value->isUnknown()) << valueStr;
+        } else if (addrStr == "cnt") {
+            EXPECT_EQ(valueStr, "-1 * n");
+        } else if (addrStr == "i") {
+            EXPECT_EQ(valueStr, "n");
+        } else {
+            FAIL() << addrStr << valueStr;
+        }
     }
 }
 
@@ -401,7 +457,36 @@ TEST(LinearInvariantPluginTest, Simple_3) {
     }
 }
 
-// TEST(LinearInvariantPluginTest, Simple_4) {
+TEST(LinearInvariantPluginTest, Simple_4) {
+    auto pluginId                         = "StInGXPlugin";
+    auto code                             = R"(
+    void func(int *p, int n) {
+        int *pt = p;
+        for(int i = 0; i < n; ++i){
+            *pt = 0;
+            ++pt;
+        }
+    }
+    )";
+    auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
+    EXPECT_NE(spec, nullopt);
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_EQ(postStates.size(), 1);
+    auto &postState = postStates.at(0);
+    for (auto &[addr, value] : postState.memoryMap_) {
+        auto var = addr.regularFormOfValue();
+        if (var == "pt") {
+            EXPECT_THAT(value->simplifiedExpr()->regularForm(),
+                        AllOf(AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
+                              AnyOf(StartsWith("n"), HasSubstr("+ n")),
+                              AnyOf(StartsWith("p"), HasSubstr("+ p"))));
+        } else if (var != "p" && var != "n" && var != "i") {
+            FAIL() << var;
+        }
+    }
+}
+
+// TEST(LinearInvariantPluginTest, Simple_5) {
 //     auto pluginId                = "StInGXPlugin";
 //     auto code                    = R"(
 //         void func(int *p, int n){
