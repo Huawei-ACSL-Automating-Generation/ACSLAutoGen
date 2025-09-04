@@ -121,10 +121,10 @@ namespace Symbolic {
         };
 
         /// @brief Try to evaluate the expression to an address.
-        /// @return Returning `std::nullptr` indicates that the expression is not a valid address.
-        virtual std::unique_ptr<Address> tryEvalAsOffsetedAddr() const {
+        /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
+        virtual std::optional<not_null<std::unique_ptr<Address>>> tryEvalAsOffsetedAddr() const {
             // TODO: cache the result.
-            return nullptr;
+            return std::nullopt;
         };
 
         std::optional<int64_t> tryEvalAsConstant() const {
@@ -329,7 +329,8 @@ namespace Symbolic {
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
-        virtual std::unique_ptr<Address> tryEvalAsOffsetedAddr() const override;
+        virtual std::optional<not_null<std::unique_ptr<Address>>> tryEvalAsOffsetedAddr()
+            const override;
         virtual bool isUnknown() const override {
             return left_->isUnknown() || right_->isUnknown();
         };
@@ -613,7 +614,8 @@ namespace Symbolic {
                                         bool isRightChild = false) const override;
         virtual std::unique_ptr<SymbolicExpr> simplifiedExpr() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
-        virtual std::unique_ptr<Address> tryEvalAsOffsetedAddr() const override;
+        virtual std::optional<not_null<std::unique_ptr<Address>>> tryEvalAsOffsetedAddr()
+            const override;
         virtual std::size_t hash() const override;
 
         unsigned int getId() const { return id_; }

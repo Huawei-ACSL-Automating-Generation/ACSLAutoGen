@@ -881,42 +881,42 @@ bool Structure::equal(const SymbolicExpr &expr) const {
                               [](auto &lhs, auto &rhs) { return *lhs.value() == *rhs.value(); });
 }
 
-std::unique_ptr<Address> BinaryOpExpr::tryEvalAsOffsetedAddr() const {
+optional<not_null<std::unique_ptr<Address>>> BinaryOpExpr::tryEvalAsOffsetedAddr() const {
     auto lhs = left_->tryEvalAsOffsetedAddr(), rhs = right_->tryEvalAsOffsetedAddr();
     if (lhs && rhs)
-        return nullptr;
-    if (lhs == nullptr && rhs == nullptr)
-        return nullptr;
+        return nullopt;
+    if (lhs == nullopt && rhs == nullopt)
+        return nullopt;
 
     std::unique_ptr<Address> addr;
     if (lhs) {
-        addr = std::move(lhs);
+        addr = std::move(lhs).value().into_underlying();
         if (!isValidOffsetOrLength(*right_))
-            return nullptr;
+            return nullopt;
         std::unique_ptr<SymbolicExpr> expr = right_->clone();
         switch (op_) {
             using enum Operator;
             case Add: addr->addOffset(std::move(expr)); break;
             case Subtract: addr->subOffset(std::move(expr)); break;
 
-            default: return nullptr;
+            default: return nullopt;
         }
     } else {
-        addr = std::move(rhs);
+        addr = std::move(lhs).value().into_underlying();
         if (!isValidOffsetOrLength(*left_))
-            return nullptr;
+            return nullopt;
         std::unique_ptr<SymbolicExpr> expr = left_->clone();
         switch (op_) {
             using enum Operator;
             case Add: addr->addOffset(std::move(expr)); break;
-            case Subtract: return nullptr;
-            default: return nullptr;
+            case Subtract: return nullopt;
+            default: return nullopt;
         }
     }
     return addr;
 }
 
-std::unique_ptr<Address> Address::tryEvalAsOffsetedAddr() const {
+optional<not_null<std::unique_ptr<Address>>> Address::tryEvalAsOffsetedAddr() const {
     auto result = make_unique<Address>(*this);
     if (!isOffseted())
         result->setOffset(make_unique<LiteralExpr>(Address::ZERO_OFFSET));

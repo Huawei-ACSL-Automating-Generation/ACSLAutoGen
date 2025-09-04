@@ -115,7 +115,7 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
                         get_if<not_null<std::unique_ptr<const Address>>>(&var->getFrom())) {
                     auto &addr = **addrPtr;
                     if (auto value = mem.read(addr)) {
-                        expr = std::move(value).value();
+                        expr = value.value()->clone();
                     } else {
                         // This variable may originate from an address on this path (at loop entry)
                         // that has not yet been accessed; retain this variable without substitution.
@@ -141,7 +141,7 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
                         } else if constexpr (std::is_same_v<
                                                  T, not_null<std::unique_ptr<const Address>>>) {
                             if (auto value = mem.read(*arg)) {
-                                expr = std::move(value).value();
+                                expr = value.value()->clone();
                             } else {
                                 // This address may originate from an address on this path (at loop
                                 // entry) that has not yet been accessed; retain this variable
@@ -196,14 +196,14 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
                 } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
                     if (auto value = mem.read(*arg)) {
                         auto realAddr = value.value()->tryEvalAsOffsetedAddr();
-                        if (realAddr == nullptr)
+                        if (realAddr == nullopt)
                             ERROR("This expr should be a address");
                         if (addr.isOffseted()) {
-                            realAddr->addOffset(addr.getOffset()->clone());
+                            realAddr.value()->addOffset(addr.getOffset()->clone());
                             if (addr.isRange())
-                                realAddr->setLength(addr.getLength()->clone());
+                                realAddr.value()->setLength(addr.getLength()->clone());
                         }
-                        return realAddr;
+                        return std::move(realAddr).value();
                     } else {
                         // This address may originate from an address on this path (at loop
                         // entry) that has not yet been accessed; retain this address

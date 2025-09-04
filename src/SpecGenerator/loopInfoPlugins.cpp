@@ -77,7 +77,7 @@ class SetPatternsPlugin : public LoopInfoPlugin {
                 try {
                     unique_ptr<SymbolicExpr> entryExpr;
                     if (auto preValue = preMS.read(addr)) {
-                        entryExpr = std::move(preValue).value().into_underlying();
+                        entryExpr = preValue.value()->clone();
                     } else {
                         auto varsAddrsMap = currentExpr->collectUsedVarsAndAddrs();
                         if (varsAddrsMap.size() != 1) {

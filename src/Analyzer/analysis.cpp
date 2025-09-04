@@ -31,6 +31,9 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
         WARN("Ignore MAIN Function.");
         return;
     }
+    // @WindOctober: TODO remove.
+    // if (FD->getNameAsString() != "BN_SetFlag")
+    //     return;
     INFO("Processing Function " + FD->getNameAsString());
 
     auto state = std::make_unique<ProgramState>(make_unique<ACSLFunction>(FD));

@@ -13,10 +13,28 @@
 
 using namespace Symbolic;
 using namespace std;
-using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>>;
-using Formulas     = std::vector<not_null<std::unique_ptr<SymbolicExpr>>>;
-using TransRel     = std::tuple<int, int, Parma_Polyhedra_Library::C_Polyhedron *>;
-using InitRel      = std::pair<int, Parma_Polyhedra_Library::C_Polyhedron *>;
+using Formulas = std::vector<not_null<std::unique_ptr<SymbolicExpr>>>;
+using TransRel = std::tuple<int, int, Parma_Polyhedra_Library::C_Polyhedron *>;
+using InitRel  = std::pair<int, Parma_Polyhedra_Library::C_Polyhedron *>;
+
+struct MemberTarget {
+    std::unique_ptr<Address> base;
+    const clang::FieldDecl *field;
+
+    MemberTarget() = default;
+    MemberTarget(std::unique_ptr<Address> b, const clang::FieldDecl *f)
+        : base(std::move(b)), field(f) {}
+
+    MemberTarget(MemberTarget &&) noexcept            = default;
+    MemberTarget &operator=(MemberTarget &&) noexcept = default;
+
+    MemberTarget(const MemberTarget &);
+    MemberTarget &operator=(const MemberTarget &);
+
+    friend bool operator==(const MemberTarget &a, const MemberTarget &b) noexcept;
+    friend bool operator!=(const MemberTarget &a, const MemberTarget &b) noexcept;
+};
+using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>, MemberTarget>;
 
 class MemoryModel {
   public:
@@ -26,8 +44,9 @@ class MemoryModel {
     MemoryModel &operator=(const MemoryModel &);
     MemoryModel(MemoryModel &&)            = default;
     MemoryModel &operator=(MemoryModel &&) = default;
-    optional<not_null<unique_ptr<SymbolicExpr>>> read(const Address &addr) const;
-    void write(const Address &address, not_null<unique_ptr<const SymbolicExpr>> value);
+    optional<not_null<const SymbolicExpr *>> read(const Address &addr) const;
+    optional<not_null<SymbolicExpr *>> read(const Address &addr);
+    void write(const Address &address, not_null<unique_ptr<SymbolicExpr>> value);
     size_t size() const;
     bool contains(const Address &addr) const;
 
@@ -43,16 +62,15 @@ class MemoryModel {
   private:
     friend struct flat_view;
 
-    unordered_map<Address, not_null<unique_ptr<const SymbolicExpr>>, AddressHash>
-        memoryMap_noOffset_;
+    unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash> memoryMap_noOffset_;
 
     unordered_map<Address,
-                  map<pair<uint64_t, uint64_t>, not_null<unique_ptr<const SymbolicExpr>>>,
+                  map<pair<uint64_t, uint64_t>, not_null<unique_ptr<SymbolicExpr>>>,
                   AddressHash>
         memoryMap_constantRange_; ///< Ranges(pair<uint64_t, uint64_t>) must be non-overlapping
                                   ///< and non-zero-length.
     unordered_map<Address,
-                  unordered_map<Address, not_null<unique_ptr<const SymbolicExpr>>, AddressHash>,
+                  unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash>,
                   AddressHash>
         memoryMap_symbolicRange_;
 };
@@ -78,7 +96,7 @@ struct MemoryModel::flat_view {
     }
 
   public:
-    using UPtr = not_null<std::unique_ptr<const SymbolicExpr>>;
+    using UPtr = not_null<std::unique_ptr<SymbolicExpr>>;
     template <bool IsConst> class flat_iterator {
         using Owner   = std::conditional_t<IsConst, const MemoryModel, MemoryModel>;
         using NoOuter = decltype(no_offset_map(std::declval<Owner &>()).begin());
@@ -277,6 +295,7 @@ class Path {
     Path()  = default;
     ~Path() = default;
     Path(const Path &other, bool shallowCopy);
+    void swap(Path &o) noexcept;
 
     enum class PathState {
         Step,
@@ -293,12 +312,15 @@ class Path {
     not_null<std::unique_ptr<SymbolicExpr>> getVarState(const clang::VarDecl *var) const;
     const Formulas &getPathConditions() const;
 
-    not_null<Address *> allocMemory(const clang::VarDecl *);
+    not_null<Address *> allocMemory(const clang::VarDecl *, bool newMemory = false);
     std::unique_ptr<Address> allocMemory(const Address &from);
 
     void updateMemory(const Address &addr, not_null<std::unique_ptr<SymbolicExpr>> expr);
     void updateVarState(not_null<const clang::VarDecl *> var,
                         not_null<std::unique_ptr<SymbolicExpr>> expr);
+    void updateStructField(not_null<const Address *> base,
+                           not_null<const clang::FieldDecl *> field,
+                           not_null<std::unique_ptr<SymbolicExpr>> value);
     void insertPathCondition(not_null<std::unique_ptr<SymbolicExpr>> cond);
 
     void setReturnExpr(std::unique_ptr<SymbolicExpr> expr) {
@@ -385,10 +407,13 @@ class ProgramState {
     auto getPaths() const -> const auto & { return paths_; }
     auto getPaths() -> auto & { return paths_; }
     auto getContext() const -> const auto & { return context_; }
+    std::optional<not_null<std::unique_ptr<Path>>> takePath(size_t i);
+    std::vector<not_null<std::unique_ptr<Path>>> takeAllPaths();
 
     void deriveLinearPostState(std::vector<Formulas> invs);
 
   private:
+    // TODO: remove from private member. [a local helper function.]
     // Only be used in step when processing SwitchStmt, just for a cleaner code.
     std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<SymbolicExpr>>> splitStateBySwitchCond(
         const clang::Expr *switchCond);
