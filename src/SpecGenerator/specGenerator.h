@@ -45,7 +45,7 @@ struct LoopInfo {
         Pattern &operator=(Pattern &&other) = default;
         string dump() const {
             ostringstream oss;
-            oss << "initialValue_: " << initialValue_->dump() << "\n";
+            oss << "initialValue_: " << initialValue_->regularForm() << "\n";
             oss << "step_: " << to_string(step_) << "\n";
             return oss.str();
         }

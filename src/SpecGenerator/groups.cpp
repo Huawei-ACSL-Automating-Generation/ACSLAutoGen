@@ -10,5 +10,6 @@ REGISTER_ACSL_GROUP(DefaultLoopInvariant,
                     "checkAndDumpLoopInfo",
                     "loopAssigns",
                     "paradigmMaxMin",
-                    "StInGXPlugin");
+                    "StInGXPlugin",
+                    "loopVariant");
 // REGISTER_ACSL_GROUP(ComplexLoop, "StInGXPlugin");

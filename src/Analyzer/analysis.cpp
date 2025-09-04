@@ -31,9 +31,6 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
         WARN("Ignore MAIN Function.");
         return;
     }
-    // @WindOctober: TODO remove.
-    if (FD->getNameAsString() != "IsLegalFlag")
-        return;
     INFO("Processing Function " + FD->getNameAsString());
 
     auto state = std::make_unique<ProgramState>(make_unique<ACSLFunction>(FD));
@@ -67,8 +64,8 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
         INFO(spec);
 
         auto beginLoc = FD->getSourceRange().getBegin();
-        GlobalSM::getRewriter().InsertText(beginLoc, spec, /*after*/ false,
-                                           /*indentNewLines*/ true);
+        GlobalSM::InsertText(beginLoc, spec, /*after*/ false,
+                             /*indentNewLines*/ true);
     } else {
         INFO("No function body found for: " + FD->getNameAsString());
     }

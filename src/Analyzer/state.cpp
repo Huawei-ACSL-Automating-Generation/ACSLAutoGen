@@ -649,6 +649,29 @@ bool Path::isUnchanged(const Address &addr) const {
                 return true;
         } else
             TODO();
+    } else if (value.value()->getType() == SymbolicExpr::ExprType::SymbolAddress) {
+        auto addrValue = unique_ptr<Symbolic::Address>(
+            static_cast<Symbolic::Address *>(std::move(value).value().into_underlying().release()));
+        return std::visit(
+            [&](auto &&arg) -> bool {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, std::monostate>) {
+                    TODO();
+                } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                    return false;
+                } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                    if (addr == *arg)
+                        return true;
+                    return false;
+                } else if constexpr (std::is_same_v<
+                                         T, std::pair<not_null<shared_ptr<const Structure::Info>>,
+                                                      const size_t>>) {
+                    TODO();
+                }
+            },
+            addrValue->getFrom());
+    } else if (value.value()->getType() == SymbolicExpr::ExprType::Structure) {
+        TODO();
     }
     return false;
 }
@@ -1167,8 +1190,18 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
     } else if (const auto *whileStmt = dyn_cast<WhileStmt>(loopStmt)) {
         cond = whileStmt->getCond();
         body = whileStmt->getBody();
-    } else {
+    } else if (const auto *doWhileStmt = dyn_cast<DoStmt>(loopStmt)) {
+        cond = doWhileStmt->getCond();
+        body = doWhileStmt->getBody();
+        cond = cond->IgnoreParenImpCasts();
+        if (auto *literal = llvm::dyn_cast<IntegerLiteral>(cond);
+            literal && literal->getValue() == 0) {
+            step(body);
+            return;
+        }
         UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
+    } else {
+        UNREACHABLE();
     }
 
     auto loopInfo = parseLoopInfo(preState, *loopEntry, cond, inc, body);
@@ -1188,8 +1221,8 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
     INFO(spec);
 
     auto beginLoc = loopStmt->getSourceRange().getBegin();
-    GlobalSM::getRewriter().InsertText(beginLoc, spec, /*after*/ false,
-                                       /*indentNewLines*/ true);
+    GlobalSM::InsertText(beginLoc, spec, /*after*/ false,
+                         /*indentNewLines*/ true);
 
     if (this == postState.get())
         UNREACHABLE();

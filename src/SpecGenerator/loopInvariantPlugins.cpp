@@ -37,17 +37,18 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
         if (loopInfo.indexInfo_) {
             auto &indexInfo = loopInfo.indexInfo_.value();
             INFO("`loopEntryInfo_` is set.");
-            INFO("`indexAddr_`: " + indexInfo.indexAddr_->dump());
-            INFO("`indexSymbolicValue_`: " + indexInfo.indexSymbolicValue_->dump());
+            INFO("`indexAddr_`: " + indexInfo.indexAddr_->regularForm());
+            INFO("`indexSymbolicValue_`: " + indexInfo.indexSymbolicValue_->regularForm());
             string opStr;
             switch (indexInfo.op_) {
 #define BINARY_OPERATION(Name, Spelling)                                                           \
-    case BO_##Name: opStr = #Spelling;
+    case BO_##Name: opStr = #Spelling; break;
 #include <clang/AST/OperationKinds.def>
+                default: UNREACHABLE();
             }
             INFO("`op_`: " + opStr);
-            INFO("`indexBound_`: " + indexInfo.indexBound_->dump());
-            INFO("`loopCount_`: " + indexInfo.loopCount_->dump());
+            INFO("`indexBound_`: " + indexInfo.indexBound_->regularForm());
+            INFO("`loopCount_`: " + indexInfo.loopCount_->regularForm());
             INFO("`indexPattern_`: " + indexInfo.indexPattern_.dump());
         } else {
             INFO("indexInfo_ isn't set.");
@@ -57,7 +58,7 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
             auto &patternInfo = loopInfo.patternInfo_.value();
             INFO("patternInfo_ is set.");
             for (auto &[addr, pattern] : patternInfo.patternsMap_) {
-                INFO("address: " + addr.dump());
+                INFO("address: " + addr.regularForm());
                 if (pattern)
                     INFO("pattern: " + pattern.value().dump());
                 else
@@ -630,3 +631,39 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
     string id_;
 };
 REGISTER_ACSL_PLUGIN(ParadigmMaxMinPlugin, "paradigmMaxMin");
+
+class LoopVariantPlugin : public LoopInvariantPlugin {
+  public:
+    LoopVariantPlugin(const string &ID) : id_(ID) {}
+    string_view id() const override { return id_; }
+    bool needSubstituteAddress() const override { return true; }
+    bool needSubstituteExpr() const override { return false; }
+    tuple<optional<string>, bool, vector<PostInfo>> generate(
+        const ProgramState &,
+        const ProgramState &,
+        const clang::Expr *,
+        const clang::Stmt *,
+        const clang::Stmt *,
+        const LoopInfo &loopInfo) const override {
+        if (loopInfo.indexInfo_ == nullopt)
+            ERROR("Dependencies are not met.");
+
+        auto &indexInfo = loopInfo.indexInfo_.value();
+
+        unique_ptr<SymbolicExpr> var;
+        using enum BinaryOpExpr::Operator;
+        if (indexInfo.indexPattern_.step_ < 0)
+            var = make_unique<BinaryOpExpr>(indexInfo.indexSymbolicValue_->clone(), Subtract,
+                                            indexInfo.indexBound_->clone());
+        else
+            var = make_unique<BinaryOpExpr>(indexInfo.indexBound_->clone(), Subtract,
+                                            indexInfo.indexSymbolicValue_->clone());
+
+        auto spec = "loop variant " + var->simplifiedExpr()->regularForm() + ";";
+        return make_tuple(std::move(spec), true, vector<PostInfo>{});
+    }
+
+  private:
+    string id_;
+};
+REGISTER_ACSL_PLUGIN(LoopVariantPlugin, "loopVariant");

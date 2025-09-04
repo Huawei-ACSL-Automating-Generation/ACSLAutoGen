@@ -259,9 +259,7 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
                          value->simplifiedExpr()->regularForm() + "} is discarded.");
                     continue;
                 }
-                auto [_, ok] = postBranchInfo.memoryMap_.emplace(*subedAddr, std::move(value));
-                if (!ok)
-                    UNREACHABLE();
+                postBranchInfo.memoryMap_.insert_or_assign(*subedAddr, std::move(value));
             }
 
             for (auto &cond : info.pathConds_) {

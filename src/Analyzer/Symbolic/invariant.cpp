@@ -527,7 +527,7 @@ optional<string> buildInvs(const C_Polyhedron &poly, const VarManager &vm) {
             default: UNREACHABLE();
         }
 
-        spec += '\n';
+        spec += ";\n";
     }
     if (spec.empty())
         return nullopt;
@@ -541,12 +541,10 @@ pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash
     const Path &initPath,
     const VarManager &vm) {
     using namespace Parma_Polyhedra_Library;
-    using R = pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash>,
-                   vector<not_null<unique_ptr<SymbolicExpr>>>>;
-    // TODO: whether clone from initPath? or select some field from initPath.
-    auto newPath = std::make_unique<Path>(initPath, true);
-    auto n       = vm.numVars;
-    auto half    = n / 2;
+    using R   = pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash>,
+                     vector<not_null<unique_ptr<SymbolicExpr>>>>;
+    auto n    = vm.numVars;
+    auto half = n / 2;
 
     std::unordered_map<int, not_null<std::unique_ptr<SymbolicExpr>>> resolvedExprs;
     for (size_t i = half; i < n; ++i) {
@@ -908,11 +906,11 @@ Parma_Polyhedra_Library::C_Polyhedron buildPathPoly(const Path &path,
             UNREACHABLE();
         std::string varName = varDecl->getNameAsString();
 
-        auto expr = path.getVarState(varDecl);
-
         auto varIt = vm.varIndexMap.find(varName);
         if (varIt == vm.varIndexMap.end())
-            ERROR("Can't find varDecl {" + varDecl->getNameAsString() + "} in VarManager.");
+            continue;
+
+        auto expr = path.getVarState(varDecl);
 
         size_t idx;
         if (init) {
@@ -1118,7 +1116,7 @@ vector<InvsAndPostStates> buildLoopInvariant(unique_ptr<SymbolicExpr> loopCond,
                                              const ProgramState &loopCurrent) {
     vector<InvsAndPostStates> invsAndPostStates;
     auto &paths   = loopCurrent.getPaths();
-    VarManager vm = VarManager::fromPaths(paths);
+    VarManager vm = VarManager::fromPaths(loopEntry.getPaths());
 
     auto &initPath    = loopEntry.getPaths().at(0);
     auto initPathPoly = buildPathPoly(*initPath, vm, true);
@@ -1191,29 +1189,29 @@ vector<InvsAndPostStates> buildLoopInvariant(unique_ptr<SymbolicExpr> loopCond,
     auto initRel = std::make_pair(initIdx, initPathPoly);
     auto invs    = computeLinearInv(locations, transitions, initRel, vm);
 
-    for (size_t i = 0; i < invs.pathsInvs_.size(); ++i) {
-        INFO("Path " + to_string(i));
-        for (auto &inv : invs.pathsInvs_[i]) {
-            INFO("invariant");
-            dump(inv, vm);
-            INFO("\n");
-        }
-    }
-    for (auto &inv : invs.exitInvs_) {
-        INFO("post state");
-        dump(inv, vm);
-        INFO("\n");
-    }
+    // for (size_t i = 0; i < invs.pathsInvs_.size(); ++i) {
+    //     INFO("Path " + to_string(i));
+    //     for (auto &inv : invs.pathsInvs_[i]) {
+    //         INFO("invariant");
+    //         dump(inv, vm);
+    //         INFO("\n");
+    //     }
+    // }
+    // for (auto &inv : invs.exitInvs_) {
+    //     INFO("post state");
+    //     dump(inv, vm);
+    //     INFO("\n");
+    // }
 
-    if (invs.pathsInvs_.size() != 1)
-        TODO();
-    if (invs.pathsInvs_.at(0).size() != 1)
-        TODO();
+    // if (invs.pathsInvs_.size() != 1)
+    //     TODO();
+    // if (invs.pathsInvs_.at(0).size() != 1)
+    //     TODO();
 
     auto loopInvs = buildInvs(invs.pathsInvs_.at(0).at(0), vm);
 
-    if (invs.exitInvs_.size() != 1)
-        TODO();
+    // if (invs.exitInvs_.size() != 1)
+    //     TODO();
 
     auto postStates = buildPostState(invs.exitInvs_.at(0), *initPath, vm);
 

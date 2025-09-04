@@ -770,8 +770,10 @@ bool Address::equal(const SymbolicExpr &expr) const {
     };
     // compare offset
     if (isOffseted() && addr->isOffseted()) {
-        if (*offset_.value() != *addr->getOffset())
+        // todo: Need a `offsetEqual`, here is not correct now.
+        if (*offset_.value()->simplifiedExpr() != *addr->getOffset()->simplifiedExpr()) {
             return false;
+        }
     } else if (isOffseted() ^ addr->isOffseted()) {
         return false;
     };

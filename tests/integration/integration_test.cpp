@@ -9,7 +9,9 @@
 #include "SpecGenerator/specGenerator.h"
 #include "Analyzer/function.h"
 #include "Analyzer/state.h"
+#include "Analyzer/analysis.h"
 #include "globalSM.h"
+#include "Context/context.h"
 
 using namespace std;
 
@@ -34,6 +36,18 @@ namespace {
             DEBUG(symbolicState->dump());
         }
         return symbolicState;
+    }
+
+    void doAll(const string_view code) {
+        ASTExtractor e(code);
+        GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
+
+        ACSLContext acslContext(e.getASTContext());
+        ACSLAnalyzer analyzer(acslContext);
+        analyzer.analyzeFunctions();
+        for (auto &str : GlobalSM::getInsertedStrings()) {
+            DEBUG(str);
+        }
     }
 
     not_null<unique_ptr<SymbolicExpr>> getReturnExprOfFirstPath(const ProgramState &state) {
@@ -336,4 +350,43 @@ TEST(IntegrationTest, CorrectPostStateOfLoop_3) {
             FAIL() << var << ": " << expr;
         }
     }
+}
+
+TEST(IntegrationTest, openHiTLS_1) {
+    auto code = R"(
+    #include <stdint.h>
+    #define BN_UINT uint32_t
+
+    #define ADD_ABC(carry, r, a, b, c)      \
+    do {                                \
+        BN_UINT macroTmpS = (b) + (c);        \
+        carry = (macroTmpS < (c)) ? 1 : 0;    \
+        (r) = macroTmpS + (a);                \
+        carry += ((r) < macroTmpS) ? 1 : 0;   \
+    } while (0)
+
+    BN_UINT BinAdd(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n)
+{
+    BN_UINT carry = 0;
+    uint32_t nn = n;
+    const BN_UINT *aa = a;
+    const BN_UINT *bb = b;
+    BN_UINT *rr = r;
+    while (nn) {
+        ADD_ABC(carry, rr[0], aa[0], bb[0], carry);
+
+        rr += 1;
+        aa += 1;
+        bb += 1;
+        nn -= 1;
+    }
+    return carry;
+}
+    )";
+    ASSERT_EXIT(
+        {
+            doAll(code);
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
 }

@@ -226,6 +226,72 @@ TEST(LoopAssignsPluginTest, Simple_3) {
     }
 }
 
+TEST(LoopAssignsPluginTest, openHiTLS_1) {
+    auto pluginId                        = "loopAssigns";
+    auto code                            = R"(
+    #include <stdint.h>
+    #define BN_UINT uint32_t
+
+    #define ADD_ABC(carry, r, a, b, c)      \
+    do {                                \
+        BN_UINT macroTmpS = (b) + (c);        \
+        carry = (macroTmpS < (c)) ? 1 : 0;    \
+        (r) = macroTmpS + (a);                \
+        carry += ((r) < macroTmpS) ? 1 : 0;   \
+    } while (0)
+
+    BN_UINT BinAdd(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n)
+{
+    BN_UINT carry = 0;
+    uint32_t nn = n;
+    const BN_UINT *aa = a;
+    const BN_UINT *bb = b;
+    BN_UINT *rr = r;
+    while (nn) {
+        ADD_ABC(carry, rr[0], aa[0], bb[0], carry);
+
+        rr += 1;
+        aa += 1;
+        bb += 1;
+        nn -= 1;
+    }
+    return carry;
+}
+    )";
+    auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
+    EXPECT_NE(spec, nullopt);
+    EXPECT_THAT(*spec, HasSubstr("aa"));
+    EXPECT_THAT(*spec, HasSubstr("bb"));
+    EXPECT_THAT(*spec, HasSubstr("rr"));
+    EXPECT_THAT(*spec, HasSubstr("nn"));
+    EXPECT_THAT(*spec, HasSubstr("rr[0...n]"));
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_EQ(postState.size(), 1);
+    EXPECT_EQ(postState.at(0).memoryMap_.size(), 6);
+    for (auto &[addr, value] : postState.at(0).memoryMap_) {
+        auto addrStr  = addr.regularFormOfValue();
+        auto valueStr = value->simplifiedExpr()->regularForm();
+        if (addrStr == "aa") {
+            EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("a"), HasSubstr("+ a")),
+                                        AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        } else if (addrStr == "bb") {
+            EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("b"), HasSubstr("+ b")),
+                                        AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        } else if (addrStr == "rr") {
+            EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("r"), HasSubstr("+ r")),
+                                        AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        } else if (addrStr == "nn") {
+            EXPECT_EQ(valueStr, "0");
+        } else if (addrStr == "rr[0...n]") {
+            EXPECT_TRUE(value->isUnknown());
+        } else if (addrStr == "carry") {
+            EXPECT_TRUE(value->isUnknown());
+        } else {
+            FAIL() << addrStr << valueStr;
+        }
+    }
+}
+
 TEST(ParadigmMaxMinPluginTest, Simple_0) {
     auto pluginId                = "paradigmMaxMin";
     auto code                    = R"(

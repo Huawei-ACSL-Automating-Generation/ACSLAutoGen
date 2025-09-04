@@ -193,6 +193,67 @@ TEST(SetPatternsPluginTest, SimpleLoop_4) {
     }
 }
 
+TEST(SetPatternsPluginTest, openHiTLS_4) {
+    auto pluginId                 = vector{"setPatterns"s};
+    auto code                     = R"(
+    #include <stdint.h>
+    #define BN_UINT uint32_t
+
+    #define ADD_ABC(carry, r, a, b, c)      \
+    do {                                \
+        BN_UINT macroTmpS = (b) + (c);        \
+        carry = (macroTmpS < (c)) ? 1 : 0;    \
+        (r) = macroTmpS + (a);                \
+        carry += ((r) < macroTmpS) ? 1 : 0;   \
+    } while (0)
+
+    BN_UINT BinAdd(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n)
+{
+    BN_UINT carry = 0;
+    uint32_t nn = n;
+    const BN_UINT *aa = a;
+    const BN_UINT *bb = b;
+    BN_UINT *rr = r;
+    while (nn) {
+        ADD_ABC(carry, rr[0], aa[0], bb[0], carry);
+
+        rr += 1;
+        aa += 1;
+        bb += 1;
+        nn -= 1;
+    }
+    return carry;
+}
+    )";
+    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginId);
+    EXPECT_EQ(continueFlag, true);
+    ASSERT_NE(loopInfo.patternInfo_, nullopt);
+    auto &patternInfo = loopInfo.patternInfo_.value();
+    EXPECT_EQ(patternInfo.patternsMap_.size(), 6);
+    for (auto &[addr, pattern] : patternInfo.patternsMap_) {
+        auto addrStr = addr.regularFormOfValue();
+        if (addrStr == "aa") {
+            ASSERT_NE(pattern, nullopt);
+            EXPECT_EQ(pattern.value().step_, 1);
+        } else if (addrStr == "bb") {
+            ASSERT_NE(pattern, nullopt);
+            EXPECT_EQ(pattern.value().step_, 1);
+        } else if (addrStr == "rr") {
+            ASSERT_NE(pattern, nullopt);
+            EXPECT_EQ(pattern.value().step_, 1);
+        } else if (addrStr == "nn") {
+            ASSERT_NE(pattern, nullopt);
+            EXPECT_EQ(pattern.value().step_, -1);
+        } else if (addrStr == "*(rr)" || addrStr == "rr[0]") {
+            EXPECT_EQ(pattern, nullopt);
+        } else if (addrStr == "carry") {
+            EXPECT_EQ(pattern, nullopt);
+        } else {
+            FAIL() << addrStr << ": " << (pattern == nullopt ? "nullopt" : pattern.value().dump());
+        }
+    }
+}
+
 TEST(SetIndexPluginTest, SimpleLoop_1) {
     auto pluginIds                = vector{"setPatterns"s, "setIndex"s};
     auto code                     = R"(
