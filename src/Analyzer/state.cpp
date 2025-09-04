@@ -739,23 +739,39 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     ERROR("No control flow branching permitted within a pointer-to-member "
                           "expression.");
 
-                if (base.second[0]->getType() != SymbolicExpr::ExprType::Structure)
-                    ERROR("LHS of a pointer-to-member expression with '.' is not a structure");
+                std::unique_ptr<Structure> st;
+                auto baseExpr = std::move(base.second[0]).into_underlying();
 
-                unique_ptr<SymbolicExpr> baseExpr = std::move(base.second[0]).into_underlying();
-                auto st = unique_ptr<Structure>(static_cast<Structure *>(baseExpr.release()));
+                if (memberExpr->isArrow()) {
+                    if (baseExpr->getType() != SymbolicExpr::ExprType::SymbolAddress)
+                        ERROR("LHS of '->' is not an address");
+                    auto addr =
+                        std::unique_ptr<Address>(static_cast<Address *>(baseExpr.release()));
+                    auto val = memoryState_.read(*addr);
+                    if (val == nullopt)
+                        UNREACHABLE();
+                    if (val.value()->getType() != SymbolicExpr::ExprType::Structure)
+                        ERROR("Dereferenced value is not a structure");
+                    st = std::unique_ptr<Structure>(
+                        static_cast<Structure *>(val.value()->clone().release()));
+                } else {
+                    if (baseExpr->getType() != SymbolicExpr::ExprType::Structure)
+                        ERROR("LHS of '.' is not a structure");
+                    st = std::unique_ptr<Structure>(static_cast<Structure *>(baseExpr.release()));
+                }
+
                 if (auto member = dyn_cast_if_present<FieldDecl>(memberExpr->getMemberDecl())) {
                     auto symbolExpr = st->getFieldValue(member->getFieldIndex());
                     if (symbolExpr == nullptr)
                         ERROR("An incomplete Structure is accessed");
-
-                    auto result = EvalResult{};
+                    EvalResult result{};
                     result.second.push_back(std::move(symbolExpr));
                     return result;
                 } else {
                     ERROR("MemberDecl is not a FieldDecl.");
                 }
             })
+
             .Case<ConstantExpr>([this](const ConstantExpr *ce) -> EvalResult {
                 APSInt v;
                 bool ok = false;
@@ -1065,70 +1081,103 @@ ProgramState::ProgramState(unique_ptr<Path> initialPath, unique_ptr<ACSLFunction
 
 ProgramState::ProgramState(unique_ptr<ACSLFunction> context) { context_ = std::move(context); }
 
-void ProgramState::init() {
-    auto FD       = context_->getFunctionDecl();
-    auto initPath = make_unique<Path>();
+namespace {
+    using Symbolic::Address;
+    using Symbolic::Structure;
+    using Symbolic::SymbolicExpr;
+    using Symbolic::Variable;
 
-    for (const ParmVarDecl *param : FD->parameters()) {
-        QualType paramType = param->getType();
-        if (paramType->isStructureType()) {
-            auto addr = initPath->allocMemory(param);
-            auto RD   = paramType->getAsRecordDecl();
-            if (RD == nullptr || !RD->isCompleteDefinition())
-                ERROR("Incomplete definited structure.");
+    static std::unique_ptr<Structure> initStructure(
+        Path *path,
+        const clang::RecordDecl *RD,
+        const clang::ASTRecordLayout &layout,
+        std::variant<std::monostate,
+                     std::unique_ptr<const Address>,
+                     std::pair<std::shared_ptr<const Structure::Info>, const size_t>> from) {
+        if (!RD || !RD->isCompleteDefinition())
+            ERROR("Incomplete struct definition");
+        RD = RD->getDefinition();
+
+        auto st =
+            std::make_unique<Structure>(path->getNextStructureId(), RD, layout, std::move(from));
+        auto slots = st->fieldsValues();
+
+        for (const auto *fieldDecl : RD->fields()) {
+            const size_t idx    = fieldDecl->getFieldIndex();
+            clang::QualType fty = fieldDecl->getType();
+
+            if (fty->isStructureType()) {
+                auto *nestedRD = fty->getAsRecordDecl();
+                if (!nestedRD || !nestedRD->isCompleteDefinition())
+                    ERROR("Incomplete nested struct definition");
+                nestedRD           = nestedRD->getDefinition();
+                auto &nestedLayout = nestedRD->getASTContext().getASTRecordLayout(nestedRD);
+                auto nested        = initStructure(path, nestedRD, nestedLayout,
+                                                   std::make_pair(st->getInfo().get(), idx));
+                slots[idx]         = std::move(nested);
+            } else if (!fty->isPointerType() && !fty->isArrayType()) {
+                SymbolicExpr::Type vty = deriveVarType(fty);
+                slots[idx] = std::make_unique<Variable>(fieldDecl->getNameAsString(), vty,
+                                                        path->getNextSymVarId(),
+                                                        std::make_pair(st->getInfo().get(), idx));
+            } else {
+                TODO();
+            }
+        }
+        return st;
+    }
+
+    static std::unique_ptr<SymbolicExpr> makeValueForType(Path *path,
+                                                          clang::QualType ty,
+                                                          Address *at,
+                                                          const std::string &name) {
+        if (ty->isStructureType()) {
+            auto *RD = ty->getAsRecordDecl();
+            if (!RD || !RD->isCompleteDefinition())
+                ERROR("Incomplete struct definition");
             RD           = RD->getDefinition();
             auto &layout = RD->getASTContext().getASTRecordLayout(RD);
-            auto st      = make_unique<Structure>(initPath->getNextStructureId(), RD, layout,
-                                                  make_unique<Address>(*addr));
+            return initStructure(path, RD, layout, std::make_unique<Address>(*at));
+        } else {
+            SymbolicExpr::Type vty = deriveVarType(ty);
+            return std::make_unique<Variable>(
+                name, vty, path->getNextSymVarId(),
+                std::unique_ptr<Address>(static_cast<Address *>(at->clone().release())));
+        }
+    }
 
-            auto structureSymbolizeInit = [&initPath](auto f, Structure &stToInit) -> void {
-                std::ranges::transform(
-                    stToInit.getInfo()->definition_->fields(), stToInit.fieldsValues().begin(),
-                    [&initPath, &stToInit, &f](const auto &fieldDecl) -> unique_ptr<SymbolicExpr> {
-                        if (fieldDecl->getType()->isStructureType()) {
-                            auto RD_nested = fieldDecl->getType()->getAsRecordDecl();
-                            if (RD_nested == nullptr || !RD_nested->isCompleteDefinition())
-                                ERROR("Incomplete definited structure.");
-                            RD_nested = RD_nested->getDefinition();
-                            auto &layout_nested =
-                                RD_nested->getASTContext().getASTRecordLayout(RD_nested);
-                            auto st_nested = make_unique<Structure>(
-                                initPath->getNextStructureId(), RD_nested, layout_nested,
-                                make_pair<std::shared_ptr<const Structure::Info>, const size_t>(
-                                    stToInit.getInfo().get(), fieldDecl->getFieldIndex()));
-                            f(f, *st_nested);
-                            return st_nested;
-                        }
-                        SymbolicExpr::Type fieldType = deriveVarType(fieldDecl->getType());
-                        return make_unique<Symbolic::Variable>(
-                            fieldDecl->getNameAsString(), fieldType, initPath->getNextSymVarId(),
-                            make_pair<std::shared_ptr<const Structure::Info>, const size_t>(
-                                stToInit.getInfo().get(), fieldDecl->getFieldIndex()));
-                    });
-            };
+    static void initParam(Path *path, const clang::ParmVarDecl *param) {
+        clang::QualType paramType = param->getType();
 
-            structureSymbolizeInit(structureSymbolizeInit, *st);
-            initPath->updateMemory(*addr, std::move(st));
-        } else if (!paramType->isPointerType() && !paramType->isArrayType()) {
-            Address *addr                    = initPath->allocMemory(param);
-            SymbolicExpr::Type varType       = deriveVarType(paramType);
-            unique_ptr<SymbolicExpr> varExpr = make_unique<Symbolic::Variable>(
-                param->getNameAsString(), varType, initPath->getNextSymVarId(),
-                std::unique_ptr<Address>(static_cast<Address *>(addr->clone().release())));
-
-            initPath->updateMemory(*addr, std::move(varExpr));
-        } else if (paramType->isPointerType()) {
-            QualType baseType = paramType->getPointeeType();
+        if (paramType->isPointerType()) {
+            clang::QualType baseType = paramType->getPointeeType();
             if (baseType->isPointerType() || baseType->isArrayType())
                 UNIMPLEMENT("Unsupported pointer to pointer/array");
 
-            Address *ptrAddr = initPath->allocMemory(param);
-            auto pointeeAddr = initPath->allocMemory(*ptrAddr);
+            Address *ptrAddr = path->allocMemory(param);
+            auto pointeeAddr = path->allocMemory(*ptrAddr);
 
-            initPath->updateMemory(*ptrAddr, std::move(pointeeAddr));
-        } else if (paramType->isArrayType()) {
-            TODO();
+            path->updateMemory(*ptrAddr, std::move(pointeeAddr));
+            return;
         }
+
+        if (paramType->isArrayType()) {
+            TODO();
+            return;
+        }
+
+        Address *addr = path->allocMemory(param);
+        auto val      = makeValueForType(path, paramType, addr, param->getNameAsString());
+        path->updateMemory(*addr, std::move(val));
+    }
+
+} // namespace
+
+void ProgramState::init() {
+    auto FD       = context_->getFunctionDecl();
+    auto initPath = std::make_unique<Path>();
+    for (const clang::ParmVarDecl *param : FD->parameters()) {
+        initParam(initPath.get(), param);
     }
     paths_.clear();
     paths_.push_back(std::move(initPath));
