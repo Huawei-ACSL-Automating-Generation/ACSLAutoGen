@@ -9,6 +9,9 @@
 using namespace std;
 using namespace clang;
 
+const std::string IND1 = "  ";
+const std::string IND2 = "    ";
+
 class AssignsPlugin : public FunctionContractPlugin {
   public:
     AssignsPlugin(const string &ID) : id_(ID) {}
@@ -86,9 +89,9 @@ class AssignsPlugin : public FunctionContractPlugin {
         }
 
         if (spec.empty())
-            return R"(assigns \nothing;)";
+            return IND1 + string("assigns \\nothing;\n");
         else
-            return "assigns " + spec.substr(0, spec.length() - 2) + ";";
+            return IND1 + string("assigns ") + spec.substr(0, spec.length() - 2) + ";\n";
     }
 
   private:
@@ -211,11 +214,12 @@ class PostStatePlugin : public FunctionContractPlugin {
 
             std::string bname = "b" + std::to_string(idx++);
             std::string block;
-            block += "behavior " + bname + ":\n";
+            block += IND1 + "behavior " + bname + ":\n";
             if (!assumes.empty())
-                block += "  assumes " + assumes + ";\n";
+                block += IND2 + "assumes " + assumes + ";\n";
             for (auto &e : ensures)
-                block += "  ensures " + e + ";\n";
+                block += IND2 + "ensures " + e + ";\n";
+
             behaviors.push_back(std::move(block));
         }
 
@@ -229,8 +233,7 @@ class PostStatePlugin : public FunctionContractPlugin {
         std::vector<std::string> names;
         for (int i = 0; i < (int)behaviors.size(); ++i)
             names.push_back("b" + std::to_string(i));
-        out += "complete behaviors " + joinCSV(names) + ";\n";
-
+        out += IND1 + "complete behaviors " + joinCSV(names) + ";\n";
         return out;
     }
 

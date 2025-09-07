@@ -62,7 +62,7 @@ string emitFunctionContract(const ProgramState &pre,
         if (plugin == nullptr)
             continue;
         if (auto s = plugin->generate(pre, post); s)
-            spec += "    " /*4 spaces*/ + *s + "\n";
+            spec += *s;
     }
     spec += ACSL_END.to_string();
     return spec;

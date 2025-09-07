@@ -32,7 +32,8 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
         return;
     }
     // @WindOctober: TODO remove.
-    // if (FD->getNameAsString() != "BN_SetFlag")
+    // if (FD->getNameAsString() != "IsLegalFlag" && FD->getNameAsString() != "BN_SetFlag" &&
+    //     FD->getNameAsString() != "BN_IsZero" && FD->getNameAsString() != "BN_IsOne")
     //     return;
     INFO("Processing Function " + FD->getNameAsString());
 
