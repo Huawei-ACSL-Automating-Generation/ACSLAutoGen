@@ -64,7 +64,7 @@ class SetPatternsPlugin : public LoopInfoPlugin {
             auto &preMS = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->getMemoryState();
             for (auto &&[addr, currentExpr] : currentEntry.getMemoryState().flat()) {
                 if (auto rootDecl = addr.getFromRoot();
-                    rootDecl == nullptr || !preVA.contains(rootDecl))
+                    rootDecl == nullopt || !preVA.contains(rootDecl.value()))
                     continue; // local variable
                 if (auto preValue = preMS.read(addr)) {
                     if (*preValue.value() == *currentExpr)

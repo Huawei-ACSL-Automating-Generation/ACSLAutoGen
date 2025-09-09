@@ -235,10 +235,10 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
 
         auto isLocal = [&](const Address &addr) {
             auto root = addr.getFromRoot();
-            if (root == nullptr)
+            if (root == nullopt)
                 TODO();
             auto &varAddrMap = preState.getPaths().at(0)->getVarAddr();
-            if (!varAddrMap.contains(root))
+            if (!varAddrMap.contains(root.value()))
                 return true;
             return false;
         }; // isLocal end

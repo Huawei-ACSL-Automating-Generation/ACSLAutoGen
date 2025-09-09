@@ -498,7 +498,7 @@ namespace Symbolic {
             std::string dump() const;
             size_t getNumFields() const { return layout_.getFieldCount(); }
             auto getFrom() const -> const auto & { return from_; }
-            const clang::VarDecl *getFromRoot() const;
+            std::optional<not_null<const clang::VarDecl *>> getFromRoot() const;
         };
 
         Structure(unsigned int id,
@@ -514,25 +514,13 @@ namespace Symbolic {
               id_(id), info_(make_shared<Info>(RD, layout, std::move(from))) {
             fields_.resize(info_->layout_.getFieldCount());
         }
-
-        Structure(const Structure &other)
-            : SymbolicExpr(other), id_(other.id_), info_(other.info_) {
-            fields_.resize(other.fields_.size());
-            std::ranges::transform(
-                other.fields_, fields_.begin(),
-                [](auto &field) -> std::optional<not_null<std::unique_ptr<SymbolicExpr>>> {
-                    if (field == std::nullopt)
-                        return std::nullopt;
-                    return field.value()->clone();
-                });
-        }
+        Structure(const Structure &other);
 
         bool isComplete() const;
         size_t getNumFields() const { return info_->getNumFields(); }
-        void setFieldValue(size_t index, const SymbolicExpr &expr);
-        std::unique_ptr<SymbolicExpr> getFieldValue(size_t index) const;
-        auto fieldsValues() { return std::span{fields_}; }
-        auto fieldsValues() const { return std::span{fields_}; }
+        void setFieldAddr(size_t index, const SymbolicExpr &expr);
+        auto fieldsAddrs() { return std::span{fields_}; }
+        auto fieldsAddrs() const { return std::span{fields_}; }
         auto getInfo() const -> const auto & { return info_; }
         std::string regularFormOfField(size_t index,
                                        std::optional<std::string_view> prefix = std::nullopt,
@@ -562,8 +550,10 @@ namespace Symbolic {
 
       private:
         unsigned int id_;
-        not_null<std::shared_ptr<Info>> info_;
-        std::vector<std::optional<not_null<std::unique_ptr<SymbolicExpr>>>> fields_;
+        not_null<std::shared_ptr<const Info>> info_;
+        std::vector<std::optional<not_null<std::unique_ptr<const Address>>>>
+            fields_; // optional is used solely because not_null has no default constructor. This
+                     // field is never intended to be nullopt after construction."
     };
 
     /// @class Address
@@ -639,7 +629,7 @@ namespace Symbolic {
             return offset_.value().get().get();
         }
         auto getFrom() const -> const auto & { return from_; }
-        const clang::VarDecl *getFromRoot() const;
+        std::optional<not_null<const clang::VarDecl *>> getFromRoot() const;
         int getDimension() const;
         std::string getBaseName() const;
         not_null<std::unique_ptr<Address>> getBaseAddr() const;
@@ -685,7 +675,7 @@ namespace Symbolic {
 
       protected:
         [[deprecated("use `getFromRoot`")]]
-        const clang::VarDecl *retrieveVarDecl() const;
+        std::optional<not_null<const clang::VarDecl *>> retrieveDecl() const;
 
       private:
         unsigned int id_; ///< This ID is unique within its path, but not globally unique across
@@ -696,9 +686,10 @@ namespace Symbolic {
                      not_null<const clang::VarDecl *>,
                      not_null<std::unique_ptr<const Address>>,
                      std::pair<not_null<std::shared_ptr<const Structure::Info>>, const size_t>>
-            from_; ///< from a VarDecl* means this is a variable's address, from another Address p
-                   ///< means this is a value(may with offset) of a pointer variable whose address
-                   ///< is p, from {Structure::Info, size_t} means this is a field.
+            from_; ///< from a VarDecl* means this is a variable or structure member's
+                   ///< address, from another Address p means this is a value(may with offset) of a
+                   ///< pointer variable whose address is p, from {Structure::Info, size_t} means
+                   ///< this is a field.
         std::optional<Range> range_;
     };
 
@@ -755,7 +746,7 @@ namespace Symbolic {
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         auto getFrom() const -> const auto & { return from_; }
-        const clang::VarDecl *getFromRoot() const;
+        std::optional<not_null<const clang::VarDecl *>> getFromRoot() const;
 
         // StInG: Support functions for affine invariant analysis
         std::unordered_map<unsigned int, std::variant<const Variable *, const Address *>> collectUsedVarsAndAddrs()

@@ -300,7 +300,10 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
 
         auto &postBranchInfo = postBranchesInfos.at(0);
         for (auto &[addr, value] : postBranchInfo.memoryMap_) {
-            if (!postPath->getVarAddr().contains(addr.getFromRoot()))
+            auto root = addr.getFromRoot();
+            if (root == nullopt)
+                TODO();
+            if (!postPath->getVarAddr().contains(root.value()))
                 continue;
             postPath->updateMemory(addr, std::move(value));
         }

@@ -138,7 +138,7 @@ class PostStatePlugin : public FunctionContractPlugin {
   public:
     PostStatePlugin(const std::string &ID) : id_(ID) {}
     std::string_view id() const override { return id_; }
-    std::optional<std::string> generate(const ProgramState &,
+    std::optional<std::string> generate(const ProgramState &pre,
                                         const ProgramState &post) const override {
         std::vector<std::string> behaviors;
         int idx = 0;
@@ -158,20 +158,64 @@ class PostStatePlugin : public FunctionContractPlugin {
                                   ret.value()->simplifiedExpr()->regularForm("\\old(", ")"));
             }
 
+            auto find_pre_value = [&](const Address *faddr) -> std::unique_ptr<SymbolicExpr> {
+                if (pre.getPaths().size() != 1)
+                    return nullptr;
+                const auto &prePath = *pre.getPaths().front();
+                const auto &preMem  = prePath.getMemoryState();
+
+                if (auto value = preMem.read(*faddr))
+                    return value.value()->clone();
+
+                using pair_t =
+                    std::pair<not_null<std::shared_ptr<const Structure::Info>>, const size_t>;
+                if (auto postPair = std::get_if<pair_t>(&faddr->getFrom())) {
+                    for (const auto &[addr, value] : preMem.flat()) {
+                        if (auto prePair = std::get_if<pair_t>(&addr.getFrom())) {
+                            if (postPair->second == prePair->second &&
+                                postPair->first->equal(*prePair->first)) {
+                                return value->clone();
+                            }
+                        }
+                    }
+                }
+                return nullptr;
+            };
+
             auto emitStruct = [&](auto &&self, const std::string &base, const Structure &st,
                                   bool topPtr) -> void {
-                auto RD = st.getInfo()->definition_;
+                auto RD    = st.getInfo()->definition_;
+                auto slots = st.fieldsAddrs();
                 for (const auto *fieldDecl : RD->fields()) {
-                    size_t fidx = fieldDecl->getFieldIndex();
-                    auto fv     = st.getFieldValue(fidx);
-                    if (!fv)
+                    size_t fidx          = fieldDecl->getFieldIndex();
+                    const Address *faddr = slots[fidx] ? slots[fidx].value().get().get() : nullptr;
+                    if (!faddr)
                         continue;
+
+                    auto postVal = path.getMemoryState().read(*faddr);
+                    if (!postVal)
+                        continue;
+
                     std::string lhs = base + (topPtr ? "->" : ".") + fieldDecl->getNameAsString();
-                    if (fv->getType() == SymbolicExpr::ExprType::Structure) {
-                        self(self, lhs, *static_cast<const Structure *>(fv.get()), false);
+
+                    if (postVal.value()->getType() == SymbolicExpr::ExprType::Structure) {
+                        self(self, lhs, *static_cast<const Structure *>(postVal.value().get()),
+                             false);
                     } else {
-                        std::string rhs = fv->simplifiedExpr()->regularForm("\\old(", ")");
-                        ensures.push_back(lhs + " == " + rhs);
+                        std::unique_ptr<SymbolicExpr> preVal = find_pre_value(faddr);
+                        bool unchanged                       = false;
+                        if (preVal) {
+                            unchanged =
+                                postVal.value()->equal(*preVal) ||
+                                (*postVal.value()->simplifiedExpr() == *preVal->simplifiedExpr());
+                        }
+                        if (unchanged) {
+                            ensures.push_back(lhs + " == \\old(" + lhs + ")");
+                        } else {
+                            std::string rhs =
+                                postVal.value()->simplifiedExpr()->regularForm("\\old(", ")");
+                            ensures.push_back(lhs + " == " + rhs);
+                        }
                     }
                 }
             };
@@ -205,6 +249,11 @@ class PostStatePlugin : public FunctionContractPlugin {
                                        *static_cast<const Structure *>(pointee.value().get()),
                                        true);
                         }
+                    }
+                } else if (param->getType()->isStructureType()) {
+                    if (finalVal.getType() == SymbolicExpr::ExprType::Structure) {
+                        emitStruct(emitStruct, varName, static_cast<const Structure &>(finalVal),
+                                   false);
                     }
                 }
             }

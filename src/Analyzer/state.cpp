@@ -20,9 +20,10 @@ using namespace clang;
 using namespace llvm;
 using namespace Symbolic;
 
-using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>, MemberTarget>;
+using LValueTarget = std::variant<const VarDecl *, std::unique_ptr<Address>, MemberTarget>;
 
-MemberTarget::MemberTarget(const MemberTarget &other) : field(other.field) {
+MemberTarget::MemberTarget(const MemberTarget &other)
+    : field(other.field), is_arrow(other.is_arrow) {
     if (other.base) {
         base = std::unique_ptr<Address>(static_cast<Address *>(other.base->clone().release()));
     }
@@ -30,7 +31,8 @@ MemberTarget::MemberTarget(const MemberTarget &other) : field(other.field) {
 
 MemberTarget &MemberTarget::operator=(const MemberTarget &other) {
     if (this != &other) {
-        field = other.field;
+        field    = other.field;
+        is_arrow = other.is_arrow;
         if (other.base) {
             base = std::unique_ptr<Address>(static_cast<Address *>(other.base->clone().release()));
         } else {
@@ -42,6 +44,8 @@ MemberTarget &MemberTarget::operator=(const MemberTarget &other) {
 
 bool operator==(const MemberTarget &a, const MemberTarget &b) noexcept {
     if (a.field != b.field)
+        return false;
+    if (a.is_arrow != b.is_arrow)
         return false;
     const bool ahas = static_cast<bool>(a.base);
     const bool bhas = static_cast<bool>(b.base);
@@ -64,7 +68,7 @@ Path::Path(const Path &other, bool shallowCopy) {
             returnExpr_.emplace(other.returnExpr_.value()->clone());
         else
             returnExpr_ = std::nullopt;
-        symbolVarAndAddrCounter_ = other.symbolVarAndAddrCounter_;
+        symbolCounter_ = other.symbolCounter_;
     } else {
         TODO();
     }
@@ -73,7 +77,7 @@ Path::Path(const Path &other, bool shallowCopy) {
 void Path::swap(Path &o) noexcept {
     using std::swap;
     swap(currentState_, o.currentState_);
-    swap(symbolVarAndAddrCounter_, o.symbolVarAndAddrCounter_);
+    swap(symbolCounter_, o.symbolCounter_);
     swap(returnExpr_, o.returnExpr_);
     swap(pathConditions_, o.pathConditions_);
     swap(varAddr_, o.varAddr_);
@@ -84,21 +88,19 @@ void Path::resymbolize() {
     memoryState_.clear();
     pathConditions_.clear();
 
-    for (auto &entry : varAddr_) {
-        const VarDecl *varDecl = entry.first;
-        QualType varType       = varDecl->getType();
-        Address *addr          = entry.second.get();
+    for (auto &[varDecl, addr] : varAddr_) {
+        clang::QualType ty = varDecl->getType();
 
-        if (!varType->isPointerType() && !varType->isArrayType()) {
-            SymbolicExpr::Type derived       = deriveVarType(varType);
-            unique_ptr<SymbolicExpr> newExpr = make_unique<Symbolic::Variable>(
-                varDecl->getNameAsString(), derived, symbolVarAndAddrCounter_++,
+        if (!ty->isPointerType() && !ty->isArrayType()) {
+            SymbolicExpr::Type derived            = deriveVarType(ty);
+            std::unique_ptr<SymbolicExpr> newExpr = std::make_unique<Symbolic::Variable>(
+                varDecl->getNameAsString(), derived, symbolCounter_++,
                 std::unique_ptr<Address>(static_cast<Address *>(addr->clone().release())));
 
             memoryState_.write(*addr, std::move(newExpr));
-        } else if (varType->isPointerType()) {
+        } else if (ty->isPointerType()) {
             auto pointeeAddr = allocMemory(*addr);
-            memoryState_.write(*addr, std::move(pointeeAddr));
+            memoryState_.write(*addr, std::move(pointeeAddr).into_underlying());
         } else {
             TODO();
         }
@@ -169,7 +171,7 @@ LValueTarget Path::extractLValue(const Expr *lhs) {
 
     if (auto *mem = dyn_cast<MemberExpr>(lexpr)) {
         // TODO: recursive case like s.x.y.m.
-        const clang::FieldDecl *fd = dyn_cast<clang::FieldDecl>(mem->getMemberDecl());
+        const FieldDecl *fd = dyn_cast<FieldDecl>(mem->getMemberDecl());
         if (!fd)
             ERROR("MemberDecl is not FieldDecl");
 
@@ -180,7 +182,7 @@ LValueTarget Path::extractLValue(const Expr *lhs) {
                 ERROR("This location does not support control flow branches.");
             auto baseExpr = std::move(addrEval.second[0]);
             if (auto addr = baseExpr->tryEvalAsOffsetedAddr())
-                return MemberTarget{std::move(addr.value()).into_underlying(), fd};
+                return MemberTarget{std::move(addr.value()).into_underlying(), fd, true};
             ERROR("Expected Address for '->' base, got: " << baseExpr->dump());
         } else {
             if (auto *dref = dyn_cast<DeclRefExpr>(base)) {
@@ -190,14 +192,14 @@ LValueTarget Path::extractLValue(const Expr *lhs) {
                         ERROR("No address for struct variable base");
                     return MemberTarget{std::unique_ptr<Address>(
                                             static_cast<Address *>(it->second->clone().release())),
-                                        fd};
+                                        fd, false};
                 }
             }
             auto baseL = extractLValue(base);
             if (auto addrPtr = get_if<std::unique_ptr<Address>>(&baseL))
                 return MemberTarget{
                     std::unique_ptr<Address>(static_cast<Address *>((*addrPtr)->clone().release())),
-                    fd};
+                    fd, false};
             ERROR("Unsupported base for '.' member access");
         }
     }
@@ -216,6 +218,22 @@ unique_ptr<Address> Path::extractAddress(const Expr *lhs) {
         assert(*addrPtr != nullptr);
         return std::move(*addrPtr);
     }
+    if (auto mt = get_if<MemberTarget>(&lv)) {
+        Address *base = mt->base.get();
+
+        auto value = memoryState_.read(*base);
+        if (value == nullopt)
+            ERROR("extractAddress: no memory entry for member base");
+        auto st = dynamic_cast<Structure *>(value.value().get());
+        if (!st)
+            ERROR("extractAddress: member base is not a Structure");
+        size_t idx = mt->field->getFieldIndex();
+        auto slots = st->fieldsAddrs();
+        if (idx >= slots.size() || !slots[idx])
+            ERROR("extractAddress: invalid field index");
+        return make_unique<Address>(*slots[idx].value());
+    }
+
     UNIMPLEMENT("extractAddress: unsupported lvalue for address");
 }
 
@@ -238,7 +256,7 @@ not_null<Address *> Path::allocMemory(const VarDecl *var, bool newMemory) {
     auto canonicalVar = var->getCanonicalDecl();
     if (!newMemory && varAddr_.find(canonicalVar) != varAddr_.end())
         ERROR("Variable already has allocated memory");
-    auto newAddr    = make_unique<Address>(symbolVarAndAddrCounter_++, var);
+    auto newAddr    = make_unique<Address>(symbolCounter_++, var);
     Address *rawPtr = newAddr.get();
     varAddr_.emplace(canonicalVar, std::move(newAddr));
 
@@ -247,8 +265,8 @@ not_null<Address *> Path::allocMemory(const VarDecl *var, bool newMemory) {
     return rawPtr;
 }
 
-unique_ptr<Address> Path::allocMemory(const Address &from) {
-    return make_unique<Address>(symbolVarAndAddrCounter_++,
+not_null<unique_ptr<Address>> Path::allocMemory(const Address &from) {
+    return make_unique<Address>(symbolCounter_++,
                                 std::unique_ptr<Address>(make_unique<Address>(from)));
 }
 
@@ -264,33 +282,6 @@ void Path::updateVarState(not_null<const VarDecl *> var, not_null<unique_ptr<Sym
 
     auto &addr = addrIt->second;
     memoryState_.write(*addr, std::move(expr).into_underlying());
-}
-
-void Path::updateStructField(not_null<const Address *> base,
-                             not_null<const clang::FieldDecl *> field,
-                             not_null<std::unique_ptr<SymbolicExpr>> value) {
-    const clang::RecordDecl *RD = field->getParent();
-    // @WindOctober: check.
-    if (!RD || !RD->isCompleteDefinition())
-        ERROR("Incomplete struct");
-    RD = RD->getDefinition();
-
-    auto &layout = RD->getASTContext().getASTRecordLayout(RD);
-
-    auto it = memoryState_.read(*base);
-    if (it == nullopt) {
-        UNREACHABLE();
-    }
-    if (it.value()->isUnknown()) {
-        auto st = std::make_unique<Structure>(getNextStructureId(), RD, layout,
-                                              std::make_unique<Address>(*base));
-        st->setFieldValue(field->getFieldIndex(), *value);
-        memoryState_.write(*base, std::move(st));
-    }
-    auto *st = dynamic_cast<Structure *>(it.value().get());
-    if (!st)
-        ERROR("Base is not a structure");
-    st->setFieldValue(field->getFieldIndex(), *value);
 }
 
 void Path::insertPathCondition(not_null<unique_ptr<SymbolicExpr>> cond) {
@@ -310,8 +301,8 @@ unique_ptr<Path> Path::clone() const {
         cloned->returnExpr_.emplace(returnExpr_.value()->clone());
     else
         cloned->returnExpr_ = nullopt;
-    cloned->symbolVarAndAddrCounter_ = symbolVarAndAddrCounter_;
-    cloned->StmtCtx                  = StmtCtx;
+    cloned->symbolCounter_ = symbolCounter_;
+    cloned->StmtCtx        = StmtCtx;
     return cloned;
 }
 
@@ -486,8 +477,12 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                 string baseName;
                 if (auto varPtr = get_if<const VarDecl *>(&lval))
                     baseName = (*varPtr)->getNameAsString();
-                else
-                    UNIMPLEMENT("Array base is not a single Variable");
+                else if (auto mt = get_if<MemberTarget>(&lval)) {
+                    auto op  = mt->is_arrow ? "->" : ".";
+                    baseName = mt->base->getBaseName() + op + mt->field->getNameAsString();
+                } else {
+                    UNIMPLEMENT("Array base is not a variable or member");
+                }
 
                 unique_ptr<Address> variableAddr = extractAddress(arrSub->getBase());
                 unique_ptr<Address> addr;
@@ -519,7 +514,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                         string varName = baseName + "[" + idxDump +
                                          "]"; // TODO: impl function to get pointer/array base name.
                         auto varExpr = make_unique<Symbolic::Variable>(
-                            varName, varType, symbolVarAndAddrCounter_++,
+                            varName, varType, symbolCounter_++,
                             unique_ptr<Address>(
                                 static_cast<Address *>(newAddr->clone().release())));
                         memoryState_.write(*newAddr, varExpr->clone());
@@ -761,11 +756,26 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                 }
 
                 if (auto member = dyn_cast_if_present<FieldDecl>(memberExpr->getMemberDecl())) {
-                    auto symbolExpr = st->getFieldValue(member->getFieldIndex());
-                    if (symbolExpr == nullptr)
+                    size_t idx = member->getFieldIndex();
+                    auto slots = st->fieldsAddrs();
+                    if (idx >= slots.size() || !slots[idx])
                         ERROR("An incomplete Structure is accessed");
+                    auto &faddr = *slots[idx].value();
+
+                    std::unique_ptr<SymbolicExpr> value;
+                    if (auto v = memoryState_.read(faddr)) {
+                        value = v.value()->clone();
+                    } else {
+                        SymbolicExpr::Type vty = deriveVarType(memberExpr->getType());
+                        auto var               = std::make_unique<Symbolic::Variable>(
+                            member->getNameAsString(), vty, getNextSymVarId(),
+                            std::make_pair(st->getInfo().get(), idx));
+                        memoryState_.write(faddr, var->clone());
+                        value = std::move(var);
+                    }
+
                     EvalResult result{};
-                    result.second.push_back(std::move(symbolExpr));
+                    result.second.push_back(std::move(value));
                     return result;
                 } else {
                     ERROR("MemberDecl is not a FieldDecl.");
@@ -815,7 +825,7 @@ string Path::dump() const {
             default: return "Unknown";
         }
     }() << "\n";
-    oss << "Symbol variables and addresses Counter: " << symbolVarAndAddrCounter_ << "\n";
+    oss << "Symbol variables and addresses Counter: " << symbolCounter_ << "\n";
 
     oss << "Return Expression: ";
     if (returnExpr_)
@@ -1088,47 +1098,15 @@ namespace {
     using Symbolic::Variable;
 
     static std::unique_ptr<Structure> initStructure(
-        Path *path,
-        const clang::RecordDecl *RD,
-        const clang::ASTRecordLayout &layout,
+        Path *,
+        const RecordDecl *,
+        const ASTRecordLayout &,
         std::variant<std::monostate,
                      std::unique_ptr<const Address>,
-                     std::pair<std::shared_ptr<const Structure::Info>, const size_t>> from) {
-        if (!RD || !RD->isCompleteDefinition())
-            ERROR("Incomplete struct definition");
-        RD = RD->getDefinition();
-
-        auto st =
-            std::make_unique<Structure>(path->getNextStructureId(), RD, layout, std::move(from));
-        auto slots = st->fieldsValues();
-
-        for (const auto *fieldDecl : RD->fields()) {
-            const size_t idx    = fieldDecl->getFieldIndex();
-            clang::QualType fty = fieldDecl->getType();
-
-            if (fty->isStructureType()) {
-                auto *nestedRD = fty->getAsRecordDecl();
-                if (!nestedRD || !nestedRD->isCompleteDefinition())
-                    ERROR("Incomplete nested struct definition");
-                nestedRD           = nestedRD->getDefinition();
-                auto &nestedLayout = nestedRD->getASTContext().getASTRecordLayout(nestedRD);
-                auto nested        = initStructure(path, nestedRD, nestedLayout,
-                                                   std::make_pair(st->getInfo().get(), idx));
-                slots[idx]         = std::move(nested);
-            } else if (!fty->isPointerType() && !fty->isArrayType()) {
-                SymbolicExpr::Type vty = deriveVarType(fty);
-                slots[idx] = std::make_unique<Variable>(fieldDecl->getNameAsString(), vty,
-                                                        path->getNextSymVarId(),
-                                                        std::make_pair(st->getInfo().get(), idx));
-            } else {
-                TODO();
-            }
-        }
-        return st;
-    }
+                     std::pair<std::shared_ptr<const Structure::Info>, const size_t>>);
 
     static std::unique_ptr<SymbolicExpr> makeValueForType(Path *path,
-                                                          clang::QualType ty,
+                                                          QualType ty,
                                                           Address *at,
                                                           const std::string &name) {
         if (ty->isStructureType()) {
@@ -1146,8 +1124,67 @@ namespace {
         }
     }
 
-    static void initParam(Path *path, const clang::ParmVarDecl *param) {
-        clang::QualType paramType = param->getType();
+    static std::unique_ptr<Structure> initStructure(
+        Path *path,
+        const RecordDecl *RD,
+        const ASTRecordLayout &layout,
+        std::variant<std::monostate,
+                     std::unique_ptr<const Address>,
+                     std::pair<std::shared_ptr<const Structure::Info>, const size_t>> from) {
+        if (!RD || !RD->isCompleteDefinition())
+            ERROR("Incomplete struct definition");
+        RD = RD->getDefinition();
+
+        auto st =
+            std::make_unique<Structure>(path->getNextStructureId(), RD, layout, std::move(from));
+
+        auto slots = st->fieldsAddrs();
+
+        const auto parentInfoNN = st->getInfo();
+        const auto parentInfo   = parentInfoNN.get();
+
+        for (const auto *fieldDecl : RD->fields()) {
+            const size_t idx = fieldDecl->getFieldIndex();
+            QualType fty     = fieldDecl->getType();
+
+            Address fieldAddr(
+                path->getNextSymVarId(),
+                std::variant<std::monostate, const clang::VarDecl *, std::unique_ptr<const Address>,
+                             std::pair<std::shared_ptr<const Structure::Info>, const size_t>>{
+                    std::make_pair(parentInfo, idx)});
+
+            auto raw = path->allocMemory(fieldAddr);
+
+            if (fty->isStructureType()) {
+                auto *nestedRD = fty->getAsRecordDecl();
+                if (!nestedRD || !nestedRD->isCompleteDefinition())
+                    ERROR("Incomplete nested struct definition");
+                nestedRD           = nestedRD->getDefinition();
+                auto &nestedLayout = nestedRD->getASTContext().getASTRecordLayout(nestedRD);
+                auto nested        = initStructure(path, nestedRD, nestedLayout,
+                                                   std::make_pair(st->getInfo().get(), idx));
+                path->updateMemory(*raw, std::move(nested));
+            } else if (fty->isPointerType()) {
+                auto addr = path->allocMemory(*raw);
+                path->updateMemory(*raw, std::move(addr).into_underlying());
+            } else if (fty->isArrayType()) {
+                TODO();
+            } else {
+                auto vty                          = deriveVarType(fty);
+                std::unique_ptr<SymbolicExpr> var = std::make_unique<Variable>(
+                    fieldDecl->getNameAsString(), vty, path->getNextSymVarId(),
+                    std::make_pair(parentInfo, idx));
+                path->updateMemory(*raw, std::move(var));
+            }
+
+            slots[idx] = std::move(raw).into_underlying();
+        }
+
+        return st;
+    }
+
+    static void initParam(Path *path, const ParmVarDecl *param) {
+        QualType paramType = param->getType();
 
         if (paramType->isPointerType()) {
             clang::QualType baseType = paramType->getPointeeType();
@@ -1157,11 +1194,9 @@ namespace {
             Address *ptrAddr = path->allocMemory(param);
             auto pointeeAddr = path->allocMemory(*ptrAddr);
 
-            path->updateMemory(*ptrAddr, std::move(pointeeAddr));
+            path->updateMemory(*ptrAddr, std::move(pointeeAddr).into_underlying());
             return;
-        }
-
-        if (paramType->isArrayType()) {
+        } else if (paramType->isArrayType()) {
             TODO();
             return;
         }
@@ -1176,7 +1211,7 @@ namespace {
 void ProgramState::init() {
     auto FD       = context_->getFunctionDecl();
     auto initPath = std::make_unique<Path>();
-    for (const clang::ParmVarDecl *param : FD->parameters()) {
+    for (const ParmVarDecl *param : FD->parameters()) {
         initParam(initPath.get(), param);
     }
     paths_.clear();
@@ -1613,17 +1648,10 @@ void ProgramState::updateVarState(const BinaryOperator *binOp) {
             if (holds_alternative<const VarDecl *>(lvalue)) {
                 auto *var = get<const VarDecl *>(lvalue);
                 newPath->updateVarState(var, std::move(eval.second[i]));
-            } else if (holds_alternative<unique_ptr<Address>>(lvalue)) {
-                auto &addrUptr = get<unique_ptr<Address>>(lvalue);
-                Address *addr  = addrUptr.get();
-                if (addr == nullptr)
-                    UNREACHABLE();
-                newPath->updateMemory(*addr, std::move(eval.second[i]));
             } else {
-                auto &mt = get<MemberTarget>(lvalue);
-                newPath->updateStructField(mt.base.get(), mt.field, std::move(eval.second[i]));
+                auto addr = newPath->extractAddress(binOp->getLHS());
+                newPath->updateMemory(*addr, std::move(eval.second[i]));
             }
-
             updatedPaths.push_back(std::move(newPath));
         }
     }
@@ -1645,7 +1673,7 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
             auto varAddr_ = path->allocMemory(varDecl);
 
             if (initExpr == nullptr) {
-                // TODO: may add a class named "Unknown" derived from Variable.
+                // TODO: add default initialization for basic types.
                 WARN("Uninitialized variable " + varDecl->getNameAsString());
 
                 auto varType = varDecl->getType();
@@ -1676,22 +1704,30 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
                     if (!RD->isCompleteDefinition())
                         ERROR("Struct with incomplete definition!");
 
-                    RD      = RD->getDefinition();
+                    RD = RD->getDefinition();
+
                     auto st = make_unique<Structure>(path->getNextStructureId(), RD,
                                                      RD->getASTContext().getASTRecordLayout(RD),
                                                      make_unique<Address>(*varAddr_));
                     if (initListExpr->getNumInits() != st->getNumFields())
                         ERROR("Initializer list size mismatches the struct's field count.");
-                    std::ranges::transform(
-                        initListExpr->inits(), st->fieldsValues().begin(), [&](const auto &init) {
-                            Path::EvalResult eval = path->evalExpr(init);
+                    auto slots = st->fieldsAddrs();
+                    for (size_t i = 0; i < slots.size(); ++i) {
+                        const Expr *init = initListExpr->getInit(i);
 
-                            if (eval.second.size() != 1)
-                                UNIMPLEMENT(
-                                    "No control flow branching permitted within an initializer "
-                                    "list now.");
-                            return std::move(eval.second[0]).into_underlying();
-                        });
+                        Path::EvalResult eval = path->evalExpr(init);
+                        if (eval.second.size() != 1)
+                            UNIMPLEMENT("No control flow branching permitted within an initializer "
+                                        "list now.");
+                        if (slots[i] == nullopt) {
+                            slots[i] = make_unique<Address>(
+                                path->getNextSymVarId(),
+                                pair<shared_ptr<const Structure::Info>, const size_t>{st->getInfo(),
+                                                                                      i});
+                        }
+                        path->updateMemory(*slots[i].value(), std::move(eval.second[0]));
+                    }
+
                     path->updateVarState(varDecl, std::move(st));
                     updatedPaths.push_back(std::move(path));
                     continue;

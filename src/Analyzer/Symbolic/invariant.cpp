@@ -206,9 +206,9 @@ optional<Parma_Polyhedra_Library::Linear_Expression> Symbolic::Address::toLinear
         return nullopt;
 
     auto varDecl = getFromRoot();
-    if (varDecl == nullptr)
+    if (varDecl == nullopt)
         ERROR("Failed to retrieve the original varDecl.");
-    auto it = varIndexMap.find(varDecl->getNameAsString());
+    auto it = varIndexMap.find(varDecl.value()->getNameAsString());
     if (it == varIndexMap.end()) {
         ERROR("Address '" + regularForm() + "' not found in index map.");
     }
@@ -727,7 +727,7 @@ std::vector<Formulas> negateFormulas(Formulas input) {
     using Op = Symbolic::BinaryOpExpr::Operator;
 
     std::vector<Formulas> result;
-    std::queue<std::pair<Formulas, size_t>> worklist;
+    std::queue<std::pair<Formulas, const size_t>> worklist;
     worklist.push({std::move(input), 0});
 
     while (!worklist.empty()) {
@@ -809,7 +809,7 @@ std::vector<Formulas> negateFormulas(Formulas input) {
 [[deprecated("Loop condition shouldn't be multiple")]]
 std::vector<Formulas> preprocessLoopCond(Formulas loopCond) {
     std::vector<Formulas> result;
-    std::queue<std::pair<Formulas, size_t>> worklist;
+    std::queue<std::pair<Formulas, const size_t>> worklist;
     worklist.push({std::move(loopCond), 0});
 
     while (!worklist.empty()) {

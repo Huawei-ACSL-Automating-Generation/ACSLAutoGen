@@ -20,10 +20,11 @@ using InitRel  = std::pair<int, Parma_Polyhedra_Library::C_Polyhedron *>;
 struct MemberTarget {
     std::unique_ptr<Address> base;
     const clang::FieldDecl *field;
+    bool is_arrow = false;
 
     MemberTarget() = default;
-    MemberTarget(std::unique_ptr<Address> b, const clang::FieldDecl *f)
-        : base(std::move(b)), field(f) {}
+    MemberTarget(std::unique_ptr<Address> b, const clang::FieldDecl *f, bool arrow)
+        : base(std::move(b)), field(f), is_arrow(arrow) {}
 
     MemberTarget(MemberTarget &&) noexcept            = default;
     MemberTarget &operator=(MemberTarget &&) noexcept = default;
@@ -313,14 +314,11 @@ class Path {
     const Formulas &getPathConditions() const;
 
     not_null<Address *> allocMemory(const clang::VarDecl *, bool newMemory = false);
-    std::unique_ptr<Address> allocMemory(const Address &from);
+    not_null<std::unique_ptr<Address>> allocMemory(const Address &from);
 
     void updateMemory(const Address &addr, not_null<std::unique_ptr<SymbolicExpr>> expr);
     void updateVarState(not_null<const clang::VarDecl *> var,
                         not_null<std::unique_ptr<SymbolicExpr>> expr);
-    void updateStructField(not_null<const Address *> base,
-                           not_null<const clang::FieldDecl *> field,
-                           not_null<std::unique_ptr<SymbolicExpr>> value);
     void insertPathCondition(not_null<std::unique_ptr<SymbolicExpr>> cond);
 
     void setReturnExpr(std::optional<not_null<std::unique_ptr<SymbolicExpr>>> expr) {
@@ -344,10 +342,10 @@ class Path {
 
     auto getVarAddr() const -> const auto & { return varAddr_; };
     auto getMemoryState() const -> const auto & { return memoryState_; }
-    int getNextSymVarId() { return symbolVarAndAddrCounter_++; }
+    int getNextSymVarId() { return symbolCounter_++; }
     auto getReturnExpr() const -> const auto & { return returnExpr_; }
     auto getPathState() const -> const auto & { return currentState_; }
-    auto getAddrCounter() const -> const auto & { return symbolVarAndAddrCounter_; }
+    auto getAddrCounter() const -> const auto & { return symbolCounter_; }
     auto getNextStructureId() { return structureCounter_++; }
 
   private:
@@ -364,7 +362,7 @@ class Path {
 
     optional<not_null<std::unique_ptr<const SymbolicExpr>>> returnExpr_ = std::nullopt;
 
-    unsigned int symbolVarAndAddrCounter_ = 0;
+    unsigned int symbolCounter_ = 0;
 
     // The Structure's counter is decoupled from the Variable and Address's counter to prevent
     // interference with the ppl library's computations.

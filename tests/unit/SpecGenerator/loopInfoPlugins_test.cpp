@@ -268,7 +268,8 @@ TEST(SetIndexPluginTest, SimpleLoop_1) {
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.indexInfo_, nullopt);
     auto &indexInfo = loopInfo.indexInfo_.value();
-    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot()->getNameAsString(), "i");
+    ASSERT_NE(indexInfo.indexAddr_->getFromRoot(), nullopt);
+    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot().value()->getNameAsString(), "i");
     EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Variable);
     EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "i");
     EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
@@ -290,7 +291,8 @@ TEST(SetIndexPluginTest, SimpleLoop_2) {
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.indexInfo_, nullopt);
     auto &indexInfo = loopInfo.indexInfo_.value();
-    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot()->getNameAsString(), "i");
+    ASSERT_NE(indexInfo.indexAddr_->getFromRoot(), nullopt);
+    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot().value()->getNameAsString(), "i");
     EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Variable);
     EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "i");
     EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_NE);
@@ -314,7 +316,8 @@ TEST(SetIndexPluginTest, SimpleLoop_3) {
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.indexInfo_, nullopt);
     auto &indexInfo = loopInfo.indexInfo_.value();
-    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot()->getNameAsString(), "i");
+    ASSERT_NE(indexInfo.indexAddr_->getFromRoot(), nullopt);
+    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot().value()->getNameAsString(), "i");
     EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Variable);
     EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "i");
     EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_GE);
@@ -335,7 +338,8 @@ TEST(SetIndexPluginTest, SimpleLoop_4) {
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.indexInfo_, nullopt);
     auto &indexInfo = loopInfo.indexInfo_.value();
-    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot()->getNameAsString(), "pt");
+    ASSERT_NE(indexInfo.indexAddr_->getFromRoot(), nullopt);
+    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot().value()->getNameAsString(), "pt");
     EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::SymbolAddress);
     EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "pt");
     EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
