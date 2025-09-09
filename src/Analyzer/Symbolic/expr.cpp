@@ -374,12 +374,34 @@ std::string UnaryOpExpr::dump() const {
 
 std::string UnknownExpr::dump() const { return "{unknown}"; }
 
+template <class FromVariant>
+static inline void dump_from(std::ostringstream &oss, const FromVariant &from) {
+    std::visit(
+        overloaded{
+            [&](std::monostate) { oss << "none"; },
+            [&](not_null<const clang::VarDecl *> d) {
+                const clang::Decl *decl = d.get();
+                if (auto *nd = llvm::dyn_cast<clang::NamedDecl>(decl))
+                    oss << "decl:" << decl->getDeclKindName() << " "
+                        << nd->getQualifiedNameAsString();
+                else
+                    oss << "decl:" << decl->getDeclKindName();
+            },
+            [&](const not_null<std::unique_ptr<const Address>> &p) {
+                const Address *base = p.get().get();
+                oss << "addr:" << (base ? base->dump() : std::string("<null>"));
+            },
+            [&](const std::pair<not_null<std::shared_ptr<const Structure::Info>>, const size_t> &s) {
+                oss << "field:" << s.first.get()->dump() << "[" << s.second << "]";
+            }},
+        from);
+}
+
 std::string Symbolic::Variable::dump() const {
     std::ostringstream oss;
     const auto &t = getValType();
 
     oss << "Var(" << name_ << "_" << id_ << ", ";
-
     switch (t.kind) {
         case ScalarKind::Int: oss << "int"; break;
         case ScalarKind::UInt: oss << "uint"; break;
@@ -387,8 +409,12 @@ std::string Symbolic::Variable::dump() const {
         case ScalarKind::Void: oss << "void"; break;
         case ScalarKind::Structure: ERROR("Variable's ScalarKind should not be Structure");
     }
-
     oss << t.bitWidth << ")";
+
+    oss << "{from=";
+    dump_from(oss, from_);
+    oss << "}";
+
     return oss.str();
 }
 
@@ -403,26 +429,7 @@ std::string Address::dump() const {
             oss << "[" << off->dump() << "..." << range_.value().len_->dump() << "]";
     }
     oss << "{from=";
-    std::visit(
-        overloaded{
-            [&](std::monostate) { oss << "none"; },
-            [&](not_null<const clang::VarDecl *> d) {
-                if (auto *vd = llvm::dyn_cast<clang::VarDecl>(d.get())) {
-                    oss << "decl:Var " << vd->getNameAsString();
-                } else if (auto *fd = llvm::dyn_cast<clang::FieldDecl>(d.get())) {
-                    oss << "decl:Field " << fd->getNameAsString();
-                } else {
-                    oss << "decl:" << d.get()->getDeclKindName();
-                }
-            },
-            [&](const not_null<std::unique_ptr<const Address>> &p) {
-                const Address *base = p.get().get();
-                oss << "addr:" << (base ? base->dump() : "<null>");
-            },
-            [&](const std::pair<not_null<std::shared_ptr<const Structure::Info>>, const size_t> &s) {
-                oss << "field:" << s.first.get()->dump() << "[" << s.second << "]";
-            }},
-        from_);
+    dump_from(oss, from_);
     oss << "}";
     return oss.str();
 }
@@ -1149,6 +1156,8 @@ bool Structure::Info::equal(const Structure::Info &other) const {
         },
         from_);
 }
+
+bool Structure::Info::operator==(const Info &other) const { return equal(other); }
 
 bool Structure::equal(const SymbolicExpr &expr) const {
     const auto st = dynamic_cast<const Structure *>(&expr);

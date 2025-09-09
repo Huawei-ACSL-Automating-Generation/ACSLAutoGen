@@ -495,6 +495,7 @@ namespace Symbolic {
                                            bool isRightChild                      = false) const;
             bool equal(const Structure::Info &other) const;
             std::size_t hash() const;
+            bool operator==(const Info &other) const;
             std::string dump() const;
             size_t getNumFields() const { return layout_.getFieldCount(); }
             auto getFrom() const -> const auto & { return from_; }

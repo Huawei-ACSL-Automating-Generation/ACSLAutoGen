@@ -9,8 +9,10 @@
 
 using namespace std;
 
+ASTExtractor e;
+
 TEST(GlobalSMTest, testing) {
-    ASTExtractor e("");
+    e.init("");
     GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
     auto &SM       = GlobalSM::getSM();
     auto fileID    = SM.getMainFileID();

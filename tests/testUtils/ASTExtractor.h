@@ -47,12 +47,13 @@ class DeclFinderVisitor : public clang::RecursiveASTVisitor<DeclFinderVisitor<No
 
 class ASTExtractor {
   public:
-    explicit ASTExtractor(const std::string_view code);
-
+    ASTExtractor()                                = default;
     ASTExtractor(const ASTExtractor &)            = delete;
     ASTExtractor &operator=(const ASTExtractor &) = delete;
     ASTExtractor(ASTExtractor &&)                 = default;
     ASTExtractor &operator=(ASTExtractor &&)      = default;
+
+    void init(const std::string_view code);
 
     template <typename NodeType> NodeType *findFirstDecl() {
         auto &Ctx = getASTContext();

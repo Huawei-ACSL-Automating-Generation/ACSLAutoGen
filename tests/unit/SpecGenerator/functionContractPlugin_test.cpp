@@ -15,9 +15,10 @@ using namespace std;
 using namespace llvm;
 
 namespace {
+    ASTExtractor e;
     // This code performs minimal safety checks, so please ensure the validity of the input.
     auto doPluginOnFirstFunc(const string &code, const string &pid) {
-        ASTExtractor e(code);
+        e.init(code);
         GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
         auto func     = e.findFirstDecl<clang::FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));

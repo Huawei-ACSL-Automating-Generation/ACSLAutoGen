@@ -22,11 +22,12 @@ using ::testing::StartsWith;
 using ::testing::StrEq;
 
 namespace {
+    ASTExtractor e;
     // This code performs minimal safety checks, so please ensure the validity of the input.
     std::tuple<std::optional<std::string>, bool, vector<PostInfo>> doPluginOnFirstLoop(
         const string &code,
         const string &pid) {
-        ASTExtractor e(code);
+        e.init(code);
         GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
         auto func     = e.findFirstDecl<clang::FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));

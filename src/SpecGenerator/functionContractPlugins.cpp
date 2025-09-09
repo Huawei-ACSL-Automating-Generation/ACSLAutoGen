@@ -72,12 +72,37 @@ class AssignsPlugin : public FunctionContractPlugin {
                                 get_if<not_null<unique_ptr<const Address>>>(&symbol->getFrom())) {
                             if ((**fromAddr) == addr)
                                 continue;
-                        } else {
+                        } else if (auto symFld = std::get_if<
+                                       std::pair<not_null<std::shared_ptr<const Structure::Info>>,
+                                                 const size_t>>(&symbol->getFrom())) {
+                            // TODO: If this "trace to field origin and compare" logic is needed in
+                            // more places,
+                            //       extract it into a helper function.
+                            const Address *cur = &addr;
+                            for (;;) {
+                                if (auto ap = std::get_if<not_null<std::unique_ptr<const Address>>>(
+                                        &cur->getFrom())) {
+                                    cur = ap->get().get();
+                                } else {
+                                    break;
+                                }
+                            }
+                            if (auto addrFld = std::get_if<std::pair<
+                                    not_null<std::shared_ptr<const Structure::Info>>, const size_t>>(
+                                    &cur->getFrom())) {
+                                const auto &aInfo = *addrFld->first.get();
+                                const auto &sInfo = *symFld->first.get();
+                                if ((aInfo == sInfo) && addrFld->second == symFld->second) {
+                                    continue;
+                                }
+                            }
+                        } else
                             TODO();
-                        }
                     }
                     if (isExisted(addr))
                         continue;
+                    INFO(addr.dump());
+                    INFO(value->dump());
 
                     assignedAddrs.push_back(&addr);
                 }
@@ -85,7 +110,7 @@ class AssignsPlugin : public FunctionContractPlugin {
         }
 
         for (auto &addr : assignedAddrs) {
-            spec += "*" + addr->regularForm() + ", ";
+            spec += addr->regularFormOfValue() + ", ";
         }
 
         if (spec.empty())

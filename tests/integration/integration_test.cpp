@@ -23,9 +23,10 @@ using ::testing::StartsWith;
 using ::testing::StrEq;
 
 namespace {
+    ASTExtractor e;
     // This code performs minimal safety checks, so please ensure the validity of the input.
     not_null<unique_ptr<ProgramState>> symbolicExecutionOnFirstFunc(const string_view code) {
-        ASTExtractor e(code);
+        e.init(code);
         GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
         auto func          = e.findFirstDecl<clang::FunctionDecl>();
         auto symbolicState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
@@ -39,7 +40,7 @@ namespace {
     }
 
     void doAll(const string_view code) {
-        ASTExtractor e(code);
+        e.init(code);
         GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
 
         ACSLContext acslContext(e.getASTContext());
@@ -61,7 +62,7 @@ namespace {
     }
 
     not_null<unique_ptr<ProgramState>> getPostStateOfFirstLoop(const string_view code) {
-        ASTExtractor e(code);
+        e.init(code);
         GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
         auto func          = e.findFirstDecl<clang::FunctionDecl>();
         auto symbolicState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
