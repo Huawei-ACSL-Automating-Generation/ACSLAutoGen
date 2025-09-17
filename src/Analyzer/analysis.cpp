@@ -52,7 +52,7 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
 
         bool hasPointer = false, hasLoop = false;
         for (auto &&[_, value] : preState->getPaths()[0]->getMemoryState().flat()) {
-            if (value->getType() == SymbolicExpr::ExprType::SymbolAddress)
+            if (value->getType() == SymbolicExpr::ExprType::Address)
                 hasPointer = true;
         }
         for (auto stmt : dyn_cast<CompoundStmt>(Body)->children()) {

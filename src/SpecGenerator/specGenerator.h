@@ -30,14 +30,14 @@ struct LoopInfo {
     struct Pattern {
         not_null<std::unique_ptr<const Symbolic::SymbolicExpr>> initialValue_;
         int64_t step_;
-        Pattern(std::unique_ptr<const Symbolic::SymbolicExpr> initialValue, int64_t step)
+        Pattern(not_null<std::unique_ptr<const Symbolic::SymbolicExpr>> initialValue, int64_t step)
             : initialValue_(std::move(initialValue)), step_(step) {}
         Pattern(const Pattern &other)
-            : initialValue_(other.initialValue_->clone()), step_(other.step_) {}
+            : initialValue_(other.initialValue_->clone().into_underlying()), step_(other.step_) {}
         Pattern &operator=(const Pattern &other) {
             if (this == &other)
                 return *this;
-            initialValue_ = other.initialValue_->clone();
+            initialValue_ = other.initialValue_->clone().into_underlying();
             step_         = other.step_;
             return *this;
         }
@@ -45,7 +45,10 @@ struct LoopInfo {
         Pattern &operator=(Pattern &&other) = default;
         string dump() const {
             ostringstream oss;
-            oss << "initialValue_: " << initialValue_->regularForm() << "\n";
+            oss << "initialValue_: "
+                << (initialValue_->regularForm() ? initialValue_->regularForm().value()
+                                                 : initialValue_->dump())
+                << "\n";
             oss << "step_: " << to_string(step_) << "\n";
             return oss.str();
         }
@@ -74,8 +77,7 @@ struct LoopInfo {
     // Address with nullopt means too complex.
     // Other addresses' values hold through loop.
     struct PatternInfo {
-        std::unordered_map<Symbolic::Address, std::optional<const Pattern>, Symbolic::AddressHash>
-            patternsMap_;
+        Symbolic::AddressBoxMap<std::optional<const Pattern>> patternsMap_;
     };
     optional<PatternInfo> patternInfo_;
 
@@ -151,7 +153,7 @@ class LoopInfoPlugin : public ACSLPlugin {
 };
 
 struct PostInfo {
-    std::unordered_map<Address, not_null<std::unique_ptr<SymbolicExpr>>, AddressHash> memoryMap_;
+    Symbolic::AddressBoxMap<not_null<std::unique_ptr<SymbolicExpr>>> memoryMap_;
     vector<not_null<unique_ptr<SymbolicExpr>>> pathConds_;
 };
 class LoopInvariantPlugin : public ACSLPlugin {

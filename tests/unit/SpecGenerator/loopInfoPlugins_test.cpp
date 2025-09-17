@@ -9,7 +9,6 @@
 #include "SpecGenerator/specGenerator.h"
 #include "Analyzer/function.h"
 #include "Analyzer/state.h"
-#include "globalSM.h"
 
 using namespace std;
 using namespace llvm;
@@ -23,8 +22,7 @@ namespace {
     // This code performs minimal safety checks, so please ensure the validity of the input.
     auto doPluginOnFirstLoop(string_view code, const vector<string> pids) {
         e.init(code);
-        GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
-        auto func     = e.findFirstDecl<clang::FunctionDecl>();
+        auto func = e.findFirstDecl<clang::FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
         clang::Stmt *loopStmt;
         preState->init();
@@ -99,7 +97,7 @@ TEST(SetPatternsPluginTest, SimpleLoop_1) {
     auto &patternInfo = loopInfo.patternInfo_.value();
     EXPECT_EQ(patternInfo.patternsMap_.size(), 2);
     for (auto &[addr, pattern] : patternInfo.patternsMap_) {
-        DEBUG(addr.dump());
+        DEBUG(addr.get().dump());
         if (pattern != nullopt) {
             DEBUG(pattern.value().initialValue_->dump() +
                   ", step: " + to_string(pattern.value().step_));
@@ -127,7 +125,7 @@ TEST(SetPatternsPluginTest, SimpleLoop_2) {
     auto &patternInfo = loopInfo.patternInfo_.value();
     EXPECT_EQ(patternInfo.patternsMap_.size(), 2);
     for (auto &[addr, pattern] : patternInfo.patternsMap_) {
-        DEBUG(addr.dump());
+        DEBUG(addr.get().dump());
         if (pattern != nullopt) {
             DEBUG(pattern.value().initialValue_->dump() +
                   ", step: " + to_string(pattern.value().step_));
@@ -156,14 +154,15 @@ TEST(SetPatternsPluginTest, SimpleLoop_3) {
     auto &patternInfo = loopInfo.patternInfo_.value();
     EXPECT_EQ(patternInfo.patternsMap_.size(), 3);
     for (auto &[addr, pattern] : patternInfo.patternsMap_) {
-        DEBUG(addr.dump());
+        DEBUG(addr.get().dump());
         if (pattern != nullopt) {
             DEBUG(pattern.value().initialValue_->dump() +
                   ", step: " + to_string(pattern.value().step_));
             EXPECT_EQ(pattern.value().step_, 1);
         } else {
             DEBUG("too complex");
-            EXPECT_EQ(addr.isOffseted(), true);
+            if (addr.get().getAddressType() != Address::AddressType::SymbolAddr)
+                FAIL();
         }
     }
 }
@@ -184,10 +183,10 @@ TEST(SetPatternsPluginTest, SimpleLoop_4) {
     auto &patternInfo = loopInfo.patternInfo_.value();
     EXPECT_EQ(patternInfo.patternsMap_.size(), 2);
     for (auto &[addr, pattern] : patternInfo.patternsMap_) {
-        DEBUG(addr.dump());
+        DEBUG(addr.get().dump());
         DEBUG(pattern.value().initialValue_->dump() +
               ", step: " + to_string(pattern.value().step_));
-        if (addr.isOffseted())
+        if (addr.get().getAddressType() == Address::AddressType::SymbolAddr)
             EXPECT_EQ(pattern.value().step_, -1);
         else
             EXPECT_EQ(pattern.value().step_, 1);
@@ -232,25 +231,28 @@ TEST(SetPatternsPluginTest, openHiTLS_4) {
     auto &patternInfo = loopInfo.patternInfo_.value();
     EXPECT_EQ(patternInfo.patternsMap_.size(), 6);
     for (auto &[addr, pattern] : patternInfo.patternsMap_) {
-        auto addrStr = addr.regularFormOfValue();
-        if (addrStr == "aa") {
+        auto addrStr = addr.get().regularFormOfValue();
+        if (addrStr == nullopt)
+            FAIL() << "address {" + addr.get().dump() << "} has no regular form.";
+        if (addrStr.value() == "aa") {
             ASSERT_NE(pattern, nullopt);
             EXPECT_EQ(pattern.value().step_, 1);
-        } else if (addrStr == "bb") {
+        } else if (addrStr.value() == "bb") {
             ASSERT_NE(pattern, nullopt);
             EXPECT_EQ(pattern.value().step_, 1);
-        } else if (addrStr == "rr") {
+        } else if (addrStr.value() == "rr") {
             ASSERT_NE(pattern, nullopt);
             EXPECT_EQ(pattern.value().step_, 1);
-        } else if (addrStr == "nn") {
+        } else if (addrStr.value() == "nn") {
             ASSERT_NE(pattern, nullopt);
             EXPECT_EQ(pattern.value().step_, -1);
-        } else if (addrStr == "*(rr)" || addrStr == "rr[0]") {
+        } else if (addrStr.value() == "*(rr)" || addrStr == "rr[0]") {
             EXPECT_EQ(pattern, nullopt);
-        } else if (addrStr == "carry") {
+        } else if (addrStr.value() == "carry") {
             EXPECT_EQ(pattern, nullopt);
         } else {
-            FAIL() << addrStr << ": " << (pattern == nullopt ? "nullopt" : pattern.value().dump());
+            FAIL() << addrStr.value() << ": "
+                   << (pattern == nullopt ? "nullopt" : pattern.value().dump());
         }
     }
 }
@@ -341,7 +343,7 @@ TEST(SetIndexPluginTest, SimpleLoop_4) {
     auto &indexInfo = loopInfo.indexInfo_.value();
     ASSERT_NE(indexInfo.indexAddr_->getFromRoot(), nullopt);
     EXPECT_EQ(indexInfo.indexAddr_->getFromRoot().value()->getNameAsString(), "pt");
-    EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::SymbolAddress);
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Address);
     EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "pt");
     EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
     EXPECT_EQ(indexInfo.indexBound_->regularForm(), "end");

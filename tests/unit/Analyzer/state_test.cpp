@@ -18,7 +18,11 @@ class TestPath : public Path {
   public:
     // MOCK_NONVIRTUAL_METHOD(
     //     std::unique_ptr<SymbolicExpr>, evalExpr, (const clang::Expr *), (), TestPath);
-    MOCK_NONVIRTUAL_METHOD(LValueTarget, extractLValue, (const clang::Expr *), (), TestPath);
+    MOCK_NONVIRTUAL_METHOD(not_null<unique_ptr<Address>>,
+                           extractLValue,
+                           (const clang::Expr *),
+                           (),
+                           TestPath);
 };
 
 // TEST(PathTest, IsUnchangedState) {
@@ -249,26 +253,30 @@ TEST(PathTest, Clone)
 }
     */
 namespace {
-    Symbolic::Address makeBaseAddr(unsigned int id) {
+    Symbolic::VariableAddress makeBaseAddr(unsigned int id) {
         // No offset and no length. Use id as a VarDecl* to make sure every made addresses can be
         // distinguished by id.
-        return Symbolic::Address{id, (clang::VarDecl *)((uint64_t)id)};
+        return Symbolic::VariableAddress{(clang::VarDecl *)((uint64_t)id)};
     }
 
-    Symbolic::Address makeRangeAddr(unsigned int id,
-                                    unique_ptr<const SymbolicExpr> offset,
-                                    unique_ptr<const SymbolicExpr> len) {
-        return Symbolic::Address{id, (clang::VarDecl *)((uint64_t)id), std::move(offset),
-                                 std::move(len)};
+    Symbolic::SymbolAddress makeRangeAddr(unsigned int id,
+                                          unique_ptr<const SymbolicExpr> offset,
+                                          unique_ptr<const SymbolicExpr> len) {
+        auto baseAddr = makeBaseAddr(id);
+        if (len != nullptr)
+            return Symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(),
+                                           std::move(offset), std::move(len)};
+        return Symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(), std::move(offset),
+                                       nullopt};
     }
 
     unique_ptr<Symbolic::Variable> makeVariable(unsigned int id) {
         return std::make_unique<Symbolic::Variable>(
-            to_string(id), SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, id}, id,
-            make_unique<Address>(id, (clang::VarDecl *)((uint64_t)id)));
+            SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, id},
+            make_unique<VariableAddress>((clang::VarDecl *)((uint64_t)id)));
     }
 
-    Symbolic::Address makePointAddr(unsigned int id, std::uint64_t off) {
+    Symbolic::SymbolAddress makePointAddr(unsigned int id, std::uint64_t off) {
         return makeRangeAddr(id, std::make_unique<LiteralExpr>(static_cast<std::uint64_t>(off)),
                              nullptr);
     }
@@ -289,28 +297,7 @@ namespace {
     }
 }; // namespace
 
-TEST(MemoryModelTest, SizeAndClear) {
-    MemoryModel mm;
-    EXPECT_EQ(mm.size(), 0u);
-
-    auto a  = makeBaseAddr(1);
-    auto e1 = makeVariable(1);
-    mm.write(a, std::move(e1));
-    EXPECT_EQ(mm.size(), 1u);
-
-    auto b  = makeBaseAddr(2);
-    auto e2 = makeVariable(2);
-    mm.write(b, std::move(e2));
-    EXPECT_EQ(mm.size(), 2u);
-
-    mm.clear();
-    EXPECT_EQ(mm.size(), 0u);
-
-    EXPECT_EQ(mm.read(a), nullopt);
-    EXPECT_EQ(mm.read(b), nullopt);
-}
-
-TEST(MemoryModelTest, ReadAfterWrite_NoOffset) {
+TEST(MemoryModelTest, ReadAfterWrite_VarAddr) {
     MemoryModel mm;
 
     auto addr     = makeBaseAddr(1);

@@ -161,9 +161,9 @@ class TransitionRelation {
     const string &getName() const;
 
     const string &getPreLocName() const;
-    const int get_preloc_index() const { return getLocIndex(getPreLocName()); }
+    int get_preloc_index() const { return getLocIndex(getPreLocName()); }
     const string &getPostLocName() const;
-    const int get_postloc_index() const { return getLocIndex(getPostLocName()); }
+    int get_postloc_index() const { return getLocIndex(getPostLocName()); }
 
     // add a pre-assigned invariant (i.e. Location::preInv) that used to
     // strengthen transitions

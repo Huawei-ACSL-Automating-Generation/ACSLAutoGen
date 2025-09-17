@@ -37,8 +37,8 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
         if (loopInfo.indexInfo_) {
             auto &indexInfo = loopInfo.indexInfo_.value();
             INFO("`loopEntryInfo_` is set.");
-            INFO("`indexAddr_`: " + indexInfo.indexAddr_->regularForm());
-            INFO("`indexSymbolicValue_`: " + indexInfo.indexSymbolicValue_->regularForm());
+            INFO("`indexAddr_`: " + indexInfo.indexAddr_->dump());
+            INFO("`indexSymbolicValue_`: " + indexInfo.indexSymbolicValue_->dump());
             string opStr;
             switch (indexInfo.op_) {
 #define BINARY_OPERATION(Name, Spelling)                                                           \
@@ -47,8 +47,8 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
                 default: UNREACHABLE();
             }
             INFO("`op_`: " + opStr);
-            INFO("`indexBound_`: " + indexInfo.indexBound_->regularForm());
-            INFO("`loopCount_`: " + indexInfo.loopCount_->regularForm());
+            INFO("`indexBound_`: " + indexInfo.indexBound_->dump());
+            INFO("`loopCount_`: " + indexInfo.loopCount_->dump());
             INFO("`indexPattern_`: " + indexInfo.indexPattern_.dump());
         } else {
             INFO("indexInfo_ isn't set.");
@@ -58,7 +58,7 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
             auto &patternInfo = loopInfo.patternInfo_.value();
             INFO("patternInfo_ is set.");
             for (auto &[addr, pattern] : patternInfo.patternsMap_) {
-                INFO("address: " + addr.regularForm());
+                INFO("address: " + addr.get().dump());
                 if (pattern)
                     INFO("pattern: " + pattern.value().dump());
                 else
@@ -99,8 +99,7 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
             ERROR("SymbolicLoopEntry_ has something wrong, check the SetLoopEntryPlugin?");
         }
 
-        using mem_map_vector =
-            vector<unordered_map<Address, unique_ptr<SymbolicExpr>, AddressHash>>;
+        using mem_map_vector = vector<AddressBoxMap<unique_ptr<SymbolicExpr>>>;
 
         unique_ptr<SymbolicExpr> loopCond;
         auto lhs = indexInfo.indexSymbolicValue_->clone();
@@ -226,7 +225,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         auto &entryMS = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->getMemoryState();
 
         string spec;
-        vector<Address> assignedAddrs;
+        vector<AddressBox> assignedAddrs;
         vector<PostInfo> postInfo;
 
         // This plugin does not produce branches.
@@ -243,19 +242,18 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
             return false;
         }; // isLocal end
 
-        auto tryGetAsRange = [&](const Address &addr) -> optional<Address> {
-            if (!addr.isOffseted())
+        auto tryGetAsRange = [&](const Address &addr) -> optional<SymbolAddress> {
+            if (addr.getAddressType() != Address::AddressType::SymbolAddr)
                 return nullopt;
-            auto &from = addr.getFrom();
+            auto symbolAddr = dynamic_cast<const SymbolAddress &>(addr);
+            auto from       = symbolAddr.getFrom();
             // If the base address itself is x-step, then there is no need to check the
             // offset (or to check it for reliability).
             if (auto range = std::visit(
-                    [&](auto &&arg) -> optional<Address> {
+                    [&](auto &&arg) -> optional<SymbolAddress> {
                         using T = std::decay_t<decltype(arg)>;
                         if constexpr (std::is_same_v<T, std::monostate>) {
                             ERROR("Invalid state");
-                        } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
-                            ERROR("Invalid state.");
                         } else if constexpr (std::is_same_v<
                                                  T, not_null<std::unique_ptr<const Address>>>) {
                             if (auto it = patternInfo.patternsMap_.find(*arg);
@@ -265,39 +263,44 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                                     TODO();
                                 if (pattern.value().step_ != 1)
                                     TODO();
-                                auto result = addr;
-                                result.setOffset(make_unique<LiteralExpr>(Address::ZERO_OFFSET));
+                                auto result = symbolAddr;
+                                result.setOffset(
+                                    make_unique<LiteralExpr>(SymbolAddress::ZERO_OFFSET));
                                 result.setLength(indexInfo.loopCount_->simplifiedExpr());
                                 return result;
                             }
-                        } else if constexpr (std::is_same_v<
-                                                 T, std::pair<
-                                                        not_null<shared_ptr<const Structure::Info>>,
-                                                        const size_t>>) {
-                            TODO();
                         }
                         return nullopt;
                     },
                     from))
                 return range;
-            auto offset = addr.getOffset();
+            auto offset = symbolAddr.getOffset();
             // Is offset x-step?
             if (auto var = dynamic_cast<const Symbolic::Variable *>(offset.get())) {
-                if (auto fromAddr =
-                        std::get_if<not_null<std::unique_ptr<const Address>>>(&var->getFrom())) {
-                    if (auto it = patternInfo.patternsMap_.find(**fromAddr);
-                        it != patternInfo.patternsMap_.end()) {
-                        auto &pattern = it->second;
-                        if (pattern == nullopt)
+                return std::visit(
+                    [&](auto &&arg) -> optional<SymbolAddress> {
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, std::monostate>) {
                             TODO();
-                        if (pattern.value().step_ != 1)
-                            TODO();
-                        auto result = addr;
-                        result.setOffset(pattern.value().initialValue_->clone());
-                        result.setLength(indexInfo.loopCount_->simplifiedExpr());
-                        return result;
-                    }
-                }
+                        } else if constexpr (std::is_same_v<
+                                                 T, not_null<std::unique_ptr<const Address>>>) {
+                            if (auto it = patternInfo.patternsMap_.find(*arg);
+                                it != patternInfo.patternsMap_.end()) {
+                                auto &pattern = it->second;
+                                if (pattern == nullopt)
+                                    TODO();
+                                if (pattern.value().step_ != 1)
+                                    TODO();
+                                auto result = symbolAddr;
+                                result.setOffset(pattern.value().initialValue_->clone());
+                                result.setLength(indexInfo.loopCount_->simplifiedExpr());
+                                return result;
+                            } else {
+                                TODO();
+                            }
+                        }
+                    },
+                    var->getFrom());
             }
             return nullopt;
         }; // tryGetAsRange end
@@ -308,18 +311,20 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                 continue;
             if (auto range = tryGetAsRange(addr)) {
                 if (pattern) {
-                    auto [_, ok] = memoryMap.emplace(range.value(), UnknownExpr::makeUnknown());
+                    auto [_, ok] = memoryMap.emplace(range.value(),
+                                                     UnknownExpr::makeUnknown().into_underlying());
                     // todo
                     // make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(), Add,
                     //                           make_unique<LiteralExpr>(pattern.value().step_)));
                     if (!ok)
                         UNREACHABLE();
                 } else {
-                    auto [_, ok] = memoryMap.emplace(range.value(), UnknownExpr::makeUnknown());
+                    auto [_, ok] = memoryMap.emplace(range.value(),
+                                                     UnknownExpr::makeUnknown().into_underlying());
                     if (!ok)
                         UNREACHABLE();
                 }
-                assignedAddrs.push_back(std::move(range.value()));
+                assignedAddrs.emplace_back(std::move(range.value()));
             } else {
                 if (pattern) {
                     auto [_, ok] = memoryMap.emplace(
@@ -331,7 +336,8 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                     if (!ok)
                         UNREACHABLE();
                 } else {
-                    auto [_, ok] = memoryMap.emplace(addr, UnknownExpr::makeUnknown());
+                    auto [_, ok] =
+                        memoryMap.emplace(addr, UnknownExpr::makeUnknown().into_underlying());
                     if (!ok)
                         UNREACHABLE();
                 }
@@ -340,8 +346,12 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         }
 
         for (auto &addr : assignedAddrs) {
-            auto valueForm = addr.regularFormOfValue();
-            spec += valueForm + ", ";
+            auto valueForm = addr.get().regularFormOfValue();
+            if (valueForm == nullopt) {
+                WARN("Value of {" + addr.get().dump() + "} has not regular form");
+                continue;
+            }
+            spec += valueForm.value() + ", ";
         }
 
         if (spec.empty())
@@ -397,7 +407,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
 
         string spec;
 
-        // Hook that deals with every if.
+        // Hook which deals with every if.
         auto ifVisitor = StmtVisitor{[&](const clang::IfStmt *s) {
             if (s == nullptr)
                 return;
@@ -411,17 +421,15 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
             param_n     = indexInfo.indexBound_->regularForm();
 
             using enum SymbolicExpr::ExprType;
-            if (indexInfo.indexBound_->getType() == Variable) {
-                param_n = indexInfo.indexBound_->regularForm();
-            }
 
-            auto getAddress = [&](const clang::Expr *expr) -> unique_ptr<Address> {
+            auto getAddress =
+                [&](const clang::Expr *expr) -> optional<not_null<unique_ptr<Symbolic::Address>>> {
                 if (expr == nullptr)
-                    return nullptr;
+                    return nullopt;
                 try {
                     // May pass some strange expr to extractAddress.
-                    return loopEntryInfo.symbolicLoopEntry_->getPaths()[0]->extractAddress(expr);
-                } catch (...) { return nullptr; }
+                    return loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->extractLValue(expr);
+                } catch (...) { return nullopt; }
             }; // getAddress end
 
             // Is expr 'p[i]', *(p+i) or *it where it == p+i?
@@ -434,11 +442,16 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                     // p[i]
                     auto idxAddr = getAddress(arraySub->getIdx());
                     // Is 'i' loop's index?
-                    if (idxAddr == nullptr || *idxAddr != *indexInfo.indexAddr_)
+                    if (idxAddr == nullopt || *idxAddr.value() != *indexInfo.indexAddr_)
                         return false;
 
                     if (auto addr = getAddress(arraySub->getBase())) {
-                        param_array = addr->regularFormOfValue();
+                        auto baseStr = addr.value()->regularFormOfValue();
+                        if (baseStr == nullopt) {
+                            WARN("Value of {" + addr.value()->dump() + "} has no regular form");
+                            return false;
+                        }
+                        param_array = baseStr.value();
                         return true;
                     } else
                         return false;
@@ -452,10 +465,15 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
 
                         // Is 'i' loop's index?
                         if (auto rhsAddr = getAddress(bin->getRHS());
-                            rhsAddr == nullptr || *rhsAddr != *indexInfo.indexAddr_)
+                            rhsAddr == nullopt || *rhsAddr.value() != *indexInfo.indexAddr_)
                             return false;
                         if (auto addr = getAddress(bin->getLHS())) {
-                            param_array = addr->regularFormOfValue();
+                            auto baseStr = addr.value()->regularFormOfValue();
+                            if (baseStr == nullopt) {
+                                WARN("Value of {" + addr.value()->dump() + "} has no regular form");
+                                return false;
+                            }
+                            param_array = baseStr.value();
                             return true;
                         } else {
                             return false;
@@ -466,14 +484,19 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                         // *it
 
                         auto addr = getAddress(declRef);
-                        if (addr == nullptr)
+                        if (addr == nullopt)
                             return false;
                         // Does this variable step same as loop?
-                        if (auto it = patternInfo.patternsMap_.find(*addr);
+                        if (auto it = patternInfo.patternsMap_.find(*addr.value());
                             it == patternInfo.patternsMap_.end() || it->second == nullopt ||
                             (*it->second).step_ != indexStep)
                             return false;
-                        param_array = addr->regularFormOfValue();
+                        auto baseStr = addr.value()->regularFormOfValue();
+                        if (baseStr == nullopt) {
+                            WARN("Value of {" + addr.value()->dump() + "} has no regular form");
+                            return false;
+                        }
+                        param_array = baseStr.value();
                         return true;
                     }
                 } else {
@@ -560,7 +583,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
 
             if (specTemplate == nullopt || param_n == nullopt || param_array == nullopt ||
                 param_index == nullopt || param_m == nullopt)
-                return;
+                UNREACHABLE();
 
             // Verify 'then' of if.
             if (auto thenStmt = s->getThen()) {
@@ -577,12 +600,20 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                     }
 
                     if (auto elementAddr = getAddress(elementExpr)) {
-                        if (auto maxVarFrom =
-                                get_if<not_null<unique_ptr<const Address>>>(&maxVar->getFrom())) {
-                            if (**maxVarFrom != *elementAddr)
-                                return;
-                        } else
-                            TODO();
+                        if (!std::visit(
+                                [&](auto &&arg) -> bool {
+                                    using T = std::decay_t<decltype(arg)>;
+                                    if constexpr (std::is_same_v<T, std::monostate>) {
+                                        TODO();
+                                    } else if constexpr (std::is_same_v<
+                                                             T, not_null<std::unique_ptr<
+                                                                    const Symbolic::Address>>>) {
+                                        return *arg == *elementAddr.value();
+                                    }
+                                },
+                                maxVar->getFrom())) {
+                            return;
+                        }
                     } else {
                         return;
                     }
@@ -659,7 +690,12 @@ class LoopVariantPlugin : public LoopInvariantPlugin {
             var = make_unique<BinaryOpExpr>(indexInfo.indexBound_->clone(), Subtract,
                                             indexInfo.indexSymbolicValue_->clone());
 
-        auto spec = "loop variant " + var->simplifiedExpr()->regularForm() + ";";
+        auto regForm = var->simplifiedExpr()->regularForm();
+        if (regForm == nullopt) {
+            WARN("Variant {" + var->simplifiedExpr()->dump() + "} has no regular form.");
+            return make_tuple(nullopt, true, vector<PostInfo>{});
+        }
+        auto spec = "loop variant " + regForm.value() + ";";
         return make_tuple(std::move(spec), true, vector<PostInfo>{});
     }
 

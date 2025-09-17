@@ -127,7 +127,10 @@ optional<Parma_Polyhedra_Library::Linear_Expression> Symbolic::Variable::toLinea
     Linear_Expression e(0);
 
     if (auto fromAddr = get_if<not_null<std::unique_ptr<const Address>>>(&from_)) {
-        if (auto fromDecl = get_if<not_null<const clang::VarDecl *>>(&(*fromAddr)->getFrom())) {
+        if ((*fromAddr)->getAddressType() != Address::AddressType::VariableAddr)
+            return nullopt;
+        auto varAddr = dynamic_cast<const VariableAddress &>(**fromAddr);
+        if (auto fromDecl = get_if<not_null<const clang::VarDecl *>>(&varAddr.getFrom())) {
             auto it = varIndexMap.find((*fromDecl)->getNameAsString());
             if (it == varIndexMap.end()) {
                 ERROR("Variable '" + (*fromDecl)->getNameAsString() + "' not found in index map.");
@@ -139,7 +142,8 @@ optional<Parma_Polyhedra_Library::Linear_Expression> Symbolic::Variable::toLinea
     return nullopt;
 }
 
-Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr() const {
+Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr(
+    const unordered_map<size_t, size_t> &) const {
     switch (type_) {
         case LiteralType::Boolean:
             return Parma_Polyhedra_Library::Linear_Expression(data_.boolValue ? 1 : 0);
@@ -160,9 +164,10 @@ Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr() const {
     }
 }
 
-Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr() const {
-    auto L = left_->toLinearExpr();
-    auto R = right_->toLinearExpr();
+Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr(
+    const unordered_map<size_t, size_t> &hashIdMap) const {
+    auto L = left_->toLinearExpr(hashIdMap);
+    auto R = right_->toLinearExpr(hashIdMap);
 
     switch (op_) {
         case Operator::Add: return L + R;
@@ -195,7 +200,7 @@ Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr() const {
     ERROR("non-affine or unsupported op");
 }
 
-optional<Parma_Polyhedra_Library::Linear_Expression> Symbolic::Address::toLinearExpr(
+optional<Parma_Polyhedra_Library::Linear_Expression> Symbolic::SymbolAddress::toLinearExpr(
     const std::unordered_map<std::string, size_t> &varIndexMap) const {
     if (range_ != nullopt)
         ERROR("Address range is solely for address representation and should not be "
@@ -210,14 +215,16 @@ optional<Parma_Polyhedra_Library::Linear_Expression> Symbolic::Address::toLinear
         ERROR("Failed to retrieve the original varDecl.");
     auto it = varIndexMap.find(varDecl.value()->getNameAsString());
     if (it == varIndexMap.end()) {
-        ERROR("Address '" + regularForm() + "' not found in index map.");
+        auto regFrom = regularForm();
+        ERROR("Address '" + (regFrom ? regFrom.value() : dump()) + "' not found in index map.");
     }
     e += Parma_Polyhedra_Library::Variable(it->second);
     return e;
 }
 
-Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr() const {
-    auto E = expr_->toLinearExpr();
+Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr(
+    const unordered_map<size_t, size_t> &hashIdMap) const {
+    auto E = expr_->toLinearExpr(hashIdMap);
 
     switch (op_) {
         case Operator::Plus: return E;
@@ -228,21 +235,33 @@ Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr() const {
     ERROR("non-affine or unsupported op");
 }
 
-Parma_Polyhedra_Library::Linear_Expression Symbolic::Variable::toLinearExpr() const {
+Parma_Polyhedra_Library::Linear_Expression Symbolic::Variable::toLinearExpr(
+    const unordered_map<size_t, size_t> &hashIdMap) const {
     Parma_Polyhedra_Library::Linear_Expression e(0);
-    auto var = Parma_Polyhedra_Library::Variable(id_);
-    e += var;
-    return e;
+    if (auto it = hashIdMap.find(hash()); it != hashIdMap.end()) {
+        auto id  = it->second;
+        auto var = Parma_Polyhedra_Library::Variable(id);
+        e += var;
+        return e;
+    } else {
+        ERROR("Hash of Variable: {" + dump() + "} can't be found.");
+    }
 }
 
-Parma_Polyhedra_Library::Linear_Expression Symbolic::Address::toLinearExpr() const {
+Parma_Polyhedra_Library::Linear_Expression Symbolic::SymbolAddress::toLinearExpr(
+    const unordered_map<size_t, size_t> &hashIdMap) const {
     if (range_ != nullopt)
         ERROR("Address range is solely for address representation and should not be "
               "used as an expression.");
     Parma_Polyhedra_Library::Linear_Expression e(0);
-    auto var = Parma_Polyhedra_Library::Variable(id_);
-    e += var;
-    return e;
+    if (auto it = hashIdMap.find(hash()); it != hashIdMap.end()) {
+        auto id  = it->second;
+        auto var = Parma_Polyhedra_Library::Variable(id);
+        e += var;
+        return e;
+    } else {
+        ERROR("Hash of Variable: {" + dump() + "} can't be found.");
+    }
 }
 
 Parma_Polyhedra_Library::Constraint primedConstriant(const Parma_Polyhedra_Library::Constraint &c,
@@ -536,12 +555,12 @@ optional<string> buildInvs(const C_Polyhedron &poly, const VarManager &vm) {
     return spec;
 }
 
-pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash>, vector<not_null<unique_ptr<SymbolicExpr>>>> buildPostState(
+pair<AddressBoxMap<not_null<unique_ptr<SymbolicExpr>>>, vector<not_null<unique_ptr<SymbolicExpr>>>> buildPostState(
     const C_Polyhedron &poly,
     const Path &initPath,
     const VarManager &vm) {
     using namespace Parma_Polyhedra_Library;
-    using R   = pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash>,
+    using R   = pair<AddressBoxMap<not_null<unique_ptr<SymbolicExpr>>>,
                      vector<not_null<unique_ptr<SymbolicExpr>>>>;
     auto n    = vm.numVars;
     auto half = n / 2;
@@ -623,14 +642,12 @@ pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash
         }
     }
 
-    std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash> newVars;
+    AddressBoxMap<not_null<unique_ptr<SymbolicExpr>>> newVars;
     vector<not_null<unique_ptr<SymbolicExpr>>> conds;
 
     for (size_t i = 0; i < half; ++i) {
         auto varDecl = vm.varDecls.at(i);
         auto &addr   = initPath.getVarAddr().at(varDecl);
-        if (addr == nullptr)
-            UNREACHABLE();
         if (resolvedExprs.contains(i)) {
             auto [_, ok] = newVars.emplace(*addr, resolvedExprs.at(i)->clone());
             if (!ok)
@@ -639,8 +656,8 @@ pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash
     }
 
     for (auto &constraint : cs) {
-        std::unique_ptr<SymbolicExpr> lhs = nullptr;
-        auto maxIdx                       = constraint.space_dimension();
+        optional<not_null<std::unique_ptr<SymbolicExpr>>> lhs{};
+        auto maxIdx = constraint.space_dimension();
         for (size_t i = 0; i < maxIdx; ++i) {
             Coefficient c = constraint.coefficient(Parma_Polyhedra_Library::Variable(i));
             if (c == 0)
@@ -665,8 +682,8 @@ pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash
             if (!lhs) {
                 lhs = std::move(term);
             } else {
-                lhs = std::make_unique<BinaryOpExpr>(std::move(lhs), BinaryOpExpr::Operator::Add,
-                                                     std::move(term));
+                lhs = std::make_unique<BinaryOpExpr>(std::move(lhs.value()),
+                                                     BinaryOpExpr::Operator::Add, std::move(term));
             }
         }
 
@@ -675,8 +692,9 @@ pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash
 
         Coefficient c0 = constraint.inhomogeneous_term();
         if (c0 != 0) {
-            lhs = std::make_unique<BinaryOpExpr>(std::move(lhs), BinaryOpExpr::Operator::Add,
-                                                 std::make_unique<LiteralExpr>(c0.get_si()));
+            lhs =
+                std::make_unique<BinaryOpExpr>(std::move(lhs.value()), BinaryOpExpr::Operator::Add,
+                                               std::make_unique<LiteralExpr>(c0.get_si()));
         }
 
         BinaryOpExpr::Operator op;
@@ -690,8 +708,8 @@ pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash
             continue;
         }
 
-        auto cond =
-            std::make_unique<BinaryOpExpr>(std::move(lhs), op, std::make_unique<LiteralExpr>(0));
+        auto cond = std::make_unique<BinaryOpExpr>(std::move(lhs.value()), op,
+                                                   std::make_unique<LiteralExpr>(0));
 
         conds.push_back(std::move(cond));
     }
@@ -902,7 +920,7 @@ Parma_Polyhedra_Library::C_Polyhedron buildPathPoly(const Path &path,
     std::unordered_set<std::string> assignedVars;
 
     for (const auto &[varDecl, addrPtr] : varAddrMap) {
-        if (!varDecl || !addrPtr)
+        if (!varDecl)
             UNREACHABLE();
         std::string varName = varDecl->getNameAsString();
 

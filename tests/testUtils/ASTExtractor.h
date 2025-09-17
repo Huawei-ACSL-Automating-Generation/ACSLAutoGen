@@ -53,7 +53,7 @@ class ASTExtractor {
     ASTExtractor(ASTExtractor &&)                 = default;
     ASTExtractor &operator=(ASTExtractor &&)      = default;
 
-    void init(const std::string_view code);
+    void init(std::string_view code);
 
     template <typename NodeType> NodeType *findFirstDecl() {
         auto &Ctx = getASTContext();

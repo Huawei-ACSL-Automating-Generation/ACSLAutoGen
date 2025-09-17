@@ -109,37 +109,13 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
             case Literal: return;
             case Variable: {
                 auto var = dynamic_cast<const Symbolic::Variable *>(expr.get().get());
-                if (var == nullptr)
-                    UNREACHABLE();
-                if (auto addrPtr =
-                        get_if<not_null<std::unique_ptr<const Address>>>(&var->getFrom())) {
-                    auto &addr = **addrPtr;
-                    if (auto value = mem.read(addr)) {
-                        expr = value.value()->clone();
-                    } else {
-                        // This variable may originate from an address on this path (at loop entry)
-                        // that has not yet been accessed; retain this variable without substitution.
-                        return;
-                    }
-                } else {
-                    TODO();
-                }
-                return;
-            }
-            case SymbolAddress: {
-                auto symbolAddr = dynamic_cast<const Symbolic::Address *>(expr.get().get());
-                if (symbolAddr == nullptr)
-                    UNREACHABLE();
                 std::visit(
                     [&](auto &&arg) -> void {
                         using T = std::decay_t<decltype(arg)>;
                         if constexpr (std::is_same_v<T, std::monostate>) {
                             TODO();
-                        } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
-                            ERROR("This is a variable's address and should not appear in an "
-                                  "expression.");
-                        } else if constexpr (std::is_same_v<
-                                                 T, not_null<std::unique_ptr<const Address>>>) {
+                        } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<
+                                                                   const Symbolic::Address>>>) {
                             if (auto value = mem.read(*arg)) {
                                 expr = value.value()->clone();
                             } else {
@@ -148,10 +124,30 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
                                 // without substitution.
                                 return;
                             }
-                        } else if constexpr (std::is_same_v<T, std::pair<not_null<std::shared_ptr<
-                                                                             const Structure::Info>>,
-                                                                         const size_t>>) {
+                        }
+                    },
+                    var->getFrom());
+                return;
+            }
+            case Address: {
+                auto symbolAddr = dynamic_cast<const Symbolic::SymbolAddress *>(expr.get().get());
+                if (symbolAddr == nullptr)
+                    UNREACHABLE();
+                std::visit(
+                    [&](auto &&arg) -> void {
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, std::monostate>) {
                             TODO();
+                        } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<
+                                                                   const Symbolic::Address>>>) {
+                            if (auto value = mem.read(*arg)) {
+                                expr = value.value()->clone();
+                            } else {
+                                // This address may originate from an address on this path (at loop
+                                // entry) that has not yet been accessed; retain this variable
+                                // without substitution.
+                                return;
+                            }
                         }
                     },
                     symbolAddr->getFrom());
@@ -183,41 +179,33 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
 
     auto getSubstitutedAddr = [&](const Address &addr,
                                   const Path &loopEntryPath) -> not_null<unique_ptr<Address>> {
-        if (addr.getDimension() == 0)
-            return make_unique<Address>(addr);
-        auto &mem = loopEntryPath.getMemoryState();
+        if (addr.getAddressType() != Address::AddressType::SymbolAddr)
+            return addr.addressClone();
+        auto &symbolAddr = dynamic_cast<const SymbolAddress &>(addr);
+        auto &mem        = loopEntryPath.getMemoryState();
         return std::visit(
             [&](auto &&arg) -> not_null<unique_ptr<Address>> {
                 using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_same_v<T, std::monostate>) {
                     TODO();
-                } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
-                    UNREACHABLE();
                 } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
                     if (auto value = mem.read(*arg)) {
                         auto realAddr = value.value()->tryEvalAsOffsetedAddr();
                         if (realAddr == nullopt)
                             ERROR("This expr should be a address");
-                        if (addr.isOffseted()) {
-                            realAddr.value()->addOffset(addr.getOffset()->clone());
-                            if (addr.isRange())
-                                realAddr.value()->setLength(addr.getLength()->clone());
-                        }
-                        return std::move(realAddr).value();
+                        realAddr.value()->addOffset(symbolAddr.getOffset()->clone());
+                        if (symbolAddr.isRange())
+                            realAddr.value()->setLength(symbolAddr.getLength()->clone());
+                        return std::move(realAddr).value().into_underlying();
                     } else {
                         // This address may originate from an address on this path (at loop
                         // entry) that has not yet been accessed; retain this address
                         // without substitution.
-                        return make_unique<Address>(addr);
+                        return symbolAddr.addressClone();
                     }
-                } else if constexpr (std::is_same_v<
-                                         T,
-                                         std::pair<not_null<std::shared_ptr<const Structure::Info>>,
-                                                   const size_t>>) {
-                    TODO();
                 }
             },
-            addr.getFrom());
+            symbolAddr.getFrom());
     }; // getSubstitutedAddr
 
     auto postState   = preState.clone();
@@ -248,15 +236,15 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
             auto &postBranchInfo = postBranchesInfos.at(0);
 
             for (auto &[addr, value] : info.memoryMap_) {
-                auto subedAddr = substituteAddr
-                                     ? getSubstitutedAddr(addr, entryPath).into_underlying()
-                                     : make_unique<Address>(addr);
+                auto subedAddr = substituteAddr ? getSubstitutedAddr(addr, entryPath)
+                                                : addr.get().addressClone();
                 if (substituteExpr)
                     substituteVariables(substituteVariables, value, entryPath);
                 if (auto it = postBranchInfo.memoryMap_.find(*subedAddr);
                     it != postBranchInfo.memoryMap_.end() && !it->second->isUnknown()) {
+                    auto regForm = value->simplifiedExpr()->regularForm();
                     WARN("Another plugin has already updated this address. The new value: {" +
-                         value->simplifiedExpr()->regularForm() + "} is discarded.");
+                         (regForm ? regForm.value() : value->dump()) + "} is discarded.");
                     continue;
                 }
                 postBranchInfo.memoryMap_.insert_or_assign(*subedAddr, std::move(value));
@@ -300,7 +288,7 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
 
         auto &postBranchInfo = postBranchesInfos.at(0);
         for (auto &[addr, value] : postBranchInfo.memoryMap_) {
-            auto root = addr.getFromRoot();
+            auto root = addr.get().getFromRoot();
             if (root == nullopt)
                 TODO();
             if (!postPath->getVarAddr().contains(root.value()))

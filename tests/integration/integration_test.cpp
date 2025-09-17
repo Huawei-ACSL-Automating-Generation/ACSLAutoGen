@@ -27,7 +27,6 @@ namespace {
     // This code performs minimal safety checks, so please ensure the validity of the input.
     not_null<unique_ptr<ProgramState>> symbolicExecutionOnFirstFunc(const string_view code) {
         e.init(code);
-        GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
         auto func          = e.findFirstDecl<clang::FunctionDecl>();
         auto symbolicState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
         symbolicState->init();
@@ -41,7 +40,6 @@ namespace {
 
     void doAll(const string_view code) {
         e.init(code);
-        GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
 
         ACSLContext acslContext(e.getASTContext());
         ACSLAnalyzer analyzer(acslContext);
@@ -63,7 +61,6 @@ namespace {
 
     not_null<unique_ptr<ProgramState>> getPostStateOfFirstLoop(const string_view code) {
         e.init(code);
-        GlobalSM::getInstance().initialize(e.getSourceManager(), e.getLangOptions());
         auto func          = e.findFirstDecl<clang::FunctionDecl>();
         auto symbolicState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
         symbolicState->init();
@@ -81,7 +78,7 @@ namespace {
 } // namespace
 
 TEST(IntegrationTest, SyntaxNoDeath) {
-    EXPECT_EXIT(
+    ASSERT_EXIT(
         {
             symbolicExecutionOnFirstFunc(R"(
     void func(){
@@ -91,7 +88,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
-    EXPECT_EXIT(
+    ASSERT_EXIT(
         {
             symbolicExecutionOnFirstFunc(R"(
     void func(int x){
@@ -103,7 +100,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
-    EXPECT_EXIT(
+    ASSERT_EXIT(
         {
             symbolicExecutionOnFirstFunc(R"(
     void func(int x, int *pt){
@@ -116,7 +113,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
-    EXPECT_EXIT(
+    ASSERT_EXIT(
         {
             symbolicExecutionOnFirstFunc(R"(
     void func(int x, int *pt){
@@ -129,7 +126,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
-    EXPECT_EXIT(
+    ASSERT_EXIT(
         {
             symbolicExecutionOnFirstFunc(R"(
     int func(int x, int n){
@@ -142,7 +139,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
-    EXPECT_EXIT(
+    ASSERT_EXIT(
         {
             symbolicExecutionOnFirstFunc(R"(
     struct A{
@@ -159,7 +156,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         },
         ::testing::ExitedWithCode(0), "");
 
-    EXPECT_EXIT(
+    ASSERT_EXIT(
         {
             symbolicExecutionOnFirstFunc(R"(
     struct A{
@@ -176,7 +173,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
-    EXPECT_EXIT(
+    ASSERT_EXIT(
         {
             symbolicExecutionOnFirstFunc(R"(
     void func(int x, int *pt){
@@ -189,7 +186,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
-    EXPECT_EXIT(
+    ASSERT_EXIT(
         {
             symbolicExecutionOnFirstFunc(R"(
     void func(int x, int *pt){
@@ -202,7 +199,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
-    EXPECT_EXIT(
+    ASSERT_EXIT(
         {
             symbolicExecutionOnFirstFunc(R"(
     void func(int x, int *pt){
@@ -261,19 +258,21 @@ TEST(IntegrationTest, CorrectPostStateOfLoop_1) {
     auto &paths    = postState->getPaths();
     ASSERT_EQ(paths.size(), 1);
     for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
-        auto var  = addr.regularFormOfValue();
+        auto var  = addr.get().regularFormOfValue();
         auto expr = value->simplifiedExpr()->regularForm();
-        if (var == "x") {
-            EXPECT_EQ(expr, "n");
-        } else if (var == "y") {
-            EXPECT_EQ(expr, "0");
-        } else if (var == "z") {
-            EXPECT_THAT(expr, AllOf(AnyOf(StartsWith("10"), HasSubstr("+ 10")),
-                                    AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
-        } else if (var == "n") {
-            EXPECT_EQ(expr, "n");
+        ASSERT_NE(var, nullopt);
+        ASSERT_NE(expr, nullopt);
+        if (var.value() == "x") {
+            EXPECT_EQ(expr.value(), "n");
+        } else if (var.value() == "y") {
+            EXPECT_EQ(expr.value(), "0");
+        } else if (var.value() == "z") {
+            EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("10"), HasSubstr("+ 10")),
+                                            AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
+        } else if (var.value() == "n") {
+            EXPECT_EQ(expr.value(), "n");
         } else {
-            FAIL() << var << ": " << expr;
+            FAIL() << var.value() << ": " << expr.value();
         }
     }
 }
@@ -298,19 +297,21 @@ TEST(IntegrationTest, CorrectPostStateOfLoop_2) {
     auto &paths    = postState->getPaths();
     ASSERT_EQ(paths.size(), 1);
     for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
-        auto var  = addr.regularFormOfValue();
+        auto var  = addr.get().regularFormOfValue();
         auto expr = value->simplifiedExpr()->regularForm();
-        if (var == "p") {
-            EXPECT_EQ(expr, "p");
-        } else if (var == "n") {
-            EXPECT_EQ(expr, "n");
-        } else if (var == "pt") {
-            EXPECT_THAT(expr, AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
-                                    AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-        } else if (var == "p[0...n]") {
+        ASSERT_NE(var, nullopt);
+        ASSERT_NE(expr, nullopt);
+        if (var.value() == "p") {
+            EXPECT_EQ(expr.value(), "p");
+        } else if (var.value() == "n") {
+            EXPECT_EQ(expr.value(), "n");
+        } else if (var.value() == "pt") {
+            EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
+                                            AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        } else if (var.value() == "p[0..n - 1]") {
             EXPECT_TRUE(value->isUnknown());
         } else {
-            FAIL() << var << ": " << expr;
+            FAIL() << var.value() << ": " << expr.value();
         }
     }
 }
@@ -335,20 +336,22 @@ TEST(IntegrationTest, CorrectPostStateOfLoop_3) {
     auto &paths    = postState->getPaths();
     ASSERT_EQ(paths.size(), 1);
     for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
-        auto var  = addr.regularFormOfValue();
+        auto var  = addr.get().regularFormOfValue();
         auto expr = value->simplifiedExpr()->regularForm();
-        if (var == "p") {
-            EXPECT_EQ(expr, "p");
-        } else if (var == "n") {
-            EXPECT_EQ(expr, "n");
-        } else if (var == "pt") {
-            EXPECT_THAT(expr, AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
-                                    AnyOf(StartsWith("n"), HasSubstr("+ n")),
-                                    AnyOf(StartsWith("1"), HasSubstr("+ 1"))));
-        } else if (var == "p[1...n + 1]") {
+        ASSERT_NE(var, nullopt);
+        ASSERT_NE(expr, nullopt);
+        if (var.value() == "p") {
+            EXPECT_EQ(expr.value(), "p");
+        } else if (var.value() == "n") {
+            EXPECT_EQ(expr.value(), "n");
+        } else if (var.value() == "pt") {
+            EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
+                                            AnyOf(StartsWith("n"), HasSubstr("+ n")),
+                                            AnyOf(StartsWith("1"), HasSubstr("+ 1"))));
+        } else if (var.value() == "p[1..n]") {
             EXPECT_TRUE(value->isUnknown());
         } else {
-            FAIL() << var << ": " << expr;
+            FAIL() << var.value() << ": " << expr.value();
         }
     }
 }

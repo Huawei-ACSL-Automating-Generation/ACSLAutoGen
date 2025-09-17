@@ -3,6 +3,7 @@
 
 #include <unordered_map>
 #include <map>
+#include <stack>
 #include <variant>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Stmt.h>
@@ -35,7 +36,6 @@ struct MemberTarget {
     friend bool operator==(const MemberTarget &a, const MemberTarget &b) noexcept;
     friend bool operator!=(const MemberTarget &a, const MemberTarget &b) noexcept;
 };
-using LValueTarget = std::variant<const clang::VarDecl *, std::unique_ptr<Address>, MemberTarget>;
 
 class MemoryModel {
   public:
@@ -48,11 +48,10 @@ class MemoryModel {
     optional<not_null<const SymbolicExpr *>> read(const Address &addr) const;
     optional<not_null<SymbolicExpr *>> read(const Address &addr);
     void write(const Address &address, not_null<unique_ptr<SymbolicExpr>> value);
-    size_t size() const;
     bool contains(const Address &addr) const;
 
     void clear() {
-        memoryMap_noOffset_.clear();
+        memoryMap_variableAddr_.clear();
         memoryMap_constantRange_.clear();
         memoryMap_symbolicRange_.clear();
     }
@@ -63,32 +62,35 @@ class MemoryModel {
   private:
     friend struct flat_view;
 
-    unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash> memoryMap_noOffset_;
+    using ConstRange = pair<uint64_t, uint64_t>;
 
-    unordered_map<Address,
-                  map<pair<uint64_t, uint64_t>, not_null<unique_ptr<SymbolicExpr>>>,
-                  AddressHash>
-        memoryMap_constantRange_; ///< Ranges(pair<uint64_t, uint64_t>) must be non-overlapping
+    unordered_map<VariableAddress, not_null<unique_ptr<SymbolicExpr>>> memoryMap_variableAddr_;
+
+    unordered_map<SymbolAddress::BaseInfo, map<ConstRange, not_null<unique_ptr<SymbolicExpr>>>>
+        memoryMap_constantRange_; ///< ConstRanges must be non-overlapping
                                   ///< and non-zero-length.
-    unordered_map<Address,
-                  unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash>,
-                  AddressHash>
+
+    using BaseHash = size_t;
+    unordered_map<BaseHash, unordered_map<SymbolAddress, not_null<unique_ptr<SymbolicExpr>>>>
         memoryMap_symbolicRange_;
 };
 
 struct MemoryModel::flat_view {
   private:
-    static Address compose_address(const Address &base, uint64_t off, uint64_t len) {
-        auto result = base;
-        result.setOffset(make_unique<LiteralExpr>(off));
+    static unique_ptr<Address> compose_address(SymbolAddress::BaseInfo base,
+                                               uint64_t off,
+                                               uint64_t len) {
         if (len == 0)
             ERROR("Length should not be 0, something goes wrong.");
-        if (len > 1)
-            result.setLength(make_unique<LiteralExpr>(len));
-
-        return result;
+        else if (len == 1)
+            return make_unique<SymbolAddress>(std::move(base.from_), make_unique<LiteralExpr>(off));
+        else
+            return make_unique<SymbolAddress>(std::move(base.from_), make_unique<LiteralExpr>(off),
+                                              make_unique<LiteralExpr>(len));
     }
-    template <class Owner> static auto &no_offset_map(Owner &mm) { return mm.memoryMap_noOffset_; }
+    template <class Owner> static auto &var_addr_map(Owner &mm) {
+        return mm.memoryMap_variableAddr_;
+    }
     template <class Owner> static auto &const_range_map(Owner &mm) {
         return mm.memoryMap_constantRange_;
     }
@@ -97,30 +99,25 @@ struct MemoryModel::flat_view {
     }
 
   public:
-    using UPtr = not_null<std::unique_ptr<SymbolicExpr>>;
     template <bool IsConst> class flat_iterator {
-        using Owner   = std::conditional_t<IsConst, const MemoryModel, MemoryModel>;
-        using NoOuter = decltype(no_offset_map(std::declval<Owner &>()).begin());
-        using COuter  = decltype(const_range_map(std::declval<Owner &>()).begin());
-        using CInner  = decltype(const_range_map(std::declval<Owner &>()).begin()->second.begin());
+        using Owner  = std::conditional_t<IsConst, const MemoryModel, MemoryModel>;
+        using VOuter = decltype(var_addr_map(std::declval<Owner &>()).begin());
+        using COuter = decltype(const_range_map(std::declval<Owner &>()).begin());
+        using CInner = decltype(const_range_map(std::declval<Owner &>()).begin()->second.begin());
 
         using SOuter = decltype(symb_range_map(std::declval<Owner &>()).begin());
         using SInner = decltype(symb_range_map(std::declval<Owner &>()).begin()->second.begin());
 
-        using UPtrRef = std::conditional_t<IsConst, const UPtr &, UPtr &>;
+        using UPtrRef = std::conditional_t<IsConst,
+                                           not_null<const SymbolicExpr *>,
+                                           not_null<unique_ptr<SymbolicExpr>> &>;
+        using R       = std::pair<AddressBox, UPtrRef>;
 
       public:
-        using difference_type   = std::ptrdiff_t;
-        using value_type        = std::pair<Address, UPtr>;
-        using reference         = std::pair<Address, UPtrRef>;
-        using rvalue_reference  = value_type;
-        using iterator_category = std::input_iterator_tag;
-        using iterator_concept  = std::input_iterator_tag;
-
         flat_iterator() = default;
         flat_iterator(Owner &o, bool to_begin) : owner_(o) {
-            no_outer_     = no_offset_map(owner_).begin();
-            no_outer_end_ = no_offset_map(owner_).end();
+            var_outer_     = var_addr_map(owner_).begin();
+            var_outer_end_ = var_addr_map(owner_).end();
 
             c_outer_     = const_range_map(owner_).begin();
             c_outer_end_ = const_range_map(owner_).end();
@@ -134,21 +131,47 @@ struct MemoryModel::flat_view {
                 phase_ = Phase::End;
         }
 
-        reference operator*() const {
+        R operator*() const {
             switch (phase_) {
-                case Phase::NoOff: {
-                    const Address &key = no_outer_->first;
-                    return reference{key, no_outer_->second};
+                case Phase::VarAddr: {
+                    const Address &addr = var_outer_->first;
+                    if constexpr (IsConst)
+                        return R{addr, var_outer_->second.get().get()};
+                    else
+                        return R{addr, var_outer_->second};
                 }
                 case Phase::Const: {
-                    const Address &base          = c_outer_->first;
-                    const auto [off, offPlusLen] = c_inner_->first;
-                    Address composed             = compose_address(base, off, offPlusLen - off);
-                    return reference{std::move(composed), c_inner_->second};
+                    const SymbolAddress::BaseInfo &base = c_outer_->first;
+                    const auto [off, offPlusLen]        = c_inner_->first;
+                    auto addr = compose_address(base, off, offPlusLen - off);
+                    if constexpr (IsConst)
+                        return R{std::move(addr), c_inner_->second.get().get()};
+                    else
+                        return R{std::move(addr), c_inner_->second};
                 }
                 case Phase::Symb: {
-                    const Address &key = s_inner_->first;
-                    return reference{key, s_inner_->second};
+                    const Address &addr = s_inner_->first;
+                    if constexpr (IsConst)
+                        return R{addr, s_inner_->second.get().get()};
+                    else
+                        return R{addr, s_inner_->second};
+                }
+                case Phase::Field: {
+                    assert(!state_saver_.empty());
+                    auto &current_state = state_saver_.top();
+                    assert(current_state.st_ != nullptr);
+                    auto &baseAddr = current_state.base_addr_;
+                    auto &st       = *current_state.st_;
+                    auto &index    = current_state.index_;
+                    auto addr      = make_unique<FieldAddress>(
+                        st.getInfo().definition_,
+                        pair<not_null<std::unique_ptr<const Address>>, const size_t>{
+                            baseAddr.get().addressClone().into_underlying(), index});
+                    auto &fieldValue = st.getFieldValue(index);
+                    if constexpr (IsConst)
+                        return R{std::move(addr), fieldValue.get().get()};
+                    else
+                        return R{std::move(addr), fieldValue};
                 }
                 default: break;
             }
@@ -174,36 +197,51 @@ struct MemoryModel::flat_view {
                 return false;
 
             switch (a.phase_) {
-                case Phase::NoOff: return a.no_outer_ == b.no_outer_;
+                case Phase::VarAddr: return a.var_outer_ == b.var_outer_;
                 case Phase::Const:
                     return a.c_outer_ == b.c_outer_ &&
                            (a.c_outer_ == a.c_outer_end_ || a.c_inner_ == b.c_inner_);
                 case Phase::Symb:
                     return a.s_outer_ == b.s_outer_ &&
                            (a.s_outer_ == a.s_outer_end_ || a.s_inner_ == b.s_inner_);
-                default: return true;
+                case Phase::Field: {
+                    assert(!a.state_saver_.empty());
+                    assert(!b.state_saver_.empty());
+                    return a.state_saver_.top().st_ == b.state_saver_.top().st_ &&
+                           a.state_saver_.top().index_ == b.state_saver_.top().index_;
+                }
+                default: UNREACHABLE();
             }
         }
 
       private:
         enum class Phase {
-            NoOff,
+            VarAddr,
             Const,
             Symb,
+            Field,
             End
         };
         Owner &owner_;
         Phase phase_ = Phase::End;
 
-        NoOuter no_outer_{}, no_outer_end_{};
+        VOuter var_outer_{}, var_outer_end_{};
         COuter c_outer_{}, c_outer_end_{};
         CInner c_inner_{};
         SOuter s_outer_{}, s_outer_end_{};
         SInner s_inner_{};
 
+        struct FieldState {
+            const AddressBox base_addr_;
+            Structure *st_{};
+            size_t index_{};
+            Phase pre_phase_ = Phase::End;
+        };
+        std::stack<FieldState> state_saver_;
+
         void advance_to_first() {
-            if (no_outer_ != no_outer_end_) {
-                phase_ = Phase::NoOff;
+            if (var_outer_ != var_outer_end_) {
+                phase_ = Phase::VarAddr;
                 return;
             }
 
@@ -224,54 +262,86 @@ struct MemoryModel::flat_view {
             phase_ = Phase::End;
         }
 
-        void advance() {
-            if (phase_ == Phase::NoOff) {
-                ++no_outer_;
-                if (no_outer_ != no_outer_end_)
-                    return;
+        void advance_without_check() {
+            switch (phase_) {
+                case Phase::VarAddr: {
+                    ++var_outer_;
+                    if (var_outer_ != var_outer_end_)
+                        return;
 
-                for (; c_outer_ != c_outer_end_; ++c_outer_) {
-                    c_inner_ = c_outer_->second.begin();
-                    if (c_inner_ != c_outer_->second.end()) {
-                        phase_ = Phase::Const;
-                        return;
-                    }
-                }
-                for (; s_outer_ != s_outer_end_; ++s_outer_) {
-                    s_inner_ = s_outer_->second.begin();
-                    if (s_inner_ != s_outer_->second.end()) {
-                        phase_ = Phase::Symb;
-                        return;
-                    }
-                }
-                phase_ = Phase::End;
-            } else if (phase_ == Phase::Const) {
-                ++c_inner_;
-                while (c_outer_ != c_outer_end_ && c_inner_ == c_outer_->second.end()) {
-                    ++c_outer_;
-                    if (c_outer_ != c_outer_end_)
+                    for (; c_outer_ != c_outer_end_; ++c_outer_) {
                         c_inner_ = c_outer_->second.begin();
-                }
-                if (c_outer_ != c_outer_end_)
-                    return;
-                for (; s_outer_ != s_outer_end_; ++s_outer_) {
-                    s_inner_ = s_outer_->second.begin();
-                    if (s_inner_ != s_outer_->second.end()) {
-                        phase_ = Phase::Symb;
-                        return;
+                        if (c_inner_ != c_outer_->second.end()) {
+                            phase_ = Phase::Const;
+                            return;
+                        }
                     }
-                }
-                phase_ = Phase::End;
-            } else if (phase_ == Phase::Symb) {
-                ++s_inner_;
-                while (s_outer_ != s_outer_end_ && s_inner_ == s_outer_->second.end()) {
-                    ++s_outer_;
-                    if (s_outer_ != s_outer_end_)
+                    for (; s_outer_ != s_outer_end_; ++s_outer_) {
                         s_inner_ = s_outer_->second.begin();
-                }
-                if (s_outer_ == s_outer_end_)
+                        if (s_inner_ != s_outer_->second.end()) {
+                            phase_ = Phase::Symb;
+                            return;
+                        }
+                    }
                     phase_ = Phase::End;
+                    break;
+                }
+                case Phase::Const: {
+                    ++c_inner_;
+                    while (c_outer_ != c_outer_end_ && c_inner_ == c_outer_->second.end()) {
+                        ++c_outer_;
+                        if (c_outer_ != c_outer_end_)
+                            c_inner_ = c_outer_->second.begin();
+                    }
+                    if (c_outer_ != c_outer_end_)
+                        return;
+                    for (; s_outer_ != s_outer_end_; ++s_outer_) {
+                        s_inner_ = s_outer_->second.begin();
+                        if (s_inner_ != s_outer_->second.end()) {
+                            phase_ = Phase::Symb;
+                            return;
+                        }
+                    }
+                    phase_ = Phase::End;
+                    break;
+                }
+                case Phase::Symb: {
+                    ++s_inner_;
+                    while (s_outer_ != s_outer_end_ && s_inner_ == s_outer_->second.end()) {
+                        ++s_outer_;
+                        if (s_outer_ != s_outer_end_)
+                            s_inner_ = s_outer_->second.begin();
+                    }
+                    if (s_outer_ == s_outer_end_)
+                        phase_ = Phase::End;
+                    break;
+                }
+                case Phase::Field: {
+                    assert(!state_saver_.empty());
+                    auto &current_state = state_saver_.top();
+                    ++current_state.index_;
+                    assert(current_state.st_ != nullptr);
+                    if (current_state.index_ < current_state.st_->getNumFields())
+                        return;
+                    phase_ = current_state.pre_phase_;
+                    state_saver_.pop();
+                    advance_without_check();
+                    break;
+                }
+                default: UNREACHABLE();
             }
+        }
+
+        void advance() {
+            auto &&[addr, value] = (*this).operator*();
+            if (value->getType() != SymbolicExpr::ExprType::Structure) {
+                advance_without_check();
+                return;
+            }
+            auto &st   = dynamic_cast<const Structure &>(*value);
+            auto state = FieldState{std::move(addr), const_cast<Structure *>(&st), 0, phase_};
+            state_saver_.push(std::move(state));
+            phase_ = Phase::Field;
         }
     }; // flat_iterator
 
@@ -307,14 +377,12 @@ class Path {
 
     void resymbolize();
 
-    LValueTarget extractLValue(const clang::Expr *lhs);
-    std::unique_ptr<Address> extractAddress(const clang::Expr *lhs);
+    not_null<std::unique_ptr<Address>> extractLValue(const clang::Expr *lhs);
 
     not_null<std::unique_ptr<SymbolicExpr>> getVarState(const clang::VarDecl *var) const;
     const Formulas &getPathConditions() const;
 
-    not_null<Address *> allocMemory(const clang::VarDecl *, bool newMemory = false);
-    not_null<std::unique_ptr<Address>> allocMemory(const Address &from);
+    not_null<VariableAddress *> allocMemory(const clang::VarDecl *);
 
     void updateMemory(const Address &addr, not_null<std::unique_ptr<SymbolicExpr>> expr);
     void updateVarState(not_null<const clang::VarDecl *> var,
@@ -342,15 +410,12 @@ class Path {
 
     auto getVarAddr() const -> const auto & { return varAddr_; };
     auto getMemoryState() const -> const auto & { return memoryState_; }
-    int getNextSymVarId() { return symbolCounter_++; }
     auto getReturnExpr() const -> const auto & { return returnExpr_; }
     auto getPathState() const -> const auto & { return currentState_; }
-    auto getAddrCounter() const -> const auto & { return symbolCounter_; }
-    auto getNextStructureId() { return structureCounter_++; }
 
   private:
     // Map: variable record definition ID -> corresponding symbolic address.
-    std::unordered_map<const clang::VarDecl *, std::unique_ptr<Address>> varAddr_;
+    std::unordered_map<const clang::VarDecl *, not_null<std::unique_ptr<VariableAddress>>> varAddr_;
 
     MemoryModel memoryState_;
 
@@ -361,12 +426,6 @@ class Path {
     PathState currentState_ = PathState::Step;
 
     optional<not_null<std::unique_ptr<const SymbolicExpr>>> returnExpr_ = std::nullopt;
-
-    unsigned int symbolCounter_ = 0;
-
-    // The Structure's counter is decoupled from the Variable and Address's counter to prevent
-    // interference with the ppl library's computations.
-    unsigned int structureCounter_ = 0;
 };
 
 class ProgramState {
@@ -466,19 +525,11 @@ struct VarManager {
         vm.numVars = rawVars.size() * 2;
         return vm;
     }
-
-    [[deprecated("seems to contain an error")]] int getIndex(const Symbolic::Variable &var) const {
-        auto it = varIndexMap.find(var.getName());
-        if (it == varIndexMap.end()) {
-            ERROR("VarManager: Variable name '" + var.getName() + "' not found in index map.");
-        }
-        return it->second;
-    }
 };
 
 struct InvsAndPostStates {
     std::optional<std::string> invs_;
-    pair<std::unordered_map<Address, not_null<unique_ptr<SymbolicExpr>>, AddressHash>,
+    pair<Symbolic::AddressBoxMap<not_null<unique_ptr<SymbolicExpr>>>,
          vector<not_null<unique_ptr<SymbolicExpr>>>>
         postStates_;
 };
