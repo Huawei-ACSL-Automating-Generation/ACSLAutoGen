@@ -1400,19 +1400,16 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
         UNREACHABLE();
     }
 
-    auto loopInfo = parseLoopInfo(preState, *loopEntry, cond, inc, body);
+    auto [loopInfo, ok] = parseLoopInfo(preState, *loopEntry, cond, inc, body);
 
     string spec;
     unique_ptr<ProgramState> postState;
-    if (loopInfo == nullopt) {
-        // Note: Dangerous! Change this.
-        auto symbolLoopEntry = clone();
-        symbolLoopEntry->resymbolize();
-        loopInfo = LoopInfo{LoopInfo::LoopEntryInfo{std::move(symbolLoopEntry)}, nullopt, nullopt};
-        tie(spec, postState) =
-            emitLoopInvariant(preState, *loopEntry, cond, inc, body, *loopInfo, "ComplexLoop");
+    if (ok) {
+        tie(spec, postState) = emitLoopInvariant(preState, *loopEntry, cond, inc, body, loopInfo);
     } else {
-        tie(spec, postState) = emitLoopInvariant(preState, *loopEntry, cond, inc, body, *loopInfo);
+        parseComplexLoopInfo(preState, *loopEntry, cond, inc, body, loopInfo);
+        tie(spec, postState) = emitLoopInvariant(preState, *loopEntry, cond, inc, body, loopInfo,
+                                                 "ComplexLoopInvariant");
     }
     INFO(spec);
 

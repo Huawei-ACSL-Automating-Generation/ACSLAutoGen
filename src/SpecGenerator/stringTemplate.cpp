@@ -59,7 +59,7 @@ size_t StringTemplate::remap(const NameMap &nameMap) {
         if (auto nameToPh_it = nameToPh_.find(nameMap_it.first); nameToPh_it != nameToPh_.end()) {
             auto &phSet = nameToPh_it->second;
             for (auto &id : phSet) {
-                placeholders_[id].name = nameMap_it.second;
+                placeholders_.at(id).name = nameMap_it.second;
                 ++count;
             }
             temp[nameMap_it.second] = std::move(phSet);

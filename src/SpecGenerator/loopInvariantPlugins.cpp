@@ -14,8 +14,6 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
   public:
     CheckAndDumpLoopInfoPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    bool needSubstituteAddress() const override { return false; }
-    bool needSubstituteExpr() const override { return false; }
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
@@ -48,7 +46,8 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
             }
             INFO("`op_`: " + opStr);
             INFO("`indexBound_`: " + indexInfo.indexBound_->dump());
-            INFO("`loopCount_`: " + indexInfo.loopCount_->dump());
+            INFO("`preciseLoopCount_`: " + indexInfo.preciseLoopCount_->dump());
+            INFO("`maxLoopCount_`: " + indexInfo.maxLoopCount_->dump());
             INFO("`indexPattern_`: " + indexInfo.indexPattern_.dump());
         } else {
             INFO("indexInfo_ isn't set.");
@@ -80,8 +79,6 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
   public:
     LinearInvariantPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    bool needSubstituteAddress() const override { return true; }
-    bool needSubstituteExpr() const override { return true; }
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
@@ -196,11 +193,9 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
   public:
     LoopAssignsPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    bool needSubstituteAddress() const override { return true; }
-    bool needSubstituteExpr() const override { return false; }
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &preState,
-        const ProgramState &,
+        const ProgramState &loopEntry,
         const clang::Expr *cond,
         const clang::Stmt *inc,
         const clang::Stmt *body,
@@ -266,7 +261,10 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                                 auto result = symbolAddr;
                                 result.setOffset(
                                     make_unique<LiteralExpr>(SymbolAddress::ZERO_OFFSET));
-                                result.setLength(indexInfo.loopCount_->simplifiedExpr());
+                                if (!indexInfo.preciseLoopCount_->isUnknown())
+                                    result.setLength(indexInfo.preciseLoopCount_->simplifiedExpr());
+                                else
+                                    result.setLength(indexInfo.maxLoopCount_->simplifiedExpr());
                                 return result;
                             }
                         }
@@ -289,11 +287,12 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                                 auto &pattern = it->second;
                                 if (pattern == nullopt)
                                     TODO();
-                                if (pattern.value().step_ != 1)
-                                    TODO();
                                 auto result = symbolAddr;
                                 result.setOffset(pattern.value().initialValue_->clone());
-                                result.setLength(indexInfo.loopCount_->simplifiedExpr());
+                                if (!indexInfo.preciseLoopCount_->isUnknown())
+                                    result.setLength(indexInfo.preciseLoopCount_->simplifiedExpr());
+                                else
+                                    result.setLength(indexInfo.maxLoopCount_->simplifiedExpr());
                                 return result;
                             } else {
                                 TODO();
@@ -332,7 +331,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                                   pattern.value().initialValue_->clone(), Add,
                                   make_unique<BinaryOpExpr>(
                                       make_unique<LiteralExpr>(pattern.value().step_), Multiply,
-                                      indexInfo.loopCount_->clone())));
+                                      indexInfo.preciseLoopCount_->clone())));
                     if (!ok)
                         UNREACHABLE();
                 } else {
@@ -345,7 +344,14 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
             }
         }
 
+        unordered_set<AddressBox, AddressBoxHash, AddressBoxEq> concreteAssignedAddrs{};
         for (auto &addr : assignedAddrs) {
+            for (auto &path : loopEntry.getPaths()) {
+                auto concreteAddr = getSubstitutedAddr(addr, *path);
+                concreteAssignedAddrs.insert(AddressBox{std::move(concreteAddr)});
+            }
+        }
+        for (auto &addr : concreteAssignedAddrs) {
             auto valueForm = addr.get().regularFormOfValue();
             if (valueForm == nullopt) {
                 WARN("Value of {" + addr.get().dump() + "} has not regular form");
@@ -370,8 +376,6 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
   public:
     ParadigmMaxMinPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    bool needSubstituteAddress() const override { return true; }
-    bool needSubstituteExpr() const override { return false; }
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
@@ -667,8 +671,6 @@ class LoopVariantPlugin : public LoopInvariantPlugin {
   public:
     LoopVariantPlugin(const string &ID) : id_(ID) {}
     string_view id() const override { return id_; }
-    bool needSubstituteAddress() const override { return true; }
-    bool needSubstituteExpr() const override { return false; }
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,

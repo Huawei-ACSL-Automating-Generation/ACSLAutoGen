@@ -22,7 +22,7 @@ namespace {
     // This code performs minimal safety checks, so please ensure the validity of the input.
     auto doPluginOnFirstLoop(string_view code, const vector<string> pids) {
         e.init(code);
-        auto func = e.findFirstDecl<clang::FunctionDecl>();
+        auto func     = e.findFirstDecl<clang::FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
         clang::Stmt *loopStmt;
         preState->init();
@@ -274,10 +274,10 @@ TEST(SetIndexPluginTest, SimpleLoop_1) {
     ASSERT_NE(indexInfo.indexAddr_->getFromRoot(), nullopt);
     EXPECT_EQ(indexInfo.indexAddr_->getFromRoot().value()->getNameAsString(), "i");
     EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Variable);
-    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "i");
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm().value_or(""), "i");
     EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
-    EXPECT_EQ(indexInfo.indexBound_->regularForm(), "n");
-    EXPECT_EQ(indexInfo.loopCount_->simplifiedExpr()->regularForm(), "n");
+    EXPECT_EQ(indexInfo.indexBound_->regularForm().value_or(""), "n");
+    EXPECT_EQ(indexInfo.preciseLoopCount_->simplifiedExpr()->regularForm().value_or(""), "n - i");
 }
 
 TEST(SetIndexPluginTest, SimpleLoop_2) {
@@ -297,10 +297,10 @@ TEST(SetIndexPluginTest, SimpleLoop_2) {
     ASSERT_NE(indexInfo.indexAddr_->getFromRoot(), nullopt);
     EXPECT_EQ(indexInfo.indexAddr_->getFromRoot().value()->getNameAsString(), "i");
     EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Variable);
-    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "i");
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm().value_or(""), "i");
     EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_NE);
-    EXPECT_EQ(indexInfo.indexBound_->regularForm(), "0");
-    EXPECT_EQ(indexInfo.loopCount_->simplifiedExpr()->regularForm(), "n");
+    EXPECT_EQ(indexInfo.indexBound_->regularForm().value_or(""), "0");
+    EXPECT_EQ(indexInfo.preciseLoopCount_->simplifiedExpr()->regularForm().value_or(""), "i");
 }
 
 TEST(SetIndexPluginTest, SimpleLoop_3) {
@@ -322,10 +322,10 @@ TEST(SetIndexPluginTest, SimpleLoop_3) {
     ASSERT_NE(indexInfo.indexAddr_->getFromRoot(), nullopt);
     EXPECT_EQ(indexInfo.indexAddr_->getFromRoot().value()->getNameAsString(), "i");
     EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Variable);
-    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "i");
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm().value_or(""), "i");
     EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_GE);
-    EXPECT_EQ(indexInfo.indexBound_->regularForm(), "0");
-    EXPECT_EQ(indexInfo.loopCount_->simplifiedExpr()->regularForm(), "n + 1");
+    EXPECT_EQ(indexInfo.indexBound_->regularForm().value_or(""), "0");
+    EXPECT_EQ(indexInfo.preciseLoopCount_->simplifiedExpr()->regularForm().value_or(""), "i + 1");
 }
 
 TEST(SetIndexPluginTest, SimpleLoop_4) {
@@ -344,11 +344,11 @@ TEST(SetIndexPluginTest, SimpleLoop_4) {
     ASSERT_NE(indexInfo.indexAddr_->getFromRoot(), nullopt);
     EXPECT_EQ(indexInfo.indexAddr_->getFromRoot().value()->getNameAsString(), "pt");
     EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Address);
-    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm(), "pt");
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm().value_or(""), "pt");
     EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
-    EXPECT_EQ(indexInfo.indexBound_->regularForm(), "end");
-    EXPECT_THAT(indexInfo.loopCount_->simplifiedExpr()->regularForm(),
-                AnyOf("end - start", "-1 * start + end"));
+    EXPECT_EQ(indexInfo.indexBound_->regularForm().value_or(""), "end");
+    EXPECT_THAT(indexInfo.preciseLoopCount_->simplifiedExpr()->regularForm().value_or(""),
+                AnyOf("end - pt", "-1 * pt + end"));
 }
 
 TEST(SetIndexPluginTest, ComplexLoop_1) {

@@ -66,7 +66,8 @@ struct LoopInfo {
         not_null<std::unique_ptr<Symbolic::SymbolicExpr>> indexSymbolicValue_; // Varibale or Address
         clang::BinaryOperator::Opcode op_;
         not_null<std::unique_ptr<Symbolic::SymbolicExpr>> indexBound_; // exclusive bound
-        not_null<std::unique_ptr<Symbolic::SymbolicExpr>> loopCount_;
+        not_null<std::unique_ptr<Symbolic::SymbolicExpr>> preciseLoopCount_;
+        not_null<std::unique_ptr<Symbolic::SymbolicExpr>> maxLoopCount_;
         Pattern indexPattern_;
         bool isLocal_; // Useless, delete this.
     };
@@ -84,7 +85,7 @@ struct LoopInfo {
     // TODO(more info to be added)
 };
 
-std::optional<LoopInfo> parseLoopInfo(
+std::pair<LoopInfo, bool> parseLoopInfo(
     const ProgramState &preState,
     const ProgramState &loopEntry,
     const clang::Expr *cond,
@@ -93,6 +94,16 @@ std::optional<LoopInfo> parseLoopInfo(
     std::string_view groupName = DEFAULT_LOOP_INFO_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
+
+void parseComplexLoopInfo(
+    const ProgramState &preState,
+    const ProgramState &loopEntry,
+    const clang::Expr *cond,
+    const clang::Stmt *inc,
+    const clang::Stmt *body,
+    LoopInfo &loopInfo,
+    std::string_view groupName                                       = COMPLEX_LOOP_INFO_PLUGINS,
+    optional<reference_wrapper<const vector<string>>> extraPluginIds = std::nullopt);
 
 std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
     const ProgramState &preState,
@@ -108,6 +119,10 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
 std::string emitInlineContract(const ProgramState &state,
                                std::string_view groupName,
                                const std::vector<std::string> &extraPluginIds);
+
+void substituteSymbols(not_null<std::unique_ptr<SymbolicExpr>> &expr, const Path &loopEntryPath);
+not_null<std::unique_ptr<Address>> getSubstitutedAddr(const Address &addr,
+                                                      const Path &loopEntryPath);
 
 /*---------------------------------------*/
 /*-------Framework for ACSLPlugin--------*/
@@ -159,10 +174,6 @@ struct PostInfo {
 class LoopInvariantPlugin : public ACSLPlugin {
   public:
     Kind kind() const override { return Kind::LoopInvariant; }
-    // Do addresses in PostInfo need to be substituted by true address?
-    virtual bool needSubstituteAddress() const = 0;
-    // Do expressions in PostInfo need to be substituted with true variable or address?
-    virtual bool needSubstituteExpr() const = 0;
 
     virtual std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
         const ProgramState &preState,
