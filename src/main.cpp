@@ -8,7 +8,7 @@
 #include <filesystem>
 #include "Context/context.h"
 #include "Analyzer/analysis.h"
-#include "Context/globalSM.h"
+#include "macros.h"
 
 using namespace clang;
 using namespace clang::tooling;
@@ -32,8 +32,8 @@ class TUASTConsumer : public ASTConsumer {
             ACSLContext acslContext(Context);
             ACSLAnalyzer analyzer(acslContext);
             analyzer.analyzeFunctions();
-            auto &SM       = GlobalSM::getSM();
-            auto &rewriter = GlobalSM::getRewriter();
+            auto &SM       = acslContext.getSourceManager();
+            auto &rewriter = acslContext.getRewriter();
             std::error_code EC;
 
             // TODO: replace "with_acsl.c" with user-defined relative path.
@@ -113,8 +113,11 @@ class ACSLCommentHandler : public CommentHandler {
 class TUFrontendAction : public ASTFrontendAction {
   public:
     std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef) override {
-        GlobalSM::getInstance().initialize(CI.getSourceManager(), CI.getLangOpts());
-        commentHandler_ = std::make_unique<ACSLCommentHandler>(GlobalSM::getRewriter());
+        auto &SM = CI.getSourceManager();
+        auto &LO = CI.getLangOpts();
+        Rewriter rewriter;
+        rewriter.setSourceMgr(SM, LO);
+        commentHandler_ = std::make_unique<ACSLCommentHandler>(rewriter);
         CI.getPreprocessor().addCommentHandler(commentHandler_.get());
         return std::make_unique<TUASTConsumer>();
     }

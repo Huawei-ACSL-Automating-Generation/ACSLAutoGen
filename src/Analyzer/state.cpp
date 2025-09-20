@@ -13,7 +13,6 @@
 #include "state.h"
 #include "macros.h"
 #include "Utils/utils.h"
-#include "Context/globalSM.h"
 #include "SpecGenerator/specGenerator.h"
 
 using namespace std;
@@ -82,7 +81,7 @@ namespace {
     }
 } // namespace
 
-Path::Path(const Path &other, bool shallowCopy) {
+Path::Path(const Path &other, bool shallowCopy) : context_(other.context_) {
     if (shallowCopy) {
         for (const auto &cond : other.pathConditions_) {
             pathConditions_.push_back(cond->clone());
@@ -267,7 +266,7 @@ void Path::insertPathCondition(not_null<unique_ptr<SymbolicExpr>> cond) {
 }
 
 unique_ptr<Path> Path::clone() const {
-    auto cloned           = make_unique<Path>();
+    auto cloned           = make_unique<Path>(context_);
     cloned->currentState_ = currentState_;
     for (const auto &entry : varAddr_)
         cloned->varAddr_.emplace(entry.first, make_unique<VariableAddress>(*entry.second));
@@ -524,8 +523,8 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     auto initPath = std::move(callArgs[k].path);
                     bindParams(initPath.get(), callee, callArgs[k].args);
 
-                    auto ctx = std::make_unique<ACSLFunction>(callee);
-                    ProgramState calleeState(std::move(initPath), std::move(ctx));
+                    auto func = std::make_unique<ACSLFunction>(callee);
+                    ProgramState calleeState(std::move(initPath), std::move(func), context_);
                     calleeState.step(callee->getBody());
 
                     auto produced = calleeState.takeAllPaths();
@@ -798,7 +797,7 @@ string Path::dump() const {
     oss << "Variable Address Mapping:\n";
     for (auto &[varDecl, addr] : varAddr_) {
         string name;
-        if (auto opt = GlobalSM::getDeclInfo(varDecl))
+        if (auto opt = context_.getDeclInfo(varDecl))
             tie(name, ignore, ignore, ignore, ignore) = *opt;
 
         oss << "  @" << name << " -> " << addr->dump();
@@ -817,7 +816,7 @@ string Path::dump() const {
     }
 
     if (StmtCtx) {
-        if (auto opt = GlobalSM::getStmtInfo(StmtCtx)) {
+        if (auto opt = context_.getStmtInfo(StmtCtx)) {
             StringRef sourceText;
             tie(sourceText, ignore, ignore, ignore) = *opt;
             if (!sourceText.empty()) {
@@ -1051,19 +1050,28 @@ const MemoryModel::flat_view MemoryModel::flat() const {
     return MemoryModel::flat_view{const_cast<MemoryModel &>(*this)};
 }
 
-ProgramState::ProgramState(unique_ptr<Path> initialPath, unique_ptr<ACSLFunction> context) {
+ProgramState::ProgramState(unique_ptr<Path> initialPath,
+                           unique_ptr<ACSLFunction> func,
+                           ACSLContext &context)
+    : context_(context) {
     paths_.push_back(std::move(initialPath));
-    context_ = std::move(context);
+    func_ = std::move(func);
 }
 
-ProgramState::ProgramState(unique_ptr<ACSLFunction> context) { context_ = std::move(context); }
+ProgramState::ProgramState(unique_ptr<ACSLFunction> func, ACSLContext &context)
+    : context_(context) {
+    func_ = std::move(func);
+}
+
+ProgramState &ProgramState::operator=(ProgramState &&other) {
+    if (&context_ != &other.context_)
+        ERROR("Different contexts!");
+    func_  = std::move(other.func_);
+    paths_ = std::move(other.paths_);
+    return *this;
+}
 
 namespace {
-    using Symbolic::Address;
-    using Symbolic::Structure;
-    using Symbolic::SymbolicExpr;
-    using Symbolic::Variable;
-
     static void initParam(Path *path, const ParmVarDecl *param) {
         QualType paramType = param->getType();
 
@@ -1075,8 +1083,8 @@ namespace {
 } // namespace
 
 void ProgramState::init() {
-    auto FD       = context_->getFunctionDecl();
-    auto initPath = std::make_unique<Path>();
+    auto FD       = func_->getFunctionDecl();
+    auto initPath = std::make_unique<Path>(context_);
     for (const ParmVarDecl *param : FD->parameters()) {
         initParam(initPath.get(), param);
     }
@@ -1414,8 +1422,8 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
     INFO(spec);
 
     auto beginLoc = loopStmt->getSourceRange().getBegin();
-    GlobalSM::InsertText(beginLoc, spec, /*after*/ false,
-                         /*indentNewLines*/ true);
+    context_.insertText(beginLoc, spec, /*after*/ false,
+                        /*indentNewLines*/ true);
 
     if (this == postState.get())
         UNREACHABLE();
@@ -1612,8 +1620,8 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
 }
 
 pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActiveInactive() {
-    auto activeState   = make_unique<ProgramState>(context_->clone());
-    auto inactiveState = make_unique<ProgramState>(context_->clone());
+    auto activeState   = make_unique<ProgramState>(func_->clone(), context_);
+    auto inactiveState = make_unique<ProgramState>(func_->clone(), context_);
 
     for (auto &path : paths_) {
         if (path->isActive())
@@ -1626,13 +1634,13 @@ pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActi
 }
 
 unique_ptr<ProgramState> ProgramState::merge(const vector<const ProgramState *> &states) {
-    if (states.size() == 0)
+    if (states.empty())
         ERROR("Nothing to be merged.");
-    auto merged = make_unique<ProgramState>(states[0]->getContext()->clone());
+    auto merged = make_unique<ProgramState>(states[0]->getFunction()->clone(), states[0]->context_);
 
     for (auto &state : states) {
-        if (*state->getContext() != *merged->getContext())
-            ERROR("States to be merged have different context.");
+        if (*state->getFunction() != *merged->getFunction())
+            ERROR("States to be merged are dealing with different functions.");
         for (const auto &path : state->paths_)
             merged->paths_.push_back(path->clone());
     }
@@ -1640,13 +1648,13 @@ unique_ptr<ProgramState> ProgramState::merge(const vector<const ProgramState *> 
 }
 
 unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramState>> &states) {
-    if (states.size() == 0)
+    if (states.empty())
         ERROR("Nothing to be merged.");
-    auto merged = make_unique<ProgramState>(states[0]->getContext()->clone());
+    auto merged = make_unique<ProgramState>(states[0]->getFunction()->clone(), states[0]->context_);
 
     for (auto &state : states) {
-        if (*state->getContext() != *merged->getContext())
-            ERROR("States to be merged have different context.");
+        if (*state->getFunction() != *merged->getFunction())
+            ERROR("States to be merged are dealing with different functions.");
         for (const auto &path : state->paths_)
             merged->paths_.push_back(path->clone());
     }
@@ -1654,7 +1662,7 @@ unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramStat
 }
 
 unique_ptr<ProgramState> ProgramState::clone() const {
-    auto newState = make_unique<ProgramState>(context_->clone());
+    auto newState = make_unique<ProgramState>(func_->clone(), context_);
 
     for (const auto &path : paths_) {
         newState->paths_.push_back(path->clone());
@@ -1766,7 +1774,7 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt) {
             }
 
             // TODO: pack a static function in Path.
-            Path tmpPath;
+            Path tmpPath(context_);
             auto caseCondEval = tmpPath.evalExpr(caseCond);
             assert(caseCondEval.second.size() == 1);
 

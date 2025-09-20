@@ -22,8 +22,10 @@ namespace {
     // This code performs minimal safety checks, so please ensure the validity of the input.
     auto doPluginOnFirstLoop(string_view code, const vector<string> pids) {
         e.init(code);
+        static optional<ACSLContext> context{};
+        context.emplace(e.getASTContext());
         auto func     = e.findFirstDecl<clang::FunctionDecl>();
-        auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
+        auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         clang::Stmt *loopStmt;
         preState->init();
         DEBUG(preState->dump());

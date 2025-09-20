@@ -8,13 +8,13 @@
 
 class ACSLAnalyzer {
   public:
-    ACSLAnalyzer(ACSLContext &Ctx) : Context(Ctx) {}
+    ACSLAnalyzer(ACSLContext &ctx) : context_(ctx) {}
 
     void analyzeFunctions();
 
   private:
-    ACSLContext &Context;
-    std::vector<std::unique_ptr<ACSLFunction>> Functions;
+    ACSLContext &context_;
+    std::vector<std::unique_ptr<ACSLFunction>> functions_;
 
     void generateFunctionSpec(ACSLFunction *func);
 };

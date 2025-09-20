@@ -3,9 +3,9 @@
 #include "function.h"
 #include "clang/AST/Stmt.h"
 #include "state.h"
-#include "Context/globalSM.h"
 #include "SpecGenerator/specGenerator.h"
 #include "clang/Rewrite/Core/Rewriter.h"
+#include "clang/Basic/SourceManager.h"
 
 using namespace clang;
 using namespace llvm;
@@ -13,14 +13,14 @@ using namespace std;
 
 void ACSLAnalyzer::analyzeFunctions() {
     PROCESS("Running analysis functions...");
-    for (auto *func : this->Context.getFunctions()) {
+    for (auto *func : this->context_.getFunctions()) {
         auto loc = func->getLocation();
-        if (!GlobalSM::getSM().isInMainFile(loc))
+        if (!context_.getSourceManager().isInMainFile(loc))
             continue;
 
         auto wrappedFunc = make_unique<ACSLFunction>(func);
         generateFunctionSpec(wrappedFunc.get());
-        Functions.push_back(std::move(wrappedFunc));
+        functions_.push_back(std::move(wrappedFunc));
     }
 }
 
@@ -36,7 +36,7 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
     //     return;
     // INFO("Processing Function " + FD->getNameAsString());
 
-    auto state = std::make_unique<ProgramState>(make_unique<ACSLFunction>(FD));
+    auto state = std::make_unique<ProgramState>(make_unique<ACSLFunction>(FD), context_);
 
     if (const Stmt *Body = FD->getBody()) {
         if (!isa<CompoundStmt>(Body))
@@ -67,8 +67,8 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
         INFO(spec);
 
         auto beginLoc = FD->getSourceRange().getBegin();
-        GlobalSM::InsertText(beginLoc, spec, /*after*/ false,
-                             /*indentNewLines*/ true);
+        context_.insertText(beginLoc, spec, /*after*/ false,
+                            /*indentNewLines*/ true);
     } else {
         INFO("No function body found for: " + FD->getNameAsString());
     }

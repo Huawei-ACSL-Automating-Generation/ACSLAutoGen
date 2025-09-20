@@ -27,8 +27,10 @@ namespace {
         const string &code,
         const string &pid) {
         e.init(code);
-        auto func     = e.findFirstDecl<clang::FunctionDecl>();
-        auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
+        static optional<ACSLContext> context{};
+        context.emplace(e.getASTContext());
+        auto func           = e.findFirstDecl<clang::FunctionDecl>();
+        auto preState       = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         clang::Stmt *loopStmt;
         preState->init();
         DEBUG(preState->dump());

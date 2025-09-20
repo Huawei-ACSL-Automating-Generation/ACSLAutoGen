@@ -28,7 +28,6 @@ add_executable(test_all
   ${CMAKE_CURRENT_SOURCE_DIR}/unit/SpecGenerator/loopInvariantPlugins_test.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/unit/SpecGenerator/functionContractPlugin_test.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/unit/Analyzer/state_test.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/unit/context/globalSM_test.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/integration/integration_test.cpp
 )
 

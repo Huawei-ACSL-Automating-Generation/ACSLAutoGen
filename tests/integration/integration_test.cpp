@@ -10,7 +10,6 @@
 #include "Analyzer/function.h"
 #include "Analyzer/state.h"
 #include "Analyzer/analysis.h"
-#include "globalSM.h"
 #include "Context/context.h"
 
 using namespace std;
@@ -27,8 +26,11 @@ namespace {
     // This code performs minimal safety checks, so please ensure the validity of the input.
     not_null<unique_ptr<ProgramState>> symbolicExecutionOnFirstFunc(const string_view code) {
         e.init(code);
-        auto func          = e.findFirstDecl<clang::FunctionDecl>();
-        auto symbolicState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
+        static optional<ACSLContext> context{};
+        context.emplace(e.getASTContext());
+        auto func = e.findFirstDecl<clang::FunctionDecl>();
+        auto symbolicState =
+            make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         symbolicState->init();
         DEBUG(symbolicState->dump());
         for (clang::Stmt *stmt : func->getBody()->children()) {
@@ -40,11 +42,11 @@ namespace {
 
     void doAll(const string_view code) {
         e.init(code);
-
-        ACSLContext acslContext(e.getASTContext());
-        ACSLAnalyzer analyzer(acslContext);
+        static optional<ACSLContext> context{};
+        context.emplace(e.getASTContext());
+        ACSLAnalyzer analyzer(context.value());
         analyzer.analyzeFunctions();
-        for (auto &str : GlobalSM::getInsertedStrings()) {
+        for (auto &str : context.value().getInsertedStrings()) {
             DEBUG(str);
         }
     }
@@ -61,8 +63,11 @@ namespace {
 
     not_null<unique_ptr<ProgramState>> getPostStateOfFirstLoop(const string_view code) {
         e.init(code);
-        auto func          = e.findFirstDecl<clang::FunctionDecl>();
-        auto symbolicState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
+        static optional<ACSLContext> context{};
+        context.emplace(e.getASTContext());
+        auto func = e.findFirstDecl<clang::FunctionDecl>();
+        auto symbolicState =
+            make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         symbolicState->init();
         DEBUG(symbolicState->dump());
         for (clang::Stmt *stmt : func->getBody()->children()) {

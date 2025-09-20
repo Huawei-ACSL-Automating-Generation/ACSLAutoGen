@@ -25,8 +25,10 @@ namespace {
     // This code performs minimal safety checks, so please ensure the validity of the input.
     auto doPluginOnFirstFunc(const string &code, const string &pid) {
         e.init(code);
+        static optional<ACSLContext> context{};
+        context.emplace(e.getASTContext());
         auto func     = e.findFirstDecl<clang::FunctionDecl>();
-        auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func));
+        auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         preState->init();
         DEBUG(preState->dump());
         auto postState = preState->clone();

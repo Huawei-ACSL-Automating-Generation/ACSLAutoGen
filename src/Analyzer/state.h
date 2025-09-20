@@ -11,6 +11,7 @@
 #include <ppl.hh>
 #include "Symbolic/expr.h"
 #include "function.h"
+#include "Context/context.h"
 
 using namespace Symbolic;
 using namespace std;
@@ -486,7 +487,7 @@ class Path {
   public:
     using EvalResult = std::pair<std::vector<not_null<std::unique_ptr<Path>>>, Formulas>;
 
-    Path()  = default;
+    Path(ACSLContext &context) : context_(context) {};
     ~Path() = default;
     Path(const Path &other, bool shallowCopy);
     void swap(Path &o) noexcept;
@@ -549,15 +550,19 @@ class Path {
     PathState currentState_ = PathState::Step;
 
     optional<not_null<std::unique_ptr<const SymbolicExpr>>> returnExpr_ = std::nullopt;
+
+    ACSLContext &context_;
 };
 
 class ProgramState {
   public:
-    ProgramState(std::unique_ptr<Path> initialPath, std::unique_ptr<ACSLFunction> context);
-    ProgramState(std::unique_ptr<ACSLFunction> context);
-    ~ProgramState()                          = default;
-    ProgramState(ProgramState &&)            = default;
-    ProgramState &operator=(ProgramState &&) = default;
+    ProgramState(std::unique_ptr<Path> initialPath,
+                 std::unique_ptr<ACSLFunction> func,
+                 ACSLContext &context);
+    ProgramState(std::unique_ptr<ACSLFunction> func, ACSLContext &context);
+    ~ProgramState()               = default;
+    ProgramState(ProgramState &&) = default;
+    ProgramState &operator=(ProgramState &&);
 
     void init();
 
@@ -587,7 +592,7 @@ class ProgramState {
 
     auto getPaths() const -> const auto & { return paths_; }
     auto getPaths() -> auto & { return paths_; }
-    auto getContext() const -> const auto & { return context_; }
+    auto getFunction() const -> const auto & { return func_; }
     std::optional<not_null<std::unique_ptr<Path>>> takePath(size_t i);
     std::vector<not_null<std::unique_ptr<Path>>> takeAllPaths();
 
@@ -607,7 +612,9 @@ class ProgramState {
 
     std::vector<not_null<std::unique_ptr<Path>>> paths_{};
 
-    std::unique_ptr<ACSLFunction> context_;
+    std::unique_ptr<ACSLFunction> func_;
+
+    ACSLContext &context_;
 };
 
 struct VarManager {
