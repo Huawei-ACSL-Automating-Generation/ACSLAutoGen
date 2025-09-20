@@ -519,6 +519,29 @@ namespace Symbolic {
             const = 0;
     };
 
+    /**
+     * @brief Aggregate container for field values.
+     *
+     * @details
+     * The Structure class represents a structured collection of field values. It is not intended to
+     * be used in arithmetic expressions, but rather serves as a container and query interface for
+     * structured data.
+     *
+     * - **Construction**:
+     *   Since id_ and name_ have been removed, a Structure can be constructed directly from the
+     *   symbolic values of all its fields.
+     *
+     * - **getFrom()**:
+     *   Invokes getFrom() on each field value. The function returns a common Address only if
+     *   every field yields a valid result and all results are FieldAddress instances with the same
+     *   base address and indices that correspond to the field values. Otherwise, it returns
+     *   monostate.
+     *
+     * - **Equality and Hashing**:
+     *   Both equality comparison and hash computation are defined as aggregation operations over
+     *   all field values.
+     */
+
     class Structure : public SymbolicExpr, public Symbol {
       public:
         struct Info {

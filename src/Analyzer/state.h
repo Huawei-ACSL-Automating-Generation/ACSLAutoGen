@@ -37,46 +37,116 @@ struct MemberTarget {
     friend bool operator!=(const MemberTarget &a, const MemberTarget &b) noexcept;
 };
 
+/**
+ * @class MemoryModel
+ * @brief Represents a symbolic memory model with support for variable addresses,
+ *        constant ranges, and symbolic ranges.
+ *
+ * This class provides read/write access to symbolic expressions stored at symbolic
+ * addresses. Memory is represented internally with three maps:
+ * - memoryMap_variableAddr_: maps variable addresses to symbolic expressions.
+ * - memoryMap_constantRange_: maps base addresses to constant ranges.
+ * - memoryMap_symbolicRange_: maps symbolic ranges hashed by base.
+ *
+ * It also provides a flat_view nested type to iterate over the entire memory
+ * content (variables, ranges, and nested structures) in a uniform manner.
+ */
 class MemoryModel {
   public:
+    /**
+     * @struct flat_view
+     * @brief Provides a flat iteration view over the memory contents.
+     *
+     * flat_view allows iteration over all memory entries, exposing each address
+     * and its associated symbolic expression in a flattened sequence.
+     */
     struct flat_view;
     MemoryModel() = default;
     MemoryModel(const MemoryModel &);
     MemoryModel &operator=(const MemoryModel &);
     MemoryModel(MemoryModel &&)            = default;
     MemoryModel &operator=(MemoryModel &&) = default;
+
+    /**
+     * @brief Reads a symbolic expression at the given address (const overload).
+     * @param addr The symbolic address to read from.
+     * @return Optional containing the expression if found, otherwise empty.
+     */
     optional<not_null<const SymbolicExpr *>> read(const Address &addr) const;
+
+    /**
+     * @brief Reads a symbolic expression at the given address (mutable overload).
+     * @param addr The symbolic address to read from.
+     * @return Optional containing the expression if found, otherwise empty.
+     */
     optional<not_null<SymbolicExpr *>> read(const Address &addr);
+
+    /**
+     * @brief Writes a symbolic expression to the given address.
+     * @param address The symbolic address to write to.
+     * @param value The symbolic expression to store.
+     */
     void write(const Address &address, not_null<unique_ptr<SymbolicExpr>> value);
+
+    /**
+     * @brief Checks whether a given address is contained in the memory model.
+     * @param addr The address to check.
+     * @return true if address exists, false otherwise.
+     */
     bool contains(const Address &addr) const;
 
+    /// Clears all memory maps.
     void clear() {
         memoryMap_variableAddr_.clear();
         memoryMap_constantRange_.clear();
         memoryMap_symbolicRange_.clear();
     }
 
-    // flat_view flat();
+    /**
+     * @brief Returns a flat view of the memory contents (const).
+     * @return A flat_view instance for iteration.
+     */
     const flat_view flat() const;
 
   private:
     friend struct flat_view;
 
+    /// Constant range [offset, offset+length)
     using ConstRange = pair<uint64_t, uint64_t>;
 
+    /// Variable address to symbolic expression mapping
     unordered_map<VariableAddress, not_null<unique_ptr<SymbolicExpr>>> memoryMap_variableAddr_;
 
+    /**
+     * @brief Constant range mapping.
+     * Maps a base address to non-overlapping constant ranges (non-zero length).
+     */
     unordered_map<SymbolAddress::BaseInfo, map<ConstRange, not_null<unique_ptr<SymbolicExpr>>>>
-        memoryMap_constantRange_; ///< ConstRanges must be non-overlapping
-                                  ///< and non-zero-length.
+        memoryMap_constantRange_; ///< ConstRanges must be non-overlapping and non-zero-length.
 
+    /// Symbolic range mapping (hashed by base info)
     using BaseHash = size_t;
     unordered_map<BaseHash, unordered_map<SymbolAddress, not_null<unique_ptr<SymbolicExpr>>>>
         memoryMap_symbolicRange_;
 };
 
+/**
+ * @struct MemoryModel::flat_view
+ * @brief Provides iteration over flattened memory model entries.
+ *
+ * flat_view exposes all variable addresses, constant ranges, symbolic ranges,
+ * and fields of Structure objects as a single iterable sequence of address/value pairs.
+ */
 struct MemoryModel::flat_view {
   private:
+    /**
+     * @brief Compose a SymbolAddress from base info, offset, and length.
+     * @param base Base info for the symbol address.
+     * @param off Offset within the base.
+     * @param len Length of the range.
+     * @return A unique_ptr to the composed Address.
+     * @note Length must be non-zero.
+     */
     static unique_ptr<Address> compose_address(SymbolAddress::BaseInfo base,
                                                uint64_t off,
                                                uint64_t len) {
@@ -88,23 +158,36 @@ struct MemoryModel::flat_view {
             return make_unique<SymbolAddress>(std::move(base.from_), make_unique<LiteralExpr>(off),
                                               make_unique<LiteralExpr>(len));
     }
+
+    /// Helper to access variable address map from owner
     template <class Owner> static auto &var_addr_map(Owner &mm) {
         return mm.memoryMap_variableAddr_;
     }
+    /// Helper to access constant range map from owner
     template <class Owner> static auto &const_range_map(Owner &mm) {
         return mm.memoryMap_constantRange_;
     }
+    /// Helper to access symbolic range map from owner
     template <class Owner> static auto &symb_range_map(Owner &mm) {
         return mm.memoryMap_symbolicRange_;
     }
 
   public:
+    /**
+     * @class flat_iterator
+     * @brief Iterator for flat_view.
+     *
+     * Iterates over all memory entries (variable addresses, constant ranges,
+     * symbolic ranges, and fields of Structure objects). Produces pairs of
+     * (Address, SymbolicExpr).
+     *
+     * @tparam IsConst true for const_iterator, false for iterator
+     */
     template <bool IsConst> class flat_iterator {
         using Owner  = std::conditional_t<IsConst, const MemoryModel, MemoryModel>;
         using VOuter = decltype(var_addr_map(std::declval<Owner &>()).begin());
         using COuter = decltype(const_range_map(std::declval<Owner &>()).begin());
         using CInner = decltype(const_range_map(std::declval<Owner &>()).begin()->second.begin());
-
         using SOuter = decltype(symb_range_map(std::declval<Owner &>()).begin());
         using SInner = decltype(symb_range_map(std::declval<Owner &>()).begin()->second.begin());
 
@@ -114,7 +197,14 @@ struct MemoryModel::flat_view {
         using R       = std::pair<AddressBox, UPtrRef>;
 
       public:
+        /// Default constructor
         flat_iterator() = default;
+
+        /**
+         * @brief Construct iterator for a MemoryModel owner.
+         * @param o Reference to owner MemoryModel.
+         * @param to_begin If true, positions at beginning; else at end.
+         */
         flat_iterator(Owner &o, bool to_begin) : owner_(o) {
             var_outer_     = var_addr_map(owner_).begin();
             var_outer_end_ = var_addr_map(owner_).end();
@@ -126,11 +216,18 @@ struct MemoryModel::flat_view {
             s_outer_end_ = symb_range_map(owner_).end();
 
             if (to_begin)
-                advance_to_first();
+                advance_to_first(); ///< initialize to first valid element
             else
                 phase_ = Phase::End;
         }
 
+        /**
+         * @brief Dereference operator
+         * @return A pair of (AddressBox, SymbolicExpr reference)
+         *
+         * Depending on phase, extracts variable, constant range, symbolic range,
+         * or Structure field as address and associated value.
+         */
         R operator*() const {
             switch (phase_) {
                 case Phase::VarAddr: {
@@ -157,6 +254,7 @@ struct MemoryModel::flat_view {
                         return R{addr, s_inner_->second};
                 }
                 case Phase::Field: {
+                    // Handle Structure fields
                     assert(!state_saver_.empty());
                     auto &current_state = state_saver_.top();
                     assert(current_state.st_ != nullptr);
@@ -178,16 +276,20 @@ struct MemoryModel::flat_view {
             UNREACHABLE();
         }
 
+        /// Pre-increment
         flat_iterator &operator++() {
             advance();
             return *this;
         }
+
+        /// Post-increment
         flat_iterator operator++(int) {
             auto tmp = *this;
             ++*this;
             return tmp;
         }
 
+        /// Equality comparison
         friend bool operator==(const flat_iterator &a, const flat_iterator &b) {
             if (&a.owner_ != &b.owner_)
                 return false;
@@ -196,6 +298,7 @@ struct MemoryModel::flat_view {
             if (a.phase_ != b.phase_)
                 return false;
 
+            // Compare according to current phase
             switch (a.phase_) {
                 case Phase::VarAddr: return a.var_outer_ == b.var_outer_;
                 case Phase::Const:
@@ -215,36 +318,41 @@ struct MemoryModel::flat_view {
         }
 
       private:
+        /// Iteration phases
         enum class Phase {
-            VarAddr,
-            Const,
-            Symb,
-            Field,
-            End
+            VarAddr, ///< Iterating over variable addresses
+            Const,   ///< Iterating over constant ranges
+            Symb,    ///< Iterating over symbolic ranges
+            Field,   ///< Iterating over fields of a Structure
+            End      ///< End sentinel
         };
-        Owner &owner_;
-        Phase phase_ = Phase::End;
+        Owner &owner_;             ///< Reference to MemoryModel owner
+        Phase phase_ = Phase::End; ///< Current iteration phase
 
+        // Iterators for variable addresses
         VOuter var_outer_{}, var_outer_end_{};
+        // Iterators for constant ranges
         COuter c_outer_{}, c_outer_end_{};
         CInner c_inner_{};
+        // Iterators for symbolic ranges
         SOuter s_outer_{}, s_outer_end_{};
         SInner s_inner_{};
 
+        /// State for traversing fields inside a Structure
         struct FieldState {
-            const AddressBox base_addr_;
-            Structure *st_{};
-            size_t index_{};
-            Phase pre_phase_ = Phase::End;
+            const AddressBox base_addr_; ///< Base address of the structure
+            Structure *st_;              ///< Pointer to Structure
+            size_t index_;               ///< Current field index
+            Phase pre_phase_;            ///< Previous phase before entering fields
         };
-        std::stack<FieldState> state_saver_;
+        std::stack<FieldState> state_saver_; ///< Stack of Structure traversal states
 
+        /// Advance iterator to first available element
         void advance_to_first() {
             if (var_outer_ != var_outer_end_) {
                 phase_ = Phase::VarAddr;
                 return;
             }
-
             for (; c_outer_ != c_outer_end_; ++c_outer_) {
                 c_inner_ = c_outer_->second.begin();
                 if (c_inner_ != c_outer_->second.end()) {
@@ -262,6 +370,7 @@ struct MemoryModel::flat_view {
             phase_ = Phase::End;
         }
 
+        /// Advance within current phase without diving into Structure fields
         void advance_without_check() {
             switch (phase_) {
                 case Phase::VarAddr: {
@@ -269,6 +378,7 @@ struct MemoryModel::flat_view {
                     if (var_outer_ != var_outer_end_)
                         return;
 
+                    // Move to constant ranges
                     for (; c_outer_ != c_outer_end_; ++c_outer_) {
                         c_inner_ = c_outer_->second.begin();
                         if (c_inner_ != c_outer_->second.end()) {
@@ -276,6 +386,7 @@ struct MemoryModel::flat_view {
                             return;
                         }
                     }
+                    // Move to symbolic ranges
                     for (; s_outer_ != s_outer_end_; ++s_outer_) {
                         s_inner_ = s_outer_->second.begin();
                         if (s_inner_ != s_outer_->second.end()) {
@@ -295,6 +406,7 @@ struct MemoryModel::flat_view {
                     }
                     if (c_outer_ != c_outer_end_)
                         return;
+                    // Move to symbolic ranges
                     for (; s_outer_ != s_outer_end_; ++s_outer_) {
                         s_inner_ = s_outer_->second.begin();
                         if (s_inner_ != s_outer_->second.end()) {
@@ -317,12 +429,14 @@ struct MemoryModel::flat_view {
                     break;
                 }
                 case Phase::Field: {
+                    // Advance within structure fields
                     assert(!state_saver_.empty());
                     auto &current_state = state_saver_.top();
                     ++current_state.index_;
                     assert(current_state.st_ != nullptr);
                     if (current_state.index_ < current_state.st_->getNumFields())
                         return;
+                    // End of fields -> return to previous phase
                     phase_ = current_state.pre_phase_;
                     state_saver_.pop();
                     advance_without_check();
@@ -332,12 +446,14 @@ struct MemoryModel::flat_view {
             }
         }
 
+        /// Advance iterator, diving into Structure fields if needed
         void advance() {
             auto &&[addr, value] = (*this).operator*();
             if (value->getType() != SymbolicExpr::ExprType::Structure) {
                 advance_without_check();
                 return;
             }
+            // Dive into Structure's fields
             auto &st   = dynamic_cast<const Structure &>(*value);
             auto state = FieldState{std::move(addr), const_cast<Structure *>(&st), 0, phase_};
             state_saver_.push(std::move(state));
@@ -345,18 +461,25 @@ struct MemoryModel::flat_view {
         }
     }; // flat_iterator
 
-    using iterator       = flat_iterator<false>;
+    /// Mutable iterator
+    using iterator = flat_iterator<false>;
+    /// Const iterator
     using const_iterator = flat_iterator<true>;
 
+    /// Construct flat_view with given MemoryModel reference
     explicit flat_view(MemoryModel &p) : owner_(p) {}
 
+    /// Begin iterator (mutable)
     iterator begin() { return iterator{owner_, true}; }
+    /// End iterator (mutable)
     iterator end() { return iterator{owner_, false}; }
+    /// Begin iterator (const)
     const_iterator begin() const { return const_iterator{owner_, true}; }
+    /// End iterator (const)
     const_iterator end() const { return const_iterator{owner_, false}; }
 
   private:
-    MemoryModel &owner_;
+    MemoryModel &owner_; ///< Reference to owning MemoryModel
 };
 
 class Path {

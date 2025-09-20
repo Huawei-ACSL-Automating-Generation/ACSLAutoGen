@@ -345,9 +345,8 @@ TEST(IntegrationTest, CorrectPostStateOfLoop_3) {
         } else if (var.value() == "n") {
             EXPECT_EQ(expr.value(), "n");
         } else if (var.value() == "pt") {
-            EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
-                                            AnyOf(StartsWith("n"), HasSubstr("+ n")),
-                                            AnyOf(StartsWith("1"), HasSubstr("+ 1"))));
+            EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("(p+1)"), HasSubstr("+ (p+1)")),
+                                            AnyOf(StartsWith("n"), HasSubstr("+ n"))));
         } else if (var.value() == "p[1..n]") {
             EXPECT_TRUE(value->isUnknown());
         } else {

@@ -221,25 +221,29 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
 }
 
 void substituteSymbols(not_null<unique_ptr<SymbolicExpr>> &expr, const Path &loopEntryPath) {
-    auto &mem = loopEntryPath.getMemoryState();
+    auto &mem = loopEntryPath.getMemoryState(); // Memory snapshot at loop entry
     switch (expr->getType()) {
         using enum SymbolicExpr::ExprType;
-        case Literal: return;
+        case Literal: return; // Literals have no symbolic origin; nothing to substitute.
         case Variable: {
+            // Try to resolve where this variable comes from and substitute with the value at that
+            // address.
             auto var = dynamic_cast<const Symbolic::Variable *>(expr.get().get());
             std::visit(
                 [&](auto &&arg) -> void {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, std::monostate>) {
+                        // No origin info; not substitutable at the moment.
                         TODO();
                     } else if constexpr (std::is_same_v<
                                              T, not_null<std::unique_ptr<const Symbolic::Address>>>) {
+                        // Origin is an address-like handle; try reading from loop-entry memory.
                         if (auto value = mem.read(*arg)) {
+                            // Replace current variable with the cloned value read from memory.
                             expr = value.value()->clone();
                         } else {
-                            // This address may originate from an address on this path (at loop
-                            // entry) that has not yet been accessed; retain this variable
-                            // without substitution.
+                            // Address originates from an address present on this path at loop entry
+                            // but hasn't been accessed -> keep variable un-substituted.
                             return;
                         }
                     }
@@ -248,31 +252,16 @@ void substituteSymbols(not_null<unique_ptr<SymbolicExpr>> &expr, const Path &loo
             return;
         }
         case Address: {
+            // For a SymbolAddress node, try to read its "from" origin and substitute the node by
+            // the value.
             auto symbolAddr = dynamic_cast<const Symbolic::SymbolAddress *>(expr.get().get());
             if (symbolAddr == nullptr)
                 UNREACHABLE();
-            std::visit(
-                [&](auto &&arg) -> void {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, std::monostate>) {
-                        TODO();
-                    } else if constexpr (std::is_same_v<
-                                             T, not_null<std::unique_ptr<const Symbolic::Address>>>) {
-                        if (auto value = mem.read(*arg)) {
-                            expr = value.value()->clone();
-                        } else {
-                            // This address may originate from an address on this path (at loop
-                            // entry) that has not yet been accessed; retain this variable
-                            // without substitution.
-                            return;
-                        }
-                    }
-                },
-                symbolAddr->getFrom());
+            expr = getSubstitutedAddr(*symbolAddr, loopEntryPath).into_underlying();
             return;
         }
         case BinaryOp: {
-            // note: non-const!
+            // Recursively substitute in both children (non-const downcast is intentional).
             auto bin = dynamic_cast<Symbolic::BinaryOpExpr *>(expr.get().get());
             if (bin == nullptr)
                 UNREACHABLE();
@@ -281,49 +270,63 @@ void substituteSymbols(not_null<unique_ptr<SymbolicExpr>> &expr, const Path &loo
             return;
         }
         case UnaryOp: {
-            // note: non-const!
+            // Recursively substitute in sub-expression (non-const downcast is intentional).
             auto un = dynamic_cast<Symbolic::UnaryOpExpr *>(expr.get().get());
             if (un == nullptr)
                 UNREACHABLE();
             substituteSymbols(un->getSub(), loopEntryPath);
             return;
         }
-        case Structure: TODO();
-        case Unknown: return;
+        case Structure: TODO(); // Structure nodes substitution not implemented yet.
+        case Unknown: return;   // Unknown nodes are left untouched.
         default: UNREACHABLE();
     }
     UNREACHABLE();
 };
 
 not_null<unique_ptr<Address>> getSubstitutedAddr(const Address &addr, const Path &loopEntryPath) {
+    // If it's not a symbolic address, simply return a clone.
     if (addr.getAddressType() != Address::AddressType::SymbolAddr)
         return addr.addressClone();
+
     auto &symbolAddr = dynamic_cast<const SymbolAddress &>(addr);
     auto &mem        = loopEntryPath.getMemoryState();
+
+    // Try to resolve the "from" origin of the SymbolAddress via loop-entry memory.
     return std::visit(
         [&](auto &&arg) -> not_null<unique_ptr<Address>> {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, std::monostate>) {
+                // No origin info — unresolved substitution.
                 TODO();
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                // Origin is an address; attempt to read the value at that origin.
                 if (auto value = mem.read(*arg)) {
+                    // The origin resolves to a value; it must be convertible to an "offseted
+                    // address".
                     auto realAddr = value.value()->tryEvalAsOffsetedAddr();
                     if (realAddr == nullopt)
                         ERROR("This expr should be a address");
-                    auto offset = symbolAddr.getOffset()->clone();
-                    substituteSymbols(offset, loopEntryPath);
 
+                    // Clone and substitute the offset of the original SymbolAddress.
+                    auto offset = symbolAddr.getOffset()->clone();
+                    substituteSymbols(offset,
+                                      loopEntryPath); // substitute any vars/addresses in offset
+
+                    // Apply substituted offset to the concrete address.
                     realAddr.value()->addOffset(offset->simplifiedExpr());
+
+                    // If original was a range, also substitute and set the length.
                     if (symbolAddr.isRange()) {
                         auto length = symbolAddr.getLength()->clone();
                         substituteSymbols(length, loopEntryPath);
                         realAddr.value()->setLength(length->simplifiedExpr());
                     }
+
+                    // Return the underlying concrete address (unique_ptr<Address>).
                     return std::move(realAddr).value().into_underlying();
                 } else {
-                    // This address may originate from an address on this path (at loop
-                    // entry) that has not yet been accessed; retain this address
-                    // without substitution.
+                    // The origin hasn't been accessed at loop entry; keep the original clone.
                     return symbolAddr.addressClone();
                 }
             }
