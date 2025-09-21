@@ -329,12 +329,18 @@ class SetIndexPlugin : public LoopInfoPlugin {
             if (indexPattern == nullopt || boundValue == nullopt || opCode == nullopt)
                 UNREACHABLE();
 
-            maxLoopCount =
-                indexPattern.value().step_ > 0
-                    ? make_unique<BinaryOpExpr>(boundValue.value()->clone(), Subtract,
-                                                indexPattern.value().initialValue_->clone())
-                    : make_unique<BinaryOpExpr>(indexPattern.value().initialValue_->clone(),
-                                                Subtract, boundValue.value()->clone());
+            // abs(n - i + step - 1)
+            maxLoopCount = indexPattern.value().step_ > 0
+                               ? make_unique<BinaryOpExpr>(
+                                     make_unique<BinaryOpExpr>(
+                                         boundValue.value()->clone(), Add,
+                                         make_unique<LiteralExpr>(indexPattern.value().step_ - 1)),
+                                     Subtract, indexPattern.value().initialValue_->clone())
+                               : make_unique<BinaryOpExpr>(
+                                     indexPattern.value().initialValue_->clone(), Subtract,
+                                     make_unique<BinaryOpExpr>(
+                                         boundValue.value()->clone(), Add,
+                                         make_unique<LiteralExpr>(indexPattern.value().step_ + 1)));
             if (opCode.value() == BO_LE || opCode.value() == BO_GE)
                 maxLoopCount = make_unique<BinaryOpExpr>(std::move(maxLoopCount.value()), Add,
                                                          make_unique<LiteralExpr>(1));
@@ -390,12 +396,19 @@ class SetIndexPlugin : public LoopInfoPlugin {
             using enum BinaryOpExpr::Operator;
             if (indexPattern == nullopt || boundValue == nullopt)
                 UNREACHABLE();
-            maxLoopCount =
-                indexPattern.value().step_ > 0
-                    ? make_unique<BinaryOpExpr>(boundValue.value()->clone(), Subtract,
-                                                indexPattern.value().initialValue_->clone())
-                    : make_unique<BinaryOpExpr>(indexPattern.value().initialValue_->clone(),
-                                                Subtract, boundValue.value()->clone());
+
+            // abs(n - i + step - 1)
+            maxLoopCount = indexPattern.value().step_ > 0
+                               ? make_unique<BinaryOpExpr>(
+                                     make_unique<BinaryOpExpr>(
+                                         boundValue.value()->clone(), Add,
+                                         make_unique<LiteralExpr>(indexPattern.value().step_ - 1)),
+                                     Subtract, indexPattern.value().initialValue_->clone())
+                               : make_unique<BinaryOpExpr>(
+                                     indexPattern.value().initialValue_->clone(), Subtract,
+                                     make_unique<BinaryOpExpr>(
+                                         boundValue.value()->clone(), Add,
+                                         make_unique<LiteralExpr>(indexPattern.value().step_ + 1)));
             if (abs(indexPattern.value().step_) == 1) {
                 preciseLoopCount = maxLoopCount.value()->clone();
             } else {
@@ -456,12 +469,18 @@ class SetIndexPlugin : public LoopInfoPlugin {
             if (indexPattern == nullopt || boundValue == nullopt)
                 UNREACHABLE();
 
-            maxLoopCount =
-                indexPattern.value().step_ > 0
-                    ? make_unique<BinaryOpExpr>(boundValue.value()->clone(), Subtract,
-                                                indexPattern.value().initialValue_->clone())
-                    : make_unique<BinaryOpExpr>(indexPattern.value().initialValue_->clone(),
-                                                Subtract, boundValue.value()->clone());
+            // abs(n - i + step - 1)
+            maxLoopCount = indexPattern.value().step_ > 0
+                               ? make_unique<BinaryOpExpr>(
+                                     make_unique<BinaryOpExpr>(
+                                         boundValue.value()->clone(), Add,
+                                         make_unique<LiteralExpr>(indexPattern.value().step_ - 1)),
+                                     Subtract, indexPattern.value().initialValue_->clone())
+                               : make_unique<BinaryOpExpr>(
+                                     indexPattern.value().initialValue_->clone(), Subtract,
+                                     make_unique<BinaryOpExpr>(
+                                         boundValue.value()->clone(), Add,
+                                         make_unique<LiteralExpr>(indexPattern.value().step_ + 1)));
             if (abs(indexPattern.value().step_) == 1) {
                 preciseLoopCount = maxLoopCount.value()->clone();
             } else {
@@ -486,8 +505,10 @@ class SetIndexPlugin : public LoopInfoPlugin {
                                 .maxLoopCount_       = std::move(maxLoopCount.value()),
                                 .indexPattern_       = std::move(indexPattern.value()),
                                 .isLocal_            = std::move(isLocal.value())};
-        if (loopInfo.indexInfo_.value().preciseLoopCount_->isUnknown())
+        if (loopInfo.indexInfo_.value().preciseLoopCount_->isUnknown()) {
+            loopInfo.isIncompleteLoop_ = true;
             return false;
+        }
         return true;
     }
 

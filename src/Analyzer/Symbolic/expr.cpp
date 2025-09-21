@@ -1236,8 +1236,8 @@ bool Structure::equal(const SymbolicExpr &expr) const {
                               [](auto &lhs, auto &rhs) { return *lhs == *rhs; });
 }
 
-optional<not_null<std::unique_ptr<SymbolAddress>>> BinaryOpExpr::tryEvalAsOffsetedAddr() const {
-    auto lhs = left_->tryEvalAsOffsetedAddr(), rhs = right_->tryEvalAsOffsetedAddr();
+optional<not_null<std::unique_ptr<SymbolAddress>>> BinaryOpExpr::doTryEvalAsSymbolAddr() const {
+    auto lhs = callTryEvalAsAddr(*left_), rhs = callTryEvalAsAddr(*right_);
     if (lhs && rhs)
         return nullopt;
     if (lhs == nullopt && rhs == nullopt)
@@ -1257,7 +1257,7 @@ optional<not_null<std::unique_ptr<SymbolAddress>>> BinaryOpExpr::tryEvalAsOffset
             default: return nullopt;
         }
     } else {
-        addr = std::move(lhs).value().into_underlying();
+        addr = std::move(rhs).value().into_underlying();
         if (!isValidOffsetOrLength(*left_))
             return nullopt;
         auto expr = left_->clone();
@@ -1271,7 +1271,7 @@ optional<not_null<std::unique_ptr<SymbolAddress>>> BinaryOpExpr::tryEvalAsOffset
     return addr;
 }
 
-optional<not_null<std::unique_ptr<SymbolAddress>>> SymbolAddress::tryEvalAsOffsetedAddr() const {
+optional<not_null<std::unique_ptr<SymbolAddress>>> SymbolAddress::doTryEvalAsSymbolAddr() const {
     auto result = make_unique<SymbolAddress>(*this);
     return result;
 }
@@ -1814,7 +1814,7 @@ namespace Symbolic {
     bool isValidOffsetOrLength(const SymbolicExpr &expr) {
         if (!expr.isLinear())
             return false;
-        if (expr.tryEvalAsOffsetedAddr())
+        if (expr.tryEvalAsSymbolAddr())
             return false;
         return true;
     }

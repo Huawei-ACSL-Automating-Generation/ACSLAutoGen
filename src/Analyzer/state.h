@@ -560,7 +560,8 @@ class ProgramState {
                  std::unique_ptr<ACSLFunction> func,
                  ACSLContext &context);
     ProgramState(std::unique_ptr<ACSLFunction> func, ACSLContext &context);
-    ~ProgramState()               = default;
+    ~ProgramState() = default;
+    ProgramState(const ProgramState &);
     ProgramState(ProgramState &&) = default;
     ProgramState &operator=(ProgramState &&);
 
@@ -598,6 +599,11 @@ class ProgramState {
 
     void deriveLinearPostState(std::vector<Formulas> invs);
 
+    struct IncompleteLoopInfo {
+        shared_ptr<ProgramState> preState_;
+        const clang::Stmt *incompleteLoop_;
+    };
+
   private:
     // TODO: remove from private member. [a local helper function.]
     // Only be used in step when processing SwitchStmt, just for a cleaner code.
@@ -615,6 +621,13 @@ class ProgramState {
     std::unique_ptr<ACSLFunction> func_;
 
     ACSLContext &context_;
+
+    std::optional<IncompleteLoopInfo>
+        incompleteLoopInfo_; ///< Record information about the incomplete loop. Both the generation
+                             ///< and detection of execution logic are handled within `stepLoop`.
+                             ///< Only special cases of non-one-step loops are processed (where the
+                             ///< last few elements are not traversed and considered as an
+                             ///< incomplete loop).
 };
 
 struct VarManager {

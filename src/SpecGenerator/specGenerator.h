@@ -67,7 +67,9 @@ struct LoopInfo {
         clang::BinaryOperator::Opcode op_;
         not_null<std::unique_ptr<Symbolic::SymbolicExpr>> indexBound_; // exclusive bound
         not_null<std::unique_ptr<Symbolic::SymbolicExpr>> preciseLoopCount_;
-        not_null<std::unique_ptr<Symbolic::SymbolicExpr>> maxLoopCount_;
+        not_null<std::unique_ptr<Symbolic::SymbolicExpr>>
+            maxLoopCount_; // The absolute value of the difference between the starting index and
+                           // the maximum/minimum possible index.
         Pattern indexPattern_;
         bool isLocal_; // Useless, delete this.
     };
@@ -82,6 +84,7 @@ struct LoopInfo {
     };
     optional<PatternInfo> patternInfo_;
 
+    bool isIncompleteLoop_{false};
     // TODO(more info to be added)
 };
 
@@ -149,7 +152,7 @@ void substituteSymbols(not_null<std::unique_ptr<SymbolicExpr>> &expr, const Path
  *
  * If @p addr is a SymbolAddress whose "from" origin resolves (via loop-entry memory)
  * to a concrete address expression, this function:
- *   1) extracts the real base address via tryEvalAsOffsetedAddr();
+ *   1) extracts the real base address via tryEvalAsSymbolAddr();
  *   2) substitutes the SymbolAddress's offset (and length if range) via substituteSymbols();
  *   3) applies the substituted offset/length to the real address;
  *   4) returns the resulting concrete address clone.

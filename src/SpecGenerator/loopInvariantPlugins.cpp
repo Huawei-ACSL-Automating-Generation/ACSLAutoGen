@@ -256,8 +256,6 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                                 auto &pattern = it->second;
                                 if (pattern == nullopt)
                                     TODO();
-                                if (pattern.value().step_ != 1)
-                                    TODO();
                                 auto result = symbolAddr;
                                 result.setOffset(
                                     make_unique<LiteralExpr>(SymbolAddress::ZERO_OFFSET));
@@ -315,12 +313,12 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                     // todo
                     // make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(), Add,
                     //                           make_unique<LiteralExpr>(pattern.value().step_)));
-                    if (!ok)
+                    if (!ok && !indexInfo.preciseLoopCount_->isUnknown())
                         UNREACHABLE();
                 } else {
                     auto [_, ok] = memoryMap.emplace(range.value(),
                                                      UnknownExpr::makeUnknown().into_underlying());
-                    if (!ok)
+                    if (!ok && !indexInfo.preciseLoopCount_->isUnknown())
                         UNREACHABLE();
                 }
                 assignedAddrs.emplace_back(std::move(range.value()));
@@ -683,18 +681,11 @@ class LoopVariantPlugin : public LoopInvariantPlugin {
 
         auto &indexInfo = loopInfo.indexInfo_.value();
 
-        unique_ptr<SymbolicExpr> var;
-        using enum BinaryOpExpr::Operator;
-        if (indexInfo.indexPattern_.step_ < 0)
-            var = make_unique<BinaryOpExpr>(indexInfo.indexSymbolicValue_->clone(), Subtract,
-                                            indexInfo.indexBound_->clone());
-        else
-            var = make_unique<BinaryOpExpr>(indexInfo.indexBound_->clone(), Subtract,
-                                            indexInfo.indexSymbolicValue_->clone());
-
-        auto regForm = var->simplifiedExpr()->regularForm();
+        // Yes, the expression of the loop variant is maxLoopCount. :)
+        auto regForm = indexInfo.maxLoopCount_->simplifiedExpr()->regularForm();
         if (regForm == nullopt) {
-            WARN("Variant {" + var->simplifiedExpr()->dump() + "} has no regular form.");
+            WARN("Variant {" + indexInfo.maxLoopCount_->simplifiedExpr()->dump() +
+                 "} has no regular form.");
             return make_tuple(nullopt, true, vector<PostInfo>{});
         }
         auto spec = "loop variant " + regForm.value() + ";";

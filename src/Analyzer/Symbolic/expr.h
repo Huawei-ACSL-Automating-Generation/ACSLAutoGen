@@ -164,12 +164,10 @@ namespace Symbolic {
             return std::pair{std::move(merged), std::move(hashIndexMap)};
         }
 
-        /// @brief Try to evaluate the expression to an address.
+        /// @brief Try to evaluate the expression to an symbol address.
         /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
-        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> tryEvalAsOffsetedAddr()
-            const {
-            // TODO: cache the result.
-            return std::nullopt;
+        std::optional<not_null<std::unique_ptr<SymbolAddress>>> tryEvalAsSymbolAddr() const {
+            return callTryEvalAsAddr(*simplifiedExpr());
         };
 
         // May merge `tryEvalAsConstant` and `evalToConstExpr` into one.
@@ -239,7 +237,20 @@ namespace Symbolic {
         /// @brief Simplify expression if it's linear, just call clone() otherwise.
         not_null<std::unique_ptr<SymbolicExpr>> simplifiedExprIfLinear() const;
 
+        static std::optional<not_null<std::unique_ptr<SymbolAddress>>> callTryEvalAsAddr(
+            const SymbolicExpr &e) {
+            return e.doTryEvalAsSymbolAddr();
+        }
+
       private:
+        /// @brief Try to evaluate the expression to an symbol address.
+        /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
+        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
+            const {
+            // TODO: cache the result.
+            return std::nullopt;
+        };
+
         ExprType type_;  ///< Kind of expression
         Type valueType_; ///< Underlying type
     };
@@ -394,8 +405,6 @@ namespace Symbolic {
         std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
 
         virtual bool equal(const SymbolicExpr &expr) const override;
-        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> tryEvalAsOffsetedAddr()
-            const override;
         virtual bool isUnknown() const override {
             return left_->isUnknown() || right_->isUnknown();
         };
@@ -410,6 +419,9 @@ namespace Symbolic {
             const std::unordered_map<size_t, size_t> &) const override;
 
       private:
+        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
+            const override;
+
         not_null<std::unique_ptr<SymbolicExpr>> left_;
         Operator op_;
         not_null<std::unique_ptr<SymbolicExpr>> right_;
@@ -802,8 +814,6 @@ namespace Symbolic {
             bool isRightChild                      = false) const override;
         virtual not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
-        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> tryEvalAsOffsetedAddr()
-            const override;
         virtual std::size_t hash() const override;
 
         /// @brief Get the value's regular form on this address.
@@ -872,6 +882,9 @@ namespace Symbolic {
             const std::unordered_map<size_t, size_t> &) const override;
 
       private:
+        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
+            const override;
+
         not_null<std::unique_ptr<const SymbolicExpr>> offset_; ///< Offset relative to an address.
         std::variant<std::monostate,
                      not_null<std::unique_ptr<const Address>>>
@@ -907,11 +920,6 @@ namespace Symbolic {
                   "should not be called.");
         };
         virtual bool equal(const SymbolicExpr &expr) const override;
-        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> tryEvalAsOffsetedAddr()
-            const override {
-            ERROR("VariableAddress should not appear in expressions, and therefore, this function "
-                  "should not be called.");
-        };
         virtual std::size_t hash() const override;
 
         /// @brief Get the value's regular form on this address.
@@ -950,6 +958,12 @@ namespace Symbolic {
         };
 
       private:
+        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
+            const override {
+            ERROR("VariableAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        };
+
         std::variant<std::monostate, not_null<const clang::VarDecl *>> from_;
     };
 
@@ -983,11 +997,6 @@ namespace Symbolic {
                   "should not be called.");
         };
         virtual bool equal(const SymbolicExpr &expr) const override;
-        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> tryEvalAsOffsetedAddr()
-            const override {
-            ERROR("FieldAddress should not appear in expressions, and therefore, this function "
-                  "should not be called.");
-        };
         virtual std::size_t hash() const override;
 
         /// @brief Get the value's regular form on this address.
@@ -1026,6 +1035,12 @@ namespace Symbolic {
         };
 
       private:
+        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
+            const override {
+            ERROR("FieldAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        };
+
         not_null<const clang::RecordDecl *> definition_;
         std::variant<std::monostate,
                      std::pair<not_null<std::unique_ptr<const Address>>, const size_t>>

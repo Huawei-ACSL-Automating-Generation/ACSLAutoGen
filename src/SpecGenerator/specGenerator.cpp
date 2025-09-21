@@ -61,6 +61,7 @@ string emitFunctionContract(const ProgramState &pre,
     for (auto &plugin : plugins) {
         if (plugin == nullptr)
             continue;
+        DEBUG("Plugin {" + string{plugin->id()} + "} is generating...");
         if (auto s = plugin->generate(pre, post); s)
             spec += *s;
     }
@@ -82,6 +83,7 @@ pair<LoopInfo, bool> parseLoopInfo(
     for (auto &plugin : plugins) {
         if (plugin == nullptr)
             UNREACHABLE();
+        DEBUG("Plugin {" + string{plugin->id()} + "} is parsing...");
         if (!plugin->parse(preState, loopEntry, cond, inc, body, loopInfo))
             return pair{std::move(loopInfo), false};
     }
@@ -101,6 +103,7 @@ void parseComplexLoopInfo(const ProgramState &preState,
     for (auto &plugin : plugins) {
         if (plugin == nullptr)
             UNREACHABLE();
+        DEBUG("Plugin {" + string{plugin->id()} + "} is parsing...");
         if (!plugin->parse(preState, loopEntry, cond, inc, body, loopInfo))
             ERROR("Plugin: {" + string{plugin->id()} +
                   "} parsing complex loop's information failed.");
@@ -168,6 +171,7 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
     for (auto &plugin : plugins) {
         if (plugin == nullptr)
             UNREACHABLE();
+        DEBUG("Plugin {" + string{plugin->id()} + "} is generating...");
         auto [s, continueFlag, postInfos] =
             plugin->generate(preState, loopEntry, cond, inc, body, loopInfo);
 
@@ -304,7 +308,7 @@ not_null<unique_ptr<Address>> getSubstitutedAddr(const Address &addr, const Path
                 if (auto value = mem.read(*arg)) {
                     // The origin resolves to a value; it must be convertible to an "offseted
                     // address".
-                    auto realAddr = value.value()->tryEvalAsOffsetedAddr();
+                    auto realAddr = value.value()->tryEvalAsSymbolAddr();
                     if (realAddr == nullopt)
                         ERROR("This expr should be a address");
 

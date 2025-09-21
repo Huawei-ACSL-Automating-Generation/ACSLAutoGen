@@ -10,6 +10,7 @@
 #include <clang/AST/Stmt.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/StmtCXX.h>
+#include <clang/AST/ParentMapContext.h>
 #include "state.h"
 #include "macros.h"
 #include "Utils/utils.h"
@@ -162,7 +163,7 @@ not_null<unique_ptr<Address>> Path::extractLValue(const Expr *lhs) {
                 TODO();
 
             auto addrExpr = std::move(addrEval.second[0]);
-            if (auto addr = addrExpr->tryEvalAsOffsetedAddr()) {
+            if (auto addr = addrExpr->tryEvalAsSymbolAddr()) {
                 if (!memoryState_.contains(*addr.value())) {
                     auto symbol =
                         getSymbol(uop->getType(), addr.value()->addressClone().into_underlying());
@@ -190,7 +191,7 @@ not_null<unique_ptr<Address>> Path::extractLValue(const Expr *lhs) {
             if (addrEval.second.size() != 1)
                 ERROR("This location does not support control flow branches.");
             auto baseExpr = std::move(addrEval.second[0]);
-            auto baseAddr = baseExpr->tryEvalAsOffsetedAddr();
+            auto baseAddr = baseExpr->tryEvalAsSymbolAddr();
             if (baseAddr == nullopt)
                 ERROR("Expected Address for '->' base, got: " << baseExpr->dump());
 
@@ -299,7 +300,7 @@ void bindParams(Path *calleePath,
         auto slot = calleePath->allocMemory(param);
 
         if (T->isPointerType()) {
-            auto m = args[i]->tryEvalAsOffsetedAddr();
+            auto m = args[i]->tryEvalAsSymbolAddr();
             if (!m)
                 ERROR("pointer parameter expects address-like argument");
             calleePath->updateMemory(*slot, m.value()->addressClone().into_underlying());
@@ -653,7 +654,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                             path->memoryState_.write(*addr, std::move(newVal));
                         } else if (op == UnaryOpExpr::Operator::Dereference) {
                             // *x
-                            auto addr = unExpr->tryEvalAsOffsetedAddr();
+                            auto addr = unExpr->tryEvalAsSymbolAddr();
                             if (addr == nullopt)
                                 ERROR("Expected Address, got: " << unExpr->dump());
                             if (auto value = path->memoryState_.read(*addr.value());
@@ -707,7 +708,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                 auto baseExpr = std::move(base.second[0]).into_underlying();
 
                 if (memberExpr->isArrow()) {
-                    auto baseAddr = baseExpr->tryEvalAsOffsetedAddr();
+                    auto baseAddr = baseExpr->tryEvalAsSymbolAddr();
                     if (baseAddr == nullopt)
                         ERROR("LHS of '->' is not an address");
                     auto val = memoryState_.read(*baseAddr.value());
@@ -1063,11 +1064,20 @@ ProgramState::ProgramState(unique_ptr<ACSLFunction> func, ACSLContext &context)
     func_ = std::move(func);
 }
 
+ProgramState::ProgramState(const ProgramState &other)
+    : func_(other.func_->clone()), context_(other.context_),
+      incompleteLoopInfo_(other.incompleteLoopInfo_) {
+    paths_.reserve(other.paths_.size());
+    std::ranges::transform(other.paths_, std::back_inserter(paths_),
+                           [](auto &path) { return path->clone(); });
+}
+
 ProgramState &ProgramState::operator=(ProgramState &&other) {
     if (&context_ != &other.context_)
         ERROR("Different contexts!");
-    func_  = std::move(other.func_);
-    paths_ = std::move(other.paths_);
+    func_               = std::move(other.func_);
+    paths_              = std::move(other.paths_);
+    incompleteLoopInfo_ = std::move(other.incompleteLoopInfo_);
     return *this;
 }
 
@@ -1378,8 +1388,118 @@ void ProgramState::stepBranch(const vector<const Expr *> &branchConds,
 }
 
 void ProgramState::stepLoop(const Stmt *loopStmt) {
-    auto &preState = *this;
-    auto loopEntry = preState.clone();
+    unique_ptr<ProgramState> preState{};
+    if (incompleteLoopInfo_ == nullopt) {
+        preState = clone();
+    } else {
+        // The previous loop was incomplete, attempt to merge the loops. Treat the incomplete loop
+        // as never executed, then analyze the current loop.
+
+        // Is this a loop stmt kind?
+        auto IsLoop = [](const Stmt *S) -> bool {
+            return llvm::isa<ForStmt>(S) || llvm::isa<WhileStmt>(S) || llvm::isa<DoStmt>(S) ||
+                   llvm::isa<CXXForRangeStmt>(S);
+        };
+
+        // Return true if child is (recursively) contained in ancestor subtree.
+        auto IsDescendantOf = [&](auto f, const Stmt *child, const Stmt *ancestor) -> bool {
+            if (!child || !ancestor)
+                return false;
+            if (child == ancestor)
+                return true;
+            for (const Stmt *C : ancestor->children())
+                if (C && f(f, child, C))
+                    return true;
+            return false;
+        };
+
+        // Find the nearest node Above such that Above is a direct child of a CompoundStmt;
+        // return {CompoundStmt*, index, Above}. We climb parents until we find a CompoundStmt
+        // that lists the current node as a direct child in its body().
+        struct CompoundLoc {
+            const CompoundStmt *CS_;
+            unsigned index_;
+            const Stmt *directChild_;
+        };
+        auto LocateInCompoundDirectChild = [&](const Stmt *S) -> std::optional<CompoundLoc> {
+            if (!S)
+                return std::nullopt;
+            const Stmt *cur = S;
+            while (cur) {
+                auto parents = context_.getASTContext().getParents(*cur);
+                if (parents.empty())
+                    return std::nullopt;
+
+                const Stmt *P = nullptr;
+                for (const auto &N : parents) {
+                    if (const Stmt *PS = N.get<Stmt>()) {
+                        P = PS;
+                        break;
+                    }
+                }
+                if (!P)
+                    return std::nullopt; // reached a Decl (e.g., FunctionDecl)
+
+                if (const auto *CS = llvm::dyn_cast<CompoundStmt>(P)) {
+                    unsigned idx = 0;
+                    for (const Stmt *Child : CS->body()) {
+                        if (Child == cur) {
+                            return CompoundLoc{CS, idx, Child};
+                        }
+                        ++idx;
+                    }
+                    // cur is not a direct child of this CompoundStmt; continue climbing.
+                }
+                cur = P;
+            }
+            return std::nullopt;
+        };
+
+        auto A = incompleteLoopInfo_.value().incompleteLoop_;
+        auto B = loopStmt;
+        // --- Validate inputs ---
+        if (!A || !B || !IsLoop(A) || !IsLoop(B))
+            ERROR("A & B must be loop.");
+
+        // --- Locate both loops as direct children of some CompoundStmt ---
+        auto LocA = LocateInCompoundDirectChild(A);
+        auto LocB = LocateInCompoundDirectChild(B);
+        if (!LocA || !LocB)
+            ERROR("A & B must be child of CompoundStmt.");
+
+        // Must belong to the same CompoundStmt
+        if (LocA->CS_ != LocB->CS_)
+            ERROR("A & B must have same CompoundStmt as parent.");
+
+        // Extra sanity: confirm original loops lie inside the recorded direct child nodes
+        if (!IsDescendantOf(IsDescendantOf, A, LocA->directChild_))
+            UNREACHABLE();
+        if (!IsDescendantOf(IsDescendantOf, B, LocB->directChild_))
+            UNREACHABLE();
+
+        // --- Build the slice between indices (exclusive) ---
+        size_t ia = LocA->index_, ib = LocB->index_;
+        if (ia == ib)
+            UNREACHABLE();
+
+        size_t lo = std::min(ia, ib), hi = std::max(ia, ib);
+
+        preState = incompleteLoopInfo_.value().preState_->clone();
+
+        size_t idx = 0;
+        for (auto child : LocA->CS_->body()) {
+            if (idx >= hi)
+                break;
+            if (idx > lo)
+                preState->step(child);
+            ++idx;
+        }
+        incompleteLoopInfo_ = nullopt;
+    }
+    assert(preState != nullptr);
+
+    auto loopEntry = preState->clone();
+
     if (auto forLoop = dyn_cast<ForStmt>(loopStmt); forLoop && forLoop->getInit())
         loopEntry->step(forLoop->getInit());
 
@@ -1408,15 +1528,15 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
         UNREACHABLE();
     }
 
-    auto [loopInfo, ok] = parseLoopInfo(preState, *loopEntry, cond, inc, body);
+    auto [loopInfo, ok] = parseLoopInfo(*preState, *loopEntry, cond, inc, body);
 
     string spec;
     unique_ptr<ProgramState> postState;
     if (ok) {
-        tie(spec, postState) = emitLoopInvariant(preState, *loopEntry, cond, inc, body, loopInfo);
+        tie(spec, postState) = emitLoopInvariant(*preState, *loopEntry, cond, inc, body, loopInfo);
     } else {
-        parseComplexLoopInfo(preState, *loopEntry, cond, inc, body, loopInfo);
-        tie(spec, postState) = emitLoopInvariant(preState, *loopEntry, cond, inc, body, loopInfo,
+        parseComplexLoopInfo(*preState, *loopEntry, cond, inc, body, loopInfo);
+        tie(spec, postState) = emitLoopInvariant(*preState, *loopEntry, cond, inc, body, loopInfo,
                                                  "ComplexLoopInvariant");
     }
     INFO(spec);
@@ -1425,9 +1545,15 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
     context_.insertText(beginLoc, spec, /*after*/ false,
                         /*indentNewLines*/ true);
 
+    if (loopInfo.isIncompleteLoop_) {
+        postState->incompleteLoopInfo_ =
+            IncompleteLoopInfo{shared_ptr<ProgramState>(preState.release()), loopStmt};
+    }
+
     if (this == postState.get())
         UNREACHABLE();
     *this = std::move(*postState);
+
     INFO(this->dump());
 }
 
@@ -1636,33 +1762,42 @@ pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActi
 unique_ptr<ProgramState> ProgramState::merge(const vector<const ProgramState *> &states) {
     if (states.empty())
         ERROR("Nothing to be merged.");
-    auto merged = make_unique<ProgramState>(states[0]->getFunction()->clone(), states[0]->context_);
+    optional<not_null<unique_ptr<ProgramState>>> merged{};
 
     for (auto &state : states) {
-        if (*state->getFunction() != *merged->getFunction())
+        if (merged == nullopt) {
+            merged.emplace(state->clone());
+            continue;
+        }
+        if (*state->getFunction() != *merged.value()->getFunction())
             ERROR("States to be merged are dealing with different functions.");
         for (const auto &path : state->paths_)
-            merged->paths_.push_back(path->clone());
+            merged.value()->paths_.push_back(path->clone());
     }
-    return merged;
+    return std::move(merged).value().into_underlying();
 }
 
 unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramState>> &states) {
     if (states.empty())
         ERROR("Nothing to be merged.");
-    auto merged = make_unique<ProgramState>(states[0]->getFunction()->clone(), states[0]->context_);
+    optional<not_null<unique_ptr<ProgramState>>> merged{};
 
     for (auto &state : states) {
-        if (*state->getFunction() != *merged->getFunction())
+        if (merged == nullopt) {
+            merged.emplace(state->clone());
+            continue;
+        }
+        if (*state->getFunction() != *merged.value()->getFunction())
             ERROR("States to be merged are dealing with different functions.");
         for (const auto &path : state->paths_)
-            merged->paths_.push_back(path->clone());
+            merged.value()->paths_.push_back(path->clone());
     }
-    return merged;
+    return std::move(merged).value().into_underlying();
 }
 
 unique_ptr<ProgramState> ProgramState::clone() const {
-    auto newState = make_unique<ProgramState>(func_->clone(), context_);
+    auto newState                 = make_unique<ProgramState>(func_->clone(), context_);
+    newState->incompleteLoopInfo_ = incompleteLoopInfo_;
 
     for (const auto &path : paths_) {
         newState->paths_.push_back(path->clone());

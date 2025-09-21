@@ -33,6 +33,7 @@ class ACSLContext {
     }
 
     auto getInsertedStrings() -> const auto & { return insertedStrs_; }
+    auto getASTContext() -> auto & { return context_; }
 
     // Tuple{name(empty string for unnamed Decl), sourceText, filename, lineNumber, columnNumber}
     std::optional<std::tuple<std::string, llvm::StringRef, llvm::StringRef, unsigned, unsigned>> getDeclInfo(
