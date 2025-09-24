@@ -342,20 +342,29 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
             }
         }
 
-        unordered_set<AddressBox, AddressBoxHash, AddressBoxEq> concreteAssignedAddrs{};
         for (auto &addr : assignedAddrs) {
             for (auto &path : loopEntry.getPaths()) {
                 auto concreteAddr = getSubstitutedAddr(addr, *path);
-                concreteAssignedAddrs.insert(AddressBox{std::move(concreteAddr)});
+                if (concreteAddr->getAddressType() == Address::AddressType::SymbolAddr) {
+                    auto &symbolAddr         = dynamic_cast<SymbolAddress &>(addr.get());
+                    auto &symbolConcreteAddr = dynamic_cast<SymbolAddress &>(*concreteAddr);
+                    if (symbolConcreteAddr.getOffset()->isUnknown()) {
+                        auto valueForm = addr.get().regularFormOfValue("\\at(", ", LoopEntry)");
+                        if (valueForm == nullopt) {
+                            WARN("Value of {" + addr.get().dump() + "} has not regular form");
+                            continue;
+                        }
+                        spec += valueForm.value() + ", ";
+                        continue;
+                    }
+                }
+                auto valueForm = concreteAddr->regularFormOfValue();
+                if (valueForm == nullopt) {
+                    WARN("Value of {" + concreteAddr->dump() + "} has not regular form");
+                    continue;
+                }
+                spec += valueForm.value() + ", ";
             }
-        }
-        for (auto &addr : concreteAssignedAddrs) {
-            auto valueForm = addr.get().regularFormOfValue();
-            if (valueForm == nullopt) {
-                WARN("Value of {" + addr.get().dump() + "} has not regular form");
-                continue;
-            }
-            spec += valueForm.value() + ", ";
         }
 
         if (spec.empty())

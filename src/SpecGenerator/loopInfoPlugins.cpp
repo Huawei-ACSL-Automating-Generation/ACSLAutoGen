@@ -232,6 +232,102 @@ class SetIndexPlugin : public LoopInfoPlugin {
             return true;
         }; // unchangedAfterOneRound end
 
+        // Split a boolean condition expression by built-in logical AND (&&).
+        auto splitByAnd = [](const Expr *cond) -> std::vector<const Expr *> {
+            std::vector<const Expr *> clauses;
+
+            // recursive lambda via std::function
+            std::function<void(const Expr *)> split = [&](const Expr *e) {
+                if (!e)
+                    return;
+                // Normalize: drop parens and implicit casts
+                const Expr *core = e->IgnoreParenImpCasts();
+
+                // Built-in && is represented by BinaryOperator with opcode BO_LAnd
+                if (const auto *BO = llvm::dyn_cast<BinaryOperator>(core)) {
+                    if (BO->getOpcode() == BO_LAnd) {
+                        split(BO->getLHS());
+                        split(BO->getRHS());
+                        return;
+                    }
+                }
+
+                // Any other form (including overloaded operator&&) is a single clause
+                clauses.push_back(core);
+            };
+
+            split(cond);
+            return clauses;
+        }; // splitByAnd end
+
+        // Check whether an expression is a "simple index condition".
+        auto isSimpleIndexCond = [](const Expr *e) -> bool {
+            if (!e)
+                return false;
+
+            const Expr *core = e->IgnoreParenImpCasts();
+
+            auto asDeclRefVar = [](const Expr *x) -> const VarDecl * {
+                if (const auto *dre = llvm::dyn_cast<DeclRefExpr>(x->IgnoreParenImpCasts()))
+                    if (llvm::isa<VarDecl>(dre->getDecl()))
+                        return llvm::cast<VarDecl>(dre->getDecl());
+                return nullptr;
+            };
+
+            // 1) Bare variable: i
+            if (asDeclRefVar(core))
+                return true;
+
+            // 2) Deref: *i
+            if (const auto *uo = llvm::dyn_cast<UnaryOperator>(core)) {
+                if (uo->getOpcode() == UO_Deref) {
+                    if (asDeclRefVar(uo->getSubExpr()))
+                        return true;
+                }
+            }
+
+            // 3) Relational comparison: i < n, n > i, etc.
+            if (const auto *bo = llvm::dyn_cast<BinaryOperator>(core)) {
+                auto op = bo->getOpcode();
+                switch (op) {
+                    case BO_LT:
+                    case BO_LE:
+                    case BO_GT:
+                    case BO_GE:
+                    case BO_EQ:
+                    case BO_NE: {
+                        const Expr *l = bo->getLHS()->IgnoreParenImpCasts();
+                        const Expr *r = bo->getRHS()->IgnoreParenImpCasts();
+                        if (asDeclRefVar(l) || asDeclRefVar(r))
+                            return true;
+                        break;
+                    }
+                    default: break;
+                }
+            }
+
+            return false;
+        }; // isSimpleIndexCond end
+
+        auto condCNF = splitByAnd(cond);
+        const clang::Expr *indexCond{};
+        for (auto &clause : condCNF) {
+            if (isSimpleIndexCond(clause)) {
+                indexCond = clause;
+                break;
+            }
+        }
+        if (indexCond == nullptr)
+            return false; // Too complex
+
+        vector<const clang::Expr *> extraConds{};
+        extraConds.reserve(condCNF.size() - 1);
+        for (auto &clause : condCNF) {
+            if (clause == indexCond)
+                continue;
+            extraConds.push_back(clause);
+        }
+
         optional<not_null<unique_ptr<Address>>> indexAddr;
         optional<not_null<unique_ptr<Symbolic::SymbolicExpr>>> indexValue;
         optional<BinaryOperator::Opcode> opCode;
@@ -241,7 +337,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
         optional<LoopInfo::Pattern> indexPattern;
         optional<bool> isLocal;
 
-        if (auto binExpr = dyn_cast<BinaryOperator>(cond->IgnoreParenImpCasts())) {
+        if (auto binExpr = dyn_cast<BinaryOperator>(indexCond->IgnoreParenImpCasts())) {
             auto sameValueBetweenEveryPaths =
                 [&](const Expr *expr) -> optional<not_null<unique_ptr<SymbolicExpr>>> {
                 optional<not_null<unique_ptr<SymbolicExpr>>> value;
@@ -265,6 +361,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
                 return value;
             }; // sameValueBetweenEveryPaths end
 
+            // Yes, assume it's on the left.
             auto indexExpr = binExpr->getLHS()->IgnoreParenImpCasts();
             auto boundExpr = binExpr->getRHS()->IgnoreParenImpCasts();
 
@@ -345,12 +442,12 @@ class SetIndexPlugin : public LoopInfoPlugin {
                 maxLoopCount = make_unique<BinaryOpExpr>(std::move(maxLoopCount.value()), Add,
                                                          make_unique<LiteralExpr>(1));
 
-            if (abs(indexPattern.value().step_) == 1) {
+            if (abs(indexPattern.value().step_) == 1 && extraConds.empty()) {
                 preciseLoopCount = maxLoopCount.value()->clone();
             } else {
                 preciseLoopCount = UnknownExpr::makeUnknown().into_underlying();
             }
-        } else if (auto unaryExpr = dyn_cast<UnaryOperator>(cond->IgnoreParenImpCasts())) {
+        } else if (auto unaryExpr = dyn_cast<UnaryOperator>(indexCond->IgnoreParenImpCasts())) {
             // TODO: more operators
             if (unaryExpr->getOpcode() != UnaryOperatorKind::UO_Deref) {
                 INFO("Loop's condition expr is too complex! Unimplemented unary "
@@ -409,12 +506,12 @@ class SetIndexPlugin : public LoopInfoPlugin {
                                      make_unique<BinaryOpExpr>(
                                          boundValue.value()->clone(), Add,
                                          make_unique<LiteralExpr>(indexPattern.value().step_ + 1)));
-            if (abs(indexPattern.value().step_) == 1) {
+            if (abs(indexPattern.value().step_) == 1 && extraConds.empty()) {
                 preciseLoopCount = maxLoopCount.value()->clone();
             } else {
                 preciseLoopCount = UnknownExpr::makeUnknown().into_underlying();
             }
-        } else if (auto refExpr = dyn_cast<DeclRefExpr>(cond->IgnoreParenImpCasts())) {
+        } else if (auto refExpr = dyn_cast<DeclRefExpr>(indexCond->IgnoreParenImpCasts())) {
             if (loopEntry.getPaths().empty()) {
                 ERROR("Pre-state has no path, something goes wrong.");
             }
@@ -481,7 +578,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
                                      make_unique<BinaryOpExpr>(
                                          boundValue.value()->clone(), Add,
                                          make_unique<LiteralExpr>(indexPattern.value().step_ + 1)));
-            if (abs(indexPattern.value().step_) == 1) {
+            if (abs(indexPattern.value().step_) == 1 && extraConds.empty()) {
                 preciseLoopCount = maxLoopCount.value()->clone();
             } else {
                 preciseLoopCount = UnknownExpr::makeUnknown().into_underlying();
@@ -505,8 +602,11 @@ class SetIndexPlugin : public LoopInfoPlugin {
                                 .maxLoopCount_       = std::move(maxLoopCount.value()),
                                 .indexPattern_       = std::move(indexPattern.value()),
                                 .isLocal_            = std::move(isLocal.value())};
-        if (loopInfo.indexInfo_.value().preciseLoopCount_->isUnknown()) {
+        loopInfo.extraCondConjuncts_ = std::move(extraConds);
+        if (abs(loopInfo.indexInfo_.value().indexPattern_.step_) != 1) {
             loopInfo.isIncompleteLoop_ = true;
+            return false;
+        } else if (!loopInfo.extraCondConjuncts_.empty()) {
             return false;
         }
         return true;

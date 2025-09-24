@@ -13,8 +13,11 @@
 using namespace std;
 using namespace llvm;
 
+using ::testing::AllOf;
 using ::testing::AnyOf;
 using ::testing::Eq;
+using ::testing::HasSubstr;
+using ::testing::StartsWith;
 using ::testing::StrEq;
 
 namespace {
@@ -370,4 +373,50 @@ TEST(SetIndexPluginTest, ComplexLoop_1) {
     auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
     EXPECT_EQ(continueFlag, false);
     EXPECT_EQ(loopInfo.indexInfo_, nullopt);
+}
+
+TEST(SetIndexPluginTest, openHITLS_1) {
+    auto pluginIds                = vector{"setPatterns"s, "setIndex"s};
+    auto code                     = R"(
+    #include <stdint.h>
+    #define BN_UINT uint32_t
+
+    #define ADD_AB(carry, r, a, b)       \
+    do {                             \
+        BN_UINT macroTmpT = (a) + (b);     \
+        (carry) = macroTmpT < (a) ? 1 : 0; \
+        (r) = macroTmpT;                   \
+    } while (0)
+
+
+    BN_UINT BinInc(BN_UINT *r, const BN_UINT *a, uint32_t size, BN_UINT w)
+{
+    uint32_t i;
+    BN_UINT carry = w;
+    for (i = 0; i < size && carry != 0; i++) {
+        ADD_AB(carry, r[i], a[i], carry);
+    }
+    if (r != a) {
+        for (; i < size; i++) {
+            r[i] = a[i];
+        }
+    }
+    return carry;
+}
+    )";
+    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    EXPECT_EQ(continueFlag, false);
+    ASSERT_NE(loopInfo.indexInfo_, nullopt);
+    auto &indexInfo = loopInfo.indexInfo_.value();
+    ASSERT_NE(indexInfo.indexAddr_->getFromRoot(), nullopt);
+    EXPECT_EQ(indexInfo.indexAddr_->getFromRoot().value()->getNameAsString(), "i");
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->getType(), SymbolicExpr::ExprType::Variable);
+    EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm().value_or(""), "i");
+    EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
+    EXPECT_EQ(indexInfo.indexBound_->regularForm().value_or(""), "size");
+    EXPECT_EQ(indexInfo.preciseLoopCount_->isUnknown(), true);
+    EXPECT_THAT(indexInfo.maxLoopCount_->simplifiedExpr()->regularForm().value_or(""),
+                AllOf(AnyOf(StartsWith("size"), HasSubstr("+ size")),
+                      AnyOf(StartsWith("-1 * i"), HasSubstr("- i"))));
+    EXPECT_EQ(loopInfo.extraCondConjuncts_.size(), 1);
 }

@@ -444,3 +444,88 @@ TEST(IntegrationTest, openHiTLS_2) {
         },
         ::testing::ExitedWithCode(0), "");
 }
+
+TEST(IntegrationTest, openHiTLS_3) {
+    auto code = R"(
+    #include <stdint.h>
+    #define BN_UINT uint32_t
+
+    #define SUB_ABC(borrow, r, a, b, c)         \
+    do {                                    \
+        BN_UINT macroTmpS = (a) - (b);            \
+        BN_UINT macroTmpB = ((a) < (b)) ? 1 : 0;  \
+        macroTmpB += (macroTmpS < (c)) ? 1 : 0;         \
+        (r) = macroTmpS - (c);                    \
+        borrow = macroTmpB;                       \
+    } while (0)
+
+BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
+    BN_UINT borrow    = 0;
+    uint32_t nn       = n;
+    const BN_UINT *aa = a;
+    const BN_UINT *bb = b;
+    BN_UINT *rr       = r;
+
+    while (nn >= 4) {
+        SUB_ABC(borrow, rr[0], aa[0], bb[0], borrow);
+        SUB_ABC(borrow, rr[1], aa[1], bb[1], borrow);
+        SUB_ABC(borrow, rr[2], aa[2], bb[2], borrow);
+        SUB_ABC(borrow, rr[3], aa[3], bb[3], borrow);
+
+        rr += 4;
+        aa += 4;
+        bb += 4;
+        nn -= 4;
+    }
+
+    uint32_t i = 0;
+
+    for (; i < nn; i++) {
+        SUB_ABC(borrow, rr[i], aa[i], bb[i], borrow);
+    }
+    return borrow;
+}
+    )";
+    ASSERT_EXIT(
+        {
+            doAll(code);
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+}
+
+TEST(IntegrationTest, openHiTLS_4) {
+    auto code = R"(
+    #include <stdint.h>
+    #define BN_UINT uint32_t
+
+    #define ADD_AB(carry, r, a, b)       \
+    do {                             \
+        BN_UINT macroTmpT = (a) + (b);     \
+        (carry) = macroTmpT < (a) ? 1 : 0; \
+        (r) = macroTmpT;                   \
+    } while (0)
+
+
+    BN_UINT BinInc(BN_UINT *r, const BN_UINT *a, uint32_t size, BN_UINT w)
+{
+    uint32_t i;
+    BN_UINT carry = w;
+    for (i = 0; i < size && carry != 0; i++) {
+        ADD_AB(carry, r[i], a[i], carry);
+    }
+    if (r != a) {
+        for (; i < size; i++) {
+            r[i] = a[i];
+        }
+    }
+    return carry;
+}
+    )";
+    ASSERT_EXIT(
+        {
+            doAll(code);
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+}

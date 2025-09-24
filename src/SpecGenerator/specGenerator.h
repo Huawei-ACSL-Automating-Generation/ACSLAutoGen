@@ -75,6 +75,11 @@ struct LoopInfo {
     };
     optional<IndexInfo> indexInfo_;
 
+    // SetIndexPlugin
+    vector<const clang::Expr *> extraCondConjuncts_; // extraCondConjuncts holds those conjunctive
+                                                     // clauses extracted from the loop
+    // condition that are **not** the simple index condition (e.g., i < n).
+
     // SetPatternsPlugin
     // Address with pattern has constant step.
     // Address with nullopt means too complex.

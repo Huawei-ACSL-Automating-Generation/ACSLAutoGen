@@ -605,10 +605,10 @@ std::optional<std::string> Symbolic::Variable::regularForm(std::optional<std::st
                     ERROR("Empty regular from.");
                 }
                 if (addr.value()[0] == '&')
-                    return (prefix ? string{prefix.value()} : "") + addr.value().substr(1) +
-                           (suffix ? string{suffix.value()} : "");
-                return (prefix ? string{prefix.value()} : "(") + "*" + addr.value() +
-                       (suffix ? string{suffix.value()} : ")");
+                    return string{prefix.value_or("")} + addr.value().substr(1) +
+                           string{suffix.value_or("")};
+                return string{prefix.value_or("(")} + "*" + addr.value() +
+                       string{suffix.value_or(")")};
             }
         },
         from_);
@@ -626,25 +626,19 @@ std::optional<std::string> SymbolAddress::regularForm(std::optional<std::string_
             if constexpr (std::is_same_v<T, std::monostate>) {
                 ERROR("Trying to get regular form of address without from_.");
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                auto nameStr = arg->regularForm(prefix, suffix);
+                auto nameStr = arg->regularFormOfValue(prefix, suffix);
                 if (nameStr == nullopt)
                     return nullopt;
                 auto offsetStr = offset_->regularForm(prefix, suffix);
                 if (offsetStr == nullopt)
                     return nullopt;
+
                 if (offsetStr.value() == "0")
                     offsetStr.value() = "";
-                if (nameStr.value().empty()) {
-                    ERROR("Empty regular from.");
-                }
-
-                if (nameStr.value()[0] == '&')
-                    nameStr.value() = nameStr.value().substr(1);
-                else
-                    nameStr.value() = "*" + nameStr.value();
 
                 if (!offsetStr.value().empty())
-                    return "(" + nameStr.value() + "+" + offsetStr.value() + ")";
+                    return "(" + string{prefix.value_or("")} + nameStr.value() +
+                           string{suffix.value_or("")} + "+" + offsetStr.value() + ")";
                 else
                     return nameStr;
             }
@@ -698,8 +692,8 @@ std::optional<std::string> FieldAddress::regularForm(std::optional<std::string_v
                 } else {
                     concatenatedStr = baseStr.value() + "->" + fieldStr;
                 }
-                return "&" + (prefix ? (std::string)*prefix : "") + concatenatedStr +
-                       (suffix ? (string)*suffix : "");
+                return "&" + std::string{prefix.value_or("")} + concatenatedStr +
+                       string{suffix.value_or("")};
             }
         },
         from_);
@@ -710,15 +704,23 @@ std::optional<std::string> SymbolAddress::regularFormOfValue(std::optional<std::
                                                              int,
                                                              bool) const {
     if (!isRange()) {
-        auto s = regularForm(prefix, suffix);
-        if (s == nullopt)
-            return nullopt;
-        if (s.value().empty())
-            ERROR("Empty regular form.");
-        if (s.value()[0] == '&')
-            return s.value().substr(1);
-        else
-            return "*(" + s.value() + ")";
+        return std::visit(
+            [&, this](auto &&arg) -> std::optional<std::string> {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, std::monostate>) {
+                    ERROR("Trying to get regular form of address without from_.");
+                } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                    auto nameStr = arg->regularFormOfValue(prefix, suffix);
+                    if (nameStr == nullopt)
+                        return nullopt;
+                    auto offsetStr = offset_->regularForm(prefix, suffix);
+                    if (offsetStr == nullopt)
+                        return nullopt;
+
+                    return nameStr.value() + "[" + offsetStr.value() + "]";
+                }
+            },
+            from_);
     } else {
         return std::visit(
             [&, this](auto &&arg) -> std::optional<std::string> {
@@ -740,7 +742,7 @@ std::optional<std::string> SymbolAddress::regularFormOfValue(std::optional<std::
                                                       range_.value().len_->clone()),
                             BinaryOpExpr::Operator::Subtract, make_unique<LiteralExpr>(1))
                             ->simplifiedExpr()
-                            ->regularForm();
+                            ->regularForm(prefix, suffix);
                     if (rangeStr == nullopt)
                         return nullopt;
 
@@ -812,10 +814,10 @@ std::optional<std::string> Symbolic::Structure::regularForm(std::optional<std::s
                     ERROR("Empty regular from.");
                 }
                 if (addr.value()[0] == '&')
-                    return (prefix ? string{prefix.value()} : "") + addr.value().substr(1) +
-                           (suffix ? string{suffix.value()} : "");
-                return (prefix ? string{prefix.value()} : "(") + "*" + addr.value() +
-                       (suffix ? string{suffix.value()} : ")");
+                    return string{prefix.value_or("")} + addr.value().substr(1) +
+                           string{suffix.value_or("")};
+                return string{prefix.value_or("(")} + "*" + addr.value() +
+                       string{suffix.value_or(")")};
             }
         },
         getFrom());
@@ -1812,6 +1814,8 @@ namespace Symbolic {
     }
 
     bool isValidOffsetOrLength(const SymbolicExpr &expr) {
+        if (expr.isUnknown())
+            return true;
         if (!expr.isLinear())
             return false;
         if (expr.tryEvalAsSymbolAddr())

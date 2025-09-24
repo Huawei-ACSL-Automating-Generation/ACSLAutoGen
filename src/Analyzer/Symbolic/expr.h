@@ -82,8 +82,8 @@ namespace Symbolic {
         virtual std::string dump() const = 0;
 
         /// @brief Emit expression in ACSL-compliant regular form.
-        /// @param prefix Optional variable prefix.
-        /// @param suffix Optional variable suffix.
+        /// @param prefix Optional prefix of symbols(Variable, Structure, SymbolAddress).
+        /// @param suffix Optional suffix of symbols(Variable, Structure, SymbolAddress).
         /// @param parentPrec Precedence of parent operator.
         /// @param isRightChild Whether this is right operand.
         /// @return String in ACSL syntax.
