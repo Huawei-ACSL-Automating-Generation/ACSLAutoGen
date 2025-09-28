@@ -342,9 +342,13 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
             }
         }
 
+        unordered_set<size_t> solvedAddrsHashs {};
         for (auto &addr : assignedAddrs) {
             for (auto &path : loopEntry.getPaths()) {
                 auto concreteAddr = getSubstitutedAddr(addr, *path);
+                if(solvedAddrsHashs.contains(concreteAddr->hash()))
+                    continue;
+                solvedAddrsHashs.insert(concreteAddr->hash());
                 if (concreteAddr->getAddressType() == Address::AddressType::SymbolAddr) {
                     auto &symbolAddr         = dynamic_cast<SymbolAddress &>(addr.get());
                     auto &symbolConcreteAddr = dynamic_cast<SymbolAddress &>(*concreteAddr);
