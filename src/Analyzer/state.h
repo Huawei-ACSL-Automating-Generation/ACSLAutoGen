@@ -581,7 +581,7 @@ class ProgramState {
     static std::unique_ptr<ProgramState> merge(const std::vector<const ProgramState *> &states);
     static std::unique_ptr<ProgramState> merge(
         const std::vector<std::unique_ptr<ProgramState>> &states);
-    std::unique_ptr<ProgramState> clone() const;
+    std::unique_ptr<ProgramState> clone(bool withPath = true) const;
     std::unique_ptr<ProgramState> cloneWithPaths(std::vector<std::unique_ptr<Path>> &newPaths) const;
     bool isInactive() const;
 

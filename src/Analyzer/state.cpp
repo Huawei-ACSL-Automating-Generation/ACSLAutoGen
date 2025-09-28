@@ -1795,12 +1795,14 @@ unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramStat
     return std::move(merged).value().into_underlying();
 }
 
-unique_ptr<ProgramState> ProgramState::clone() const {
+unique_ptr<ProgramState> ProgramState::clone(bool withPath) const {
     auto newState                 = make_unique<ProgramState>(func_->clone(), context_);
     newState->incompleteLoopInfo_ = incompleteLoopInfo_;
 
-    for (const auto &path : paths_) {
-        newState->paths_.push_back(path->clone());
+    if (withPath) {
+        for (const auto &path : paths_) {
+            newState->paths_.push_back(path->clone());
+        }
     }
 
     newState->StmtCtx = StmtCtx;
@@ -1808,7 +1810,7 @@ unique_ptr<ProgramState> ProgramState::clone() const {
 }
 
 unique_ptr<ProgramState> ProgramState::cloneWithPaths(vector<unique_ptr<Path>> &newPaths) const {
-    auto clone = this->clone();
+    auto clone = this->clone(false);
     clone->paths_.clear();
     clone->paths_.reserve(newPaths.size());
     clone->paths_.insert(clone->paths_.end(), make_move_iterator(newPaths.begin()),
