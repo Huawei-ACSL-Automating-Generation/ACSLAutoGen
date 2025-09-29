@@ -54,6 +54,7 @@ struct MemberTarget {
  */
 class MemoryModel {
   public:
+    using KeySet = std::unordered_set<AddressBox, AddressBoxHash, AddressBoxEq>;
     /**
      * @struct flat_view
      * @brief Provides a flat iteration view over the memory contents.
@@ -108,6 +109,31 @@ class MemoryModel {
      * @return A flat_view instance for iteration.
      */
     const flat_view flat() const;
+
+    /**
+     * @brief Collect a flat set of all address keys currently exposed by the memory model.
+     * @return A set of addresses following the same flattening semantics as flat_view.
+     *
+     * Note: Field addresses (arising from Structure values) are not stored as
+     * map keys and thus are not retained independently.
+     */
+    KeySet keys_flat() const;
+
+    /**
+     * @brief Retain only the entries whose (flattened) addresses are present in @p keep.
+     *        All other entries will be removed from the underlying maps.
+     *
+     * @param keep A set of addresses defined under the same flattening semantics
+     *             as produced by keys_flat() / flat_view.
+     *
+     * Semantics:
+     * - Variable addresses are matched directly.
+     * - Constant ranges are matched via composed SymbolAddress (offset/length)
+     *   consistent with flat_view.
+     * - Symbolic ranges are matched directly.
+     * - Structure fields are not directly stored as map keys and are therefore ignored.
+     */
+    void retain_only(const KeySet &keep);
 
   private:
     friend struct flat_view;
@@ -524,6 +550,7 @@ class Path {
 
     bool isActive() const { return currentState_ == PathState::Step; }
     bool isUnchanged(const Address &addr) const;
+    bool is_point_to_structure(const Address &addr) const;
     std::unique_ptr<Path> clone() const;
 
     const clang::Stmt *StmtCtx = nullptr;
@@ -534,6 +561,7 @@ class Path {
 
     auto getVarAddr() const -> const auto & { return varAddr_; };
     auto getMemoryState() const -> const auto & { return memoryState_; }
+    auto getMutMemoryState() -> auto & { return memoryState_; }
     auto getReturnExpr() const -> const auto & { return returnExpr_; }
     auto getPathState() const -> const auto & { return currentState_; }
 
@@ -603,6 +631,33 @@ class ProgramState {
         shared_ptr<ProgramState> preState_;
         const clang::Stmt *incompleteLoop_;
     };
+
+    /**
+     * @brief Collect a snapshot of address keys across all paths.
+     *
+     * This method traverses every active path and computes the union of
+     * flattened address keys (as defined by MemoryModel::flat_view), thereby
+     * yielding a conservative snapshot of the memory footprint at the
+     * program-state level.
+     *
+     * @return A set of addresses whose equality and hashing semantics follow
+     *         AddressBox/AddressBoxHash/AddressBoxEq.
+     */
+    MemoryModel::KeySet snapshot_all_path_keys() const;
+
+    /**
+     * @brief Retain only the addresses specified by @p keep across all paths.
+     *
+     * For each path, this method calls MemoryModel::retain_only(keep) on the
+     * underlying memory model, thereby removing all entries whose flattened
+     * addresses are not contained in @p keep. This operation is intended to
+     * model call-frame unwinding or scope exit where transient modifications
+     * must be discarded.
+     *
+     * @param keep A set of addresses to be preserved; its semantics must match
+     *             those produced by snapshot_all_path_keys().
+     */
+    void retain_only_keys_across_paths(const MemoryModel::KeySet &keep);
 
   private:
     // TODO: remove from private member. [a local helper function.]

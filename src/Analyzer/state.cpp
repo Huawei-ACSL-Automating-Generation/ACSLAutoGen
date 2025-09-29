@@ -514,6 +514,8 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     return Path::EvalResult(std::move(empty), std::move(exprs));
                 }
 
+                auto saved_memory = this->getMemoryState().keys_flat();
+
                 auto callArgs = evalCallArgs(this, call);
 
                 std::vector<not_null<std::unique_ptr<Path>>> outPaths;
@@ -536,6 +538,9 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                                                 : UnknownExpr::makeUnknown().into_underlying());
 
                         p->setPathState(PathState::Step);
+
+                        p->getMutMemoryState().retain_only(saved_memory);
+
                         if (!firstTaken) {
                             this->swap(*p);
                             outExprs.emplace_back(std::move(ret));
@@ -836,6 +841,15 @@ bool Path::isUnchanged(const Address &addr) const {
     return isFrom(addr, *value.value());
 }
 
+bool Path::is_point_to_structure(const Address &addr) const {
+    auto opt = memoryState_.read(addr);
+    if (!opt)
+        return false;
+
+    const SymbolicExpr *expr = opt.value().get();
+    return expr->getType() == SymbolicExpr::ExprType::Structure;
+}
+
 MemoryModel::MemoryModel(const MemoryModel &other) {
     for (auto &[addr, value] : other.memoryMap_variableAddr_) {
         memoryMap_variableAddr_.emplace(addr, value->clone());
@@ -1051,6 +1065,107 @@ const MemoryModel::flat_view MemoryModel::flat() const {
     return MemoryModel::flat_view{const_cast<MemoryModel &>(*this)};
 }
 
+MemoryModel::KeySet MemoryModel::keys_flat() const {
+    KeySet out;
+    for (auto &&[addr, value] : this->flat()) {
+        out.insert(addr);
+    }
+    return out;
+}
+
+// --- retain_only() ---
+void MemoryModel::retain_only(const KeySet &keep) {
+    /**
+     * Variable addresses
+     * Iterate over the variable-address map and remove all entries
+     * whose keys are not present in the preserved set.
+     */
+    for (auto it = memoryMap_variableAddr_.begin(); it != memoryMap_variableAddr_.end();) {
+        AddressBox key_as_box{it->first};
+        if (keep.find(key_as_box) == keep.end()) {
+            it = memoryMap_variableAddr_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    /**
+     * Constant ranges
+     * Each entry in this map is a pair consisting of a base information object
+     * and a set of constant ranges. For every range, we reconstruct the symbolic
+     * address in a manner consistent with flat_view::compose_address. If the
+     * reconstructed address is not present in the preserved set, the entry is
+     * removed. Empty inner maps are eliminated to maintain consistency.
+     */
+    for (auto outer = memoryMap_constantRange_.begin(); outer != memoryMap_constantRange_.end();) {
+        auto &inner_map = outer->second;
+
+        for (auto inner = inner_map.begin(); inner != inner_map.end();) {
+            const auto off        = inner->first.first;
+            const auto offPlusLen = inner->first.second;
+            const auto len        = offPlusLen - off;
+
+            auto base_copy = outer->first; // Copy ensures stability of map keys
+            std::unique_ptr<Address> composed;
+            if (len == 0) {
+                // Zero-length ranges are ill-formed; treated as deletions.
+                composed = nullptr;
+            } else if (len == 1) {
+                composed = std::make_unique<SymbolAddress>(std::move(base_copy.from_),
+                                                           std::make_unique<LiteralExpr>(off));
+            } else {
+                composed = std::make_unique<SymbolAddress>(std::move(base_copy.from_),
+                                                           std::make_unique<LiteralExpr>(off),
+                                                           std::make_unique<LiteralExpr>(len));
+            }
+
+            bool keep_this = false;
+            if (composed) {
+                AddressBox box{std::move(composed)};
+                keep_this = (keep.find(box) != keep.end());
+            }
+
+            if (!keep_this) {
+                inner = inner_map.erase(inner);
+            } else {
+                ++inner;
+            }
+        }
+
+        if (inner_map.empty()) {
+            outer = memoryMap_constantRange_.erase(outer);
+        } else {
+            ++outer;
+        }
+    }
+
+    /**
+     * Symbolic ranges
+     * Symbolic ranges are keyed directly by SymbolAddress. Each such key is
+     * converted into an AddressBox and compared against the preserved set.
+     * Entries not in the preserved set are removed. Outer maps are erased
+     * once their inner maps become empty.
+     */
+    for (auto outer = memoryMap_symbolicRange_.begin(); outer != memoryMap_symbolicRange_.end();) {
+        auto &inner_map = outer->second;
+
+        for (auto inner = inner_map.begin(); inner != inner_map.end();) {
+            AddressBox key_as_box{inner->first};
+            if (keep.find(key_as_box) == keep.end()) {
+                inner = inner_map.erase(inner);
+            } else {
+                ++inner;
+            }
+        }
+
+        if (inner_map.empty()) {
+            outer = memoryMap_symbolicRange_.erase(outer);
+        } else {
+            ++outer;
+        }
+    }
+}
+
 ProgramState::ProgramState(unique_ptr<Path> initialPath,
                            unique_ptr<ACSLFunction> func,
                            ACSLContext &context)
@@ -1092,6 +1207,11 @@ namespace {
 
 } // namespace
 
+// @WindOctober: A preliminary scan of the function is also required to identify all
+// global variables (i.e., variables whose scope is greater than or equal
+// to the current function). These variables must then be either properly
+// initialized or subjected to special handling.
+
 void ProgramState::init() {
     auto FD       = func_->getFunctionDecl();
     auto initPath = std::make_unique<Path>(context_);
@@ -1108,10 +1228,12 @@ void ProgramState::step(const Stmt *stmt) {
     TypeSwitch<const Stmt *, void>(stmt)
         .Case<CompoundStmt>([this](const CompoundStmt *cs) {
             DEBUG("stepping CompoundStmt...");
+            auto saved_memory = this->snapshot_all_path_keys();
             for (const Stmt *child : cs->children()) {
                 if (child)
                     step(child);
             }
+            this->retain_only_keys_across_paths(saved_memory);
         })
         .Case<IfStmt>([this](const IfStmt *ifStmt) {
             DEBUG("stepping IfStmt...");
@@ -1987,6 +2109,38 @@ std::vector<not_null<std::unique_ptr<Path>>> ProgramState::takeAllPaths() {
     std::vector<not_null<std::unique_ptr<Path>>> out;
     out.swap(paths_);
     return out;
+}
+
+MemoryModel::KeySet ProgramState::snapshot_all_path_keys() const {
+    MemoryModel::KeySet uni;
+
+    /**
+     * Iterate over all paths and accumulate the union of flattened address
+     * keys derived from each path's memory model. The flattening semantics
+     * coincide with MemoryModel::flat_view, ensuring that ranges and symbolic
+     * addresses are reconstructed consistently with iteration order.
+     */
+    for (const auto &p : paths_) {
+        const auto &mm = p->getMemoryState();
+        auto ks        = mm.keys_flat();
+        // Union: insert all keys into the accumulator.
+        uni.insert(ks.begin(), ks.end());
+    }
+    return uni;
+}
+
+void ProgramState::retain_only_keys_across_paths(const MemoryModel::KeySet &keep) {
+    /**
+     * For every path, enforce a retention filter on the underlying memory
+     * model: only entries whose flattened addresses belong to @p keep are
+     * preserved; all other entries are removed. This models the effect of
+     * unwinding a call or scope, where ephemeral updates are discarded while
+     * globally-relevant state is retained.
+     */
+    for (auto &p : paths_) {
+        auto &mm = p->getMutMemoryState();
+        mm.retain_only(keep);
+    }
 }
 
 string ProgramState::dump() const {

@@ -1117,6 +1117,9 @@ namespace Symbolic {
     BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
     SymbolicExpr::Type deriveVarType(clang::QualType type);
     bool isValidOffsetOrLength(const SymbolicExpr &expr);
+
+    bool is_symbol_addr(const Symbolic::Address &a) noexcept;
+
     bool isFrom(const Symbolic::Address &addr, const SymbolicExpr &expr);
 
 } // namespace Symbolic

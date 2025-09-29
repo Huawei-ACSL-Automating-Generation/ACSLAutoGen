@@ -1131,9 +1131,12 @@ bool VariableAddress::equal(const SymbolicExpr &expr) const {
             if constexpr (std::is_same_v<T, std::monostate>) {
                 TODO();
             } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                // @WindOctober: TODO remove the canonical form in compare, and move to construct.
                 if (auto varDeclPtr = std::get_if<not_null<const clang::VarDecl *>>(&other->from_);
-                    varDeclPtr != nullptr && arg == *varDeclPtr) {
-                    return true;
+                    varDeclPtr != nullptr) {
+                    const clang::VarDecl *lhs = arg.get()->getCanonicalDecl();
+                    const clang::VarDecl *rhs = (*varDeclPtr).get()->getCanonicalDecl();
+                    return lhs == rhs;
                 }
                 return false;
             }
@@ -1821,6 +1824,10 @@ namespace Symbolic {
         if (expr.tryEvalAsSymbolAddr())
             return false;
         return true;
+    }
+
+    bool is_symbol_addr(const Symbolic::Address &a) noexcept {
+        return a.getAddressType() == Symbolic::Address::AddressType::SymbolAddr;
     }
 
     bool isFrom(const Symbolic::Address &addr, const SymbolicExpr &expr) {

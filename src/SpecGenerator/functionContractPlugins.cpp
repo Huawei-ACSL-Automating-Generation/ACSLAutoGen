@@ -62,19 +62,21 @@ class AssignsPlugin : public FunctionContractPlugin {
         if (auto &paths = pre.getPaths(); paths.size() == 1) {
             auto &prePath = paths[0];
 
-            // For every post-state path
             for (auto &postPath : post.getPaths()) {
-                // and every Address in the path's memoryState.
+                INFO("path");
                 for (auto &&[addr, value] : postPath->getMemoryState().flat()) {
-                    if (!isFromPointer(isFromPointer, addr))
+                    INFO(addr.get().dump());
+                    INFO(value->dump());
+                    // If the current address corresponds to a pointer targeting a structure,
+                    // the associated handling is deliberately omitted. This omission is justified
+                    // by the design of the flat() traversal: the fields of the structure are
+                    // enumerated and processed individually. Thus, treating the pointer itself
+                    // would introduce redundancy.
+                    if (is_symbol_addr(addr) && postPath->is_point_to_structure(addr))
                         continue;
-                    postPath->isUnchanged(addr);
 
-                    auto [_, ok] = assignedAddrs.try_emplace(addr.hash(), std::move(addr));
-                    if (ok) {
-                        INFO(addr.get().dump());
-                        INFO(value->dump());
-                    }
+                    if (!postPath->isUnchanged(addr))
+                        auto [_, ok] = assignedAddrs.try_emplace(addr.hash(), std::move(addr));
                 }
             }
         }
