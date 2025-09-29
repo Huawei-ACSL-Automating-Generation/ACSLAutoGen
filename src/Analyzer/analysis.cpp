@@ -32,7 +32,8 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
         return;
     }
     // @WindOctober: TODO remove.
-    // if (FD->getNameAsString() != "IsLegalFlag" && FD->getNameAsString() != "BN_SetFlag")
+    // if (FD->getNameAsString() != "IsLegalFlag" && FD->getNameAsString() != "BN_SetFlag" &&
+    //     FD->getNameAsString() != "BN_IsZero")
     //     return;
     // INFO("Processing Function " + FD->getNameAsString());
 
@@ -66,9 +67,9 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
         auto spec = emitFunctionContract(*preState, *state);
         INFO(spec);
 
-        auto beginLoc = FD->getSourceRange().getBegin();
-        context_.insertText(beginLoc, spec, /*after*/ false,
-                            /*indentNewLines*/ true);
+        auto &SM       = context_.getSourceManager();
+        auto fileBegin = SM.getFileLoc(FD->getSourceRange().getBegin());
+        context_.insertText(fileBegin, spec, /*after*/ false, /*indentNewLines*/ true);
     } else {
         INFO("No function body found for: " + FD->getNameAsString());
     }
