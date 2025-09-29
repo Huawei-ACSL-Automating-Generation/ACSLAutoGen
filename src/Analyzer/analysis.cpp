@@ -32,9 +32,9 @@ void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
         return;
     }
     // @WindOctober: TODO remove.
-    if (FD->getNameAsString() != "IsLegalFlag" && FD->getNameAsString() != "BN_SetFlag")
-        return;
-    INFO("Processing Function " + FD->getNameAsString());
+    // if (FD->getNameAsString() != "IsLegalFlag" && FD->getNameAsString() != "BN_SetFlag")
+    //     return;
+    // INFO("Processing Function " + FD->getNameAsString());
 
     auto state = std::make_unique<ProgramState>(make_unique<ACSLFunction>(FD), context_);
 
