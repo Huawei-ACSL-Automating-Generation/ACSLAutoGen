@@ -4,7 +4,7 @@
 #include "macros.h"
 
 REGISTER_ACSL_GROUP(EmptyGroup);
-REGISTER_ACSL_GROUP(DefaultFunctionContract, "assigns", "result" /*, "poststate"*/);
+REGISTER_ACSL_GROUP(DefaultFunctionContract, "assigns", "poststate");
 REGISTER_ACSL_GROUP(DefaultLoopInfo, "setLoopEntry", "setPatterns", "setIndex");
 REGISTER_ACSL_GROUP(ComplexLoopInfo);
 REGISTER_ACSL_GROUP(DefaultLoopInvariant,
