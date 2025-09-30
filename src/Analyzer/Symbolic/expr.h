@@ -791,6 +791,8 @@ namespace Symbolic {
                     },
                     from_);
             }
+
+            std::optional<not_null<const clang::VarDecl *>> getFromRoot() const;
         };
 
         SymbolAddress(const SymbolAddress &other);
@@ -906,7 +908,18 @@ namespace Symbolic {
         bool operator==(const VariableAddress &other) const { return equal(other); }
 
         VariableAddress(std::variant<std::monostate, not_null<const clang::VarDecl *>> from)
-            : Address(AddressType::VariableAddr), from_(std::move(from)) {};
+            : Address(AddressType::VariableAddr) {
+            std::visit(
+                [&](auto &&arg) {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, std::monostate>) {
+                        from_ = std::monostate{};
+                    } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                        from_ = arg->getCanonicalDecl();
+                    }
+                },
+                from);
+        };
 
         not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;

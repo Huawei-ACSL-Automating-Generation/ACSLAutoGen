@@ -11,6 +11,7 @@
 #include "Analyzer/state.h"
 #include "Analyzer/analysis.h"
 #include "Context/context.h"
+#include "testHelper.h"
 
 using namespace std;
 
@@ -21,71 +22,10 @@ using ::testing::HasSubstr;
 using ::testing::StartsWith;
 using ::testing::StrEq;
 
-namespace {
-    ASTExtractor e;
-    // This code performs minimal safety checks, so please ensure the validity of the input.
-    not_null<unique_ptr<ProgramState>> symbolicExecutionOnFirstFunc(const string_view code) {
-        e.init(code);
-        static optional<ACSLContext> context{};
-        context.emplace(e.getASTContext());
-        auto func = e.findFirstDecl<clang::FunctionDecl>();
-        auto symbolicState =
-            make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
-        symbolicState->init();
-        DEBUG(symbolicState->dump());
-        for (clang::Stmt *stmt : func->getBody()->children()) {
-            symbolicState->step(stmt);
-            DEBUG(symbolicState->dump());
-        }
-        return symbolicState;
-    }
-
-    void doAll(const string_view code) {
-        e.init(code);
-        static optional<ACSLContext> context{};
-        context.emplace(e.getASTContext());
-        ACSLAnalyzer analyzer(context.value());
-        analyzer.analyzeFunctions();
-        for (auto &str : context.value().getInsertedStrings()) {
-            DEBUG(str);
-        }
-    }
-
-    not_null<unique_ptr<SymbolicExpr>> getReturnExprOfFirstPath(const ProgramState &state) {
-        if (state.getPaths().empty())
-            ERROR("Empty paths_!");
-        auto &firstPath  = state.getPaths()[0];
-        auto &returnExpr = firstPath->getReturnExpr();
-        if (returnExpr == nullopt)
-            ERROR("There is no returnExpr!");
-        return returnExpr.value()->clone();
-    }
-
-    not_null<unique_ptr<ProgramState>> getPostStateOfFirstLoop(const string_view code) {
-        e.init(code);
-        static optional<ACSLContext> context{};
-        context.emplace(e.getASTContext());
-        auto func = e.findFirstDecl<clang::FunctionDecl>();
-        auto symbolicState =
-            make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
-        symbolicState->init();
-        DEBUG(symbolicState->dump());
-        for (clang::Stmt *stmt : func->getBody()->children()) {
-            symbolicState->step(stmt);
-            if (isa<clang::WhileStmt>(stmt) || isa<clang::ForStmt>(stmt) ||
-                isa<clang::DoStmt>(stmt)) {
-                DEBUG(symbolicState->dump());
-                break;
-            }
-        }
-        return symbolicState;
-    }
-} // namespace
-
 TEST(IntegrationTest, SyntaxNoDeath) {
     ASSERT_EXIT(
         {
-            symbolicExecutionOnFirstFunc(R"(
+            execOnFirstFunc(R"(
     void func(){
         return;
     }
@@ -95,7 +35,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         ::testing::ExitedWithCode(0), "");
     ASSERT_EXIT(
         {
-            symbolicExecutionOnFirstFunc(R"(
+            execOnFirstFunc(R"(
     void func(int x){
         x++;
         int y = x + 1;
@@ -107,7 +47,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         ::testing::ExitedWithCode(0), "");
     ASSERT_EXIT(
         {
-            symbolicExecutionOnFirstFunc(R"(
+            execOnFirstFunc(R"(
     void func(int x, int *pt){
         x++;
         ++(*pt);
@@ -120,7 +60,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         ::testing::ExitedWithCode(0), "");
     ASSERT_EXIT(
         {
-            symbolicExecutionOnFirstFunc(R"(
+            execOnFirstFunc(R"(
     void func(int x, int *pt){
         x++;
         ++(*pt);
@@ -133,7 +73,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         ::testing::ExitedWithCode(0), "");
     ASSERT_EXIT(
         {
-            symbolicExecutionOnFirstFunc(R"(
+            execOnFirstFunc(R"(
     int func(int x, int n){
         for(int i = 0; i < n; i++){
             x = x - 1;
@@ -146,7 +86,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         ::testing::ExitedWithCode(0), "");
     ASSERT_EXIT(
         {
-            symbolicExecutionOnFirstFunc(R"(
+            execOnFirstFunc(R"(
     struct A{
         int x;
         unsigned long y;
@@ -163,7 +103,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
 
     ASSERT_EXIT(
         {
-            symbolicExecutionOnFirstFunc(R"(
+            execOnFirstFunc(R"(
     struct A{
         int x;
         unsigned long y;
@@ -180,7 +120,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         ::testing::ExitedWithCode(0), "");
     ASSERT_EXIT(
         {
-            symbolicExecutionOnFirstFunc(R"(
+            execOnFirstFunc(R"(
     void func(int x, int *pt){
         x++;
         ++*(pt+1);
@@ -193,7 +133,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         ::testing::ExitedWithCode(0), "");
     ASSERT_EXIT(
         {
-            symbolicExecutionOnFirstFunc(R"(
+            execOnFirstFunc(R"(
     void func(int x, int *pt){
         x++;
         ++pt[2];
@@ -206,7 +146,7 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         ::testing::ExitedWithCode(0), "");
     ASSERT_EXIT(
         {
-            symbolicExecutionOnFirstFunc(R"(
+            execOnFirstFunc(R"(
     void func(int x, int *pt){
         x++;
         pt[1]++;
@@ -233,11 +173,11 @@ TEST(IntegrationTest, CorrectStateWithPointerArithmetic) {
     )"s;
     ASSERT_EXIT(
         {
-            symbolicExecutionOnFirstFunc(code);
+            execOnFirstFunc(code);
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
-    auto postState = symbolicExecutionOnFirstFunc(code);
+    auto postState = execOnFirstFunc(code);
     ASSERT_EQ(*getReturnExprOfFirstPath(*postState)->simplifiedExpr(),
               *LiteralExpr{0}.simplifiedExpr());
 }
@@ -528,4 +468,123 @@ TEST(IntegrationTest, openHiTLS_4) {
             std::_Exit(0);
         },
         ::testing::ExitedWithCode(0), "");
+}
+
+TEST(ResultTest, WithStructure_1) {
+    auto code = R"(
+        struct A{
+            int x;
+            unsigned long y;
+        };
+        int func(struct A x, int n){
+            return x.x - x.y + n - 100;
+        }
+    )";
+    ASSERT_EXIT(
+        {
+            execOnFirstFunc(code);
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+    auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+    auto resultStr = result->regularForm();
+    if (resultStr == nullopt)
+        FAIL() << result->dump();
+    EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
+                                         AnyOf(StartsWith("-1 * x.y"), HasSubstr("- x.y")),
+                                         AnyOf(StartsWith("n"), HasSubstr("+ n")),
+                                         AnyOf(StartsWith("-1 * 100"), HasSubstr("- 100"))));
+}
+
+TEST(ResultTest, WithStructure_2) {
+    auto code = R"(
+        struct A{
+            int x;
+            unsigned long y;
+        };
+        int func(struct A x, int n){
+            int temp = x.x;
+            x.x = -10;
+            x.y = 100;
+            x.x++;
+            --x.y;
+            x.x = temp + n;
+            return x.x - x.y;
+        }
+    )";
+    ASSERT_EXIT(
+        {
+            execOnFirstFunc(code);
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+    auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+    auto resultStr = result->regularForm();
+    if (resultStr == nullopt)
+        FAIL() << result->dump();
+    EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
+                                         AnyOf(StartsWith("-1 * 99"), HasSubstr("- 99")),
+                                         AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+}
+
+TEST(ResultTest, WithStructure_3) {
+    auto code = R"(
+        struct A{
+            int* x;
+            unsigned long y;
+        };
+        int func(struct A x, int n){
+            int* temp = x.x;
+            x.y = 100;
+            (*x.x)++;
+            --x.y;
+            *temp += n;
+            return *x.x - x.y;
+        }
+    )";
+    ASSERT_EXIT(
+        {
+            execOnFirstFunc(code);
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+    auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+    auto resultStr = result->regularForm();
+    if (resultStr == nullopt)
+        FAIL() << result->dump();
+    EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("(*x.x)"), HasSubstr("+ (*x.x)")),
+                                         AnyOf(StartsWith("-1 * 98"), HasSubstr("- 98")),
+                                         AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+}
+
+TEST(ResultTest, WithStructure_4) {
+    auto code = R"(
+        struct A{
+            int* x;
+            unsigned long y;
+        };
+        int func(struct A a, struct A b){
+            A temp = b;
+            (*a.x)++;
+            a.y = 42;
+            (*temp.x)--;
+            temp.y = 100;
+            b.y += temp.y;
+            return *a.x + a.y + *b.x + b.y;
+        }
+    )";
+    ASSERT_EXIT(
+        {
+            execOnFirstFunc(code);
+            std::_Exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+    auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+    auto resultStr = result->regularForm();
+    if (resultStr == nullopt)
+        FAIL() << result->dump();
+    EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("(*a.x)"), HasSubstr("+ (*a.x)")),
+                                         AnyOf(StartsWith("(*b.x)"), HasSubstr("+ (*b.x)")),
+                                         AnyOf(StartsWith("b.y"), HasSubstr("+ b.y")),
+                                         AnyOf(StartsWith("142"), HasSubstr("+ 142"))));
 }

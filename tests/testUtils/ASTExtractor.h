@@ -45,6 +45,28 @@ class DeclFinderVisitor : public clang::RecursiveASTVisitor<DeclFinderVisitor<No
     NodeType *Found;
 };
 
+template <typename NodeType>
+class NthDeclFinderVisitor : public clang::RecursiveASTVisitor<NthDeclFinderVisitor<NodeType>> {
+  public:
+    explicit NthDeclFinderVisitor(unsigned n) : Found(nullptr), target_(n), count_(0) {}
+
+    bool VisitDecl(clang::Decl *D) {
+        if (auto *node = llvm::dyn_cast<NodeType>(D)) {
+            if (++count_ == target_) {
+                Found = node;
+                return false;
+            }
+        }
+        return Found == nullptr;
+    }
+
+    NodeType *Found;
+
+  private:
+    unsigned target_;
+    unsigned count_;
+};
+
 class ASTExtractor {
   public:
     ASTExtractor()                                = default;
@@ -56,16 +78,23 @@ class ASTExtractor {
     void init(std::string_view code);
 
     template <typename NodeType> NodeType *findFirstDecl() {
-        auto &Ctx = getASTContext();
+        auto &ctx = getASTContext();
         DeclFinderVisitor<NodeType> visitor;
-        visitor.TraverseDecl(Ctx.getTranslationUnitDecl());
+        visitor.TraverseDecl(ctx.getTranslationUnitDecl());
+        return visitor.Found;
+    }
+
+    template <typename NodeType> NodeType *findNthDecl(unsigned n) {
+        auto &ctx = getASTContext();
+        NthDeclFinderVisitor<NodeType> visitor(n);
+        visitor.TraverseDecl(ctx.getTranslationUnitDecl());
         return visitor.Found;
     }
 
     template <typename NodeType> NodeType *findFirstStmt() {
-        auto &Ctx = getASTContext();
+        auto &ctx = getASTContext();
         StmtFinderVisitor<NodeType> visitor;
-        visitor.TraverseDecl(Ctx.getTranslationUnitDecl());
+        visitor.TraverseDecl(ctx.getTranslationUnitDecl());
         return visitor.Found;
     }
 

@@ -105,6 +105,20 @@ class MemoryModel {
     }
 
     /**
+     * @brief Return number of memoryModel's entries without structures' fields.
+     * @return Number of memoryModel's entries without structures' fields.
+     */
+    size_t sizeWithoutFields() const {
+        size_t sum{0};
+        sum += memoryMap_variableAddr_.size();
+        for (auto &[_, map] : memoryMap_constantRange_)
+            sum += map.size();
+        for (auto &[_, map] : memoryMap_symbolicRange_)
+            sum += map.size();
+        return sum;
+    }
+
+    /**
      * @brief Returns a flat view of the memory contents (const).
      * @return A flat_view instance for iteration.
      */
@@ -117,6 +131,7 @@ class MemoryModel {
      * Note: Field addresses (arising from Structure values) are not stored as
      * map keys and thus are not retained independently.
      */
+    [[deprecated("Some bugs, use `eraseExpiredLocals`")]]
     KeySet keys_flat() const;
 
     /**
@@ -133,7 +148,23 @@ class MemoryModel {
      * - Symbolic ranges are matched directly.
      * - Structure fields are not directly stored as map keys and are therefore ignored.
      */
+    [[deprecated("Some bugs, use `eraseExpiredLocals`")]]
     void retain_only(const KeySet &keep);
+
+    /**
+     * @brief Remove all memory entries associated with a set of local variables
+     *        that have gone out of scope.
+     *
+     * This function inspects the memory model and erases any Address→Value
+     * pairs whose Address was derived from one of the provided local
+     * variables. It should be called at the end of a scope to ensure that
+     * memory state does not retain references to variables which are no
+     * longer visible.
+     *
+     * @param localVars The set of VarDecl pointers representing local
+     *                  variables that have expired (gone out of scope).
+     */
+    void eraseExpiredLocals(const unordered_set<const clang::VarDecl *> &localVars);
 
   private:
     friend struct flat_view;
@@ -151,9 +182,9 @@ class MemoryModel {
     unordered_map<SymbolAddress::BaseInfo, map<ConstRange, not_null<unique_ptr<SymbolicExpr>>>>
         memoryMap_constantRange_; ///< ConstRanges must be non-overlapping and non-zero-length.
 
-    /// Symbolic range mapping (hashed by base info)
-    using BaseHash = size_t;
-    unordered_map<BaseHash, unordered_map<SymbolAddress, not_null<unique_ptr<SymbolicExpr>>>>
+    /// Symbolic range mapping
+    unordered_map<SymbolAddress::BaseInfo,
+                  unordered_map<SymbolAddress, not_null<unique_ptr<SymbolicExpr>>>>
         memoryMap_symbolicRange_;
 };
 

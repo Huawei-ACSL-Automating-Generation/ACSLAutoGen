@@ -1131,12 +1131,9 @@ bool VariableAddress::equal(const SymbolicExpr &expr) const {
             if constexpr (std::is_same_v<T, std::monostate>) {
                 TODO();
             } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
-                // @WindOctober: TODO remove the canonical form in compare, and move to construct.
                 if (auto varDeclPtr = std::get_if<not_null<const clang::VarDecl *>>(&other->from_);
-                    varDeclPtr != nullptr) {
-                    const clang::VarDecl *lhs = arg.get()->getCanonicalDecl();
-                    const clang::VarDecl *rhs = (*varDeclPtr).get()->getCanonicalDecl();
-                    return lhs == rhs;
+                    varDeclPtr != nullptr && arg == *varDeclPtr) {
+                    return true;
                 }
                 return false;
             }
@@ -1171,6 +1168,19 @@ bool FieldAddress::equal(const SymbolicExpr &expr) const {
 }
 
 optional<not_null<const clang::VarDecl *>> SymbolAddress::getFromRoot() const {
+    return std::visit(
+        [](auto &&arg) -> optional<not_null<const clang::VarDecl *>> {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                return nullopt;
+            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                return arg->getFromRoot();
+            }
+        },
+        from_);
+}
+
+optional<not_null<const clang::VarDecl *>> SymbolAddress::BaseInfo::getFromRoot() const {
     return std::visit(
         [](auto &&arg) -> optional<not_null<const clang::VarDecl *>> {
             using T = std::decay_t<decltype(arg)>;

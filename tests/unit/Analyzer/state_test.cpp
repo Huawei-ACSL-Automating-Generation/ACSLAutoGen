@@ -13,6 +13,7 @@
 
 using ::testing::Return;
 using namespace std;
+using namespace clang;
 
 class TestPath : public Path {
   public:
@@ -252,55 +253,87 @@ TEST(PathTest, Clone)
     EXPECT_EQ(equal(path, *path_3), true);
 }
     */
+
 namespace {
-    Symbolic::VariableAddress makeBaseAddr(unsigned int id) {
-        // No offset and no length. Use id as a VarDecl* to make sure every made addresses can be
-        // distinguished by id.
-        return Symbolic::VariableAddress{(clang::VarDecl *)((uint64_t)id)};
-    }
 
-    Symbolic::SymbolAddress makeRangeAddr(unsigned int id,
-                                          unique_ptr<const SymbolicExpr> offset,
-                                          unique_ptr<const SymbolicExpr> len) {
-        auto baseAddr = makeBaseAddr(id);
-        if (len != nullptr)
+    class MemoryModelTest : public ::testing::Test {
+      protected:
+        MemoryModelTest() {
+            std::string code{};
+            for (auto i : views::iota(0u, 20u)) {
+                code += "int g" + to_string(i) + ";";
+            }
+
+            e.init(code);
+            for (auto d : e.getASTContext().getTranslationUnitDecl()->decls()) {
+                if (auto vd = llvm::dyn_cast<clang::VarDecl>(d))
+                    varDecls.push_back(vd);
+            }
+        }
+
+        not_null<const clang::VarDecl *> getVarDecl(unsigned int id) {
+            if (!idCountMap.contains(id)) {
+                assert(count < varDecls.size() && "Need more varDecl? Change the for loop above!");
+                idCountMap[id] = count++;
+            }
+            return varDecls.at(idCountMap.at(id));
+        }
+
+        ASTExtractor e;
+
+        VariableAddress makeVariableAddr(unsigned int id) {
+            return VariableAddress{getVarDecl(id)};
+        }
+
+        Symbolic::SymbolAddress makeRangeAddr(unsigned int id,
+                                              unique_ptr<const SymbolicExpr> offset,
+                                              unique_ptr<const SymbolicExpr> len) {
+            auto baseAddr = makeVariableAddr(id);
+            if (len != nullptr)
+                return Symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(),
+                                               std::move(offset), std::move(len)};
             return Symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(),
-                                           std::move(offset), std::move(len)};
-        return Symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(), std::move(offset),
-                                       nullopt};
-    }
+                                           std::move(offset), nullopt};
+        }
 
-    unique_ptr<Symbolic::Variable> makeVariable(unsigned int id) {
-        return std::make_unique<Symbolic::Variable>(
-            SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, id},
-            make_unique<VariableAddress>((clang::VarDecl *)((uint64_t)id)));
-    }
+        unique_ptr<Symbolic::Variable> makeVariable(unsigned int id) {
+            return std::make_unique<Symbolic::Variable>(
+                SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, id},
+                make_unique<VariableAddress>(getVarDecl(id)));
+        }
 
-    Symbolic::SymbolAddress makePointAddr(unsigned int id, std::uint64_t off) {
-        return makeRangeAddr(id, std::make_unique<LiteralExpr>(static_cast<std::uint64_t>(off)),
-                             nullptr);
-    }
+        Symbolic::SymbolAddress makePointAddr(unsigned int id, std::uint64_t off) {
+            return makeRangeAddr(id, std::make_unique<LiteralExpr>(static_cast<std::uint64_t>(off)),
+                                 nullptr);
+        }
 
-    void ExpectReadEqAt(MemoryModel &mm,
-                        unsigned id,
-                        std::uint64_t off,
-                        const Symbolic::SymbolicExpr &expected) {
-        auto addr = makePointAddr(id, off);
-        auto got  = mm.read(addr);
-        ASSERT_NE(got, nullopt) << "read returned null at off=" << off;
-        EXPECT_EQ(*got.value(), expected) << "mismatch at off=" << off;
-    }
+        void ExpectReadEqAt(MemoryModel &mm,
+                            unsigned id,
+                            std::uint64_t off,
+                            const Symbolic::SymbolicExpr &expected) {
+            auto addr = makePointAddr(id, off);
+            auto got  = mm.read(addr);
+            ASSERT_NE(got, nullopt) << "read returned null at off=" << off;
+            EXPECT_EQ(*got.value(), expected) << "mismatch at off=" << off;
+        }
 
-    void ExpectReadNullAt(MemoryModel &mm, unsigned id, std::uint64_t off) {
-        auto addr = makePointAddr(id, off);
-        EXPECT_EQ(mm.read(addr), nullopt) << "expected null at off=" << off;
-    }
+        void ExpectReadNullAt(MemoryModel &mm, unsigned id, std::uint64_t off) {
+            auto addr = makePointAddr(id, off);
+            EXPECT_EQ(mm.read(addr), nullopt) << "expected null at off=" << off;
+        }
+
+      private:
+        std::vector<const clang::VarDecl *> varDecls;
+        size_t count{0};
+        unordered_map<unsigned int, size_t> idCountMap{};
+    };
+
 }; // namespace
 
-TEST(MemoryModelTest, ReadAfterWrite_VarAddr) {
+TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
     MemoryModel mm;
 
-    auto addr     = makeBaseAddr(1);
+    auto addr     = makeVariableAddr(1);
     auto expr     = makeVariable(42);
     auto saveExpr = expr->clone();
     mm.write(addr, std::move(expr));
@@ -311,11 +344,11 @@ TEST(MemoryModelTest, ReadAfterWrite_VarAddr) {
     EXPECT_EQ(*got.value(), *saveExpr);
 }
 
-TEST(MemoryModelTest, Flat_Yields_All_Three_Categories) {
+TEST_F(MemoryModelTest, Flat_Yields_All_Three_Categories) {
     MemoryModel mm;
 
     // noOffset
-    auto baseA  = makeBaseAddr(1);
+    auto baseA  = makeVariableAddr(1);
     auto eA     = makeVariable(1);
     auto saveEA = eA->clone();
     mm.write(baseA, std::move(eA));
@@ -348,7 +381,7 @@ TEST(MemoryModelTest, Flat_Yields_All_Three_Categories) {
     EXPECT_TRUE(fC);
 }
 
-TEST(MemoryModelTest, ConstRange_CoverageAndOverride) {
+TEST_F(MemoryModelTest, ConstRange_CoverageAndOverride) {
     MemoryModel mm;
     const unsigned baseId = 10;
 
@@ -398,7 +431,7 @@ TEST(MemoryModelTest, ConstRange_CoverageAndOverride) {
     ExpectReadNullAt(mm, baseId, 10);
 }
 
-TEST(MemoryModelTest, ConstRange_ExactOverrideSameInterval) {
+TEST_F(MemoryModelTest, ConstRange_ExactOverrideSameInterval) {
     MemoryModel mm;
     const unsigned baseId = 11;
 
@@ -422,7 +455,7 @@ TEST(MemoryModelTest, ConstRange_ExactOverrideSameInterval) {
     ExpectReadNullAt(mm, baseId, 9);
 }
 
-TEST(MemoryModelTest, ConstRange_TouchingIntervals_NoOverlap) {
+TEST_F(MemoryModelTest, ConstRange_TouchingIntervals_NoOverlap) {
     MemoryModel mm;
     const unsigned baseId = 12;
 
@@ -449,4 +482,44 @@ TEST(MemoryModelTest, ConstRange_TouchingIntervals_NoOverlap) {
     ExpectReadEqAt(mm, baseId, 4, *s2);
 
     ExpectReadNullAt(mm, baseId, 5);
+}
+TEST_F(MemoryModelTest, EraseExpiredLocals) {
+    auto code = R"(
+void func(int param) {
+    int x;
+}
+
+void test_mm_erase(int param) { 
+    int x = 1;
+
+    {
+        int y = 2;
+        int z = 3;
+    }
+
+    for (int i = 0; i < 2; ++i) {
+        int t = i;
+    }
+
+    {
+        int x = 42;
+    }
+
+    func(x);
+}
+)";
+
+    ASTExtractor e;
+    e.init(code);
+
+    auto context       = ACSLContext{e.getASTContext()};
+    auto func          = e.findNthDecl<clang::FunctionDecl>(2);
+    auto symbolicState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context);
+    symbolicState->init();
+    EXPECT_EQ(symbolicState->getPaths().at(0)->getMemoryState().sizeWithoutFields(), 1);
+    for (clang::Stmt *stmt : func->getBody()->children()) {
+        symbolicState->step(stmt);
+        EXPECT_EQ(symbolicState->getPaths().at(0)->getMemoryState().sizeWithoutFields(), 2)
+            << symbolicState->dump();
+    }
 }

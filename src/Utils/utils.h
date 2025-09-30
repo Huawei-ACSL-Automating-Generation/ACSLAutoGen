@@ -3,10 +3,11 @@
 
 #include <utility>
 #include "clang/AST/RecursiveASTVisitor.h"
+#include <unordered_set>
 
 bool isAssignOp(const clang::BinaryOperator *binOp);
-
 bool ignoreTopBinop(const clang::BinaryOperator *binOp);
+std::unordered_set<const clang::VarDecl *> collectLocalVars(const clang::Stmt *stmt);
 
 namespace acslg {
     // handy hash

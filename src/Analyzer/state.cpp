@@ -514,8 +514,6 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     return Path::EvalResult(std::move(empty), std::move(exprs));
                 }
 
-                auto saved_memory = this->getMemoryState().keys_flat();
-
                 auto callArgs = evalCallArgs(this, call);
 
                 std::vector<not_null<std::unique_ptr<Path>>> outPaths;
@@ -538,8 +536,6 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                                                 : UnknownExpr::makeUnknown().into_underlying());
 
                         p->setPathState(PathState::Step);
-
-                        p->getMutMemoryState().retain_only(saved_memory);
 
                         if (!firstTaken) {
                             this->swap(*p);
@@ -929,10 +925,9 @@ optional<not_null<const SymbolicExpr *>> MemoryModel::read(const Address &addr) 
             }
         }
 
-        auto baseHash = baseInfo.hash();
-        if (!memoryMap_symbolicRange_.contains(baseHash))
+        if (!memoryMap_symbolicRange_.contains(baseInfo))
             return nullopt;
-        auto &addrValueMap = memoryMap_symbolicRange_.at(baseHash);
+        auto &addrValueMap = memoryMap_symbolicRange_.at(baseInfo);
         auto it            = addrValueMap.find(symbolAddr);
         if (it == addrValueMap.end())
             return nullopt;
@@ -1027,8 +1022,7 @@ void MemoryModel::write(const Address &addr, not_null<unique_ptr<SymbolicExpr>> 
             return;
         }
         // symbolic range
-        auto baseHash      = baseInfo.hash();
-        auto &addrValueMap = memoryMap_symbolicRange_[baseHash];
+        auto &addrValueMap = memoryMap_symbolicRange_[baseInfo];
         addrValueMap.insert_or_assign(symbolAddr, std::move(value));
         return;
     } else if (addr.getAddressType() == FieldAddr) {
@@ -1166,6 +1160,27 @@ void MemoryModel::retain_only(const KeySet &keep) {
     }
 }
 
+void MemoryModel::eraseExpiredLocals(const unordered_set<const clang::VarDecl *> &localVars) {
+    std::erase_if(memoryMap_variableAddr_, [&](auto const &kv) {
+        auto fromRoot = kv.first.getFromRoot();
+        if (fromRoot == nullopt)
+            TODO();
+        return localVars.contains(fromRoot.value());
+    });
+    std::erase_if(memoryMap_constantRange_, [&](auto const &kv) {
+        auto fromRoot = kv.first.getFromRoot();
+        if (fromRoot == nullopt)
+            TODO();
+        return localVars.contains(fromRoot.value());
+    });
+    std::erase_if(memoryMap_symbolicRange_, [&](auto const &kv) {
+        auto fromRoot = kv.first.getFromRoot();
+        if (fromRoot == nullopt)
+            TODO();
+        return localVars.contains(fromRoot.value());
+    });
+}
+
 ProgramState::ProgramState(unique_ptr<Path> initialPath,
                            unique_ptr<ACSLFunction> func,
                            ACSLContext &context)
@@ -1228,12 +1243,10 @@ void ProgramState::step(const Stmt *stmt) {
     TypeSwitch<const Stmt *, void>(stmt)
         .Case<CompoundStmt>([this](const CompoundStmt *cs) {
             DEBUG("stepping CompoundStmt...");
-            auto saved_memory = this->snapshot_all_path_keys();
             for (const Stmt *child : cs->children()) {
                 if (child)
                     step(child);
             }
-            this->retain_only_keys_across_paths(saved_memory);
         })
         .Case<IfStmt>([this](const IfStmt *ifStmt) {
             DEBUG("stepping IfStmt...");
@@ -1393,6 +1406,13 @@ void ProgramState::step(const Stmt *stmt) {
         // })
         .Default(
             [](const Stmt *s) { UNIMPLEMENT("Unsupported Stmt type: " << s->getStmtClassName()); });
+
+    auto localVars = collectLocalVars(stmt);
+    for (auto &path : paths_) {
+        auto &memoryState = path->getMutMemoryState();
+        std::erase_if(path->varAddr_, [&](auto &&kv) { return localVars.contains(kv.first); });
+        memoryState.eraseExpiredLocals(localVars);
+    }
     return;
 }
 
@@ -2111,6 +2131,7 @@ std::vector<not_null<std::unique_ptr<Path>>> ProgramState::takeAllPaths() {
     return out;
 }
 
+[[deprecated("Some bugs, use `eraseExpiredLocals`")]]
 MemoryModel::KeySet ProgramState::snapshot_all_path_keys() const {
     MemoryModel::KeySet uni;
 
@@ -2129,6 +2150,7 @@ MemoryModel::KeySet ProgramState::snapshot_all_path_keys() const {
     return uni;
 }
 
+[[deprecated("Some bugs, use `eraseExpiredLocals`")]]
 void ProgramState::retain_only_keys_across_paths(const MemoryModel::KeySet &keep) {
     /**
      * For every path, enforce a retention filter on the underlying memory

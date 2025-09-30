@@ -9,6 +9,7 @@
 #include "SpecGenerator/specGenerator.h"
 #include "Analyzer/function.h"
 #include "Analyzer/state.h"
+#include "testHelper.h"
 
 using namespace std;
 using namespace llvm;
@@ -20,72 +21,6 @@ using ::testing::HasSubstr;
 using ::testing::StartsWith;
 using ::testing::StrEq;
 
-namespace {
-    ASTExtractor e;
-    // This code performs minimal safety checks, so please ensure the validity of the input.
-    auto doPluginOnFirstLoop(string_view code, const vector<string> pids) {
-        e.init(code);
-        static optional<ACSLContext> context{};
-        context.emplace(e.getASTContext());
-        auto func     = e.findFirstDecl<clang::FunctionDecl>();
-        auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
-        clang::Stmt *loopStmt;
-        preState->init();
-        DEBUG(preState->dump());
-        for (clang::Stmt *stmt : func->getBody()->children()) {
-            if (isa<clang::WhileStmt>(stmt) || isa<clang::ForStmt>(stmt) ||
-                isa<clang::DoStmt>(stmt)) {
-                loopStmt = stmt;
-                break;
-            }
-            preState->step(stmt);
-            DEBUG(preState->dump());
-        }
-
-        auto loopEntry = preState->clone();
-        if (auto forLoop = dyn_cast<clang::ForStmt>(loopStmt); forLoop && forLoop->getInit()) {
-            loopEntry->step(forLoop->getInit());
-            DEBUG(loopEntry->dump());
-        }
-
-        const clang::Expr *cond = nullptr;
-        const clang::Stmt *inc  = nullptr;
-        const clang::Stmt *body = nullptr;
-
-        if (const auto *forStmt = dyn_cast<clang::ForStmt>(loopStmt)) {
-            cond = forStmt->getCond();
-            inc  = forStmt->getInc();
-            body = forStmt->getBody();
-        } else if (const auto *whileStmt = dyn_cast<clang::WhileStmt>(loopStmt)) {
-            cond = whileStmt->getCond();
-            body = whileStmt->getBody();
-        } else {
-            UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
-        }
-
-        LoopInfo loopInfo;
-
-        if (auto *pl = ACSLPluginRegistry::instance().get("setLoopEntry")) {
-            auto *setLoopEntryPlugin = dynamic_cast<const LoopInfoPlugin *>(pl);
-
-            if (!setLoopEntryPlugin->parse(*preState, *loopEntry, cond, inc, body, loopInfo))
-                ERROR("Set loop entry fail.");
-        } else {
-            ERROR("Set loop entry fail.");
-        }
-
-        bool result;
-        for (auto &pid : pids) {
-            auto *pl = ACSLPluginRegistry::instance().get(pid);
-            if (!pl)
-                ERROR("Plugin with id " + pid + " does not exist!");
-            auto *fcp = dynamic_cast<const LoopInfoPlugin *>(pl);
-            result    = fcp->parse(*preState, *loopEntry, cond, inc, body, loopInfo);
-        }
-        return pair{std::move(loopInfo), result};
-    }
-} // namespace
-
 TEST(SetPatternsPluginTest, SimpleLoop_1) {
     auto pluginIds                = vector{"setPatterns"s};
     auto code                     = R"(
@@ -96,7 +31,7 @@ TEST(SetPatternsPluginTest, SimpleLoop_1) {
             return x;
         }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.patternInfo_, nullopt);
     auto &patternInfo = loopInfo.patternInfo_.value();
@@ -124,7 +59,7 @@ TEST(SetPatternsPluginTest, SimpleLoop_2) {
             return x;
         }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginId);
+    auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.patternInfo_, nullopt);
     auto &patternInfo = loopInfo.patternInfo_.value();
@@ -153,7 +88,7 @@ TEST(SetPatternsPluginTest, SimpleLoop_3) {
             return x;
         }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginId);
+    auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.patternInfo_, nullopt);
     auto &patternInfo = loopInfo.patternInfo_.value();
@@ -182,7 +117,7 @@ TEST(SetPatternsPluginTest, SimpleLoop_4) {
             return x;
         }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginId);
+    auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.patternInfo_, nullopt);
     auto &patternInfo = loopInfo.patternInfo_.value();
@@ -230,7 +165,7 @@ TEST(SetPatternsPluginTest, openHiTLS_4) {
     return carry;
 }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginId);
+    auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.patternInfo_, nullopt);
     auto &patternInfo = loopInfo.patternInfo_.value();
@@ -272,7 +207,7 @@ TEST(SetIndexPluginTest, SimpleLoop_1) {
             return x;
         }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.indexInfo_, nullopt);
     auto &indexInfo = loopInfo.indexInfo_.value();
@@ -295,7 +230,7 @@ TEST(SetIndexPluginTest, SimpleLoop_2) {
             return x;
         }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.indexInfo_, nullopt);
     auto &indexInfo = loopInfo.indexInfo_.value();
@@ -320,7 +255,7 @@ TEST(SetIndexPluginTest, SimpleLoop_3) {
             return x;
         }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.indexInfo_, nullopt);
     auto &indexInfo = loopInfo.indexInfo_.value();
@@ -342,7 +277,7 @@ TEST(SetIndexPluginTest, SimpleLoop_4) {
             } 
         }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
     EXPECT_EQ(continueFlag, true);
     ASSERT_NE(loopInfo.indexInfo_, nullopt);
     auto &indexInfo = loopInfo.indexInfo_.value();
@@ -370,7 +305,7 @@ TEST(SetIndexPluginTest, ComplexLoop_1) {
         return 0;
     }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
     EXPECT_EQ(continueFlag, false);
     EXPECT_EQ(loopInfo.indexInfo_, nullopt);
 }
@@ -404,7 +339,7 @@ TEST(SetIndexPluginTest, openHITLS_1) {
     return carry;
 }
     )";
-    auto [loopInfo, continueFlag] = doPluginOnFirstLoop(code, pluginIds);
+    auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
     EXPECT_EQ(continueFlag, false);
     ASSERT_NE(loopInfo.indexInfo_, nullopt);
     auto &indexInfo = loopInfo.indexInfo_.value();
