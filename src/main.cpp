@@ -52,61 +52,73 @@ class TUASTConsumer : public ASTConsumer {
 };
 
 class ACSLCommentHandler : public CommentHandler {
-    Rewriter &TheRewriter;
+    Rewriter rewriter_;
+
+    static bool isACSL(StringRef s) {
+        StringRef t = s.ltrim();
+        return t.starts_with("/*@") || t.starts_with("//@") || t.contains("\n//@");
+    }
+
+    static StringRef firstTokenAfterMarker(StringRef s) {
+        s = s.ltrim();
+        if (s.starts_with("/*@")) {
+            s = s.drop_front(3);
+            if (s.ends_with("@*/"))
+                s = s.drop_back(3);
+            if (s.ends_with("*/"))
+                s = s.drop_back(2);
+        } else if (s.starts_with("//@")) {
+            s = s.drop_front(3);
+        } else {
+            size_t pos = s.rfind("//@");
+            if (pos != StringRef::npos)
+                s = s.substr(pos + 3);
+        }
+        s        = s.ltrim();
+        size_t i = 0;
+        while (i < s.size() && (isalnum(s[i]) || s[i] == '_' || s[i] == '-'))
+            ++i;
+        return s.substr(0, i);
+    }
+
+    static bool isTopLevelRequires(StringRef raw) {
+        auto tok = firstTokenAfterMarker(raw).lower();
+        return tok == "requires";
+    }
 
   public:
-    ACSLCommentHandler(Rewriter &R) : TheRewriter(R) {}
+    ACSLCommentHandler(const Rewriter &rewriter) : rewriter_(rewriter) {}
 
-    bool HandleComment(Preprocessor &PP, SourceRange CommentRange) override {
-        SourceManager &SM = PP.getSourceManager();
-        if (!SM.isInMainFile(CommentRange.getBegin()))
+    bool HandleComment(Preprocessor &PP, SourceRange comment) override {
+        const SourceManager &SM     = PP.getSourceManager();
+        const LangOptions &LO       = PP.getLangOpts();
+        clang::SourceLocation begin = SM.getFileLoc(comment.getBegin());
+        clang::SourceLocation end   = SM.getFileLoc(comment.getEnd());
+
+        if (!begin.isValid() || !end.isValid())
             return false;
 
-        // Grab the raw text of the comment
-        StringRef text =
-            Lexer::getSourceText(CharSourceRange::getCharRange(CommentRange), SM, PP.getLangOpts());
+        end = clang::Lexer::getLocForEndOfToken(end, 0, SM, LO);
 
-        // Only care about ACSL-style comments: /*@ ... */ or //@ ...
-        if (text.starts_with("/*@") || text.starts_with("//@")) {
-            //-------------------------------
-            // remove all ACSL now
-            //-------------------------------
-            // TODO(requires): impl this dealing with 'requires'.
-            TheRewriter.RemoveText(CharSourceRange::getCharRange(CommentRange));
+        if (!SM.isWrittenInMainFile(begin))
             return false;
-            // If it contains a 'requires', extract only those lines
-            if (text.contains("requires")) {
-                SmallVector<StringRef, 8> lines;
-                text.split(lines, '\n');
-
-                std::string newComment;
-                // Reconstruct as a /*@ ... */ block
-                if (text.starts_with("/*@"))
-                    newComment = "/*@\n";
-                else
-                    newComment = "//@\n";
-
-                for (auto &line : lines) {
-                    if (auto pos = line.find("requires"); pos != StringRef::npos) {
-                        newComment += line.substr(pos);
-                        newComment += "\n";
-                    }
-                }
-
-                if (text.starts_with("/*@"))
-                    newComment += "*/";
-
-                // TODO: store 'requires'.
-                TheRewriter.ReplaceText(CharSourceRange::getCharRange(CommentRange), newComment);
-            } else {
-                // Remove all ACSL
-                TheRewriter.RemoveText(CharSourceRange::getCharRange(CommentRange));
-            }
-            // TODO: return true causes segfault, why?
+        if (SM.getFileID(begin) != SM.getFileID(end))
             return false;
+        if (!rewriter_.isRewritable(begin) || !rewriter_.isRewritable(end))
+            return false;
+
+        llvm::StringRef raw =
+            clang::Lexer::getSourceText(clang::CharSourceRange::getCharRange(begin, end), SM, LO);
+
+        if (!isACSL(raw))
+            return false;
+
+        if (!isTopLevelRequires(raw)) {
+            clang::CharSourceRange charRange = clang::CharSourceRange::getCharRange(begin, end);
+            rewriter_.ReplaceText(charRange, "");
         }
 
-        return false; // leave other comments alone
+        return false;
     }
 };
 
