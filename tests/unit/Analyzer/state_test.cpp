@@ -279,8 +279,6 @@ namespace {
             return varDecls.at(idCountMap.at(id));
         }
 
-        ASTExtractor e;
-
         VariableAddress makeVariableAddr(unsigned int id) {
             return VariableAddress{getVarDecl(id)};
         }
@@ -288,18 +286,20 @@ namespace {
         Symbolic::SymbolAddress makeRangeAddr(unsigned int id,
                                               unique_ptr<const SymbolicExpr> offset,
                                               unique_ptr<const SymbolicExpr> len) {
-            auto baseAddr = makeVariableAddr(id);
+            auto defaultPoint = SourcePoint::fromDefault(e.getSourceManager());
+            auto baseAddr     = makeVariableAddr(id);
             if (len != nullptr)
                 return Symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(),
-                                               std::move(offset), std::move(len)};
-            return Symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(),
+                                               defaultPoint, std::move(offset), std::move(len)};
+            return Symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(), defaultPoint,
                                            std::move(offset), nullopt};
         }
 
         unique_ptr<Symbolic::Variable> makeVariable(unsigned int id) {
+            auto defaultPoint = SourcePoint::fromDefault(e.getSourceManager());
             return std::make_unique<Symbolic::Variable>(
                 SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, id},
-                make_unique<VariableAddress>(getVarDecl(id)));
+                make_unique<VariableAddress>(getVarDecl(id)), defaultPoint);
         }
 
         Symbolic::SymbolAddress makePointAddr(unsigned int id, std::uint64_t off) {
@@ -323,6 +323,7 @@ namespace {
         }
 
       private:
+        ASTExtractor e;
         std::vector<const clang::VarDecl *> varDecls;
         size_t count{0};
         unordered_map<unsigned int, size_t> idCountMap{};

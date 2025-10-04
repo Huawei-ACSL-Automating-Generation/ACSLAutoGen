@@ -17,6 +17,7 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
+        SourcePoint,
         const clang::Expr *,
         const clang::Stmt *,
         const clang::Stmt *,
@@ -82,6 +83,7 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
+        SourcePoint,
         const clang::Expr *cond,
         const clang::Stmt *inc,
         const clang::Stmt *body,
@@ -196,6 +198,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &preState,
         const ProgramState &loopEntry,
+        SourcePoint,
         const clang::Expr *cond,
         const clang::Stmt *inc,
         const clang::Stmt *body,
@@ -342,11 +345,11 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
             }
         }
 
-        unordered_set<size_t> solvedAddrsHashs {};
+        unordered_set<size_t> solvedAddrsHashs{};
         for (auto &addr : assignedAddrs) {
             for (auto &path : loopEntry.getPaths()) {
                 auto concreteAddr = getSubstitutedAddr(addr, *path);
-                if(solvedAddrsHashs.contains(concreteAddr->hash()))
+                if (solvedAddrsHashs.contains(concreteAddr->hash()))
                     continue;
                 solvedAddrsHashs.insert(concreteAddr->hash());
                 if (concreteAddr->getAddressType() == Address::AddressType::SymbolAddr) {
@@ -390,6 +393,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
+        SourcePoint,
         const clang::Expr *,
         const clang::Stmt *,
         const clang::Stmt *body,
@@ -685,6 +689,7 @@ class LoopVariantPlugin : public LoopInvariantPlugin {
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
+        SourcePoint,
         const clang::Expr *,
         const clang::Stmt *,
         const clang::Stmt *,

@@ -60,11 +60,12 @@ bool operator==(const MemberTarget &a, const MemberTarget &b) noexcept {
 bool operator!=(const MemberTarget &a, const MemberTarget &b) noexcept { return !(a == b); }
 
 namespace {
-    static not_null<unique_ptr<SymbolicExpr>> getSymbol(
+    not_null<unique_ptr<SymbolicExpr>> getSymbol(
         QualType type,
-        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from) {
+        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
+        SourcePoint fromPoint) {
         if (type->isPointerType()) {
-            return make_unique<SymbolAddress>(std::move(from));
+            return make_unique<SymbolAddress>(std::move(from), std::move(fromPoint));
         } else if (type->isArrayType()) {
             TODO();
         } else if (type->isStructureType()) {
@@ -73,11 +74,11 @@ namespace {
                 ERROR("Incomplete struct definition");
             RD           = RD->getDefinition();
             auto &layout = RD->getASTContext().getASTRecordLayout(RD);
-            return make_unique<Structure>(RD, layout, std::move(from));
+            return make_unique<Structure>(RD, layout, std::move(from), std::move(fromPoint));
 
         } else {
             SymbolicExpr::Type vty = deriveVarType(type);
-            return std::make_unique<Symbolic::Variable>(vty, std::move(from));
+            return std::make_unique<Symbolic::Variable>(vty, std::move(from), std::move(fromPoint));
         }
     }
 } // namespace
@@ -106,14 +107,14 @@ void Path::swap(Path &o) noexcept {
     swap(memoryState_, o.memoryState_);
 }
 
-void Path::resymbolize() {
+void Path::resymbolize(SourcePoint point) {
     memoryState_.clear();
     pathConditions_.clear();
 
     for (auto &[varDecl, addr] : varAddr_) {
         clang::QualType ty = varDecl->getType();
 
-        auto symbol = getSymbol(ty, addr->addressClone().into_underlying());
+        auto symbol = getSymbol(ty, addr->addressClone().into_underlying(), point);
         updateMemory(*addr, std::move(symbol));
     }
 }
@@ -146,7 +147,8 @@ not_null<unique_ptr<Address>> Path::extractLValue(const Expr *lhs) {
             resultAddr->addOffset(std::move(idxExpr));
             if (!memoryState_.contains(*resultAddr)) {
                 auto newSymbol =
-                    getSymbol(arr->getType(), resultAddr->addressClone().into_underlying());
+                    getSymbol(arr->getType(), resultAddr->addressClone().into_underlying(),
+                              SourcePoint::fromDefault(context_.getSourceManager()));
                 memoryState_.write(*resultAddr, std::move(newSymbol));
             }
             return std::move(resultAddr);
@@ -166,7 +168,8 @@ not_null<unique_ptr<Address>> Path::extractLValue(const Expr *lhs) {
             if (auto addr = addrExpr->tryEvalAsSymbolAddr()) {
                 if (!memoryState_.contains(*addr.value())) {
                     auto symbol =
-                        getSymbol(uop->getType(), addr.value()->addressClone().into_underlying());
+                        getSymbol(uop->getType(), addr.value()->addressClone().into_underlying(),
+                                  SourcePoint::fromDefault(context_.getSourceManager()));
                     memoryState_.write(*addr.value(), std::move(symbol));
                 }
                 return std::move(addr).value().into_underlying();
@@ -197,7 +200,8 @@ not_null<unique_ptr<Address>> Path::extractLValue(const Expr *lhs) {
 
             if (!memoryState_.contains(*baseAddr.value())) {
                 auto st = make_unique<Structure>(
-                    RD, layout, baseAddr.value()->addressClone().into_underlying());
+                    RD, layout, baseAddr.value()->addressClone().into_underlying(),
+                    SourcePoint::fromDefault(context_.getSourceManager()));
                 memoryState_.write(*baseAddr.value(), std::move(st));
             }
             return make_unique<FieldAddress>(
@@ -207,7 +211,8 @@ not_null<unique_ptr<Address>> Path::extractLValue(const Expr *lhs) {
 
             if (!memoryState_.contains(*baseAddr)) {
                 auto st =
-                    make_unique<Structure>(RD, layout, baseAddr->addressClone().into_underlying());
+                    make_unique<Structure>(RD, layout, baseAddr->addressClone().into_underlying(),
+                                           SourcePoint::fromDefault(context_.getSourceManager()));
                 memoryState_.write(*baseAddr, std::move(st));
             }
             return make_unique<FieldAddress>(
@@ -482,7 +487,8 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     if (auto value = memoryState_.read(*newAddr); value == nullopt) {
                         auto elemType = arrSub->getType();
                         auto symbol =
-                            getSymbol(elemType, newAddr->addressClone().into_underlying());
+                            getSymbol(elemType, newAddr->addressClone().into_underlying(),
+                                      SourcePoint::fromDefault(context_.getSourceManager()));
                         memoryState_.write(*newAddr, symbol->clone());
                         outExprs.emplace_back(std::move(symbol));
                     } else {
@@ -624,7 +630,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     auto unExpr = std::move(operand.second[i]);
 
                     // Prevent misuse by not capturing this and operand.
-                    [&path, &unExpr, &op, &outExprs, &uop]() {
+                    [this, &path, &unExpr, &op, &outExprs, &uop]() {
                         if (op == UnaryOpExpr::Operator::PreInc ||
                             op == UnaryOpExpr::Operator::PostInc ||
                             op == UnaryOpExpr::Operator::PreDec ||
@@ -661,7 +667,8 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                             if (auto value = path->memoryState_.read(*addr.value());
                                 value == nullopt) {
                                 auto symbol = getSymbol(
-                                    uop->getType(), addr.value()->addressClone().into_underlying());
+                                    uop->getType(), addr.value()->addressClone().into_underlying(),
+                                    SourcePoint::fromDefault(context_.getSourceManager()));
                                 path->memoryState_.write(*addr.value(), symbol->clone());
                                 outExprs.emplace_back(std::move(symbol));
                             } else {
@@ -715,7 +722,8 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     auto val = memoryState_.read(*baseAddr.value());
                     if (val == nullopt) {
                         st = make_unique<Structure>(
-                            RD, layout, baseAddr.value()->addressClone().into_underlying());
+                            RD, layout, baseAddr.value()->addressClone().into_underlying(),
+                            SourcePoint::fromDefault(context_.getSourceManager()));
                         memoryState_.write(*baseAddr.value(), st->clone());
                     } else if (val.value()->getType() == SymbolicExpr::ExprType::Structure) {
                         auto &stVal = dynamic_cast<Structure &>(*val.value());
@@ -1059,107 +1067,6 @@ const MemoryModel::flat_view MemoryModel::flat() const {
     return MemoryModel::flat_view{const_cast<MemoryModel &>(*this)};
 }
 
-MemoryModel::KeySet MemoryModel::keys_flat() const {
-    KeySet out;
-    for (auto &&[addr, value] : this->flat()) {
-        out.insert(addr);
-    }
-    return out;
-}
-
-// --- retain_only() ---
-void MemoryModel::retain_only(const KeySet &keep) {
-    /**
-     * Variable addresses
-     * Iterate over the variable-address map and remove all entries
-     * whose keys are not present in the preserved set.
-     */
-    for (auto it = memoryMap_variableAddr_.begin(); it != memoryMap_variableAddr_.end();) {
-        AddressBox key_as_box{it->first};
-        if (keep.find(key_as_box) == keep.end()) {
-            it = memoryMap_variableAddr_.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    /**
-     * Constant ranges
-     * Each entry in this map is a pair consisting of a base information object
-     * and a set of constant ranges. For every range, we reconstruct the symbolic
-     * address in a manner consistent with flat_view::compose_address. If the
-     * reconstructed address is not present in the preserved set, the entry is
-     * removed. Empty inner maps are eliminated to maintain consistency.
-     */
-    for (auto outer = memoryMap_constantRange_.begin(); outer != memoryMap_constantRange_.end();) {
-        auto &inner_map = outer->second;
-
-        for (auto inner = inner_map.begin(); inner != inner_map.end();) {
-            const auto off        = inner->first.first;
-            const auto offPlusLen = inner->first.second;
-            const auto len        = offPlusLen - off;
-
-            auto base_copy = outer->first; // Copy ensures stability of map keys
-            std::unique_ptr<Address> composed;
-            if (len == 0) {
-                // Zero-length ranges are ill-formed; treated as deletions.
-                composed = nullptr;
-            } else if (len == 1) {
-                composed = std::make_unique<SymbolAddress>(std::move(base_copy.from_),
-                                                           std::make_unique<LiteralExpr>(off));
-            } else {
-                composed = std::make_unique<SymbolAddress>(std::move(base_copy.from_),
-                                                           std::make_unique<LiteralExpr>(off),
-                                                           std::make_unique<LiteralExpr>(len));
-            }
-
-            bool keep_this = false;
-            if (composed) {
-                AddressBox box{std::move(composed)};
-                keep_this = (keep.find(box) != keep.end());
-            }
-
-            if (!keep_this) {
-                inner = inner_map.erase(inner);
-            } else {
-                ++inner;
-            }
-        }
-
-        if (inner_map.empty()) {
-            outer = memoryMap_constantRange_.erase(outer);
-        } else {
-            ++outer;
-        }
-    }
-
-    /**
-     * Symbolic ranges
-     * Symbolic ranges are keyed directly by SymbolAddress. Each such key is
-     * converted into an AddressBox and compared against the preserved set.
-     * Entries not in the preserved set are removed. Outer maps are erased
-     * once their inner maps become empty.
-     */
-    for (auto outer = memoryMap_symbolicRange_.begin(); outer != memoryMap_symbolicRange_.end();) {
-        auto &inner_map = outer->second;
-
-        for (auto inner = inner_map.begin(); inner != inner_map.end();) {
-            AddressBox key_as_box{inner->first};
-            if (keep.find(key_as_box) == keep.end()) {
-                inner = inner_map.erase(inner);
-            } else {
-                ++inner;
-            }
-        }
-
-        if (inner_map.empty()) {
-            outer = memoryMap_symbolicRange_.erase(outer);
-        } else {
-            ++outer;
-        }
-    }
-}
-
 void MemoryModel::eraseExpiredLocals(const unordered_set<const clang::VarDecl *> &localVars) {
     std::erase_if(memoryMap_variableAddr_, [&](auto const &kv) {
         auto fromRoot = kv.first.getFromRoot();
@@ -1212,11 +1119,12 @@ ProgramState &ProgramState::operator=(ProgramState &&other) {
 }
 
 namespace {
-    static void initParam(Path *path, const ParmVarDecl *param) {
+    void initParam(Path *path, const ParmVarDecl *param) {
         QualType paramType = param->getType();
 
         auto paramAddr = path->allocMemory(param);
-        auto value     = getSymbol(paramType, paramAddr->addressClone().into_underlying());
+        auto value     = getSymbol(paramType, paramAddr->addressClone().into_underlying(),
+                                   SourcePoint::fromDefault(path->getContext().getSourceManager()));
         path->updateMemory(*paramAddr, std::move(value));
     }
 
@@ -1670,16 +1578,19 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
         UNREACHABLE();
     }
 
-    auto [loopInfo, ok] = parseLoopInfo(*preState, *loopEntry, cond, inc, body);
+    auto loopEntryPoint = SourcePoint::fromStmtBefore(loopStmt, context_.getSourceManager(),
+                                                      context_.getLangOptions());
+    auto [loopInfo, ok] = parseLoopInfo(*preState, *loopEntry, loopEntryPoint, cond, inc, body);
 
     string spec;
     unique_ptr<ProgramState> postState;
     if (ok) {
-        tie(spec, postState) = emitLoopInvariant(*preState, *loopEntry, cond, inc, body, loopInfo);
+        tie(spec, postState) =
+            emitLoopInvariant(*preState, *loopEntry, loopEntryPoint, cond, inc, body, loopInfo);
     } else {
-        parseComplexLoopInfo(*preState, *loopEntry, cond, inc, body, loopInfo);
-        tie(spec, postState) = emitLoopInvariant(*preState, *loopEntry, cond, inc, body, loopInfo,
-                                                 "ComplexLoopInvariant");
+        parseComplexLoopInfo(*preState, *loopEntry, loopEntryPoint, cond, inc, body, loopInfo);
+        tie(spec, postState) = emitLoopInvariant(*preState, *loopEntry, loopEntryPoint, cond, inc,
+                                                 body, loopInfo, "ComplexLoopInvariant");
     }
     INFO(spec);
 
@@ -1819,8 +1730,10 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
                         ERROR("Struct with incomplete definition!");
 
                     RD      = RD->getDefinition();
-                    auto st = make_unique<Structure>(RD, RD->getASTContext().getASTRecordLayout(RD),
-                                                     varAddr_->addressClone().into_underlying());
+                    auto st = make_unique<Structure>(
+                        RD, RD->getASTContext().getASTRecordLayout(RD),
+                        varAddr_->addressClone().into_underlying(),
+                        SourcePoint::fromDefault(context_.getSourceManager()));
                     path->updateVarState(varDecl, std::move(st));
                 }
 
@@ -1839,8 +1752,10 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
 
                     RD = RD->getDefinition();
 
-                    auto st = make_unique<Structure>(RD, RD->getASTContext().getASTRecordLayout(RD),
-                                                     varAddr_->addressClone().into_underlying());
+                    auto st = make_unique<Structure>(
+                        RD, RD->getASTContext().getASTRecordLayout(RD),
+                        varAddr_->addressClone().into_underlying(),
+                        SourcePoint::fromDefault(context_.getSourceManager()));
                     if (initListExpr->getNumInits() != st->getNumFields())
                         ERROR("Initializer list size mismatches the struct's field count.");
                     auto slots = st->fieldsValues();
@@ -2105,11 +2020,11 @@ bool ProgramState::isInactive() const {
     return true;
 }
 
-void ProgramState::resymbolize() {
+void ProgramState::resymbolize(SourcePoint point) {
     for (auto &path : paths_) {
         if (path->isActive()) {
             auto temp = std::move(path);
-            temp->resymbolize();
+            temp->resymbolize(std::move(point));
             paths_.clear();
             paths_.push_back(std::move(temp));
             return;
@@ -2129,40 +2044,6 @@ std::vector<not_null<std::unique_ptr<Path>>> ProgramState::takeAllPaths() {
     std::vector<not_null<std::unique_ptr<Path>>> out;
     out.swap(paths_);
     return out;
-}
-
-[[deprecated("Some bugs, use `eraseExpiredLocals`")]]
-MemoryModel::KeySet ProgramState::snapshot_all_path_keys() const {
-    MemoryModel::KeySet uni;
-
-    /**
-     * Iterate over all paths and accumulate the union of flattened address
-     * keys derived from each path's memory model. The flattening semantics
-     * coincide with MemoryModel::flat_view, ensuring that ranges and symbolic
-     * addresses are reconstructed consistently with iteration order.
-     */
-    for (const auto &p : paths_) {
-        const auto &mm = p->getMemoryState();
-        auto ks        = mm.keys_flat();
-        // Union: insert all keys into the accumulator.
-        uni.insert(ks.begin(), ks.end());
-    }
-    return uni;
-}
-
-[[deprecated("Some bugs, use `eraseExpiredLocals`")]]
-void ProgramState::retain_only_keys_across_paths(const MemoryModel::KeySet &keep) {
-    /**
-     * For every path, enforce a retention filter on the underlying memory
-     * model: only entries whose flattened addresses belong to @p keep are
-     * preserved; all other entries are removed. This models the effect of
-     * unwinding a call or scope, where ephemeral updates are discarded while
-     * globally-relevant state is retained.
-     */
-    for (auto &p : paths_) {
-        auto &mm = p->getMutMemoryState();
-        mm.retain_only(keep);
-    }
 }
 
 string ProgramState::dump() const {

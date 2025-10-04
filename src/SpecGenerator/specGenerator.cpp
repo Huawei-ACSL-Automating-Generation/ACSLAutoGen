@@ -72,6 +72,7 @@ string emitFunctionContract(const ProgramState &pre,
 pair<LoopInfo, bool> parseLoopInfo(
     const ProgramState &preState,
     const ProgramState &loopEntry,
+    SourcePoint loopEntryPoint,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
@@ -84,7 +85,7 @@ pair<LoopInfo, bool> parseLoopInfo(
         if (plugin == nullptr)
             UNREACHABLE();
         DEBUG("Plugin {" + string{plugin->id()} + "} is parsing...");
-        if (!plugin->parse(preState, loopEntry, cond, inc, body, loopInfo))
+        if (!plugin->parse(preState, loopEntry, loopEntryPoint, cond, inc, body, loopInfo))
             return pair{std::move(loopInfo), false};
     }
     return pair{std::move(loopInfo), true};
@@ -92,6 +93,7 @@ pair<LoopInfo, bool> parseLoopInfo(
 
 void parseComplexLoopInfo(const ProgramState &preState,
                           const ProgramState &loopEntry,
+                          SourcePoint loopEntryPoint,
                           const clang::Expr *cond,
                           const clang::Stmt *inc,
                           const clang::Stmt *body,
@@ -104,7 +106,7 @@ void parseComplexLoopInfo(const ProgramState &preState,
         if (plugin == nullptr)
             UNREACHABLE();
         DEBUG("Plugin {" + string{plugin->id()} + "} is parsing...");
-        if (!plugin->parse(preState, loopEntry, cond, inc, body, loopInfo))
+        if (!plugin->parse(preState, loopEntry, loopEntryPoint, cond, inc, body, loopInfo))
             ERROR("Plugin: {" + string{plugin->id()} +
                   "} parsing complex loop's information failed.");
     }
@@ -113,6 +115,7 @@ void parseComplexLoopInfo(const ProgramState &preState,
 std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
     const ProgramState &preState,
     const ProgramState &loopEntry,
+    SourcePoint loopEntryPoint,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
@@ -173,7 +176,7 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
             UNREACHABLE();
         DEBUG("Plugin {" + string{plugin->id()} + "} is generating...");
         auto [s, continueFlag, postInfos] =
-            plugin->generate(preState, loopEntry, cond, inc, body, loopInfo);
+            plugin->generate(preState, loopEntry, loopEntryPoint, cond, inc, body, loopInfo);
 
         if (s) {
             spec += "    " /*4 spaces*/ + *s + "\n";

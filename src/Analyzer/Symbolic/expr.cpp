@@ -11,6 +11,7 @@ using namespace std;
 using namespace Symbolic;
 using namespace clang;
 using namespace llvm;
+using namespace acslg;
 
 template <class... Ts> struct overloaded : Ts... {
     using Ts::operator()...;
@@ -180,17 +181,7 @@ not_null<unique_ptr<SymbolicExpr>> UnaryOpExpr::clone() const {
 not_null<unique_ptr<SymbolicExpr>> UnknownExpr::clone() const { return make_unique<UnknownExpr>(); }
 
 not_null<unique_ptr<SymbolicExpr>> Symbolic::Variable::clone() const {
-    return std::visit(
-        [this](auto &&arg) {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, std::monostate>) {
-                return std::make_unique<Symbolic::Variable>(varType_, std::monostate{});
-            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                return std::make_unique<Symbolic::Variable>(varType_,
-                                                            arg->addressClone().into_underlying());
-            }
-        },
-        from_);
+    return make_unique<Variable>(*this);
 }
 
 not_null<unique_ptr<SymbolicExpr>> SymbolAddress::clone() const {
@@ -241,26 +232,26 @@ std::size_t LiteralExpr::hash() const {
 
     switch (type_) {
         using enum LiteralType;
-        case Boolean: return acslg::hash_val(seed, data_.boolValue);
-        case Int: return acslg::hash_val(seed, data_.intValue);
-        case UnsignedInt: return acslg::hash_val(seed, data_.uintValue);
-        case Short: return acslg::hash_val(seed, data_.shortValue);
-        case UnsignedShort: return acslg::hash_val(seed, data_.ushortValue);
-        case Int64: return acslg::hash_val(seed, data_.int64Value);
-        case UInt64: return acslg::hash_val(seed, data_.uint64Value);
+        case Boolean: return hash_val(seed, data_.boolValue);
+        case Int: return hash_val(seed, data_.intValue);
+        case UnsignedInt: return hash_val(seed, data_.uintValue);
+        case Short: return hash_val(seed, data_.shortValue);
+        case UnsignedShort: return hash_val(seed, data_.ushortValue);
+        case Int64: return hash_val(seed, data_.int64Value);
+        case UInt64: return hash_val(seed, data_.uint64Value);
         default: ERROR("Wrong type.");
     }
 }
 
 std::size_t Symbolic::Variable::hash() const {
-    size_t seed = hash_val(getType());
+    size_t seed = hash_val(getType(), fromPoint_.hash());
     std::visit(
         [&](auto &&arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, std::monostate>) {
                 /* do nothing */
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                seed = acslg::hash_val(seed, arg->hash());
+                seed = hash_val(seed, arg->hash());
             }
         },
         from_);
@@ -276,8 +267,8 @@ std::size_t BinaryOpExpr::hash() const {
 }
 
 std::size_t SymbolAddress::hash() const {
-    std::size_t seed =
-        hash_val(getAddressType(), offset_->hash(), range_ ? range_.value().len_->hash() : 0);
+    std::size_t seed = hash_val(getAddressType(), fromPoint_.hash(), offset_->hash(),
+                                range_ ? range_.value().len_->hash() : 0);
 
     std::visit(
         [&](auto &&arg) {
@@ -285,7 +276,7 @@ std::size_t SymbolAddress::hash() const {
             if constexpr (std::is_same_v<T, std::monostate>) {
                 return;
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                seed = acslg::hash_val(seed, arg->hash());
+                seed = hash_val(seed, arg->hash());
             }
         },
         from_);
@@ -301,7 +292,7 @@ std::size_t VariableAddress::hash() const {
             if constexpr (std::is_same_v<T, std::monostate>) {
                 return;
             } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
-                seed = acslg::hash_val(seed, arg.get());
+                seed = hash_val(seed, arg.get());
             }
         },
         from_);
@@ -320,7 +311,7 @@ std::size_t FieldAddress::hash() const {
                                                 std::pair<not_null<std::unique_ptr<const Address>>,
                                                           const size_t>>) {
                 auto &[fromAddr, id] = arg;
-                seed                 = acslg::hash_val(seed, fromAddr->hash(), id);
+                seed                 = hash_val(seed, fromAddr->hash(), id);
             }
         },
         from_);
@@ -328,9 +319,9 @@ std::size_t FieldAddress::hash() const {
 }
 
 std::size_t Structure::hash() const {
-    auto seed = acslg::hash_val(getType(), info_.definition_.get());
+    auto seed = hash_val(getType(), info_.definition_.get());
     for (auto &field : fields_)
-        seed = acslg::hash_val(seed, field->hash());
+        seed = hash_val(seed, field->hash());
     return seed;
 }
 
@@ -441,8 +432,11 @@ std::string Symbolic::Variable::dump() const {
 
     oss << "{from=";
     dump_from(oss, from_);
-    oss << "}";
+    oss << "}, ";
 
+    oss << "{from point=";
+    oss << fromPoint_.dump();
+    oss << "}";
     return oss.str();
 }
 
@@ -456,6 +450,9 @@ std::string SymbolAddress::dump() const {
         oss << "[" << off->dump() << "..." << range_.value().len_->dump() << "]";
     oss << "{from=";
     dump_from(oss, from_);
+    oss << "}, ";
+    oss << "{from point=";
+    oss << fromPoint_.dump();
     oss << "}";
     return oss.str();
 }
@@ -1065,6 +1062,9 @@ bool Symbolic::Variable::equal(const SymbolicExpr &expr) const {
     if (!var)
         return false;
 
+    if (fromPoint_ != var->fromPoint_)
+        return false;
+
     return std::visit(
         [&](auto &&arg) {
             using T = std::decay_t<decltype(arg)>;
@@ -1104,6 +1104,10 @@ bool SymbolAddress::equal(const SymbolicExpr &expr) const {
     if (!flag) {
         return false;
     };
+
+    if (fromPoint_ != other->fromPoint_)
+        return false;
+
     // compare offset
     // todo: Need a `offsetEqual`, here is not correct now.
     if (*offset_->simplifiedExpr() != *other->getOffset()->simplifiedExpr()) {
@@ -1315,7 +1319,7 @@ SymbolicExpr::UsedMap Symbolic::SymbolAddress::collectUsedVarsAndAddrs() const {
 
 SymbolAddress::SymbolAddress(const SymbolAddress &other)
     : Address(other), Symbol(other), offset_(other.offset_->clone().into_underlying()),
-      range_(other.range_) {
+      fromPoint_(other.fromPoint_), range_(other.range_) {
     std::visit(
         [this](auto &&arg) {
             using T = std::decay_t<decltype(arg)>;
@@ -1328,27 +1332,8 @@ SymbolAddress::SymbolAddress(const SymbolAddress &other)
         other.from_);
 }
 
-SymbolAddress &SymbolAddress::operator=(const SymbolAddress &other) {
-    if (this != &other) {
-        Address::operator=(other);
-        Symbol::operator=(other);
-        offset_ = other.offset_->clone().into_underlying();
-        range_  = other.range_;
-        std::visit(
-            [this](auto &&arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    from_ = std::monostate{};
-                } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                    from_.emplace<1>(arg->addressClone().into_underlying());
-                }
-            },
-            other.from_);
-    }
-    return *this;
-}
-
-SymbolAddress::BaseInfo::BaseInfo(const SymbolAddress::BaseInfo &other) {
+SymbolAddress::BaseInfo::BaseInfo(const SymbolAddress::BaseInfo &other)
+    : fromPoint_(other.fromPoint_) {
     std::visit(
         [this](auto &&arg) {
             using T = std::decay_t<decltype(arg)>;
@@ -1359,49 +1344,15 @@ SymbolAddress::BaseInfo::BaseInfo(const SymbolAddress::BaseInfo &other) {
             }
         },
         other.from_);
-}
-
-SymbolAddress::BaseInfo &SymbolAddress::BaseInfo::operator=(const SymbolAddress::BaseInfo &other) {
-    if (this != &other) {
-        std::visit(
-            [this](auto &&arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    from_ = std::monostate{};
-                } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                    from_.emplace<1>(arg->addressClone().into_underlying());
-                }
-            },
-            other.from_);
-    }
-    return *this;
-}
-
-SymbolAddress &SymbolAddress::operator=(SymbolAddress &&other) {
-    if (this == &other)
-        return *this;
-    Address::operator=(other);
-    offset_ = std::move(other.offset_);
-    range_  = std::move(other.range_);
-    std::visit(
-        [this](auto &&arg) {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, std::monostate>) {
-                from_ = std::monostate{};
-            } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                from_.emplace<1>(std::move(arg));
-            }
-        },
-        other.from_);
-    return *this;
 }
 
 SymbolAddress::SymbolAddress(
     std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
+    SourcePoint fromPoint,
     optional<not_null<std::unique_ptr<const SymbolicExpr>>> offset,
     optional<not_null<std::unique_ptr<const SymbolicExpr>>> length)
     : Address(AddressType::SymbolAddr), offset_(make_unique<LiteralExpr>(ZERO_OFFSET)),
-      from_(std::move(from)) {
+      from_(std::move(from)), fromPoint_(fromPoint) {
     if (offset != nullopt)
         offset_ = std::move(offset.value());
     if (length) {
@@ -1445,13 +1396,14 @@ void SymbolAddress::setLength(not_null<std::unique_ptr<SymbolicExpr>> len) {
 }
 
 size_t SymbolAddress::BaseInfo::hash() const {
+    auto seed = hash_val(fromPoint_.hash());
     return std::visit(
-        [](auto &&arg) -> size_t {
+        [&](auto &&arg) -> size_t {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, std::monostate>) {
-                return 0;
+                return seed;
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                return arg->hash();
+                return hash_val(seed, arg->hash());
             }
         },
         from_);
@@ -1459,12 +1411,12 @@ size_t SymbolAddress::BaseInfo::hash() const {
 
 SymbolAddress::BaseInfo SymbolAddress::getBaseInfo() const {
     return std::visit(
-        [](auto &&arg) -> BaseInfo {
+        [this](auto &&arg) -> BaseInfo {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, std::monostate>) {
-                return BaseInfo{std::monostate{}};
+                return BaseInfo{std::monostate{}, fromPoint_};
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                return BaseInfo{arg->addressClone().into_underlying()};
+                return BaseInfo{arg->addressClone().into_underlying(), fromPoint_};
             }
         },
         from_);
@@ -1599,7 +1551,8 @@ std::optional<std::string> Symbolic::Structure::regularFormOfField(
 
 Structure::Structure(const clang::RecordDecl *RD,
                      const clang::ASTRecordLayout &layout,
-                     std::variant<std::monostate, not_null<unique_ptr<const Address>>> from)
+                     std::variant<std::monostate, not_null<unique_ptr<const Address>>> from,
+                     SourcePoint fromPoint)
     : SymbolicExpr(
           ExprType::Structure,
           Type{ScalarKind::Structure, static_cast<unsigned>(layout.getSize().getQuantity()) *
@@ -1630,16 +1583,17 @@ Structure::Structure(const clang::RecordDecl *RD,
                 ERROR("Incomplete nested struct definition");
             nestedRD           = nestedRD->getDefinition();
             auto &nestedLayout = nestedRD->getASTContext().getASTRecordLayout(nestedRD);
-            auto nested = make_unique<Structure>(nestedRD, nestedLayout, std::move(fieldAddr));
+            auto nested =
+                make_unique<Structure>(nestedRD, nestedLayout, std::move(fieldAddr), fromPoint);
             fields_.emplace_back(std::move(nested));
         } else if (fty->isPointerType()) {
-            auto addr = make_unique<SymbolAddress>(std::move(fieldAddr));
+            auto addr = make_unique<SymbolAddress>(std::move(fieldAddr), fromPoint);
             fields_.emplace_back(std::move(addr));
         } else if (fty->isArrayType()) {
             TODO();
         } else {
             auto vty = deriveVarType(fty);
-            auto var = std::make_unique<Variable>(vty, std::move(fieldAddr));
+            auto var = std::make_unique<Variable>(vty, std::move(fieldAddr), fromPoint);
             fields_.emplace_back(std::move(var));
         }
     }
@@ -1648,7 +1602,7 @@ Structure::Structure(const clang::RecordDecl *RD,
 }
 
 Symbolic::Variable::Variable(const Variable &other)
-    : SymbolicExpr(other), varType_(other.varType_) {
+    : SymbolicExpr(other), varType_(other.varType_), fromPoint_(other.fromPoint_) {
     std::visit(
         [this](auto &&arg) {
             using T = std::decay_t<decltype(arg)>;
@@ -1724,6 +1678,87 @@ std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> Structure
     if (commonBase == nullopt)
         UNREACHABLE();
     return std::move(commonBase).value();
+}
+
+SourcePoint SourcePoint::fromStmtBefore(const clang::Stmt *S,
+                                        const clang::SourceManager &SM,
+                                        const clang::LangOptions &LO) {
+    SourcePoint p{SM};
+    if (S) {
+        auto BL = S->getBeginLoc();
+        if (BL.isInvalid())
+            ERROR("Location before Stmt: {" +
+                  clang::Lexer::getSourceText(
+                      clang::CharSourceRange::getTokenRange(S->getSourceRange()), SM, LO)
+                      .str() +
+                  "} is invalid.");
+        p.loc_ = SM.getExpansionLoc(BL);
+    } else {
+        ERROR("S is nullptr.");
+    }
+    return p;
+}
+
+SourcePoint SourcePoint::fromStmtAfter(const clang::Stmt *S,
+                                       const clang::SourceManager &SM,
+                                       const clang::LangOptions &LO) {
+    SourcePoint p{SM};
+    if (S) {
+        auto EL = S->getEndLoc();
+
+        auto AL = clang::Lexer::getLocForEndOfToken(EL, /*Offset*/ 0, SM, LO);
+        if (AL.isInvalid())
+            ERROR("Location after Stmt: {" +
+                  clang::Lexer::getSourceText(
+                      clang::CharSourceRange::getTokenRange(S->getSourceRange()), SM, LO)
+                      .str() +
+                  "} is invalid.");
+        p.loc_ = SM.getExpansionLoc(AL);
+    } else {
+        ERROR("S is nullptr.");
+    }
+    return p;
+}
+
+bool SourcePoint::operator<(const SourcePoint &other) const {
+    if (&SM_ != &other.SM_)
+        ERROR("SourcePoint from different SourceManager.");
+    if (loc_ == nullopt && other.loc_ != nullopt)
+        return true;
+    if (other.loc_ == nullopt)
+        return false;
+    if (loc_.value().isInvalid() || other.loc_.value().isInvalid())
+        UNREACHABLE();
+    return SM_.isBeforeInTranslationUnit(loc_.value(), other.loc_.value());
+}
+
+bool SourcePoint::operator==(const SourcePoint &other) const {
+    if (&SM_ != &other.SM_)
+        ERROR("SourcePoint from different SourceManager.");
+    if (loc_ == nullopt && other.loc_ == nullopt)
+        return true;
+    if (loc_ == nullopt || other.loc_ == nullopt)
+        return false;
+    if (loc_.value().isInvalid() || other.loc_.value().isInvalid())
+        UNREACHABLE();
+    return !SM_.isBeforeInTranslationUnit(loc_.value(), other.loc_.value()) &&
+           !SM_.isBeforeInTranslationUnit(other.loc_.value(), loc_.value());
+}
+
+string SourcePoint::dump() const {
+    if (loc_ == nullopt)
+        return "<default point>";
+
+    if (loc_.value().isInvalid())
+        ERROR("Invalid SourcePoint.");
+
+    auto ploc = SM_.getPresumedLoc(loc_.value());
+    if (ploc.isInvalid())
+        ERROR("Invalid presumed SourcePoint.");
+
+    ostringstream oss;
+    oss << ploc.getFilename() << ":" << ploc.getLine() << ":" << ploc.getColumn();
+    return oss.str();
 }
 
 namespace Symbolic {

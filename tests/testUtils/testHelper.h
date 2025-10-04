@@ -146,11 +146,14 @@ inline auto doPluginsOnFirstLoop(string_view code, const vector<string> pids) {
     }
 
     LoopInfo loopInfo;
+    auto loopEntryPoint = SourcePoint::fromStmtBefore(loopStmt, context.value().getSourceManager(),
+                                                      context.value().getLangOptions());
 
     if (auto *pl = ACSLPluginRegistry::instance().get("setLoopEntry")) {
         auto *setLoopEntryPlugin = dynamic_cast<const LoopInfoPlugin *>(pl);
 
-        if (!setLoopEntryPlugin->parse(*preState, *loopEntry, cond, inc, body, loopInfo))
+        if (!setLoopEntryPlugin->parse(*preState, *loopEntry, loopEntryPoint, cond, inc, body,
+                                       loopInfo))
             ERROR("Set loop entry fail.");
     } else {
         ERROR("Set loop entry fail.");
@@ -162,7 +165,7 @@ inline auto doPluginsOnFirstLoop(string_view code, const vector<string> pids) {
         if (!pl)
             ERROR("Plugin with id " + pid + " does not exist!");
         auto *fcp = dynamic_cast<const LoopInfoPlugin *>(pl);
-        result    = fcp->parse(*preState, *loopEntry, cond, inc, body, loopInfo);
+        result    = fcp->parse(*preState, *loopEntry, loopEntryPoint, cond, inc, body, loopInfo);
     }
     return pair{std::move(loopInfo), result};
 }
@@ -210,7 +213,9 @@ inline std::tuple<std::optional<std::string>, bool, vector<PostInfo>> doPluginOn
         UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
     }
 
-    auto [loopInfo, ok] = parseLoopInfo(*preState, *loopEntry, cond, inc, body);
+    auto loopEntryPoint = SourcePoint::fromStmtBefore(loopStmt, context.value().getSourceManager(),
+                                                      context.value().getLangOptions());
+    auto [loopInfo, ok] = parseLoopInfo(*preState, *loopEntry, loopEntryPoint, cond, inc, body);
     if (!ok) {
         // TODO(complex loop)
         UNIMPLEMENT("Loop is too complex!");
@@ -221,7 +226,7 @@ inline std::tuple<std::optional<std::string>, bool, vector<PostInfo>> doPluginOn
         ERROR("Plugin with id " + pid + " does not exist!");
     auto *fcp = dynamic_cast<const LoopInvariantPlugin *>(pl);
 
-    return fcp->generate(*preState, *loopEntry, cond, inc, body, loopInfo);
+    return fcp->generate(*preState, *loopEntry, loopEntryPoint, cond, inc, body, loopInfo);
 }
 
 #endif

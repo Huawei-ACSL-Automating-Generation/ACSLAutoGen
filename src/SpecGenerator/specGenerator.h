@@ -96,6 +96,7 @@ struct LoopInfo {
 std::pair<LoopInfo, bool> parseLoopInfo(
     const ProgramState &preState,
     const ProgramState &loopEntry,
+    SourcePoint loopEntryPoint,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
@@ -106,6 +107,7 @@ std::pair<LoopInfo, bool> parseLoopInfo(
 void parseComplexLoopInfo(
     const ProgramState &preState,
     const ProgramState &loopEntry,
+    SourcePoint loopEntryPoint,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
@@ -116,6 +118,7 @@ void parseComplexLoopInfo(
 std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
     const ProgramState &preState,
     const ProgramState &loopEntry,
+    SourcePoint loopEntryPoint,
     const clang::Expr *cond,
     const clang::Stmt *inc,
     const clang::Stmt *body,
@@ -205,7 +208,9 @@ class LoopInfoPlugin : public ACSLPlugin {
     Kind kind() const override { return Kind::LoopInfo; }
 
     /// @brief Parse the given loop and fill in loopInfo.
+    /// @param preState
     /// @param loopEntry
+    /// @param loopEntryPoint
     /// @param cond
     /// @param inc
     /// @param body
@@ -213,6 +218,7 @@ class LoopInfoPlugin : public ACSLPlugin {
     /// @return return false means this loop is too complex and will abort whole parsing!
     virtual bool parse(const ProgramState &preState,
                        const ProgramState &loopEntry,
+                       SourcePoint loopEntryPoint,
                        const clang::Expr *cond,
                        const clang::Stmt *inc,
                        const clang::Stmt *body,
@@ -230,6 +236,7 @@ class LoopInvariantPlugin : public ACSLPlugin {
     virtual std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
         const ProgramState &preState,
         const ProgramState &loopEntry,
+        SourcePoint loopEntryPoint,
         const clang::Expr *cond,
         const clang::Stmt *inc,
         const clang::Stmt *body,

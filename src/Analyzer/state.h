@@ -125,33 +125,6 @@ class MemoryModel {
     const flat_view flat() const;
 
     /**
-     * @brief Collect a flat set of all address keys currently exposed by the memory model.
-     * @return A set of addresses following the same flattening semantics as flat_view.
-     *
-     * Note: Field addresses (arising from Structure values) are not stored as
-     * map keys and thus are not retained independently.
-     */
-    [[deprecated("Some bugs, use `eraseExpiredLocals`")]]
-    KeySet keys_flat() const;
-
-    /**
-     * @brief Retain only the entries whose (flattened) addresses are present in @p keep.
-     *        All other entries will be removed from the underlying maps.
-     *
-     * @param keep A set of addresses defined under the same flattening semantics
-     *             as produced by keys_flat() / flat_view.
-     *
-     * Semantics:
-     * - Variable addresses are matched directly.
-     * - Constant ranges are matched via composed SymbolAddress (offset/length)
-     *   consistent with flat_view.
-     * - Symbolic ranges are matched directly.
-     * - Structure fields are not directly stored as map keys and are therefore ignored.
-     */
-    [[deprecated("Some bugs, use `eraseExpiredLocals`")]]
-    void retain_only(const KeySet &keep);
-
-    /**
      * @brief Remove all memory entries associated with a set of local variables
      *        that have gone out of scope.
      *
@@ -211,9 +184,11 @@ struct MemoryModel::flat_view {
         if (len == 0)
             ERROR("Length should not be 0, something goes wrong.");
         else if (len == 1)
-            return make_unique<SymbolAddress>(std::move(base.from_), make_unique<LiteralExpr>(off));
+            return make_unique<SymbolAddress>(std::move(base.from_), base.fromPoint_,
+                                              make_unique<LiteralExpr>(off));
         else
-            return make_unique<SymbolAddress>(std::move(base.from_), make_unique<LiteralExpr>(off),
+            return make_unique<SymbolAddress>(std::move(base.from_), base.fromPoint_,
+                                              make_unique<LiteralExpr>(off),
                                               make_unique<LiteralExpr>(len));
     }
 
@@ -556,7 +531,7 @@ class Path {
         Return
     };
 
-    void resymbolize();
+    void resymbolize(SourcePoint point);
 
     not_null<std::unique_ptr<Address>> extractLValue(const clang::Expr *lhs);
 
@@ -595,6 +570,7 @@ class Path {
     auto getMutMemoryState() -> auto & { return memoryState_; }
     auto getReturnExpr() const -> const auto & { return returnExpr_; }
     auto getPathState() const -> const auto & { return currentState_; }
+    auto getContext() const -> const auto & { return context_; }
 
   private:
     // Map: variable record definition ID -> corresponding symbolic address.
@@ -648,7 +624,7 @@ class ProgramState {
 
     std::string dump() const;
     void resetState();
-    void resymbolize();
+    void resymbolize(SourcePoint point);
 
     auto getPaths() const -> const auto & { return paths_; }
     auto getPaths() -> auto & { return paths_; }
@@ -662,33 +638,6 @@ class ProgramState {
         shared_ptr<ProgramState> preState_;
         const clang::Stmt *incompleteLoop_;
     };
-
-    /**
-     * @brief Collect a snapshot of address keys across all paths.
-     *
-     * This method traverses every active path and computes the union of
-     * flattened address keys (as defined by MemoryModel::flat_view), thereby
-     * yielding a conservative snapshot of the memory footprint at the
-     * program-state level.
-     *
-     * @return A set of addresses whose equality and hashing semantics follow
-     *         AddressBox/AddressBoxHash/AddressBoxEq.
-     */
-    MemoryModel::KeySet snapshot_all_path_keys() const;
-
-    /**
-     * @brief Retain only the addresses specified by @p keep across all paths.
-     *
-     * For each path, this method calls MemoryModel::retain_only(keep) on the
-     * underlying memory model, thereby removing all entries whose flattened
-     * addresses are not contained in @p keep. This operation is intended to
-     * model call-frame unwinding or scope exit where transient modifications
-     * must be discarded.
-     *
-     * @param keep A set of addresses to be preserved; its semantics must match
-     *             those produced by snapshot_all_path_keys().
-     */
-    void retain_only_keys_across_paths(const MemoryModel::KeySet &keep);
 
   private:
     // TODO: remove from private member. [a local helper function.]

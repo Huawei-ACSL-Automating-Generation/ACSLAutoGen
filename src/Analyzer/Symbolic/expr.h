@@ -13,6 +13,8 @@
 #include <clang/AST/Expr.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/RecordLayout.h>
+#include <clang/Basic/SourceManager.h>
+#include <clang/Lex/Lexer.h>
 #include <variant>
 #include "macros.h"
 #include "Utils/utils.h"
@@ -519,6 +521,126 @@ namespace Symbolic {
         int getMaxDegree() const override { return 0; }
     };
 
+    /**
+     * @class SourcePoint
+     * @brief Represents a unique source position in the source code.
+     *
+     * This class encapsulates a `clang::SourceLocation` together with its associated
+     * `SourceManager`, and provides utilities for constructing points relative to statements,
+     * comparing positions, generating hash values, and dumping human-readable information.
+     *
+     * A `SourcePoint` may also be a *default point* created via `fromDefault()`.
+     * - The default point has no associated location (`loc_ == std::nullopt`).
+     * - It compares as strictly smaller than any valid SourcePoint.
+     * - Its `asSourceLocation()` returns `std::nullopt`.
+     *
+     * This class is designed to express a program location in the source text, not a control flow
+     * node.
+     */
+    class SourcePoint {
+      public:
+        SourcePoint(const SourcePoint &) = default;
+        SourcePoint(SourcePoint &&)      = default;
+
+        /**
+         * @brief Construct a default SourcePoint without a concrete source location.
+         *
+         * The resulting point is considered "smaller" than any valid SourcePoint
+         * when compared with operator<, and its @ref asSourceLocation will return nullopt.
+         *
+         * @param SM The SourceManager to associate with this point.
+         * @return A default SourcePoint.
+         */
+        static SourcePoint fromDefault(const clang::SourceManager &SM) { return SourcePoint{SM}; }
+
+        /**
+         * @brief Construct a SourcePoint at the position just before a given statement.
+         *
+         * @param S  The statement to reference.
+         * @param SM The SourceManager providing context for the source file.
+         * @param LO The language options used for retrieving locations.
+         * @return A SourcePoint located before the given statement.
+         */
+        static SourcePoint fromStmtBefore(const clang::Stmt *S,
+                                          const clang::SourceManager &SM,
+                                          const clang::LangOptions &LO);
+
+        /**
+         * @brief Construct a SourcePoint at the position just after a given statement.
+         *
+         * @param S  The statement to reference.
+         * @param SM The SourceManager providing context for the source file.
+         * @param LO The language options used for retrieving locations.
+         * @return A SourcePoint located after the given statement.
+         */
+        static SourcePoint fromStmtAfter(const clang::Stmt *S,
+                                         const clang::SourceManager &SM,
+                                         const clang::LangOptions &LO);
+
+        /**
+         * @brief Compare this SourcePoint with another.
+         *
+         * Default points are considered smaller than any valid point.
+         *
+         * @param other The SourcePoint to compare against.
+         * @return True if this point is strictly before the other, false otherwise.
+         */
+        bool operator<(const SourcePoint &other) const;
+
+        /**
+         * @brief Test equality between two SourcePoints.
+         *
+         * Two points are equal if both are default points, or if their
+         * underlying `SourceLocation`s compare equal under the same SourceManager.
+         *
+         * @param other The SourcePoint to compare against.
+         * @return True if both points represent the same location, false otherwise.
+         */
+        bool operator==(const SourcePoint &other) const;
+
+        /**
+         * @brief Get the underlying `clang::SourceLocation` represented by this point.
+         *
+         * May return `std::nullopt` if this is a default SourcePoint.
+         *
+         * @return An optional `clang::SourceLocation`.
+         */
+        std::optional<clang::SourceLocation> asSourceLocation() const { return loc_; }
+
+        /**
+         * @brief Generate a hash value for this SourcePoint.
+         *
+         * For default points, returns the hash of 0. Otherwise computed from
+         * the underlying `SourceLocation`'s hash value.
+         *
+         * @return Hash value suitable for use in unordered containers.
+         */
+        size_t hash() const { return hash_val(loc_ ? loc_.value().getHashValue() : 0); }
+
+        /**
+         * @brief Dump a human-readable string representation of the SourcePoint.
+         *
+         * - For valid points: returns "filename:line:column".
+         * - For default points: returns "<default SourcePoint>".
+         *
+         * @return A string representation of this SourcePoint.
+         */
+        std::string dump() const;
+
+      private:
+        /**
+         * @brief Private constructor to initialize a SourcePoint from a SourceManager.
+         *
+         * Only accessible to the static factory functions.
+         *
+         * @param SM The SourceManager to associate with this SourcePoint.
+         */
+        SourcePoint(const clang::SourceManager &SM) : loc_{std::nullopt}, SM_(SM) {};
+
+        std::optional<clang::SourceLocation> loc_; ///< Optional Clang source location.
+        const clang::SourceManager &SM_; ///< Reference to the source manager for resolution.
+    };
+
     class Symbol {
       public:
         virtual ~Symbol()                 = default;
@@ -577,7 +699,8 @@ namespace Symbolic {
         Structure(
             const clang::RecordDecl *RD,
             const clang::ASTRecordLayout &layout,
-            std::variant<std::monostate, not_null<std::unique_ptr<const Symbolic::Address>>> from);
+            std::variant<std::monostate, not_null<std::unique_ptr<const Symbolic::Address>>> from,
+            SourcePoint fromPoint);
 
         Structure(const Structure &other) : SymbolicExpr(other), info_(other.info_) {
             fields_.clear();
@@ -737,20 +860,22 @@ namespace Symbolic {
             not_null<std::unique_ptr<const SymbolicExpr>>
                 len_; ///< The length of an address. The Address type does not store pointer types
                       ///< currently, thus it does not support C-style pointer conversion.
-            not_null<std::unique_ptr<const Variable>>
-                index_; ///< Vaule of this AddressRange may rely on this ghost variable.
+            // not_null<std::unique_ptr<const Variable>>
+            //     index_; ///< Vaule of this AddressRange may rely on this ghost variable.
 
             Range(not_null<std::unique_ptr<const SymbolicExpr>> len)
-                : len_(std::move(len)),
-                  index_(make_unique<Variable>(SymbolicExpr::Type{ScalarKind::UInt, 32},
-                                               std::monostate{})) {}
+                : len_(std::move(len)) /*,
+                   index_(make_unique<Variable>(SymbolicExpr::Type{ScalarKind::UInt, 32},
+                                                std::monostate{}))*/
+            {}
 
             Range(const Range &other)
-                : len_(other.len_->clone().into_underlying()),
-                  index_(std::make_unique<Variable>(*other.index_)) {}
+                : len_(other.len_->clone().into_underlying()) /*,
+                   index_(std::make_unique<Variable>(*other.index_))*/
+            {}
             Range &operator=(const Range &other) {
-                len_   = other.len_->clone().into_underlying();
-                index_ = std::make_unique<Variable>(*other.index_);
+                len_ = other.len_->clone().into_underlying();
+                // index_ = std::make_unique<Variable>(*other.index_);
                 return *this;
             }
             Range(Range &&other)       = default;
@@ -765,14 +890,16 @@ namespace Symbolic {
 
         struct BaseInfo {
             std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from_;
-            BaseInfo(std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from)
-                : from_(std::move(from)) {}
+            SourcePoint fromPoint_;
+            BaseInfo(std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
+                     SourcePoint fromPoint)
+                : from_(std::move(from)), fromPoint_(std::move(fromPoint)) {}
             BaseInfo(const BaseInfo &);
-            BaseInfo &operator=(const BaseInfo &);
-            BaseInfo(BaseInfo &&)            = default;
-            BaseInfo &operator=(BaseInfo &&) = default;
+            BaseInfo(BaseInfo &&) = default;
             size_t hash() const;
             bool operator==(const BaseInfo &other) const {
+                if (fromPoint_ != other.fromPoint_)
+                    return false;
                 return std::visit(
                     [&](auto &&arg) -> bool {
                         using T = std::decay_t<decltype(arg)>;
@@ -796,14 +923,13 @@ namespace Symbolic {
         };
 
         SymbolAddress(const SymbolAddress &other);
-        SymbolAddress &operator=(const SymbolAddress &other);
         SymbolAddress(SymbolAddress &&) = default;
-        SymbolAddress &operator=(SymbolAddress &&);
 
         bool operator==(const SymbolAddress &other) const { return equal(other); }
 
         SymbolAddress(
             std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
+            SourcePoint fromPoint,
             std::optional<not_null<std::unique_ptr<const SymbolicExpr>>> offset = std::nullopt,
             std::optional<not_null<std::unique_ptr<const SymbolicExpr>>> length = std::nullopt);
 
@@ -855,11 +981,11 @@ namespace Symbolic {
                 ERROR("Is not a range! Do isRange first.");
             return range_.value().len_;
         }
-        auto getIndex() const -> const auto & {
-            if (range_ == std::nullopt)
-                ERROR("Is not a range! Do isRange first.");
-            return range_.value().index_;
-        }
+        // auto getIndex() const -> const auto & {
+        //     if (range_ == std::nullopt)
+        //         ERROR("Is not a range! Do isRange first.");
+        //     return range_.value().index_;
+        // }
         bool isRange() const { return range_ != std::nullopt; }
         void resetRange() { range_ = std::nullopt; }
         BaseInfo getBaseInfo() const;
@@ -893,6 +1019,8 @@ namespace Symbolic {
             from_; ///< From another Address p means this is a value(may with offset) of a
                    ///< pointer variable whose address is p, from {Structure::Info, size_t} means
                    ///< this is a field(a pointer)'s value.
+
+        SourcePoint fromPoint_;
         std::optional<Range> range_;
     };
 
@@ -1070,11 +1198,13 @@ namespace Symbolic {
     class Variable : public SymbolicExpr, public Symbol {
       public:
         Variable(Type varType,
-                 std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from)
-            : SymbolicExpr(ExprType::Variable, varType), varType_(varType), from_(std::move(from)) {
-        }
+                 std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
+                 SourcePoint fromPoint)
+            : SymbolicExpr(ExprType::Variable, varType), varType_(varType), from_(std::move(from)),
+              fromPoint_(std::move(fromPoint)) {}
 
         Variable(const Variable &other);
+        Variable(Variable &&) = default;
 
         Type getVarType() const { return varType_; }
         void setVarType(Type vt) {
@@ -1123,6 +1253,8 @@ namespace Symbolic {
         std::variant<std::monostate,
                      not_null<std::unique_ptr<const Address>>>
             from_; ///< The original Address of the value or the Structure it belongs.
+
+        SourcePoint fromPoint_;
     };
 
     std::unique_ptr<SymbolicExpr> createLNotExpr(not_null<std::unique_ptr<SymbolicExpr>> expr);

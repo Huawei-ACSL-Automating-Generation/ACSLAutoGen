@@ -14,13 +14,14 @@ class SetLoopEntryPlugin : public LoopInfoPlugin {
     string_view id() const override { return id_; }
     bool parse(const ProgramState &,
                const ProgramState &loopEntry,
+               SourcePoint loopEntryPoint,
                const Expr *,
                const Stmt *,
                const Stmt *,
                LoopInfo &loopInfo) const override {
         auto symbolicState = loopEntry.clone();
 
-        symbolicState->resymbolize();
+        symbolicState->resymbolize(std::move(loopEntryPoint));
         loopInfo.loopEntryInfo_.emplace(std::move(symbolicState));
         return true;
     }
@@ -37,6 +38,7 @@ class SetPatternsPlugin : public LoopInfoPlugin {
     string_view id() const override { return id_; }
     bool parse(const ProgramState &,
                const ProgramState &loopEntry,
+               SourcePoint,
                const Expr *cond,
                const Stmt *inc,
                const Stmt *body,
@@ -169,6 +171,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
     string_view id() const override { return id_; }
     bool parse(const ProgramState &preState,
                const ProgramState &loopEntry,
+               SourcePoint,
                const Expr *cond,
                const Stmt *inc,
                const Stmt *body,

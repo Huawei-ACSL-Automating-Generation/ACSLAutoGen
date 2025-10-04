@@ -21,6 +21,7 @@ class ACSLContext {
     std::vector<const clang::FunctionDecl *> getFunctions() const;
     auto getSourceManager() -> auto & { return SM_; }
     auto getSourceManager() const -> const auto & { return SM_; }
+    auto getLangOptions() const -> const auto & { return LO_; }
     auto getRewriter() -> auto & { return rewriter_; }
     auto getRewriter() const -> const auto & { return rewriter_; }
 
