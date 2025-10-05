@@ -51,6 +51,43 @@ namespace {
     }
 } // namespace
 
+LoopInfo::Pattern &LoopInfo::Pattern::operator=(const Pattern &other) {
+    if (this == &other)
+        return *this;
+    initialValue_ = other.initialValue_->clone().into_underlying();
+    step_         = other.step_;
+    return *this;
+}
+
+string LoopInfo::Pattern::dump() const {
+    ostringstream oss;
+    oss << "initialValue_: "
+        << (initialValue_->regularForm() ? initialValue_->regularForm().value()
+                                         : initialValue_->dump())
+        << "\n";
+    oss << "step_: " << to_string(step_) << "\n";
+    return oss.str();
+}
+
+LoopInfo::LoopInfo(const clang::Stmt *loopStmt)
+    : loopStmt_(loopStmt), initStmt_{nullptr}, condExpr_{nullptr}, incStmt_(nullptr),
+      bodyStmt_(nullptr) {
+    if (const auto *forStmt = dyn_cast<ForStmt>(loopStmt)) {
+        initStmt_ = forStmt->getInit();
+        condExpr_ = forStmt->getCond();
+        incStmt_  = forStmt->getInc();
+        bodyStmt_ = forStmt->getBody();
+    } else if (const auto *whileStmt = dyn_cast<WhileStmt>(loopStmt)) {
+        condExpr_ = whileStmt->getCond();
+        bodyStmt_ = whileStmt->getBody();
+    } else if (const auto *doWhileStmt = dyn_cast<DoStmt>(loopStmt)) {
+        condExpr_ = doWhileStmt->getCond();
+        bodyStmt_ = doWhileStmt->getBody();
+    } else {
+        ERROR("LoopStmt should be a Stmt of loop.");
+    }
+}
+
 string emitFunctionContract(const ProgramState &pre,
                             const ProgramState &post,
                             std::string_view groupName,
@@ -72,20 +109,17 @@ string emitFunctionContract(const ProgramState &pre,
 pair<LoopInfo, bool> parseLoopInfo(
     const ProgramState &preState,
     const ProgramState &loopEntry,
-    SourcePoint loopEntryPoint,
-    const clang::Expr *cond,
-    const clang::Stmt *inc,
-    const clang::Stmt *body,
+    const clang::Stmt *loopStmt,
     std::string_view groupName,
     optional<reference_wrapper<const vector<string>>> extraPluginIds) {
     auto plugins = getPlugins<LoopInfoPlugin>(groupName, extraPluginIds);
 
-    LoopInfo loopInfo;
+    LoopInfo loopInfo{loopStmt};
     for (auto &plugin : plugins) {
         if (plugin == nullptr)
             UNREACHABLE();
         DEBUG("Plugin {" + string{plugin->id()} + "} is parsing...");
-        if (!plugin->parse(preState, loopEntry, loopEntryPoint, cond, inc, body, loopInfo))
+        if (!plugin->parse(preState, loopEntry, loopInfo))
             return pair{std::move(loopInfo), false};
     }
     return pair{std::move(loopInfo), true};
@@ -93,10 +127,6 @@ pair<LoopInfo, bool> parseLoopInfo(
 
 void parseComplexLoopInfo(const ProgramState &preState,
                           const ProgramState &loopEntry,
-                          SourcePoint loopEntryPoint,
-                          const clang::Expr *cond,
-                          const clang::Stmt *inc,
-                          const clang::Stmt *body,
                           LoopInfo &loopInfo,
                           std::string_view groupName,
                           optional<reference_wrapper<const vector<string>>> extraPluginIds) {
@@ -106,7 +136,7 @@ void parseComplexLoopInfo(const ProgramState &preState,
         if (plugin == nullptr)
             UNREACHABLE();
         DEBUG("Plugin {" + string{plugin->id()} + "} is parsing...");
-        if (!plugin->parse(preState, loopEntry, loopEntryPoint, cond, inc, body, loopInfo))
+        if (!plugin->parse(preState, loopEntry, loopInfo))
             ERROR("Plugin: {" + string{plugin->id()} +
                   "} parsing complex loop's information failed.");
     }
@@ -115,10 +145,6 @@ void parseComplexLoopInfo(const ProgramState &preState,
 std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
     const ProgramState &preState,
     const ProgramState &loopEntry,
-    SourcePoint loopEntryPoint,
-    const clang::Expr *cond,
-    const clang::Stmt *inc,
-    const clang::Stmt *body,
     const LoopInfo &loopInfo,
     std::string_view groupName,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
@@ -175,8 +201,7 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
         if (plugin == nullptr)
             UNREACHABLE();
         DEBUG("Plugin {" + string{plugin->id()} + "} is generating...");
-        auto [s, continueFlag, postInfos] =
-            plugin->generate(preState, loopEntry, loopEntryPoint, cond, inc, body, loopInfo);
+        auto [s, continueFlag, postInfos] = plugin->generate(preState, loopEntry, loopInfo);
 
         if (s) {
             spec += "    " /*4 spaces*/ + *s + "\n";
@@ -255,7 +280,7 @@ void substituteSymbols(not_null<unique_ptr<SymbolicExpr>> &expr, const Path &loo
                         }
                     }
                 },
-                var->getFrom());
+                var->getFromAddr());
             return;
         }
         case Address: {
@@ -338,5 +363,5 @@ not_null<unique_ptr<Address>> getSubstitutedAddr(const Address &addr, const Path
                 }
             }
         },
-        symbolAddr.getFrom());
+        symbolAddr.getFromAddr());
 };

@@ -34,25 +34,19 @@ struct LoopInfo {
             : initialValue_(std::move(initialValue)), step_(step) {}
         Pattern(const Pattern &other)
             : initialValue_(other.initialValue_->clone().into_underlying()), step_(other.step_) {}
-        Pattern &operator=(const Pattern &other) {
-            if (this == &other)
-                return *this;
-            initialValue_ = other.initialValue_->clone().into_underlying();
-            step_         = other.step_;
-            return *this;
-        }
+        Pattern &operator=(const Pattern &other);
         Pattern(Pattern &&other)            = default;
         Pattern &operator=(Pattern &&other) = default;
-        string dump() const {
-            ostringstream oss;
-            oss << "initialValue_: "
-                << (initialValue_->regularForm() ? initialValue_->regularForm().value()
-                                                 : initialValue_->dump())
-                << "\n";
-            oss << "step_: " << to_string(step_) << "\n";
-            return oss.str();
-        }
+        string dump() const;
     };
+
+    LoopInfo(const clang::Stmt *loopStmt);
+
+    const clang::Stmt *loopStmt_;
+    const clang::Stmt *initStmt_;
+    const clang::Expr *condExpr_;
+    const clang::Stmt *incStmt_;
+    const clang::Stmt *bodyStmt_;
 
     // SetLoopEntryPlugin
     struct LoopEntryInfo {
@@ -96,10 +90,7 @@ struct LoopInfo {
 std::pair<LoopInfo, bool> parseLoopInfo(
     const ProgramState &preState,
     const ProgramState &loopEntry,
-    SourcePoint loopEntryPoint,
-    const clang::Expr *cond,
-    const clang::Stmt *inc,
-    const clang::Stmt *body,
+    const clang::Stmt *loopStmt,
     std::string_view groupName = DEFAULT_LOOP_INFO_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
         std::nullopt);
@@ -107,10 +98,6 @@ std::pair<LoopInfo, bool> parseLoopInfo(
 void parseComplexLoopInfo(
     const ProgramState &preState,
     const ProgramState &loopEntry,
-    SourcePoint loopEntryPoint,
-    const clang::Expr *cond,
-    const clang::Stmt *inc,
-    const clang::Stmt *body,
     LoopInfo &loopInfo,
     std::string_view groupName                                       = COMPLEX_LOOP_INFO_PLUGINS,
     optional<reference_wrapper<const vector<string>>> extraPluginIds = std::nullopt);
@@ -118,10 +105,6 @@ void parseComplexLoopInfo(
 std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
     const ProgramState &preState,
     const ProgramState &loopEntry,
-    SourcePoint loopEntryPoint,
-    const clang::Expr *cond,
-    const clang::Stmt *inc,
-    const clang::Stmt *body,
     const LoopInfo &loopInfo,
     std::string_view groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
     std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
@@ -211,17 +194,10 @@ class LoopInfoPlugin : public ACSLPlugin {
     /// @param preState
     /// @param loopEntry
     /// @param loopEntryPoint
-    /// @param cond
-    /// @param inc
-    /// @param body
     /// @param loopInfo info to be filled in
     /// @return return false means this loop is too complex and will abort whole parsing!
     virtual bool parse(const ProgramState &preState,
                        const ProgramState &loopEntry,
-                       SourcePoint loopEntryPoint,
-                       const clang::Expr *cond,
-                       const clang::Stmt *inc,
-                       const clang::Stmt *body,
                        LoopInfo &loopInfo) const = 0;
 };
 
@@ -236,10 +212,6 @@ class LoopInvariantPlugin : public ACSLPlugin {
     virtual std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
         const ProgramState &preState,
         const ProgramState &loopEntry,
-        SourcePoint loopEntryPoint,
-        const clang::Expr *cond,
-        const clang::Stmt *inc,
-        const clang::Stmt *body,
         const LoopInfo &loopInfo) const = 0;
 };
 

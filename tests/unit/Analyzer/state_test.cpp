@@ -259,7 +259,7 @@ namespace {
     class MemoryModelTest : public ::testing::Test {
       protected:
         MemoryModelTest() {
-            std::string code{};
+            std::string code{"void func() {}"};
             for (auto i : views::iota(0u, 20u)) {
                 code += "int g" + to_string(i) + ";";
             }
@@ -286,8 +286,9 @@ namespace {
         Symbolic::SymbolAddress makeRangeAddr(unsigned int id,
                                               unique_ptr<const SymbolicExpr> offset,
                                               unique_ptr<const SymbolicExpr> len) {
-            auto defaultPoint = SourcePoint::fromDefault(e.getSourceManager());
-            auto baseAddr     = makeVariableAddr(id);
+            auto defaultPoint = SourcePoint::fromFuncDeclBefore(
+                e.findFirstDecl<FunctionDecl>(), e.getSourceManager(), e.getLangOptions());
+            auto baseAddr = makeVariableAddr(id);
             if (len != nullptr)
                 return Symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(),
                                                defaultPoint, std::move(offset), std::move(len)};
@@ -296,7 +297,8 @@ namespace {
         }
 
         unique_ptr<Symbolic::Variable> makeVariable(unsigned int id) {
-            auto defaultPoint = SourcePoint::fromDefault(e.getSourceManager());
+            auto defaultPoint = SourcePoint::fromFuncDeclBefore(
+                e.findFirstDecl<FunctionDecl>(), e.getSourceManager(), e.getLangOptions());
             return std::make_unique<Symbolic::Variable>(
                 SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, id},
                 make_unique<VariableAddress>(getVarDecl(id)), defaultPoint);

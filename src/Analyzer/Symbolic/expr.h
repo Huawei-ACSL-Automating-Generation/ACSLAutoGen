@@ -540,18 +540,21 @@ namespace Symbolic {
     class SourcePoint {
       public:
         SourcePoint(const SourcePoint &) = default;
-        SourcePoint(SourcePoint &&)      = default;
+        SourcePoint &operator=(const SourcePoint &);
+        SourcePoint(SourcePoint &&) = default;
+        SourcePoint &operator=(SourcePoint &&);
 
         /**
-         * @brief Construct a default SourcePoint without a concrete source location.
+         * @brief Construct a SourcePoint at the position just before a given FunctionDecl.
          *
-         * The resulting point is considered "smaller" than any valid SourcePoint
-         * when compared with operator<, and its @ref asSourceLocation will return nullopt.
-         *
-         * @param SM The SourceManager to associate with this point.
-         * @return A default SourcePoint.
+         * @param FD  The FunctionDecl to reference.
+         * @param SM The SourceManager providing context for the source file.
+         * @param LO The language options used for retrieving locations.
+         * @return A SourcePoint located before the given statement.
          */
-        static SourcePoint fromDefault(const clang::SourceManager &SM) { return SourcePoint{SM}; }
+        static SourcePoint fromFuncDeclBefore(const clang::FunctionDecl *FD,
+                                              const clang::SourceManager &SM,
+                                              const clang::LangOptions &LO);
 
         /**
          * @brief Construct a SourcePoint at the position just before a given statement.
@@ -580,8 +583,6 @@ namespace Symbolic {
         /**
          * @brief Compare this SourcePoint with another.
          *
-         * Default points are considered smaller than any valid point.
-         *
          * @param other The SourcePoint to compare against.
          * @return True if this point is strictly before the other, false otherwise.
          */
@@ -590,8 +591,8 @@ namespace Symbolic {
         /**
          * @brief Test equality between two SourcePoints.
          *
-         * Two points are equal if both are default points, or if their
-         * underlying `SourceLocation`s compare equal under the same SourceManager.
+         * Two points are equal if their underlying `SourceLocation`s compare equal
+         * under the same SourceManager.
          *
          * @param other The SourcePoint to compare against.
          * @return True if both points represent the same location, false otherwise.
@@ -601,27 +602,21 @@ namespace Symbolic {
         /**
          * @brief Get the underlying `clang::SourceLocation` represented by this point.
          *
-         * May return `std::nullopt` if this is a default SourcePoint.
-         *
-         * @return An optional `clang::SourceLocation`.
+         * @return An `clang::SourceLocation`.
          */
-        std::optional<clang::SourceLocation> asSourceLocation() const { return loc_; }
+        clang::SourceLocation asSourceLocation() const { return loc_; }
 
         /**
          * @brief Generate a hash value for this SourcePoint.
          *
-         * For default points, returns the hash of 0. Otherwise computed from
-         * the underlying `SourceLocation`'s hash value.
+         * Computed from the underlying `SourceLocation`'s hash value.
          *
          * @return Hash value suitable for use in unordered containers.
          */
-        size_t hash() const { return hash_val(loc_ ? loc_.value().getHashValue() : 0); }
+        size_t hash() const { return hash_val(loc_.getHashValue()); }
 
         /**
          * @brief Dump a human-readable string representation of the SourcePoint.
-         *
-         * - For valid points: returns "filename:line:column".
-         * - For default points: returns "<default SourcePoint>".
          *
          * @return A string representation of this SourcePoint.
          */
@@ -635,9 +630,9 @@ namespace Symbolic {
          *
          * @param SM The SourceManager to associate with this SourcePoint.
          */
-        SourcePoint(const clang::SourceManager &SM) : loc_{std::nullopt}, SM_(SM) {};
+        SourcePoint(const clang::SourceManager &SM) : SM_(SM) {};
 
-        std::optional<clang::SourceLocation> loc_; ///< Optional Clang source location.
+        clang::SourceLocation loc_;      ///< Clang source location.
         const clang::SourceManager &SM_; ///< Reference to the source manager for resolution.
     };
 
@@ -649,8 +644,9 @@ namespace Symbolic {
         Symbol &operator=(const Symbol &) = default;
         Symbol(Symbol &&)                 = default;
         Symbol &operator=(Symbol &&)      = default;
-        virtual std::variant<std::monostate, not_null<std::unique_ptr<const Symbolic::Address>>> getFrom()
-            const = 0;
+        virtual std::variant<std::monostate, not_null<std::unique_ptr<const Symbolic::Address>>> getFromAddr()
+            const                                               = 0;
+        virtual std::optional<SourcePoint> getFromPoint() const = 0;
     };
 
     /**
@@ -665,8 +661,8 @@ namespace Symbolic {
      *   Since id_ and name_ have been removed, a Structure can be constructed directly from the
      *   symbolic values of all its fields.
      *
-     * - **getFrom()**:
-     *   Invokes getFrom() on each field value. The function returns a common Address only if
+     * - **getFromAddr()**:
+     *   Invokes getFromAddr() on each field value. The function returns a common Address only if
      *   every field yields a valid result and all results are FieldAddress instances with the same
      *   base address and indices that correspond to the field values. Otherwise, it returns
      *   monostate.
@@ -734,8 +730,9 @@ namespace Symbolic {
 
         not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> getFrom()
+        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> getFromAddr()
             const override;
+        std::optional<SourcePoint> getFromPoint() const override;
         std::optional<std::string> regularForm(
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt,
@@ -760,6 +757,12 @@ namespace Symbolic {
             WARN("Met Structure in getMaxDegree.");
             return -1;
         }
+
+      protected:
+        using From =
+            std::pair<std::variant<std::monostate, not_null<std::unique_ptr<const Address>>>,
+                      std::optional<SourcePoint>>;
+        From getFrom() const;
 
       private:
         Info info_;
@@ -950,7 +953,7 @@ namespace Symbolic {
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
-        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> getFrom()
+        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> getFromAddr()
             const override {
             return std::visit(
                 [&](auto &&arg)
@@ -965,6 +968,7 @@ namespace Symbolic {
                 },
                 from_);
         }
+        std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
         std::optional<not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;
         virtual not_null<std::unique_ptr<Address>> addressClone() const override;
@@ -1222,7 +1226,7 @@ namespace Symbolic {
         virtual not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
-        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> getFrom()
+        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> getFromAddr()
             const override {
             return std::visit(
                 [&](auto &&arg)
@@ -1237,6 +1241,7 @@ namespace Symbolic {
                 },
                 from_);
         }
+        std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
         std::optional<not_null<const clang::VarDecl *>> getFromRoot() const;
 
         // StInG: Support functions for affine invariant analysis
@@ -1265,7 +1270,7 @@ namespace Symbolic {
 
     bool is_symbol_addr(const Symbolic::Address &a) noexcept;
 
-    bool isFrom(const Symbolic::Address &addr, const SymbolicExpr &expr);
+    bool isFrom(const SymbolicExpr &expr, const Symbolic::Address &fromAddr, SourcePoint fromPoint);
 
 } // namespace Symbolic
 

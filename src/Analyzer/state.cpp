@@ -83,7 +83,8 @@ namespace {
     }
 } // namespace
 
-Path::Path(const Path &other, bool shallowCopy) : context_(other.context_) {
+Path::Path(const Path &other, bool shallowCopy)
+    : context_(other.context_), startPoint_(other.startPoint_) {
     if (shallowCopy) {
         for (const auto &cond : other.pathConditions_) {
             pathConditions_.push_back(cond->clone());
@@ -105,16 +106,18 @@ void Path::swap(Path &o) noexcept {
     swap(pathConditions_, o.pathConditions_);
     swap(varAddr_, o.varAddr_);
     swap(memoryState_, o.memoryState_);
+    swap(startPoint_, o.startPoint_);
 }
 
-void Path::resymbolize(SourcePoint point) {
+void Path::resymbolize(SourcePoint newStartPoint) {
     memoryState_.clear();
     pathConditions_.clear();
 
+    startPoint_ = std::move(newStartPoint);
     for (auto &[varDecl, addr] : varAddr_) {
         clang::QualType ty = varDecl->getType();
 
-        auto symbol = getSymbol(ty, addr->addressClone().into_underlying(), point);
+        auto symbol = getSymbol(ty, addr->addressClone().into_underlying(), startPoint_);
         updateMemory(*addr, std::move(symbol));
     }
 }
@@ -146,9 +149,8 @@ not_null<unique_ptr<Address>> Path::extractLValue(const Expr *lhs) {
             auto idxExpr = std::move(idxEval.second[0]);
             resultAddr->addOffset(std::move(idxExpr));
             if (!memoryState_.contains(*resultAddr)) {
-                auto newSymbol =
-                    getSymbol(arr->getType(), resultAddr->addressClone().into_underlying(),
-                              SourcePoint::fromDefault(context_.getSourceManager()));
+                auto newSymbol = getSymbol(
+                    arr->getType(), resultAddr->addressClone().into_underlying(), startPoint_);
                 memoryState_.write(*resultAddr, std::move(newSymbol));
             }
             return std::move(resultAddr);
@@ -169,7 +171,7 @@ not_null<unique_ptr<Address>> Path::extractLValue(const Expr *lhs) {
                 if (!memoryState_.contains(*addr.value())) {
                     auto symbol =
                         getSymbol(uop->getType(), addr.value()->addressClone().into_underlying(),
-                                  SourcePoint::fromDefault(context_.getSourceManager()));
+                                  startPoint_);
                     memoryState_.write(*addr.value(), std::move(symbol));
                 }
                 return std::move(addr).value().into_underlying();
@@ -200,8 +202,7 @@ not_null<unique_ptr<Address>> Path::extractLValue(const Expr *lhs) {
 
             if (!memoryState_.contains(*baseAddr.value())) {
                 auto st = make_unique<Structure>(
-                    RD, layout, baseAddr.value()->addressClone().into_underlying(),
-                    SourcePoint::fromDefault(context_.getSourceManager()));
+                    RD, layout, baseAddr.value()->addressClone().into_underlying(), startPoint_);
                 memoryState_.write(*baseAddr.value(), std::move(st));
             }
             return make_unique<FieldAddress>(
@@ -210,9 +211,8 @@ not_null<unique_ptr<Address>> Path::extractLValue(const Expr *lhs) {
             auto baseAddr = extractLValue(base);
 
             if (!memoryState_.contains(*baseAddr)) {
-                auto st =
-                    make_unique<Structure>(RD, layout, baseAddr->addressClone().into_underlying(),
-                                           SourcePoint::fromDefault(context_.getSourceManager()));
+                auto st = make_unique<Structure>(
+                    RD, layout, baseAddr->addressClone().into_underlying(), startPoint_);
                 memoryState_.write(*baseAddr, std::move(st));
             }
             return make_unique<FieldAddress>(
@@ -272,7 +272,7 @@ void Path::insertPathCondition(not_null<unique_ptr<SymbolicExpr>> cond) {
 }
 
 unique_ptr<Path> Path::clone() const {
-    auto cloned           = make_unique<Path>(context_);
+    auto cloned           = make_unique<Path>(context_, startPoint_);
     cloned->currentState_ = currentState_;
     for (const auto &entry : varAddr_)
         cloned->varAddr_.emplace(entry.first, make_unique<VariableAddress>(*entry.second));
@@ -486,9 +486,8 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     newAddr->setOffset(std::move(idxExpr));
                     if (auto value = memoryState_.read(*newAddr); value == nullopt) {
                         auto elemType = arrSub->getType();
-                        auto symbol =
-                            getSymbol(elemType, newAddr->addressClone().into_underlying(),
-                                      SourcePoint::fromDefault(context_.getSourceManager()));
+                        auto symbol = getSymbol(elemType, newAddr->addressClone().into_underlying(),
+                                                startPoint_);
                         memoryState_.write(*newAddr, symbol->clone());
                         outExprs.emplace_back(std::move(symbol));
                     } else {
@@ -668,7 +667,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                                 value == nullopt) {
                                 auto symbol = getSymbol(
                                     uop->getType(), addr.value()->addressClone().into_underlying(),
-                                    SourcePoint::fromDefault(context_.getSourceManager()));
+                                    startPoint_);
                                 path->memoryState_.write(*addr.value(), symbol->clone());
                                 outExprs.emplace_back(std::move(symbol));
                             } else {
@@ -723,7 +722,7 @@ Path::EvalResult Path::evalExpr(const Expr *expr) {
                     if (val == nullopt) {
                         st = make_unique<Structure>(
                             RD, layout, baseAddr.value()->addressClone().into_underlying(),
-                            SourcePoint::fromDefault(context_.getSourceManager()));
+                            startPoint_);
                         memoryState_.write(*baseAddr.value(), st->clone());
                     } else if (val.value()->getType() == SymbolicExpr::ExprType::Structure) {
                         auto &stVal = dynamic_cast<Structure &>(*val.value());
@@ -837,12 +836,14 @@ string Path::dump() const {
     return oss.str();
 }
 
-bool Path::isUnchanged(const Address &addr) const {
+bool Path::isUnchanged(const Address &addr, optional<SourcePoint> since) const {
     auto value = memoryState_.read(addr);
     if (value == nullopt)
         return true; // Assume it has not been accessed yet.
 
-    return isFrom(addr, *value.value());
+    if (since != nullopt)
+        return isFrom(*value.value(), addr, std::move(since).value());
+    return isFrom(*value.value(), addr, startPoint_);
 }
 
 bool Path::is_point_to_structure(const Address &addr) const {
@@ -1091,18 +1092,21 @@ void MemoryModel::eraseExpiredLocals(const unordered_set<const clang::VarDecl *>
 ProgramState::ProgramState(unique_ptr<Path> initialPath,
                            unique_ptr<ACSLFunction> func,
                            ACSLContext &context)
-    : context_(context) {
+    : func_(std::move(func)), context_(context),
+      startPoint_(SourcePoint::fromFuncDeclBefore(func_->getFunctionDecl(),
+                                                  context_.getSourceManager(),
+                                                  context_.getLangOptions())) {
     paths_.push_back(std::move(initialPath));
-    func_ = std::move(func);
 }
 
 ProgramState::ProgramState(unique_ptr<ACSLFunction> func, ACSLContext &context)
-    : context_(context) {
-    func_ = std::move(func);
-}
+    : func_(std::move(func)), context_(context),
+      startPoint_(SourcePoint::fromFuncDeclBefore(func_->getFunctionDecl(),
+                                                  context_.getSourceManager(),
+                                                  context_.getLangOptions())) {}
 
 ProgramState::ProgramState(const ProgramState &other)
-    : func_(other.func_->clone()), context_(other.context_),
+    : func_(other.func_->clone()), context_(other.context_), startPoint_(other.startPoint_),
       incompleteLoopInfo_(other.incompleteLoopInfo_) {
     paths_.reserve(other.paths_.size());
     std::ranges::transform(other.paths_, std::back_inserter(paths_),
@@ -1114,21 +1118,10 @@ ProgramState &ProgramState::operator=(ProgramState &&other) {
         ERROR("Different contexts!");
     func_               = std::move(other.func_);
     paths_              = std::move(other.paths_);
+    startPoint_         = std::move(other.startPoint_);
     incompleteLoopInfo_ = std::move(other.incompleteLoopInfo_);
     return *this;
 }
-
-namespace {
-    void initParam(Path *path, const ParmVarDecl *param) {
-        QualType paramType = param->getType();
-
-        auto paramAddr = path->allocMemory(param);
-        auto value     = getSymbol(paramType, paramAddr->addressClone().into_underlying(),
-                                   SourcePoint::fromDefault(path->getContext().getSourceManager()));
-        path->updateMemory(*paramAddr, std::move(value));
-    }
-
-} // namespace
 
 // @WindOctober: A preliminary scan of the function is also required to identify all
 // global variables (i.e., variables whose scope is greater than or equal
@@ -1137,9 +1130,13 @@ namespace {
 
 void ProgramState::init() {
     auto FD       = func_->getFunctionDecl();
-    auto initPath = std::make_unique<Path>(context_);
+    auto initPath = std::make_unique<Path>(context_, startPoint_);
     for (const ParmVarDecl *param : FD->parameters()) {
-        initParam(initPath.get(), param);
+        QualType paramType = param->getType();
+
+        auto paramAddr = initPath->allocMemory(param);
+        auto value = getSymbol(paramType, paramAddr->addressClone().into_underlying(), startPoint_);
+        initPath->updateMemory(*paramAddr, std::move(value));
     }
     paths_.clear();
     paths_.push_back(std::move(initPath));
@@ -1553,44 +1550,27 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
     if (auto forLoop = dyn_cast<ForStmt>(loopStmt); forLoop && forLoop->getInit())
         loopEntry->step(forLoop->getInit());
 
-    const Expr *cond = nullptr;
-    const Stmt *inc  = nullptr;
-    const Stmt *body = nullptr;
-
-    if (const auto *forStmt = dyn_cast<ForStmt>(loopStmt)) {
-        cond = forStmt->getCond();
-        inc  = forStmt->getInc();
-        body = forStmt->getBody();
-    } else if (const auto *whileStmt = dyn_cast<WhileStmt>(loopStmt)) {
-        cond = whileStmt->getCond();
-        body = whileStmt->getBody();
-    } else if (const auto *doWhileStmt = dyn_cast<DoStmt>(loopStmt)) {
-        cond = doWhileStmt->getCond();
-        body = doWhileStmt->getBody();
-        cond = cond->IgnoreParenImpCasts();
+    if (const auto *doWhileStmt = dyn_cast<DoStmt>(loopStmt)) {
+        auto cond = doWhileStmt->getCond()->IgnoreParenImpCasts();
+        auto body = doWhileStmt->getBody();
         if (auto *literal = llvm::dyn_cast<IntegerLiteral>(cond);
             literal && literal->getValue() == 0) {
             step(body);
             return;
         }
         UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
-    } else {
-        UNREACHABLE();
     }
 
-    auto loopEntryPoint = SourcePoint::fromStmtBefore(loopStmt, context_.getSourceManager(),
-                                                      context_.getLangOptions());
-    auto [loopInfo, ok] = parseLoopInfo(*preState, *loopEntry, loopEntryPoint, cond, inc, body);
+    auto [loopInfo, ok] = parseLoopInfo(*preState, *loopEntry, loopStmt);
 
     string spec;
     unique_ptr<ProgramState> postState;
     if (ok) {
-        tie(spec, postState) =
-            emitLoopInvariant(*preState, *loopEntry, loopEntryPoint, cond, inc, body, loopInfo);
+        tie(spec, postState) = emitLoopInvariant(*preState, *loopEntry, loopInfo);
     } else {
-        parseComplexLoopInfo(*preState, *loopEntry, loopEntryPoint, cond, inc, body, loopInfo);
-        tie(spec, postState) = emitLoopInvariant(*preState, *loopEntry, loopEntryPoint, cond, inc,
-                                                 body, loopInfo, "ComplexLoopInvariant");
+        parseComplexLoopInfo(*preState, *loopEntry, loopInfo);
+        tie(spec, postState) =
+            emitLoopInvariant(*preState, *loopEntry, loopInfo, "ComplexLoopInvariant");
     }
     INFO(spec);
 
@@ -1730,10 +1710,9 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
                         ERROR("Struct with incomplete definition!");
 
                     RD      = RD->getDefinition();
-                    auto st = make_unique<Structure>(
-                        RD, RD->getASTContext().getASTRecordLayout(RD),
-                        varAddr_->addressClone().into_underlying(),
-                        SourcePoint::fromDefault(context_.getSourceManager()));
+                    auto st = make_unique<Structure>(RD, RD->getASTContext().getASTRecordLayout(RD),
+                                                     varAddr_->addressClone().into_underlying(),
+                                                     startPoint_);
                     path->updateVarState(varDecl, std::move(st));
                 }
 
@@ -1752,10 +1731,9 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
 
                     RD = RD->getDefinition();
 
-                    auto st = make_unique<Structure>(
-                        RD, RD->getASTContext().getASTRecordLayout(RD),
-                        varAddr_->addressClone().into_underlying(),
-                        SourcePoint::fromDefault(context_.getSourceManager()));
+                    auto st = make_unique<Structure>(RD, RD->getASTContext().getASTRecordLayout(RD),
+                                                     varAddr_->addressClone().into_underlying(),
+                                                     startPoint_);
                     if (initListExpr->getNumInits() != st->getNumFields())
                         ERROR("Initializer list size mismatches the struct's field count.");
                     auto slots = st->fieldsValues();
@@ -1803,8 +1781,10 @@ void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
 }
 
 pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActiveInactive() {
-    auto activeState   = make_unique<ProgramState>(func_->clone(), context_);
-    auto inactiveState = make_unique<ProgramState>(func_->clone(), context_);
+    auto activeState           = make_unique<ProgramState>(func_->clone(), context_);
+    activeState->startPoint_   = startPoint_;
+    auto inactiveState         = make_unique<ProgramState>(func_->clone(), context_);
+    inactiveState->startPoint_ = startPoint_;
 
     for (auto &path : paths_) {
         if (path->isActive())
@@ -1828,6 +1808,11 @@ unique_ptr<ProgramState> ProgramState::merge(const vector<const ProgramState *> 
         }
         if (*state->getFunction() != *merged.value()->getFunction())
             ERROR("States to be merged are dealing with different functions.");
+        if (&state->getContext() != &merged.value()->getContext())
+            ERROR("States to be merged have different context.");
+        if (state->getStartPoint() != merged.value()->getStartPoint())
+            ERROR("States to be merged have different start point.");
+
         for (const auto &path : state->paths_)
             merged.value()->paths_.push_back(path->clone());
     }
@@ -1846,6 +1831,11 @@ unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramStat
         }
         if (*state->getFunction() != *merged.value()->getFunction())
             ERROR("States to be merged are dealing with different functions.");
+        if (&state->getContext() != &merged.value()->getContext())
+            ERROR("States to be merged have different context.");
+        if (state->getStartPoint() != merged.value()->getStartPoint())
+            ERROR("States to be merged have different start point.");
+
         for (const auto &path : state->paths_)
             merged.value()->paths_.push_back(path->clone());
     }
@@ -1854,6 +1844,7 @@ unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramStat
 
 unique_ptr<ProgramState> ProgramState::clone(bool withPath) const {
     auto newState                 = make_unique<ProgramState>(func_->clone(), context_);
+    newState->startPoint_         = startPoint_;
     newState->incompleteLoopInfo_ = incompleteLoopInfo_;
 
     if (withPath) {
@@ -1968,7 +1959,7 @@ void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt) {
             }
 
             // TODO: pack a static function in Path.
-            Path tmpPath(context_);
+            Path tmpPath(context_, startPoint_);
             auto caseCondEval = tmpPath.evalExpr(caseCond);
             assert(caseCondEval.second.size() == 1);
 
@@ -2020,11 +2011,12 @@ bool ProgramState::isInactive() const {
     return true;
 }
 
-void ProgramState::resymbolize(SourcePoint point) {
+void ProgramState::resymbolize(SourcePoint newStartPoint) {
+    startPoint_ = std::move(newStartPoint);
     for (auto &path : paths_) {
         if (path->isActive()) {
             auto temp = std::move(path);
-            temp->resymbolize(std::move(point));
+            temp->resymbolize(startPoint_);
             paths_.clear();
             paths_.push_back(std::move(temp));
             return;

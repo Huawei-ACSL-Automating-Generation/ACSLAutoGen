@@ -98,12 +98,12 @@ class ASTExtractor {
         return visitor.Found;
     }
 
-    clang::ASTContext &getASTContext() const { return AST->getASTContext(); }
-    const clang::LangOptions &getLangOptions() const { return AST->getLangOpts(); }
-    clang::SourceManager &getSourceManager() const { return AST->getSourceManager(); }
+    clang::ASTContext &getASTContext() const { return AST_->getASTContext(); }
+    const clang::LangOptions &getLangOptions() const { return AST_->getLangOpts(); }
+    clang::SourceManager &getSourceManager() const { return AST_->getSourceManager(); }
 
   private:
-    std::unique_ptr<clang::ASTUnit> AST;
+    std::unique_ptr<clang::ASTUnit> AST_;
 };
 
 #endif // AST_EXTRACTOR_H

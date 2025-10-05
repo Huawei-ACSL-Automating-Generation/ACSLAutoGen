@@ -14,12 +14,12 @@ class SetLoopEntryPlugin : public LoopInfoPlugin {
     string_view id() const override { return id_; }
     bool parse(const ProgramState &,
                const ProgramState &loopEntry,
-               SourcePoint loopEntryPoint,
-               const Expr *,
-               const Stmt *,
-               const Stmt *,
                LoopInfo &loopInfo) const override {
         auto symbolicState = loopEntry.clone();
+
+        auto loopEntryPoint = SourcePoint::fromStmtBefore(
+            loopInfo.loopStmt_, symbolicState->getContext().getSourceManager(),
+            symbolicState->getContext().getLangOptions());
 
         symbolicState->resymbolize(std::move(loopEntryPoint));
         loopInfo.loopEntryInfo_.emplace(std::move(symbolicState));
@@ -38,10 +38,6 @@ class SetPatternsPlugin : public LoopInfoPlugin {
     string_view id() const override { return id_; }
     bool parse(const ProgramState &,
                const ProgramState &loopEntry,
-               SourcePoint,
-               const Expr *cond,
-               const Stmt *inc,
-               const Stmt *body,
                LoopInfo &loopInfo) const override {
         if (loopInfo.loopEntryInfo_ == nullopt)
             ERROR("Dependencies are not met.");
@@ -56,9 +52,9 @@ class SetPatternsPlugin : public LoopInfoPlugin {
 
         using Pattern = LoopInfo::Pattern;
 
-        loopCurrent->step(cond);
-        loopCurrent->step(body);
-        loopCurrent->step(inc);
+        loopCurrent->step(loopInfo.condExpr_);
+        loopCurrent->step(loopInfo.bodyStmt_);
+        loopCurrent->step(loopInfo.incStmt_);
 
         auto getPatternsFromPath = [&](const Path &currentEntry) {
             AddressBoxMap<optional<const Pattern>> patterns;
@@ -84,8 +80,12 @@ class SetPatternsPlugin : public LoopInfoPlugin {
                         patterns.emplace(addr, nullopt);
                         continue;
                     }
-                    if (visit([&](auto &&arg) -> bool { return isFrom(addr, *arg); },
-                              hashAddrMap.begin()->second)) {
+                    if (visit(
+                            [&](auto &&arg) -> bool {
+                                return isFrom(*arg, addr,
+                                              loopEntryInfo.symbolicLoopEntry_->getStartPoint());
+                            },
+                            hashAddrMap.begin()->second)) {
                         entryExpr = visit([](auto &&arg) { return arg->clone(); },
                                           hashAddrMap.begin()->second);
                     } else {
@@ -171,10 +171,6 @@ class SetIndexPlugin : public LoopInfoPlugin {
     string_view id() const override { return id_; }
     bool parse(const ProgramState &preState,
                const ProgramState &loopEntry,
-               SourcePoint,
-               const Expr *cond,
-               const Stmt *inc,
-               const Stmt *body,
                LoopInfo &loopInfo) const override {
         if (loopInfo.loopEntryInfo_ == nullopt || loopInfo.patternInfo_ == nullopt)
             ERROR("Dependencies are not met.");
@@ -216,9 +212,9 @@ class SetIndexPlugin : public LoopInfoPlugin {
 
         auto unchangedAfterOneRound = [&](const Expr *expr) -> bool {
             auto state = loopEntryInfo.symbolicLoopEntry_->clone();
-            state->step(cond);
-            state->step(body);
-            state->step(inc);
+            state->step(loopInfo.condExpr_);
+            state->step(loopInfo.bodyStmt_);
+            state->step(loopInfo.incStmt_);
             auto [_, valueVector] = entryPath->evalExpr(expr);
             if (valueVector.size() != 1)
                 ERROR("Do not support branch at here");
@@ -312,7 +308,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
             return false;
         }; // isSimpleIndexCond end
 
-        auto condCNF = splitByAnd(cond);
+        auto condCNF = splitByAnd(loopInfo.condExpr_);
         const clang::Expr *indexCond{};
         for (auto &clause : condCNF) {
             if (isSimpleIndexCond(clause)) {

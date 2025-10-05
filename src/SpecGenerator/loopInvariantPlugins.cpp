@@ -17,10 +17,6 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
-        SourcePoint,
-        const clang::Expr *,
-        const clang::Stmt *,
-        const clang::Stmt *,
         const LoopInfo &loopInfo) const override {
         if (loopInfo.loopEntryInfo_) {
             auto &loopEntryInfo = loopInfo.loopEntryInfo_.value();
@@ -83,10 +79,6 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
-        SourcePoint,
-        const clang::Expr *cond,
-        const clang::Stmt *inc,
-        const clang::Stmt *body,
         const LoopInfo &loopInfo) const override {
         if (loopInfo.loopEntryInfo_ == nullopt || loopInfo.indexInfo_ == nullopt)
             ERROR("Dependencies are not met.");
@@ -153,10 +145,9 @@ class LinearInvariantPlugin : public LoopInvariantPlugin {
         auto loopEntry   = loopEntryInfo.symbolicLoopEntry_->clone();
         auto loopCurrent = loopEntryInfo.symbolicLoopEntry_->clone();
 
-        loopCurrent->step(cond);
-        loopCurrent->step(body);
-        if (inc)
-            loopCurrent->step(inc);
+        loopCurrent->step(loopInfo.condExpr_);
+        loopCurrent->step(loopInfo.bodyStmt_);
+        loopCurrent->step(loopInfo.incStmt_);
 
         auto &paths = loopCurrent->getPaths();
 
@@ -198,10 +189,6 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &preState,
         const ProgramState &loopEntry,
-        SourcePoint,
-        const clang::Expr *cond,
-        const clang::Stmt *inc,
-        const clang::Stmt *body,
         const LoopInfo &loopInfo) const override {
         if (loopInfo.loopEntryInfo_ == nullopt || loopInfo.indexInfo_ == nullopt ||
             loopInfo.patternInfo_ == nullopt)
@@ -216,9 +203,9 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         }
 
         auto loopCurrent = loopEntryInfo.symbolicLoopEntry_->clone();
-        loopCurrent->step(cond);
-        loopCurrent->step(body);
-        loopCurrent->step(inc);
+        loopCurrent->step(loopInfo.condExpr_);
+        loopCurrent->step(loopInfo.bodyStmt_);
+        loopCurrent->step(loopInfo.incStmt_);
 
         auto &entryMS = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->getMemoryState();
 
@@ -244,7 +231,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
             if (addr.getAddressType() != Address::AddressType::SymbolAddr)
                 return nullopt;
             auto symbolAddr = dynamic_cast<const SymbolAddress &>(addr);
-            auto from       = symbolAddr.getFrom();
+            auto from       = symbolAddr.getFromAddr();
             // If the base address itself is x-step, then there is no need to check the
             // offset (or to check it for reliability).
             if (auto range = std::visit(
@@ -300,7 +287,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                             }
                         }
                     },
-                    var->getFrom());
+                    var->getFromAddr());
             }
             return nullopt;
         }; // tryGetAsRange end
@@ -393,10 +380,6 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
-        SourcePoint,
-        const clang::Expr *,
-        const clang::Stmt *,
-        const clang::Stmt *body,
         const LoopInfo &loopInfo) const override {
         if (loopInfo.loopEntryInfo_ == nullopt || loopInfo.indexInfo_ == nullopt ||
             loopInfo.patternInfo_ == nullopt)
@@ -630,7 +613,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                                         return *arg == *elementAddr.value();
                                     }
                                 },
-                                maxVar->getFrom())) {
+                                maxVar->getFromAddr())) {
                             return;
                         }
                     } else {
@@ -667,7 +650,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                                            {"m", *param_m}}) +
                     "\n";
         }}; // ifVisitor end
-        ifVisitor.runOn(body);
+        ifVisitor.runOn(loopInfo.bodyStmt_);
 
         if (spec.empty())
             return make_tuple(nullopt, true, vector<PostInfo>{});
@@ -689,10 +672,6 @@ class LoopVariantPlugin : public LoopInvariantPlugin {
     tuple<optional<string>, bool, vector<PostInfo>> generate(
         const ProgramState &,
         const ProgramState &,
-        SourcePoint,
-        const clang::Expr *,
-        const clang::Stmt *,
-        const clang::Stmt *,
         const LoopInfo &loopInfo) const override {
         if (loopInfo.indexInfo_ == nullopt)
             ERROR("Dependencies are not met.");

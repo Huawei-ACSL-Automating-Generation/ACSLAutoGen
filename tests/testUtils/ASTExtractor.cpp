@@ -6,8 +6,8 @@ using namespace clang;
 using namespace clang::tooling;
 
 void ASTExtractor::init(std::string_view code) {
-    AST = buildASTFromCodeWithArgs(code, {"-xc", "-std=c11"});
-    if (!AST) {
+    AST_ = buildASTFromCodeWithArgs(code, {"-xc", "-std=c11"});
+    if (!AST_) {
         llvm::errs() << "Failed to parse code.\n";
     }
 }

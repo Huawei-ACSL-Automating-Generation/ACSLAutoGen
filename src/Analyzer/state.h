@@ -519,7 +519,8 @@ class Path {
   public:
     using EvalResult = std::pair<std::vector<not_null<std::unique_ptr<Path>>>, Formulas>;
 
-    Path(ACSLContext &context) : context_(context) {};
+    Path(ACSLContext &context, SourcePoint startPoint)
+        : context_(context), startPoint_(startPoint) {};
     ~Path() = default;
     Path(const Path &other, bool shallowCopy);
     void swap(Path &o) noexcept;
@@ -531,7 +532,7 @@ class Path {
         Return
     };
 
-    void resymbolize(SourcePoint point);
+    void resymbolize(SourcePoint newStartPoint);
 
     not_null<std::unique_ptr<Address>> extractLValue(const clang::Expr *lhs);
 
@@ -555,7 +556,7 @@ class Path {
     void setPathState(PathState state) { currentState_ = state; }
 
     bool isActive() const { return currentState_ == PathState::Step; }
-    bool isUnchanged(const Address &addr) const;
+    bool isUnchanged(const Address &addr, std::optional<SourcePoint> since = nullopt) const;
     bool is_point_to_structure(const Address &addr) const;
     std::unique_ptr<Path> clone() const;
 
@@ -571,6 +572,7 @@ class Path {
     auto getReturnExpr() const -> const auto & { return returnExpr_; }
     auto getPathState() const -> const auto & { return currentState_; }
     auto getContext() const -> const auto & { return context_; }
+    auto getStartPoint() const -> const auto & { return startPoint_; }
 
   private:
     // Map: variable record definition ID -> corresponding symbolic address.
@@ -587,6 +589,8 @@ class Path {
     optional<not_null<std::unique_ptr<const SymbolicExpr>>> returnExpr_ = std::nullopt;
 
     ACSLContext &context_;
+
+    SourcePoint startPoint_;
 };
 
 class ProgramState {
@@ -624,15 +628,16 @@ class ProgramState {
 
     std::string dump() const;
     void resetState();
-    void resymbolize(SourcePoint point);
+    void resymbolize(SourcePoint newStartPoint);
 
     auto getPaths() const -> const auto & { return paths_; }
     auto getPaths() -> auto & { return paths_; }
     auto getFunction() const -> const auto & { return func_; }
+    auto getContext() const -> const auto & { return context_; }
+    auto getStartPoint() const -> const auto & { return startPoint_; }
+
     std::optional<not_null<std::unique_ptr<Path>>> takePath(size_t i);
     std::vector<not_null<std::unique_ptr<Path>>> takeAllPaths();
-
-    void deriveLinearPostState(std::vector<Formulas> invs);
 
     struct IncompleteLoopInfo {
         shared_ptr<ProgramState> preState_;
@@ -656,6 +661,8 @@ class ProgramState {
     std::unique_ptr<ACSLFunction> func_;
 
     ACSLContext &context_;
+
+    SourcePoint startPoint_;
 
     std::optional<IncompleteLoopInfo>
         incompleteLoopInfo_; ///< Record information about the incomplete loop. Both the generation

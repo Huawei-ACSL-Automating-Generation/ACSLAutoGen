@@ -747,7 +747,7 @@ std::optional<std::string> SymbolAddress::regularFormOfValue(std::optional<std::
                            "]";
                 }
             },
-            getFrom());
+            getFromAddr());
     }
 }
 
@@ -817,7 +817,7 @@ std::optional<std::string> Symbolic::Structure::regularForm(std::optional<std::s
                        string{suffix.value_or(")")};
             }
         },
-        getFrom());
+        getFromAddr());
 }
 
 not_null<unique_ptr<SymbolicExpr>> LiteralExpr::simplifiedExpr() const {
@@ -1629,16 +1629,18 @@ std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType t) {
     return os;
 }
 
-std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> Structure::getFrom() const {
-    // This structure has a fixed 'from' only if every member is from the same `fieldAddress`.
-    optional<not_null<unique_ptr<const Address>>> commonBase{};
+Structure::From Structure::getFrom() const {
+    // This structure has a fixed 'from' only if every member is from the same `FieldAddress`
+    // **and** same `SourcePoint`.
+    optional<not_null<unique_ptr<const Address>>> commonBaseAddr{};
+    optional<SourcePoint> commonBasePoint{};
     for (size_t index = 0; index < fields_.size(); ++index) {
         auto &field = fields_.at(index);
         auto symbol = dynamic_cast<const Symbol *>(field.get().get());
         if (symbol == nullptr)
-            return std::monostate{};
-        auto from = symbol->getFrom();
-        optional<not_null<unique_ptr<const Address>>> base{};
+            return From{std::monostate{}, nullopt};
+        auto fromAddr = symbol->getFromAddr();
+        optional<not_null<unique_ptr<const Address>>> baseAddr{};
         std::visit(
             [&](auto &&arg) {
                 using T = std::decay_t<decltype(arg)>;
@@ -1658,26 +1660,79 @@ std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> Structure
                                                      std::pair<
                                                          not_null<std::unique_ptr<const Address>>,
                                                          const size_t>>) {
-                                auto &[baseAddr, fieldId] = fieldFrom;
+                                auto &[base, fieldId] = fieldFrom;
                                 if (fieldId != index)
                                     return;
-                                base.emplace(baseAddr->addressClone().into_underlying());
+                                baseAddr.emplace(base->addressClone().into_underlying());
                             }
                         },
                         fieldAddr.getFrom());
                 }
             },
-            from);
-        if (base == nullopt)
-            return std::monostate{};
-        if (commonBase == nullopt)
-            commonBase = std::move(base);
-        else if (*commonBase.value() != *base.value())
-            return std::monostate{};
+            fromAddr);
+        if (baseAddr == nullopt)
+            return From{std::monostate{}, nullopt};
+        if (commonBaseAddr == nullopt)
+            commonBaseAddr = std::move(baseAddr);
+
+        auto fromPoint = symbol->getFromPoint();
+        if (fromPoint == nullopt)
+            return From{std::monostate{}, nullopt};
+        if (commonBasePoint == nullopt)
+            commonBasePoint.emplace(fromPoint.value());
+
+        if (*commonBaseAddr.value() != *baseAddr.value() ||
+            commonBasePoint.value() != fromPoint.value())
+            return From{std::monostate{}, nullopt};
     }
-    if (commonBase == nullopt)
+    if (commonBaseAddr == nullopt || commonBasePoint == nullopt)
         UNREACHABLE();
-    return std::move(commonBase).value();
+
+    return From{std::move(commonBaseAddr).value(), std::move(commonBasePoint).value()};
+}
+
+std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> Structure::getFromAddr()
+    const {
+    return getFrom().first;
+}
+
+optional<SourcePoint> Structure::getFromPoint() const { return getFrom().second; }
+
+SourcePoint &SourcePoint::operator=(const SourcePoint &other) {
+    if (this == &other)
+        return *this;
+    if (&SM_ != &other.SM_)
+        ERROR("SourcePoint from different SourceManager.");
+    loc_ = other.loc_;
+    return *this;
+}
+
+SourcePoint &SourcePoint::operator=(SourcePoint &&other) {
+    if (this == &other)
+        return *this;
+    if (&SM_ != &other.SM_)
+        ERROR("SourcePoint from different SourceManager.");
+    loc_ = std::move(other.loc_);
+    return *this;
+}
+
+SourcePoint SourcePoint::fromFuncDeclBefore(const clang::FunctionDecl *FD,
+                                            const clang::SourceManager &SM,
+                                            const clang::LangOptions &LO) {
+    SourcePoint p{SM};
+    if (FD) {
+        auto BL = FD->getBeginLoc();
+        if (BL.isInvalid())
+            ERROR("Location before FunctionDecl: {" +
+                  clang::Lexer::getSourceText(
+                      clang::CharSourceRange::getTokenRange(FD->getSourceRange()), SM, LO)
+                      .str() +
+                  "} is invalid.");
+        p.loc_ = SM.getExpansionLoc(BL);
+    } else {
+        ERROR("S is nullptr.");
+    }
+    return p;
 }
 
 SourcePoint SourcePoint::fromStmtBefore(const clang::Stmt *S,
@@ -1723,36 +1778,27 @@ SourcePoint SourcePoint::fromStmtAfter(const clang::Stmt *S,
 bool SourcePoint::operator<(const SourcePoint &other) const {
     if (&SM_ != &other.SM_)
         ERROR("SourcePoint from different SourceManager.");
-    if (loc_ == nullopt && other.loc_ != nullopt)
-        return true;
-    if (other.loc_ == nullopt)
-        return false;
-    if (loc_.value().isInvalid() || other.loc_.value().isInvalid())
+    if (loc_.isInvalid() || other.loc_.isInvalid())
         UNREACHABLE();
-    return SM_.isBeforeInTranslationUnit(loc_.value(), other.loc_.value());
+    return SM_.isBeforeInTranslationUnit(loc_, other.loc_);
 }
 
 bool SourcePoint::operator==(const SourcePoint &other) const {
-    if (&SM_ != &other.SM_)
-        ERROR("SourcePoint from different SourceManager.");
-    if (loc_ == nullopt && other.loc_ == nullopt)
-        return true;
-    if (loc_ == nullopt || other.loc_ == nullopt)
+    if (&SM_ != &other.SM_) {
+        WARN("SourcePoint from different SourceManager.");
         return false;
-    if (loc_.value().isInvalid() || other.loc_.value().isInvalid())
+    }
+    if (loc_.isInvalid() || other.loc_.isInvalid())
         UNREACHABLE();
-    return !SM_.isBeforeInTranslationUnit(loc_.value(), other.loc_.value()) &&
-           !SM_.isBeforeInTranslationUnit(other.loc_.value(), loc_.value());
+    return !SM_.isBeforeInTranslationUnit(loc_, other.loc_) &&
+           !SM_.isBeforeInTranslationUnit(other.loc_, loc_);
 }
 
 string SourcePoint::dump() const {
-    if (loc_ == nullopt)
-        return "<default point>";
-
-    if (loc_.value().isInvalid())
+    if (loc_.isInvalid())
         ERROR("Invalid SourcePoint.");
 
-    auto ploc = SM_.getPresumedLoc(loc_.value());
+    auto ploc = SM_.getPresumedLoc(loc_);
     if (ploc.isInvalid())
         ERROR("Invalid presumed SourcePoint.");
 
@@ -1875,9 +1921,14 @@ namespace Symbolic {
         return a.getAddressType() == Symbolic::Address::AddressType::SymbolAddr;
     }
 
-    bool isFrom(const Symbolic::Address &addr, const SymbolicExpr &expr) {
+    bool isFrom(const SymbolicExpr &expr,
+                const Symbolic::Address &fromAddr,
+                SourcePoint fromPoint) {
         auto symbol = dynamic_cast<const Symbol *>(&expr);
         if (symbol == nullptr)
+            return false;
+
+        if (symbol->getFromPoint() == nullopt || symbol->getFromPoint().value() != fromPoint)
             return false;
         return std::visit(
             [&](auto &&arg) {
@@ -1885,9 +1936,9 @@ namespace Symbolic {
                 if constexpr (std::is_same_v<T, std::monostate>) {
                     return false;
                 } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
-                    return addr == *arg;
+                    return fromAddr == *arg;
                 }
             },
-            symbol->getFrom());
+            symbol->getFromAddr());
     }
 } // namespace Symbolic
