@@ -129,13 +129,18 @@ std::string emitInlineContract(const ProgramState &state,
  *                       when substitution succeeds.
  * @param loopEntryPath  The path that provides the memory state at loop entry.
  *
- * @note Only Variable and Address (SymbolAddress) nodes are substituted directly.
+ * @param fromPoint      The expected fromPoint of symbols. Met unexpected fromPoint will
+ *                       cause an error now.
+ *
+ * @note Only Variable and Address (SymbolAddress) and Structure nodes are substituted directly.
  *       Composite nodes (BinaryOp/UnaryOp) are traversed recursively.
- *       Structure nodes are TODO; Unknown nodes are ignored.
+ *       Unknown nodes are ignored.
  * @warning When the "from" variant is std::monostate, behavior is marked as TODO().
  * @see getSubstitutedAddr()
  */
-void substituteSymbols(not_null<std::unique_ptr<SymbolicExpr>> &expr, const Path &loopEntryPath);
+void substituteSymbols(not_null<std::unique_ptr<SymbolicExpr>> &expr,
+                       const Path &loopEntryPath,
+                       const SourcePoint &fromPoint);
 
 /**
  * @brief Compute the address obtained by substituting the symbolic origin of @p addr
@@ -153,6 +158,8 @@ void substituteSymbols(not_null<std::unique_ptr<SymbolicExpr>> &expr, const Path
  *
  * @param addr           The input address expression to substitute.
  * @param loopEntryPath  The path that provides the memory state at loop entry.
+ * @param fromPoint      The expected fromPoint of `SymbolAddress`. Met unexpected fromPoint will
+ *                       cause an error now.
  * @return not_null<unique_ptr<Address>>  The substituted (or cloned) address.
  *
  * @note When the "from" variant is std::monostate, behavior is marked as TODO().
@@ -160,7 +167,8 @@ void substituteSymbols(not_null<std::unique_ptr<SymbolicExpr>> &expr, const Path
  * @see substituteSymbols()
  */
 not_null<std::unique_ptr<Address>> getSubstitutedAddr(const Address &addr,
-                                                      const Path &loopEntryPath);
+                                                      const Path &loopEntryPath,
+                                                      const SourcePoint &fromPoint);
 
 /*---------------------------------------*/
 /*-------Framework for ACSLPlugin--------*/

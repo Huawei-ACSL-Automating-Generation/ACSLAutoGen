@@ -152,6 +152,9 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
     vector<unique_ptr<Path>> invariants;
     string spec = ACSL_HEAD.to_string();
 
+    auto loopEntryPoint =
+        SourcePoint::fromStmtBefore(loopInfo.loopStmt_, loopEntry.getContext().getSourceManager(),
+                                    loopEntry.getContext().getLangOptions());
     auto postState   = preState.clone();
     auto &postPaths  = postState->getPaths();
     auto pathNum     = postPaths.size();
@@ -179,8 +182,8 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
             auto &postBranchInfo = postBranchesInfos.at(0);
 
             for (auto &[addr, value] : info.memoryMap_) {
-                auto subedAddr = getSubstitutedAddr(addr, entryPath);
-                substituteSymbols(value, entryPath);
+                auto subedAddr = getSubstitutedAddr(addr, entryPath, loopEntryPoint);
+                substituteSymbols(value, entryPath, loopEntryPoint);
                 if (auto it = postBranchInfo.memoryMap_.find(*subedAddr);
                     it != postBranchInfo.memoryMap_.end() && !it->second->isUnknown()) {
                     auto regForm = value->simplifiedExpr()->regularForm();
@@ -252,7 +255,9 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
     return pair{spec, std::move(postState)};
 }
 
-void substituteSymbols(not_null<unique_ptr<SymbolicExpr>> &expr, const Path &loopEntryPath) {
+void substituteSymbols(not_null<unique_ptr<SymbolicExpr>> &expr,
+                       const Path &loopEntryPath,
+                       const SourcePoint &fromPoint) {
     auto &mem = loopEntryPath.getMemoryState(); // Memory snapshot at loop entry
     switch (expr->getType()) {
         using enum SymbolicExpr::ExprType;
@@ -260,7 +265,10 @@ void substituteSymbols(not_null<unique_ptr<SymbolicExpr>> &expr, const Path &loo
         case Variable: {
             // Try to resolve where this variable comes from and substitute with the value at that
             // address.
-            auto var = dynamic_cast<const Symbolic::Variable *>(expr.get().get());
+            auto &var = dynamic_cast<const Symbolic::Variable &>(*expr.get().get());
+            if (var.getFromPoint() && var.getFromPoint().value() != fromPoint)
+                ERROR("Met unexpected fromPoint is an error now. If a reasonable scenario is "
+                      "identified, it may be necessary to change this `ERROR` to `continue`.");
             std::visit(
                 [&](auto &&arg) -> void {
                     using T = std::decay_t<decltype(arg)>;
@@ -269,18 +277,22 @@ void substituteSymbols(not_null<unique_ptr<SymbolicExpr>> &expr, const Path &loo
                         TODO();
                     } else if constexpr (std::is_same_v<
                                              T, not_null<std::unique_ptr<const Symbolic::Address>>>) {
+                        auto realFromAddr = getSubstitutedAddr(*arg, loopEntryPath, fromPoint);
                         // Origin is an address-like handle; try reading from loop-entry memory.
-                        if (auto value = mem.read(*arg)) {
+                        if (auto value = mem.read(*realFromAddr)) {
                             // Replace current variable with the cloned value read from memory.
                             expr = value.value()->clone();
                         } else {
                             // Address originates from an address present on this path at loop entry
-                            // but hasn't been accessed -> keep variable un-substituted.
-                            return;
+                            // but hasn't been accessed -> construct a Variable with corrext
+                            // fromAddr and fromPoint.
+                            expr = make_unique<Symbolic::Variable>(
+                                var.getVarType(), std::move(realFromAddr).into_underlying(),
+                                loopEntryPath.getStartPoint());
                         }
                     }
                 },
-                var->getFromAddr());
+                var.getFromAddr());
             return;
         }
         case Address: {
@@ -289,40 +301,72 @@ void substituteSymbols(not_null<unique_ptr<SymbolicExpr>> &expr, const Path &loo
             auto symbolAddr = dynamic_cast<const Symbolic::SymbolAddress *>(expr.get().get());
             if (symbolAddr == nullptr)
                 UNREACHABLE();
-            expr = getSubstitutedAddr(*symbolAddr, loopEntryPath).into_underlying();
+            if (symbolAddr->getFromPoint() && symbolAddr->getFromPoint().value() != fromPoint)
+                ERROR("Met unexpected fromPoint is an error now. If a reasonable scenario is "
+                      "identified, it may be necessary to change this `ERROR` to `continue`.");
+            expr = getSubstitutedAddr(*symbolAddr, loopEntryPath, fromPoint).into_underlying();
             return;
         }
         case BinaryOp: {
             // Recursively substitute in both children (non-const downcast is intentional).
-            auto bin = dynamic_cast<Symbolic::BinaryOpExpr *>(expr.get().get());
-            if (bin == nullptr)
-                UNREACHABLE();
-            substituteSymbols(bin->getLeft(), loopEntryPath);
-            substituteSymbols(bin->getRight(), loopEntryPath);
+            auto &bin = dynamic_cast<Symbolic::BinaryOpExpr &>(*expr.get().get());
+            substituteSymbols(bin.getLeft(), loopEntryPath, fromPoint);
+            substituteSymbols(bin.getRight(), loopEntryPath, fromPoint);
             return;
         }
         case UnaryOp: {
             // Recursively substitute in sub-expression (non-const downcast is intentional).
-            auto un = dynamic_cast<Symbolic::UnaryOpExpr *>(expr.get().get());
-            if (un == nullptr)
-                UNREACHABLE();
-            substituteSymbols(un->getSub(), loopEntryPath);
+            auto &un = dynamic_cast<Symbolic::UnaryOpExpr &>(*expr.get().get());
+            substituteSymbols(un.getSub(), loopEntryPath, fromPoint);
             return;
         }
-        case Structure: TODO(); // Structure nodes substitution not implemented yet.
-        case Unknown: return;   // Unknown nodes are left untouched.
+        case Structure: {
+            auto &st = dynamic_cast<Symbolic::Structure &>(*expr.get().get());
+            for (auto &field : st.fieldsValues()) {
+                // Substitute all fields of structure.
+                substituteSymbols(field, loopEntryPath, fromPoint);
+            }
+            return;
+        }
+        case Unknown: return; // Unknown nodes are left untouched.
         default: UNREACHABLE();
     }
     UNREACHABLE();
 };
 
-not_null<unique_ptr<Address>> getSubstitutedAddr(const Address &addr, const Path &loopEntryPath) {
+not_null<unique_ptr<Address>> getSubstitutedAddr(const Address &addr,
+                                                 const Path &loopEntryPath,
+                                                 const SourcePoint &fromPoint) {
     // If it's not a symbolic address, simply return a clone.
-    if (addr.getAddressType() != Address::AddressType::SymbolAddr)
+    if (addr.getAddressType() == Address::AddressType::VariableAddr)
         return addr.addressClone();
 
+    auto &mem = loopEntryPath.getMemoryState();
+
+    if (addr.getAddressType() == Address::AddressType::FieldAddr) {
+        auto &fieldAddr = dynamic_cast<const FieldAddress &>(addr);
+        return std::visit(
+            [&](auto &&arg) -> not_null<unique_ptr<Address>> {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, std::monostate>) {
+                    // No origin info — unresolved substitution.
+                    TODO();
+                } else if constexpr (std::is_same_v<
+                                         T, std::pair<not_null<std::unique_ptr<const Address>>,
+                                                      const size_t>>) {
+                    // Substitute the base address.
+                    auto &[baseAddr, index] = arg;
+                    auto trueBaseAddr = getSubstitutedAddr(*baseAddr, loopEntryPath, fromPoint);
+                    return make_unique<FieldAddress>(
+                        fieldAddr.getDefinition(),
+                        pair<not_null<std::unique_ptr<const Address>>, const size_t>{
+                            std::move(trueBaseAddr).into_underlying(), index});
+                }
+            },
+            fieldAddr.getFrom());
+    }
+
     auto &symbolAddr = dynamic_cast<const SymbolAddress &>(addr);
-    auto &mem        = loopEntryPath.getMemoryState();
 
     // Try to resolve the "from" origin of the SymbolAddress via loop-entry memory.
     return std::visit(
@@ -332,34 +376,45 @@ not_null<unique_ptr<Address>> getSubstitutedAddr(const Address &addr, const Path
                 // No origin info — unresolved substitution.
                 TODO();
             } else if constexpr (std::is_same_v<T, not_null<std::unique_ptr<const Address>>>) {
+                auto realFromAddr = getSubstitutedAddr(*arg, loopEntryPath, fromPoint);
+
+                // Clone and substitute the offset of the original SymbolAddress.
+                auto offset = symbolAddr.getOffset()->clone();
+                substituteSymbols(offset, loopEntryPath,
+                                  fromPoint); // substitute any vars/addresses in offset
+                offset = offset->simplifiedExpr();
+
+                optional<not_null<unique_ptr<SymbolicExpr>>> length{};
+                // If original was a range, also substitute and set the length.
+                if (symbolAddr.isRange()) {
+                    length = symbolAddr.getLength()->clone();
+                    substituteSymbols(length.value(), loopEntryPath, fromPoint);
+                    length = length.value()->simplifiedExpr();
+                }
+
                 // Origin is an address; attempt to read the value at that origin.
-                if (auto value = mem.read(*arg)) {
+                if (auto value = mem.read(*realFromAddr)) {
                     // The origin resolves to a value; it must be convertible to an "offseted
                     // address".
                     auto realAddr = value.value()->tryEvalAsSymbolAddr();
                     if (realAddr == nullopt)
                         ERROR("This expr should be a address");
 
-                    // Clone and substitute the offset of the original SymbolAddress.
-                    auto offset = symbolAddr.getOffset()->clone();
-                    substituteSymbols(offset,
-                                      loopEntryPath); // substitute any vars/addresses in offset
-
                     // Apply substituted offset to the concrete address.
-                    realAddr.value()->addOffset(offset->simplifiedExpr());
+                    realAddr.value()->addOffset(std::move(offset));
 
-                    // If original was a range, also substitute and set the length.
-                    if (symbolAddr.isRange()) {
-                        auto length = symbolAddr.getLength()->clone();
-                        substituteSymbols(length, loopEntryPath);
-                        realAddr.value()->setLength(length->simplifiedExpr());
+                    if (length) {
+                        realAddr.value()->setLength(std::move(length).value());
                     }
-
                     // Return the underlying concrete address (unique_ptr<Address>).
                     return std::move(realAddr).value().into_underlying();
                 } else {
-                    // The origin hasn't been accessed at loop entry; keep the original clone.
-                    return symbolAddr.addressClone();
+                    // The origin hasn't been accessed at loop entry -> construct a SymbolAddress
+                    // with corrext fromAddr and fromPoint.
+                    return make_unique<SymbolAddress>(std::move(realFromAddr).into_underlying(),
+                                                      loopEntryPath.getStartPoint(),
+                                                      std::move(offset).into_underlying(),
+                                                      std::move(length).value().into_underlying());
                 }
             }
         },

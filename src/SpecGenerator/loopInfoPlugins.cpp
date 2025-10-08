@@ -337,29 +337,6 @@ class SetIndexPlugin : public LoopInfoPlugin {
         optional<bool> isLocal;
 
         if (auto binExpr = dyn_cast<BinaryOperator>(indexCond->IgnoreParenImpCasts())) {
-            auto sameValueBetweenEveryPaths =
-                [&](const Expr *expr) -> optional<not_null<unique_ptr<SymbolicExpr>>> {
-                optional<not_null<unique_ptr<SymbolicExpr>>> value;
-                for (auto &path : loopEntry.getPaths()) {
-                    if (value == nullopt) {
-                        // value is empty
-                        auto [_, valueVector] = path->evalExpr(expr);
-                        if (valueVector.size() != 1)
-                            return nullopt;
-                        value = std::move(valueVector[0]);
-                        continue;
-                    }
-
-                    auto [_, valueVector] = path->evalExpr(expr);
-                    if (valueVector.size() != 1)
-                        return nullopt;
-
-                    if (*value.value() != *valueVector[0])
-                        return nullopt;
-                }
-                return value;
-            }; // sameValueBetweenEveryPaths end
-
             // Yes, assume it's on the left.
             auto indexExpr = binExpr->getLHS()->IgnoreParenImpCasts();
             auto boundExpr = binExpr->getRHS()->IgnoreParenImpCasts();
@@ -398,12 +375,13 @@ class SetIndexPlugin : public LoopInfoPlugin {
                 UNREACHABLE();
             indexValue = std::move(values.at(0));
 
-            if (auto value = sameValueBetweenEveryPaths(boundExpr);
-                value && unchangedAfterOneRound(boundExpr)) {
-                boundValue = std::move(*value);
+            if (unchangedAfterOneRound(boundExpr)) {
+                auto evalResult = entryPath->evalExpr(boundExpr);
+                if (evalResult.second.size() != 1)
+                    ERROR("This location does not support control flow branches.");
+                boundValue = std::move(evalResult.second.front());
             } else {
-                INFO("Boound expr is evaluated to different value in different path or changed "
-                     "after one round.");
+                INFO("Bound expr is changed after one round.");
                 return false;
             }
 

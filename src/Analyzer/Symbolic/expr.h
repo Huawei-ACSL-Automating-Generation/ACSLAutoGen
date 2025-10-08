@@ -802,9 +802,7 @@ namespace Symbolic {
 
     class AddressBox {
       public:
-        using pointer = not_null<std::unique_ptr<Address>>;
-
-        explicit AddressBox(pointer p) noexcept : ptr_(std::move(p)) {}
+        explicit AddressBox(not_null<std::unique_ptr<Address>> p) noexcept : ptr_(std::move(p)) {}
         AddressBox(const Address &other) : ptr_(other.addressClone()) {};
 
         AddressBox(const AddressBox &other) : ptr_(other.ptr_->addressClone()) {}
@@ -833,7 +831,7 @@ namespace Symbolic {
         std::size_t hash() const noexcept { return ptr_->hash(); }
 
       private:
-        pointer ptr_;
+        not_null<std::unique_ptr<Address>> ptr_;
     };
 
     struct AddressBoxHash {
@@ -1150,6 +1148,7 @@ namespace Symbolic {
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
+        auto getDefinition() const -> const auto & { return definition_; }
         auto getFrom() const -> const auto & { return from_; }
         std::optional<not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;

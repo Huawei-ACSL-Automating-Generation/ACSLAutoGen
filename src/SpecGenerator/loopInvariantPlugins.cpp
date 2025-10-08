@@ -202,11 +202,6 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
             ERROR("SymbolicLoopEntry_ has something wrong, check the SetLoopEntryPlugin?");
         }
 
-        auto loopCurrent = loopEntryInfo.symbolicLoopEntry_->clone();
-        loopCurrent->step(loopInfo.condExpr_);
-        loopCurrent->step(loopInfo.bodyStmt_);
-        loopCurrent->step(loopInfo.incStmt_);
-
         auto &entryMS = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->getMemoryState();
 
         string spec;
@@ -332,10 +327,13 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
             }
         }
 
+        auto loopEntryPoint = SourcePoint::fromStmtBefore(
+            loopInfo.loopStmt_, loopEntryInfo.symbolicLoopEntry_->getContext().getSourceManager(),
+            loopEntryInfo.symbolicLoopEntry_->getContext().getLangOptions());
         unordered_set<size_t> solvedAddrsHashs{};
         for (auto &addr : assignedAddrs) {
             for (auto &path : loopEntry.getPaths()) {
-                auto concreteAddr = getSubstitutedAddr(addr, *path);
+                auto concreteAddr = getSubstitutedAddr(addr, *path, loopEntryPoint);
                 if (solvedAddrsHashs.contains(concreteAddr->hash()))
                     continue;
                 solvedAddrsHashs.insert(concreteAddr->hash());
