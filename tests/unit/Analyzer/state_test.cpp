@@ -10,6 +10,7 @@
 #include "clang/AST/AST.h"
 #include "clang/AST/Decl.h"
 #include "expr.h"
+#include "testHelper.h"
 
 using ::testing::Return;
 using namespace std;
@@ -255,83 +256,8 @@ TEST(PathTest, Clone)
     */
 
 namespace {
-
-    class MemoryModelTest : public ::testing::Test {
-      protected:
-        MemoryModelTest() {
-            std::string code{"void func() {}"};
-            for (auto i : views::iota(0u, 20u)) {
-                code += "int g" + to_string(i) + ";";
-            }
-
-            e.init(code);
-            for (auto d : e.getASTContext().getTranslationUnitDecl()->decls()) {
-                if (auto vd = llvm::dyn_cast<clang::VarDecl>(d))
-                    varDecls.push_back(vd);
-            }
-        }
-
-        not_null<const clang::VarDecl *> getVarDecl(unsigned int id) {
-            if (!idCountMap.contains(id)) {
-                assert(count < varDecls.size() && "Need more varDecl? Change the for loop above!");
-                idCountMap[id] = count++;
-            }
-            return varDecls.at(idCountMap.at(id));
-        }
-
-        VariableAddress makeVariableAddr(unsigned int id) {
-            return VariableAddress{getVarDecl(id)};
-        }
-
-        Symbolic::SymbolAddress makeRangeAddr(unsigned int id,
-                                              unique_ptr<const SymbolicExpr> offset,
-                                              unique_ptr<const SymbolicExpr> len) {
-            auto defaultPoint = SourcePoint::fromFuncDeclBefore(
-                e.findFirstDecl<FunctionDecl>(), e.getSourceManager(), e.getLangOptions());
-            auto baseAddr = makeVariableAddr(id);
-            if (len != nullptr)
-                return Symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(),
-                                               defaultPoint, std::move(offset), std::move(len)};
-            return Symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(), defaultPoint,
-                                           std::move(offset), nullopt};
-        }
-
-        unique_ptr<Symbolic::Variable> makeVariable(unsigned int id) {
-            auto defaultPoint = SourcePoint::fromFuncDeclBefore(
-                e.findFirstDecl<FunctionDecl>(), e.getSourceManager(), e.getLangOptions());
-            return std::make_unique<Symbolic::Variable>(
-                SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, id},
-                make_unique<VariableAddress>(getVarDecl(id)), defaultPoint);
-        }
-
-        Symbolic::SymbolAddress makePointAddr(unsigned int id, std::uint64_t off) {
-            return makeRangeAddr(id, std::make_unique<LiteralExpr>(static_cast<std::uint64_t>(off)),
-                                 nullptr);
-        }
-
-        void ExpectReadEqAt(MemoryModel &mm,
-                            unsigned id,
-                            std::uint64_t off,
-                            const Symbolic::SymbolicExpr &expected) {
-            auto addr = makePointAddr(id, off);
-            auto got  = mm.read(addr);
-            ASSERT_NE(got, nullopt) << "read returned null at off=" << off;
-            EXPECT_EQ(*got.value(), expected) << "mismatch at off=" << off;
-        }
-
-        void ExpectReadNullAt(MemoryModel &mm, unsigned id, std::uint64_t off) {
-            auto addr = makePointAddr(id, off);
-            EXPECT_EQ(mm.read(addr), nullopt) << "expected null at off=" << off;
-        }
-
-      private:
-        ASTExtractor e;
-        std::vector<const clang::VarDecl *> varDecls;
-        size_t count{0};
-        unordered_map<unsigned int, size_t> idCountMap{};
-    };
-
-}; // namespace
+    struct MemoryModelTest : public FixtureWithCode {};
+} // namespace
 
 TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
     MemoryModel mm;

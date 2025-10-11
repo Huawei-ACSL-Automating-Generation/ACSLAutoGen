@@ -5,13 +5,15 @@
 
 #include <memory>
 #include <string>
+#include <sstream>
+#include <type_traits>
 #include "clang/AST/AST.h"
 #include "clang/Tooling/Tooling.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/AST/RecursiveASTVisitor.h"
-#include <sstream>
-#include <type_traits>
+#include "clang/ASTMatchers/ASTMatchers.h"
+#include "clang/ASTMatchers/ASTMatchFinder.h"
 
 template <typename NodeType>
 class StmtFinderVisitor : public clang::RecursiveASTVisitor<StmtFinderVisitor<NodeType>> {
@@ -69,7 +71,8 @@ class NthDeclFinderVisitor : public clang::RecursiveASTVisitor<NthDeclFinderVisi
 
 class ASTExtractor {
   public:
-    ASTExtractor()                                = default;
+    ASTExtractor() = default;
+    ASTExtractor(std::string_view code);
     ASTExtractor(const ASTExtractor &)            = delete;
     ASTExtractor &operator=(const ASTExtractor &) = delete;
     ASTExtractor(ASTExtractor &&)                 = default;
@@ -96,6 +99,25 @@ class ASTExtractor {
         StmtFinderVisitor<NodeType> visitor;
         visitor.TraverseDecl(ctx.getTranslationUnitDecl());
         return visitor.Found;
+    }
+
+    const clang::FunctionDecl *findFunc(llvm::StringRef name) {
+        using namespace clang;
+        using namespace clang::tooling;
+        using namespace clang::ast_matchers;
+        auto matcher           = functionDecl(hasName(name), isDefinition()).bind("f");
+        const FunctionDecl *FD = nullptr;
+        MatchFinder Finder;
+        struct CB : MatchFinder::MatchCallback {
+            const FunctionDecl *&FD;
+            explicit CB(const FunctionDecl *&F) : FD(F) {}
+            void run(const MatchFinder::MatchResult &Result) override {
+                FD = Result.Nodes.getNodeAs<FunctionDecl>("f");
+            }
+        } cb(FD);
+        Finder.addMatcher(matcher, &cb);
+        Finder.matchAST(getASTContext());
+        return FD;
     }
 
     clang::ASTContext &getASTContext() const { return AST_->getASTContext(); }

@@ -412,6 +412,12 @@ not_null<unique_ptr<Address>> getSubstitutedAddr(const Address &addr,
                 } else {
                     // The origin hasn't been accessed at loop entry -> construct a SymbolAddress
                     // with corrext fromAddr and fromPoint.
+                    if (length == nullopt) {
+                        return make_unique<SymbolAddress>(std::move(realFromAddr).into_underlying(),
+                                                          loopEntryPath.getStartPoint(),
+                                                          std::move(offset).into_underlying(),
+                                                          nullopt);
+                    }
                     return make_unique<SymbolAddress>(std::move(realFromAddr).into_underlying(),
                                                       loopEntryPath.getStartPoint(),
                                                       std::move(offset).into_underlying(),

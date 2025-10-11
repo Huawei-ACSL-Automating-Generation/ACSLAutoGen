@@ -529,11 +529,6 @@ namespace Symbolic {
      * `SourceManager`, and provides utilities for constructing points relative to statements,
      * comparing positions, generating hash values, and dumping human-readable information.
      *
-     * A `SourcePoint` may also be a *default point* created via `fromDefault()`.
-     * - The default point has no associated location (`loc_ == std::nullopt`).
-     * - It compares as strictly smaller than any valid SourcePoint.
-     * - Its `asSourceLocation()` returns `std::nullopt`.
-     *
      * This class is designed to express a program location in the source text, not a control flow
      * node.
      */
