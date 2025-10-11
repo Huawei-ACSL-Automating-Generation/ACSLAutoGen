@@ -195,6 +195,7 @@ std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
             }
 
             for (auto &cond : info.pathConds_) {
+                substituteSymbols(cond, entryPath, loopEntryPoint);
                 postBranchInfo.pathConds_.push_back(std::move(cond));
             }
         }
@@ -267,8 +268,7 @@ void substituteSymbols(not_null<unique_ptr<SymbolicExpr>> &expr,
             // address.
             auto &var = dynamic_cast<const Symbolic::Variable &>(*expr.get().get());
             if (var.getFromPoint() && var.getFromPoint().value() != fromPoint)
-                ERROR("Met unexpected fromPoint is an error now. If a reasonable scenario is "
-                      "identified, it may be necessary to change this `ERROR` to `continue`.");
+                return;
             std::visit(
                 [&](auto &&arg) -> void {
                     using T = std::decay_t<decltype(arg)>;
@@ -302,8 +302,7 @@ void substituteSymbols(not_null<unique_ptr<SymbolicExpr>> &expr,
             if (symbolAddr == nullptr)
                 UNREACHABLE();
             if (symbolAddr->getFromPoint() && symbolAddr->getFromPoint().value() != fromPoint)
-                ERROR("Met unexpected fromPoint is an error now. If a reasonable scenario is "
-                      "identified, it may be necessary to change this `ERROR` to `continue`.");
+                return;
             expr = getSubstitutedAddr(*symbolAddr, loopEntryPath, fromPoint).into_underlying();
             return;
         }
@@ -368,6 +367,8 @@ not_null<unique_ptr<Address>> getSubstitutedAddr(const Address &addr,
 
     auto &symbolAddr = dynamic_cast<const SymbolAddress &>(addr);
 
+    if (symbolAddr.getFromPoint() != fromPoint)
+        return addr.addressClone();
     // Try to resolve the "from" origin of the SymbolAddress via loop-entry memory.
     return std::visit(
         [&](auto &&arg) -> not_null<unique_ptr<Address>> {

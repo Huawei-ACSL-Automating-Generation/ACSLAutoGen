@@ -59,30 +59,6 @@ bool operator==(const MemberTarget &a, const MemberTarget &b) noexcept {
 
 bool operator!=(const MemberTarget &a, const MemberTarget &b) noexcept { return !(a == b); }
 
-namespace {
-    not_null<unique_ptr<SymbolicExpr>> getSymbol(
-        QualType type,
-        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
-        SourcePoint fromPoint) {
-        if (type->isPointerType()) {
-            return make_unique<SymbolAddress>(std::move(from), std::move(fromPoint));
-        } else if (type->isArrayType()) {
-            TODO();
-        } else if (type->isStructureType()) {
-            auto *RD = type->getAsRecordDecl();
-            if (!RD || !RD->isCompleteDefinition())
-                ERROR("Incomplete struct definition");
-            RD           = RD->getDefinition();
-            auto &layout = RD->getASTContext().getASTRecordLayout(RD);
-            return make_unique<Structure>(RD, layout, std::move(from), std::move(fromPoint));
-
-        } else {
-            SymbolicExpr::Type vty = deriveVarType(type);
-            return std::make_unique<Symbolic::Variable>(vty, std::move(from), std::move(fromPoint));
-        }
-    }
-} // namespace
-
 Path::Path(const Path &other, bool shallowCopy)
     : context_(other.context_), startPoint_(other.startPoint_) {
     if (shallowCopy) {
@@ -1106,8 +1082,7 @@ ProgramState::ProgramState(unique_ptr<ACSLFunction> func, ACSLContext &context)
                                                   context_.getLangOptions())) {}
 
 ProgramState::ProgramState(const ProgramState &other)
-    : func_(other.func_->clone()), context_(other.context_), startPoint_(other.startPoint_),
-      incompleteLoopInfo_(other.incompleteLoopInfo_) {
+    : func_(other.func_->clone()), context_(other.context_), startPoint_(other.startPoint_) {
     paths_.reserve(other.paths_.size());
     std::ranges::transform(other.paths_, std::back_inserter(paths_),
                            [](auto &path) { return path->clone(); });
@@ -1116,10 +1091,9 @@ ProgramState::ProgramState(const ProgramState &other)
 ProgramState &ProgramState::operator=(ProgramState &&other) {
     if (&context_ != &other.context_)
         ERROR("Different contexts!");
-    func_               = std::move(other.func_);
-    paths_              = std::move(other.paths_);
-    startPoint_         = std::move(other.startPoint_);
-    incompleteLoopInfo_ = std::move(other.incompleteLoopInfo_);
+    func_       = std::move(other.func_);
+    paths_      = std::move(other.paths_);
+    startPoint_ = std::move(other.startPoint_);
     return *this;
 }
 
@@ -1435,116 +1409,7 @@ void ProgramState::stepBranch(const vector<const Expr *> &branchConds,
 }
 
 void ProgramState::stepLoop(const Stmt *loopStmt) {
-    unique_ptr<ProgramState> preState{};
-    if (incompleteLoopInfo_ == nullopt) {
-        preState = clone();
-    } else {
-        // The previous loop was incomplete, attempt to merge the loops. Treat the incomplete loop
-        // as never executed, then analyze the current loop.
-
-        // Is this a loop stmt kind?
-        auto IsLoop = [](const Stmt *S) -> bool {
-            return llvm::isa<ForStmt>(S) || llvm::isa<WhileStmt>(S) || llvm::isa<DoStmt>(S) ||
-                   llvm::isa<CXXForRangeStmt>(S);
-        };
-
-        // Return true if child is (recursively) contained in ancestor subtree.
-        auto IsDescendantOf = [&](auto f, const Stmt *child, const Stmt *ancestor) -> bool {
-            if (!child || !ancestor)
-                return false;
-            if (child == ancestor)
-                return true;
-            for (const Stmt *C : ancestor->children())
-                if (C && f(f, child, C))
-                    return true;
-            return false;
-        };
-
-        // Find the nearest node Above such that Above is a direct child of a CompoundStmt;
-        // return {CompoundStmt*, index, Above}. We climb parents until we find a CompoundStmt
-        // that lists the current node as a direct child in its body().
-        struct CompoundLoc {
-            const CompoundStmt *CS_;
-            unsigned index_;
-            const Stmt *directChild_;
-        };
-        auto LocateInCompoundDirectChild = [&](const Stmt *S) -> std::optional<CompoundLoc> {
-            if (!S)
-                return std::nullopt;
-            const Stmt *cur = S;
-            while (cur) {
-                auto parents = context_.getASTContext().getParents(*cur);
-                if (parents.empty())
-                    return std::nullopt;
-
-                const Stmt *P = nullptr;
-                for (const auto &N : parents) {
-                    if (const Stmt *PS = N.get<Stmt>()) {
-                        P = PS;
-                        break;
-                    }
-                }
-                if (!P)
-                    return std::nullopt; // reached a Decl (e.g., FunctionDecl)
-
-                if (const auto *CS = llvm::dyn_cast<CompoundStmt>(P)) {
-                    unsigned idx = 0;
-                    for (const Stmt *Child : CS->body()) {
-                        if (Child == cur) {
-                            return CompoundLoc{CS, idx, Child};
-                        }
-                        ++idx;
-                    }
-                    // cur is not a direct child of this CompoundStmt; continue climbing.
-                }
-                cur = P;
-            }
-            return std::nullopt;
-        };
-
-        auto A = incompleteLoopInfo_.value().incompleteLoop_;
-        auto B = loopStmt;
-        // --- Validate inputs ---
-        if (!A || !B || !IsLoop(A) || !IsLoop(B))
-            ERROR("A & B must be loop.");
-
-        // --- Locate both loops as direct children of some CompoundStmt ---
-        auto LocA = LocateInCompoundDirectChild(A);
-        auto LocB = LocateInCompoundDirectChild(B);
-        if (!LocA || !LocB)
-            ERROR("A & B must be child of CompoundStmt.");
-
-        // Must belong to the same CompoundStmt
-        if (LocA->CS_ != LocB->CS_)
-            ERROR("A & B must have same CompoundStmt as parent.");
-
-        // Extra sanity: confirm original loops lie inside the recorded direct child nodes
-        if (!IsDescendantOf(IsDescendantOf, A, LocA->directChild_))
-            UNREACHABLE();
-        if (!IsDescendantOf(IsDescendantOf, B, LocB->directChild_))
-            UNREACHABLE();
-
-        // --- Build the slice between indices (exclusive) ---
-        size_t ia = LocA->index_, ib = LocB->index_;
-        if (ia == ib)
-            UNREACHABLE();
-
-        size_t lo = std::min(ia, ib), hi = std::max(ia, ib);
-
-        preState = incompleteLoopInfo_.value().preState_->clone();
-
-        size_t idx = 0;
-        for (auto child : LocA->CS_->body()) {
-            if (idx >= hi)
-                break;
-            if (idx > lo)
-                preState->step(child);
-            ++idx;
-        }
-        incompleteLoopInfo_ = nullopt;
-    }
-    assert(preState != nullptr);
-
+    auto preState  = clone();
     auto loopEntry = preState->clone();
 
     if (auto forLoop = dyn_cast<ForStmt>(loopStmt); forLoop && forLoop->getInit())
@@ -1577,11 +1442,6 @@ void ProgramState::stepLoop(const Stmt *loopStmt) {
     auto beginLoc = loopStmt->getSourceRange().getBegin();
     context_.insertText(beginLoc, spec, /*after*/ false,
                         /*indentNewLines*/ true);
-
-    if (loopInfo.isIncompleteLoop_) {
-        postState->incompleteLoopInfo_ =
-            IncompleteLoopInfo{shared_ptr<ProgramState>(preState.release()), loopStmt};
-    }
 
     if (this == postState.get())
         UNREACHABLE();
@@ -1843,9 +1703,8 @@ unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramStat
 }
 
 unique_ptr<ProgramState> ProgramState::clone(bool withPath) const {
-    auto newState                 = make_unique<ProgramState>(func_->clone(), context_);
-    newState->startPoint_         = startPoint_;
-    newState->incompleteLoopInfo_ = incompleteLoopInfo_;
+    auto newState         = make_unique<ProgramState>(func_->clone(), context_);
+    newState->startPoint_ = startPoint_;
 
     if (withPath) {
         for (const auto &path : paths_) {

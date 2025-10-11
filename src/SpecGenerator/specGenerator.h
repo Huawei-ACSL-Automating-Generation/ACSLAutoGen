@@ -56,7 +56,9 @@ struct LoopInfo {
 
     // SetIndexPlugin
     struct IndexInfo {
-        not_null<std::unique_ptr<Symbolic::Address>> indexAddr_;
+        not_null<const clang::Expr *> indexExpr_;
+        not_null<std::unique_ptr<Symbolic::Address>>
+            indexRealAddr_; // index's sole address on pre-state
         not_null<std::unique_ptr<Symbolic::SymbolicExpr>> indexSymbolicValue_; // Varibale or Address
         clang::BinaryOperator::Opcode op_;
         not_null<std::unique_ptr<Symbolic::SymbolicExpr>> indexBound_; // exclusive bound
@@ -83,7 +85,6 @@ struct LoopInfo {
     };
     optional<PatternInfo> patternInfo_;
 
-    bool isIncompleteLoop_{false};
     // TODO(more info to be added)
 };
 
@@ -130,7 +131,7 @@ std::string emitInlineContract(const ProgramState &state,
  * @param loopEntryPath  The path that provides the memory state at loop entry.
  *
  * @param fromPoint      The expected fromPoint of symbols. Met unexpected fromPoint will
- *                       cause an error now.
+ *                       just ignore it.
  *
  * @note Only Variable and Address (SymbolAddress) and Structure nodes are substituted directly.
  *       Composite nodes (BinaryOp/UnaryOp) are traversed recursively.
@@ -159,7 +160,7 @@ void substituteSymbols(not_null<std::unique_ptr<SymbolicExpr>> &expr,
  * @param addr           The input address expression to substitute.
  * @param loopEntryPath  The path that provides the memory state at loop entry.
  * @param fromPoint      The expected fromPoint of `SymbolAddress`. Met unexpected fromPoint will
- *                       cause an error now.
+ *                       just return unchanged `SymbolAddress`.
  * @return not_null<unique_ptr<Address>>  The substituted (or cloned) address.
  *
  * @note When the "from" variant is std::monostate, behavior is marked as TODO().

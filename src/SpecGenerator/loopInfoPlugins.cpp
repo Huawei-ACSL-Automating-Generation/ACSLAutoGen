@@ -327,7 +327,8 @@ class SetIndexPlugin : public LoopInfoPlugin {
             extraConds.push_back(clause);
         }
 
-        optional<not_null<unique_ptr<Address>>> indexAddr;
+        optional<not_null<const clang::Expr *>> indexExpr;
+        optional<not_null<unique_ptr<Address>>> indexRealAddr;
         optional<not_null<unique_ptr<Symbolic::SymbolicExpr>>> indexValue;
         optional<BinaryOperator::Opcode> opCode;
         optional<not_null<unique_ptr<SymbolicExpr>>> boundValue;
@@ -338,12 +339,14 @@ class SetIndexPlugin : public LoopInfoPlugin {
 
         if (auto binExpr = dyn_cast<BinaryOperator>(indexCond->IgnoreParenImpCasts())) {
             // Yes, assume it's on the left.
-            auto indexExpr = binExpr->getLHS()->IgnoreParenImpCasts();
-            auto boundExpr = binExpr->getRHS()->IgnoreParenImpCasts();
+            auto index = binExpr->getLHS()->IgnoreParenImpCasts();
+            auto bound = binExpr->getRHS()->IgnoreParenImpCasts();
+
+            indexExpr = index;
 
             using enum BinaryOperator::Opcode;
 
-            if (auto addr = sameAddressBetweenEveryPaths(indexExpr)) {
+            if (auto addr = sameAddressBetweenEveryPaths(index)) {
                 if (auto pattern = hasPattern(**addr); pattern == nullopt) {
                     INFO("Index has no parseable pattern.");
                     return false;
@@ -363,20 +366,19 @@ class SetIndexPlugin : public LoopInfoPlugin {
                     if (isLocal == nullopt)
                         UNREACHABLE();
                 }
-                indexAddr = std::move(*addr);
+                indexRealAddr = std::move(*addr);
             } else {
                 INFO("Same expr in different path points to different location!");
                 return false;
             }
 
-            auto [_, values] =
-                loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->evalExpr(indexExpr);
+            auto [_, values] = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->evalExpr(index);
             if (values.size() != 1)
                 UNREACHABLE();
             indexValue = std::move(values.at(0));
 
-            if (unchangedAfterOneRound(boundExpr)) {
-                auto evalResult = entryPath->evalExpr(boundExpr);
+            if (unchangedAfterOneRound(bound)) {
+                auto evalResult = entryPath->evalExpr(bound);
                 if (evalResult.second.size() != 1)
                     ERROR("This location does not support control flow branches.");
                 boundValue = std::move(evalResult.second.front());
@@ -432,6 +434,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
                 return false;
             }
 
+            indexExpr = unaryExpr;
             if (auto addr = sameAddressBetweenEveryPaths(unaryExpr)) {
                 if (auto pattern = hasPattern(**addr); pattern == nullopt) {
                     INFO("Index has no parseable pattern.");
@@ -452,7 +455,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
                     if (isLocal == nullopt)
                         UNREACHABLE();
                 }
-                indexAddr = std::move(*addr);
+                indexRealAddr = std::move(*addr);
             } else {
                 INFO("Same expr in different path points to different location!");
                 return false;
@@ -504,6 +507,8 @@ class SetIndexPlugin : public LoopInfoPlugin {
                 return false;
             }
 
+            indexExpr = refExpr;
+
             if (auto it = loopEntry.getPaths()[0]->getVarAddr().find(varDecl);
                 it != loopEntry.getPaths()[0]->getVarAddr().end()) {
                 if (auto pattern = hasPattern(*it->second); pattern == nullopt) {
@@ -525,7 +530,7 @@ class SetIndexPlugin : public LoopInfoPlugin {
                     if (isLocal == nullopt)
                         UNREACHABLE();
                 }
-                indexAddr = it->second->addressClone();
+                indexRealAddr = it->second->addressClone();
             } else {
                 ERROR("A varDecl* has no Address mapped, something must goes wrong.");
             }
@@ -566,12 +571,13 @@ class SetIndexPlugin : public LoopInfoPlugin {
         }
 
         // 	Check and assign in bulk
-        if (indexAddr == nullopt || indexValue == nullopt || opCode == nullopt ||
-            boundValue == nullopt || preciseLoopCount == nullopt || maxLoopCount == nullopt ||
-            indexPattern == nullopt || isLocal == nullopt)
+        if (indexExpr == nullopt || indexRealAddr == nullopt || indexValue == nullopt ||
+            opCode == nullopt || boundValue == nullopt || preciseLoopCount == nullopt ||
+            maxLoopCount == nullopt || indexPattern == nullopt || isLocal == nullopt)
             UNREACHABLE();
         loopInfo.indexInfo_ =
-            LoopInfo::IndexInfo{.indexAddr_          = std::move(indexAddr.value()),
+            LoopInfo::IndexInfo{.indexExpr_          = std::move(indexExpr.value()),
+                                .indexRealAddr_      = std::move(indexRealAddr.value()),
                                 .indexSymbolicValue_ = std::move(indexValue.value()),
                                 .op_                 = std::move(opCode.value()),
                                 .indexBound_         = std::move(boundValue.value()),
@@ -581,7 +587,6 @@ class SetIndexPlugin : public LoopInfoPlugin {
                                 .isLocal_            = std::move(isLocal.value())};
         loopInfo.extraCondConjuncts_ = std::move(extraConds);
         if (abs(loopInfo.indexInfo_.value().indexPattern_.step_) != 1) {
-            loopInfo.isIncompleteLoop_ = true;
             return false;
         } else if (!loopInfo.extraCondConjuncts_.empty()) {
             return false;

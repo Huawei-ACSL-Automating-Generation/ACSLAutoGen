@@ -32,7 +32,7 @@ class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
         if (loopInfo.indexInfo_) {
             auto &indexInfo = loopInfo.indexInfo_.value();
             INFO("`loopEntryInfo_` is set.");
-            INFO("`indexAddr_`: " + indexInfo.indexAddr_->dump());
+            INFO("`indexRealAddr_`: " + indexInfo.indexRealAddr_->dump());
             INFO("`indexSymbolicValue_`: " + indexInfo.indexSymbolicValue_->dump());
             string opStr;
             switch (indexInfo.op_) {
@@ -211,6 +211,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
         // This plugin does not produce branches.
         postInfo.emplace_back();
         auto &memoryMap = postInfo.at(0).memoryMap_;
+        auto &pathConds = postInfo.at(0).pathConds_;
 
         auto isLocal = [&](const Address &addr) {
             auto root = addr.getFromRoot();
@@ -287,6 +288,7 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
             return nullopt;
         }; // tryGetAsRange end
 
+        unordered_map<size_t, not_null<unique_ptr<SymbolicExpr>>> condsForInsert;
         for (auto &[addr, pattern] : patternInfo.patternsMap_) {
             using enum BinaryOpExpr::Operator;
             if (isLocal(addr))
@@ -298,33 +300,131 @@ class LoopAssignsPlugin : public LoopInvariantPlugin {
                     // todo
                     // make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(), Add,
                     //                           make_unique<LiteralExpr>(pattern.value().step_)));
+
+                    // Deal with loops like
+                    // {
+                    //     p[0] = ...;
+                    //     p[1] = ...;
+                    //     p[2] = ...;
+                    //     p += 3;
+                    // }
+                    // In which case `tryGetAsRange` will return same **range** for all three
+                    // expressions.
+                    // This unsound method currently exists solely to handle this special case.
                     if (!ok && !indexInfo.preciseLoopCount_->isUnknown())
                         UNREACHABLE();
                 } else {
                     auto [_, ok] = memoryMap.emplace(range.value(),
                                                      UnknownExpr::makeUnknown().into_underlying());
+
+                    // Deal with loops like
+                    // {
+                    //     p[0] = ...;
+                    //     p[1] = ...;
+                    //     p[2] = ...;
+                    //     p += 3;
+                    // }
+                    // In which case `tryGetAsRange` will return same **range** for all three
+                    // expressions.
+                    // This unsound method currently exists solely to handle this special case.
                     if (!ok && !indexInfo.preciseLoopCount_->isUnknown())
                         UNREACHABLE();
                 }
                 assignedAddrs.emplace_back(std::move(range.value()));
             } else {
-                if (pattern) {
-                    auto [_, ok] = memoryMap.emplace(
-                        addr, make_unique<BinaryOpExpr>(
-                                  pattern.value().initialValue_->clone(), Add,
-                                  make_unique<BinaryOpExpr>(
-                                      make_unique<LiteralExpr>(pattern.value().step_), Multiply,
-                                      indexInfo.preciseLoopCount_->clone())));
-                    if (!ok)
-                        UNREACHABLE();
-                } else {
-                    auto [_, ok] =
-                        memoryMap.emplace(addr, UnknownExpr::makeUnknown().into_underlying());
-                    if (!ok)
-                        UNREACHABLE();
-                }
+                // Use lambda to eliminate nested if。
+                [&]() {
+                    if (!pattern)
+                        return;
+                    if (!indexInfo.preciseLoopCount_->isUnknown()) {
+                        // Loop count is precise (index's step is 1 or -1)
+
+                        // init + step * loopCount
+                        auto [_, ok] = memoryMap.emplace(
+                            addr, make_unique<BinaryOpExpr>(
+                                      pattern.value().initialValue_->clone(), Add,
+                                      make_unique<BinaryOpExpr>(
+                                          make_unique<LiteralExpr>(pattern.value().step_), Multiply,
+                                          indexInfo.preciseLoopCount_->clone())));
+                        if (!ok)
+                            UNREACHABLE();
+                    } else {
+                        // index's step is not +-1.
+
+                        // Just check.
+                        if (abs(pattern.value().step_) != abs(indexInfo.indexPattern_.step_))
+                            return;
+
+                        auto pointAfterLoop = SourcePoint::fromStmtBefore(
+                            loopInfo.bodyStmt_,
+                            loopEntryInfo.symbolicLoopEntry_->getContext().getSourceManager(),
+                            loopEntryInfo.symbolicLoopEntry_->getContext().getLangOptions());
+
+                        auto indexValueAfterLoop =
+                            getSymbol(indexInfo.indexExpr_->getType(),
+                                      indexInfo.indexRealAddr_->addressClone().into_underlying(),
+                                      std::move(pointAfterLoop));
+
+                        using enum BinaryOpExpr::Operator;
+
+                        // i >= n (step > 0) or
+                        // i <= 0 (step < 0)
+                        auto firstIndexCond =
+                            (indexInfo.indexPattern_.step_ > 0
+                                 ? make_unique<BinaryOpExpr>(indexValueAfterLoop->clone(),
+                                                             GreaterEqual,
+                                                             indexInfo.indexBound_->clone())
+                                 : make_unique<BinaryOpExpr>(indexValueAfterLoop->clone(),
+                                                             LessEqual,
+                                                             indexInfo.indexBound_->clone()));
+
+                        // i < n + step (step > 0) or
+                        // i > 0 + step (step < 0)
+                        auto secondIndexCond =
+                            (indexInfo.indexPattern_.step_ > 0
+                                 ? make_unique<BinaryOpExpr>(
+                                       indexValueAfterLoop->clone(), LessThan,
+                                       make_unique<BinaryOpExpr>(
+                                           indexInfo.indexBound_->clone(), Add,
+                                           make_unique<LiteralExpr>(indexInfo.indexPattern_.step_)))
+                                 : make_unique<BinaryOpExpr>(
+                                       indexValueAfterLoop->clone(), GreaterThan,
+                                       make_unique<BinaryOpExpr>(
+                                           indexInfo.indexBound_->clone(), Add,
+                                           make_unique<LiteralExpr>(
+                                               indexInfo.indexPattern_.step_))));
+
+                        condsForInsert.emplace(firstIndexCond->hash(), firstIndexCond->clone());
+                        condsForInsert.emplace(secondIndexCond->hash(), secondIndexCond->clone());
+
+                        // abs(i_post - i_init)
+                        auto diff =
+                            (indexInfo.indexPattern_.step_ > 0
+                                 ? make_unique<BinaryOpExpr>(indexValueAfterLoop->clone(), Subtract,
+                                                             indexInfo.indexSymbolicValue_->clone())
+                                 : make_unique<BinaryOpExpr>(indexInfo.indexSymbolicValue_->clone(),
+                                                             Subtract,
+                                                             indexValueAfterLoop->clone()));
+
+                        auto postValue =
+                            (pattern.value().step_ > 0
+                                 ? make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(),
+                                                             Add, std::move(diff))
+                                 : make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(),
+                                                             Subtract, std::move(diff)));
+
+                        memoryMap.emplace(addr, std::move(postValue));
+                    }
+                }();
+
+                // If all branches fails, fall into here
+                memoryMap.emplace(addr, UnknownExpr::makeUnknown().into_underlying());
                 assignedAddrs.push_back(addr);
             }
+        }
+
+        for (auto &[_, cond] : condsForInsert) {
+            pathConds.push_back(std::move(cond));
         }
 
         auto loopEntryPoint = SourcePoint::fromStmtBefore(
@@ -393,7 +493,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
 
         // Only work when loop is 1-step.
         int64_t indexStep;
-        if (auto it = patternInfo.patternsMap_.find(*indexInfo.indexAddr_);
+        if (auto it = patternInfo.patternsMap_.find(*indexInfo.indexRealAddr_);
             it != patternInfo.patternsMap_.end()) {
             if (it->second == nullopt)
                 ERROR("PatternsMap_ is in an invalid state");
@@ -417,7 +517,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
             optional<string> param_n{nullopt}, param_array{nullopt}, param_index{nullopt},
                 param_m{nullopt};
 
-            param_index = indexInfo.indexAddr_->regularFormOfValue();
+            param_index = indexInfo.indexRealAddr_->regularFormOfValue();
             param_n     = indexInfo.indexBound_->regularForm();
 
             using enum SymbolicExpr::ExprType;
@@ -442,7 +542,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
                     // p[i]
                     auto idxAddr = getAddress(arraySub->getIdx());
                     // Is 'i' loop's index?
-                    if (idxAddr == nullopt || *idxAddr.value() != *indexInfo.indexAddr_)
+                    if (idxAddr == nullopt || *idxAddr.value() != *indexInfo.indexRealAddr_)
                         return false;
 
                     if (auto addr = getAddress(arraySub->getBase())) {
@@ -465,7 +565,7 @@ class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
 
                         // Is 'i' loop's index?
                         if (auto rhsAddr = getAddress(bin->getRHS());
-                            rhsAddr == nullopt || *rhsAddr.value() != *indexInfo.indexAddr_)
+                            rhsAddr == nullopt || *rhsAddr.value() != *indexInfo.indexRealAddr_)
                             return false;
                         if (auto addr = getAddress(bin->getLHS())) {
                             auto baseStr = addr.value()->regularFormOfValue();

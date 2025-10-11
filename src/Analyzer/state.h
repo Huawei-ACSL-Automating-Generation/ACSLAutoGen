@@ -663,13 +663,6 @@ class ProgramState {
     ACSLContext &context_;
 
     SourcePoint startPoint_;
-
-    std::optional<IncompleteLoopInfo>
-        incompleteLoopInfo_; ///< Record information about the incomplete loop. Both the generation
-                             ///< and detection of execution logic are handled within `stepLoop`.
-                             ///< Only special cases of non-one-step loops are processed (where the
-                             ///< last few elements are not traversed and considered as an
-                             ///< incomplete loop).
 };
 
 struct VarManager {

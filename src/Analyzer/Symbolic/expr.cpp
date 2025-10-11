@@ -1941,4 +1941,26 @@ namespace Symbolic {
             },
             symbol->getFromAddr());
     }
+
+    not_null<std::unique_ptr<SymbolicExpr>> getSymbol(
+        clang::QualType type,
+        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
+        SourcePoint fromPoint) {
+        if (type->isPointerType()) {
+            return make_unique<SymbolAddress>(std::move(from), std::move(fromPoint));
+        } else if (type->isArrayType()) {
+            TODO();
+        } else if (type->isStructureType()) {
+            auto *RD = type->getAsRecordDecl();
+            if (!RD || !RD->isCompleteDefinition())
+                ERROR("Incomplete struct definition");
+            RD           = RD->getDefinition();
+            auto &layout = RD->getASTContext().getASTRecordLayout(RD);
+            return make_unique<Structure>(RD, layout, std::move(from), std::move(fromPoint));
+
+        } else {
+            SymbolicExpr::Type vty = deriveVarType(type);
+            return std::make_unique<Symbolic::Variable>(vty, std::move(from), std::move(fromPoint));
+        }
+    }
 } // namespace Symbolic

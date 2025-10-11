@@ -1271,6 +1271,10 @@ namespace Symbolic {
 
     bool isFrom(const SymbolicExpr &expr, const Symbolic::Address &fromAddr, SourcePoint fromPoint);
 
+    not_null<std::unique_ptr<SymbolicExpr>> getSymbol(
+        clang::QualType type,
+        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
+        SourcePoint fromPoint);
 } // namespace Symbolic
 
 namespace std {
