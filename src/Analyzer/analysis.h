@@ -6,17 +6,19 @@
 #include <vector>
 #include <memory>
 
-class ACSLAnalyzer {
-  public:
-    ACSLAnalyzer(ACSLContext &ctx) : context_(ctx) {}
+namespace acslg::analyzer {
+    class ACSLAnalyzer {
+      public:
+        ACSLAnalyzer(context::ACSLContext &ctx) : context_(ctx) {}
 
-    void analyzeFunctions();
+        void analyzeFunctions();
 
-  private:
-    ACSLContext &context_;
-    std::vector<std::unique_ptr<ACSLFunction>> functions_;
+      private:
+        context::ACSLContext &context_;
+        std::vector<std::unique_ptr<ACSLFunction>> functions_;
 
-    void generateFunctionSpec(ACSLFunction *func);
-};
+        void generateFunctionSpec(ACSLFunction *func);
+    };
+} // namespace acslg::analyzer
 
 #endif

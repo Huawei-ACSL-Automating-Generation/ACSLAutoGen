@@ -13,6 +13,8 @@
 using namespace clang;
 using namespace clang::tooling;
 using namespace llvm;
+using namespace acslg;
+
 namespace fs = std::filesystem;
 
 static cl::OptionCategory ACSLGCategory("ACSLG options");
@@ -24,13 +26,13 @@ static cl::opt<bool> ASTOnly(
 
 class TUASTConsumer : public ASTConsumer {
   public:
-    void HandleTranslationUnit(ASTContext &Context) override {
+    void HandleTranslationUnit(ASTContext &context) override {
         if (ASTOnly) {
-            TranslationUnitDecl *TUDecl = Context.getTranslationUnitDecl();
+            TranslationUnitDecl *TUDecl = context.getTranslationUnitDecl();
             TUDecl->dump();
         } else {
-            ACSLContext acslContext(Context);
-            ACSLAnalyzer analyzer(acslContext);
+            auto acslContext = context::ACSLContext{context};
+            auto analyzer    = analyzer::ACSLAnalyzer{acslContext};
             analyzer.analyzeFunctions();
             auto &SM       = acslContext.getSourceManager();
             auto &rewriter = acslContext.getRewriter();

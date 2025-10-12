@@ -7,129 +7,126 @@
 
 using namespace std;
 
-TEST(StringTemplateTest, NoPlaceholder)
-{
-    StringTemplate st("Hello, World!");
-    EXPECT_EQ(st.getPlaceholderNum(), 0);
+namespace acslg::test::unit::spec_generator {
+    using namespace acslg::spec_generator;
 
-    EXPECT_EQ(st.to_string(), "Hello, World!");
-}
+    TEST(StringTemplateTest, NoPlaceholder) {
+        StringTemplate st("Hello, World!");
+        EXPECT_EQ(st.getPlaceholderNum(), 0);
 
-TEST(StringTemplateTest, SinglePlaceholder)
-{
-    StringTemplate st("Hello, ${name}!");
-    EXPECT_EQ(st.getPlaceholderNum(), 1);
+        EXPECT_EQ(st.to_string(), "Hello, World!");
+    }
 
-    NameMap mapping;
-    mapping["name"] = "Alice";
+    TEST(StringTemplateTest, SinglePlaceholder) {
+        StringTemplate st("Hello, ${name}!");
+        EXPECT_EQ(st.getPlaceholderNum(), 1);
 
-    EXPECT_EQ(st.to_string(mapping), "Hello, Alice!");
-}
+        NameMap mapping;
+        mapping["name"] = "Alice";
 
-TEST(StringTemplateTest, Append)
-{
-    StringTemplate st_1("Hello, ");
-    StringTemplate st_2("${name_1}!");
+        EXPECT_EQ(st.to_string(mapping), "Hello, Alice!");
+    }
 
-    st_1.append(st_2);
+    TEST(StringTemplateTest, Append) {
+        StringTemplate st_1("Hello, ");
+        StringTemplate st_2("${name_1}!");
 
-    EXPECT_EQ(st_1.getPlaceholderNum(), st_2.getPlaceholderNum());
+        st_1.append(st_2);
 
-    NameMap mapping;
-    mapping["name_1"] = "Alice";
+        EXPECT_EQ(st_1.getPlaceholderNum(), st_2.getPlaceholderNum());
 
-    EXPECT_EQ(st_1.to_string(mapping), "Hello, Alice!");
+        NameMap mapping;
+        mapping["name_1"] = "Alice";
 
-    st_1.append(" and ${name_2}!"_st);
-    mapping["name_2"] = "Rabbit";
+        EXPECT_EQ(st_1.to_string(mapping), "Hello, Alice!");
 
-    EXPECT_EQ(st_1.to_string(mapping), "Hello, Alice! and Rabbit!");
-}
+        st_1.append(" and ${name_2}!"_st);
+        mapping["name_2"] = "Rabbit";
 
-TEST(StringTemplateTest, OperatorPlus)
-{
-    StringTemplate st_1("Hello, ");
-    StringTemplate st_2("${name_1}!");
+        EXPECT_EQ(st_1.to_string(mapping), "Hello, Alice! and Rabbit!");
+    }
 
-    StringTemplate combined_1 = st_1 + st_2;
+    TEST(StringTemplateTest, OperatorPlus) {
+        StringTemplate st_1("Hello, ");
+        StringTemplate st_2("${name_1}!");
 
-    EXPECT_EQ(combined_1.getPlaceholderNum(), st_2.getPlaceholderNum());
+        StringTemplate combined_1 = st_1 + st_2;
 
-    NameMap mapping;
-    mapping["name_1"] = "Alice";
+        EXPECT_EQ(combined_1.getPlaceholderNum(), st_2.getPlaceholderNum());
 
-    EXPECT_EQ(combined_1.to_string(mapping), "Hello, Alice!");
+        NameMap mapping;
+        mapping["name_1"] = "Alice";
 
-    auto combined_2 =
-        st_1 + st_2 + " and ${name_2}!"_st + " and ${name_3}!"_st + " and ${name_4}!"_st;
-    mapping["name_2"] = "March";
-    mapping["name_3"] = "Hatter";
-    mapping["name_4"] = "Mouse";
+        EXPECT_EQ(combined_1.to_string(mapping), "Hello, Alice!");
 
-    EXPECT_EQ(combined_2.to_string(mapping), "Hello, Alice! and March! and Hatter! and Mouse!");
-}
+        auto combined_2 =
+            st_1 + st_2 + " and ${name_2}!"_st + " and ${name_3}!"_st + " and ${name_4}!"_st;
+        mapping["name_2"] = "March";
+        mapping["name_3"] = "Hatter";
+        mapping["name_4"] = "Mouse";
 
-TEST(StringTemplateTest, Remap)
-{
-    auto st_1 = "Hello, ${name}!"_st;
+        EXPECT_EQ(combined_2.to_string(mapping), "Hello, Alice! and March! and Hatter! and Mouse!");
+    }
 
-    EXPECT_EQ(st_1.remap(NameMap({{"name", "name_1"}})), 1);
+    TEST(StringTemplateTest, Remap) {
+        auto st_1 = "Hello, ${name}!"_st;
 
-    NameMap mapping;
-    mapping["name_1"] = "Alice";
+        EXPECT_EQ(st_1.remap(NameMap({{"name", "name_1"}})), 1);
 
-    EXPECT_EQ(st_1.to_string(mapping), "Hello, Alice!");
+        NameMap mapping;
+        mapping["name_1"] = "Alice";
 
-    auto st_2 = " and ${name}!"_st;
+        EXPECT_EQ(st_1.to_string(mapping), "Hello, Alice!");
 
-    EXPECT_EQ(st_2.remap(NameMap({{"name", "name_2"}})), 1);
+        auto st_2 = " and ${name}!"_st;
 
-    auto combine      = st_1 + st_2;
-    mapping["name_2"] = "Rabbit";
+        EXPECT_EQ(st_2.remap(NameMap({{"name", "name_2"}})), 1);
 
-    EXPECT_EQ(combine.to_string(mapping), "Hello, Alice! and Rabbit!");
+        auto combine      = st_1 + st_2;
+        mapping["name_2"] = "Rabbit";
 
-    EXPECT_EQ(combine.remap(NameMap({{"name_1", "name"}, {"name_2", "name"}})), 2);
+        EXPECT_EQ(combine.to_string(mapping), "Hello, Alice! and Rabbit!");
 
-    mapping.clear();
-    mapping["name"] = "Cat";
+        EXPECT_EQ(combine.remap(NameMap({{"name_1", "name"}, {"name_2", "name"}})), 2);
 
-    EXPECT_EQ(combine.to_string(mapping), "Hello, Cat! and Cat!");
-}
+        mapping.clear();
+        mapping["name"] = "Cat";
 
-TEST(StringTemplateTest, Initialize)
-{
-    auto st = "$}$Hello, $${name_1}! and ${${name_2}}! and ${}! and ${"_st;
-    EXPECT_EQ(st.getPlaceholderNum(), 3);
+        EXPECT_EQ(combine.to_string(mapping), "Hello, Cat! and Cat!");
+    }
 
-    EXPECT_EQ(st.to_string(NameMap({{"name_1", "Alice"}, {"${name_2", "Rabbit"}, {"", "Cat"}})),
-        "$}$Hello, $Alice! and Rabbit}! and Cat! and ${");
-}
+    TEST(StringTemplateTest, Initialize) {
+        auto st = "$}$Hello, $${name_1}! and ${${name_2}}! and ${}! and ${"_st;
+        EXPECT_EQ(st.getPlaceholderNum(), 3);
 
-TEST(StringTemplateTest, OverLapReMap)
-{
-    auto st = "Hello, ${name_1}! and ${name_2}! and ${name_3}!"_st;
-    EXPECT_EQ(
-        st.remap(NameMap({{"name_1", "name_2"}, {"name_2", "name_1"}, {"name_3", "name_1"}})), 3);
+        EXPECT_EQ(st.to_string(NameMap({{"name_1", "Alice"}, {"${name_2", "Rabbit"}, {"", "Cat"}})),
+                  "$}$Hello, $Alice! and Rabbit}! and Cat! and ${");
+    }
 
-    EXPECT_EQ(st.to_string(NameMap({{"name_1", "Cat"}, {"name_2", "Alice"}})),
-        "Hello, Alice! and Cat! and Cat!");
-}
+    TEST(StringTemplateTest, OverLapReMap) {
+        auto st = "Hello, ${name_1}! and ${name_2}! and ${name_3}!"_st;
+        EXPECT_EQ(
+            st.remap(NameMap({{"name_1", "name_2"}, {"name_2", "name_1"}, {"name_3", "name_1"}})),
+            3);
 
-TEST(StringTemplateTest, ReMapAndWrongMapping)
-{
-    auto st = "Hello, ${name_1}! and ${name_2}! and ${name_3}!"_st;
-    EXPECT_EQ(
-        st.remap(NameMap{{{"name_1", "name_0"}, {"name_2", "name_1"}, {"name_3", "name_2"}}}), 3);
-    EXPECT_EQ(
-        st.to_string(NameMap({{"name", "Queen"}, {"name_0", "Alice"}, {"name_3", "Carroll"}})),
-        "Hello, Alice! and name_1! and name_2!");
-}
+        EXPECT_EQ(st.to_string(NameMap({{"name_1", "Cat"}, {"name_2", "Alice"}})),
+                  "Hello, Alice! and Cat! and Cat!");
+    }
 
-TEST(StringTemplateTest, PlusString)
-{
-    StringTemplate st = "";
-    st += "Hello, ";
-    st += "${name}"_st + "!";
-    EXPECT_EQ(st.to_string(NameMap({{"name", "Alice"}})), "Hello, Alice!");
-}
+    TEST(StringTemplateTest, ReMapAndWrongMapping) {
+        auto st = "Hello, ${name_1}! and ${name_2}! and ${name_3}!"_st;
+        EXPECT_EQ(
+            st.remap(NameMap{{{"name_1", "name_0"}, {"name_2", "name_1"}, {"name_3", "name_2"}}}),
+            3);
+        EXPECT_EQ(
+            st.to_string(NameMap({{"name", "Queen"}, {"name_0", "Alice"}, {"name_3", "Carroll"}})),
+            "Hello, Alice! and name_1! and name_2!");
+    }
+
+    TEST(StringTemplateTest, PlusString) {
+        StringTemplate st = "";
+        st += "Hello, ";
+        st += "${name}"_st + "!";
+        EXPECT_EQ(st.to_string(NameMap({{"name", "Alice"}})), "Hello, Alice!");
+    }
+} // namespace acslg::test::unit::spec_generator

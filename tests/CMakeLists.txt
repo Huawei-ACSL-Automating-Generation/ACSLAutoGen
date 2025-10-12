@@ -1,6 +1,5 @@
 # tests/CMakeLists.txt
 
-
 include(FetchContent)
 FetchContent_Declare(
   googletest

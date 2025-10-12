@@ -5,9 +5,11 @@
 
 #include "stringTemplate.h"
 
-// TODO: some scaffolds
+namespace acslg::spec_generator {
+    // TODO: some scaffolds
 
-const StringTemplate ACSL_HEAD = "/*@\n";
-const StringTemplate ACSL_END  = "*/\n";
+    inline const StringTemplate ACSL_HEAD = "/*@\n";
+    inline const StringTemplate ACSL_END  = "*/\n";
+} // namespace acslg::spec_generator
 
 #endif

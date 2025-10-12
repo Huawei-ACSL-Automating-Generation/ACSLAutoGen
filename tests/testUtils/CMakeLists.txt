@@ -1,6 +1,6 @@
 # tests/testUtils/CMakeLists.txt
 
-add_library(TestUtilsLib STATIC ASTExtractor.cpp)
+add_library(TestUtilsLib STATIC ASTExtractor.cpp testHelper.cpp)
 
 target_include_directories(TestUtilsLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -14,4 +14,6 @@ target_link_libraries(TestUtilsLib PRIVATE
   clangTooling
   clangFrontend
   clangAST
+  GTest::gtest
+  GTest::gmock
 )

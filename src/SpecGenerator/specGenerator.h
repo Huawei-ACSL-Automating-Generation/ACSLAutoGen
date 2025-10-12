@@ -17,248 +17,264 @@
 #include "Analyzer/state.h"
 #include "Utils/utils.h"
 
-class ProgramState;
+namespace aclsg::analyzer {
+    class programState;
+}
 
-std::string emitFunctionContract(
-    const ProgramState &pre,
-    const ProgramState &post,
-    std::string_view groupName = DEFAULT_FUNC_CONTRACT_PLUGINS,
-    std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
-        std::nullopt);
+namespace acslg::spec_generator {
 
-struct LoopInfo {
-    struct Pattern {
-        not_null<std::unique_ptr<const Symbolic::SymbolicExpr>> initialValue_;
-        int64_t step_;
-        Pattern(not_null<std::unique_ptr<const Symbolic::SymbolicExpr>> initialValue, int64_t step)
-            : initialValue_(std::move(initialValue)), step_(step) {}
-        Pattern(const Pattern &other)
-            : initialValue_(other.initialValue_->clone().into_underlying()), step_(other.step_) {}
-        Pattern &operator=(const Pattern &other);
-        Pattern(Pattern &&other)            = default;
-        Pattern &operator=(Pattern &&other) = default;
-        string dump() const;
+    std::string emitFunctionContract(
+        const analyzer::ProgramState &pre,
+        const analyzer::ProgramState &post,
+        std::string_view groupName = DEFAULT_FUNC_CONTRACT_PLUGINS,
+        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
+            std::nullopt);
+
+    struct LoopInfo {
+        struct Pattern {
+            utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>> initialValue_;
+            int64_t step_;
+            Pattern(utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>>
+                        initialValue,
+                    int64_t step)
+                : initialValue_(std::move(initialValue)), step_(step) {}
+            Pattern(const Pattern &other)
+                : initialValue_(other.initialValue_->clone().into_underlying()),
+                  step_(other.step_) {}
+            Pattern &operator=(const Pattern &other);
+            Pattern(Pattern &&other)            = default;
+            Pattern &operator=(Pattern &&other) = default;
+            std::string dump() const;
+        };
+
+        LoopInfo(const clang::Stmt *loopStmt);
+
+        const clang::Stmt *loopStmt_;
+        const clang::Stmt *initStmt_;
+        const clang::Expr *condExpr_;
+        const clang::Stmt *incStmt_;
+        const clang::Stmt *bodyStmt_;
+
+        // SetLoopEntryPlugin
+        struct LoopEntryInfo {
+            utils::not_null<std::unique_ptr<const analyzer::ProgramState>> symbolicLoopEntry_;
+        };
+        std::optional<LoopEntryInfo> loopEntryInfo_;
+
+        // SetIndexPlugin
+        struct IndexInfo {
+            utils::not_null<const clang::Expr *> indexExpr_;
+            utils::not_null<std::unique_ptr<analyzer::symbolic::Address>>
+                indexRealAddr_; // index's sole address on pre-state
+            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
+                indexSymbolicValue_; // Varibale or Address
+            clang::BinaryOperator::Opcode op_;
+            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
+                indexBound_; // exclusive bound
+            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>> preciseLoopCount_;
+            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
+                maxLoopCount_; // The absolute value of the difference between the starting index
+                               // and the maximum/minimum possible index.
+            Pattern indexPattern_;
+            bool isLocal_; // Useless, delete this.
+        };
+        std::optional<IndexInfo> indexInfo_;
+
+        // SetIndexPlugin
+        std::vector<const clang::Expr *>
+            extraCondConjuncts_; // extraCondConjuncts holds those conjunctive
+                                 // clauses extracted from the loop
+        // condition that are **not** the simple index condition (e.g., i < n).
+
+        // SetPatternsPlugin
+        // Address with pattern has constant step.
+        // Address with nullopt means too complex.
+        // Other addresses' values hold through loop.
+        struct PatternInfo {
+            analyzer::symbolic::AddressBoxMap<std::optional<const Pattern>> patternsMap_;
+        };
+        std::optional<PatternInfo> patternInfo_;
+
+        // TODO(more info to be added)
     };
 
-    LoopInfo(const clang::Stmt *loopStmt);
+    std::pair<LoopInfo, bool> parseLoopInfo(
+        const analyzer::ProgramState &preState,
+        const analyzer::ProgramState &loopEntry,
+        const clang::Stmt *loopStmt,
+        std::string_view groupName = DEFAULT_LOOP_INFO_PLUGINS,
+        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
+            std::nullopt);
 
-    const clang::Stmt *loopStmt_;
-    const clang::Stmt *initStmt_;
-    const clang::Expr *condExpr_;
-    const clang::Stmt *incStmt_;
-    const clang::Stmt *bodyStmt_;
+    void parseComplexLoopInfo(const analyzer::ProgramState &preState,
+                              const analyzer::ProgramState &loopEntry,
+                              LoopInfo &loopInfo,
+                              std::string_view groupName = COMPLEX_LOOP_INFO_PLUGINS,
+                              std::optional<std::reference_wrapper<const std::vector<std::string>>>
+                                  extraPluginIds = std::nullopt);
 
-    // SetLoopEntryPlugin
-    struct LoopEntryInfo {
-        not_null<std::unique_ptr<const ProgramState>> symbolicLoopEntry_;
+    std::pair<std::string, std::unique_ptr<analyzer::ProgramState>> emitLoopInvariant(
+        const analyzer::ProgramState &preState,
+        const analyzer::ProgramState &loopEntry,
+        const LoopInfo &loopInfo,
+        std::string_view groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
+        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
+            std::nullopt);
+
+    std::string emitInlineContract(const analyzer::ProgramState &state,
+                                   std::string_view groupName,
+                                   const std::vector<std::string> &extraPluginIds);
+
+    /**
+     * @brief Substitute symbolic variables/addresses in an expression using the memory state
+     *        captured at the loop-entry path.
+     *
+     * This routine walks the symbolic expression tree and, when a Variable or SymbolAddress
+     * carries a resolvable "from" origin (i.e., an address), it queries the loop-entry
+     * memory model to obtain the concrete symbolic value stored at that origin and
+     * replaces the current node with that value (cloned). If the origin cannot be
+     * resolved/read at loop-entry, the node is kept as-is.
+     *
+     * @param expr           (in/out) The symbolic expression to be substituted in-place.
+     *                       The unique_ptr reference may be reassigned to a cloned node
+     *                       when substitution succeeds.
+     * @param loopEntryPath  The path that provides the memory state at loop entry.
+     *
+     * @param fromPoint      The expected fromPoint of symbols. Met unexpected fromPoint will
+     *                       just ignore it.
+     *
+     * @note Only Variable and Address (SymbolAddress) and Structure nodes are substituted directly.
+     *       Composite nodes (BinaryOp/UnaryOp) are traversed recursively.
+     *       Unknown nodes are ignored.
+     * @warning When the "from" variant is std::monostate, behavior is marked as TODO().
+     * @see getSubstitutedAddr()
+     */
+    void substituteSymbols(utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>> &expr,
+                           const analyzer::Path &loopEntryPath,
+                           const analyzer::symbolic::SourcePoint &fromPoint);
+
+    /**
+     * @brief Compute the address obtained by substituting the symbolic origin of @p addr
+     *        using the loop-entry memory, and re-applying the original offset/length.
+     *
+     * If @p addr is a SymbolAddress whose "from" origin resolves (via loop-entry memory)
+     * to a concrete address expression, this function:
+     *   1) extracts the real base address via tryEvalAsSymbolAddr();
+     *   2) substitutes the SymbolAddress's offset (and length if range) via substituteSymbols();
+     *   3) applies the substituted offset/length to the real address;
+     *   4) returns the resulting concrete address clone.
+     *
+     * If the origin cannot be resolved/read, it returns a clone of the original @p addr.
+     * Non-SymbolAddr inputs are cloned and returned unchanged.
+     *
+     * @param addr           The input address expression to substitute.
+     * @param loopEntryPath  The path that provides the memory state at loop entry.
+     * @param fromPoint      The expected fromPoint of `SymbolAddress`. Met unexpected fromPoint
+     * will just return unchanged `SymbolAddress`.
+     * @return utils::not_null<unique_ptr<Address>>  The substituted (or cloned) address.
+     *
+     * @note When the "from" variant is std::monostate, behavior is marked as TODO().
+     * @warning If the resolved value is not an address-like expression, the function errors out.
+     * @see substituteSymbols()
+     */
+    utils::not_null<std::unique_ptr<analyzer::symbolic::Address>> getSubstitutedAddr(
+        const analyzer::symbolic::Address &addr,
+        const analyzer::Path &loopEntryPath,
+        const analyzer::symbolic::SourcePoint &fromPoint);
+
+    /*---------------------------------------*/
+    /*-------Framework for ACSLPlugin--------*/
+    /*---------------------------------------*/
+
+    class ACSLPlugin {
+      public:
+        virtual ~ACSLPlugin()               = default;
+        virtual std::string_view id() const = 0;
+        enum class Kind {
+            FunctionContract,
+            LoopInvariant,
+            InlineAssertion,
+            LoopInfo
+        };
+        virtual Kind kind() const = 0;
     };
-    optional<LoopEntryInfo> loopEntryInfo_;
 
-    // SetIndexPlugin
-    struct IndexInfo {
-        not_null<const clang::Expr *> indexExpr_;
-        not_null<std::unique_ptr<Symbolic::Address>>
-            indexRealAddr_; // index's sole address on pre-state
-        not_null<std::unique_ptr<Symbolic::SymbolicExpr>> indexSymbolicValue_; // Varibale or Address
-        clang::BinaryOperator::Opcode op_;
-        not_null<std::unique_ptr<Symbolic::SymbolicExpr>> indexBound_; // exclusive bound
-        not_null<std::unique_ptr<Symbolic::SymbolicExpr>> preciseLoopCount_;
-        not_null<std::unique_ptr<Symbolic::SymbolicExpr>>
-            maxLoopCount_; // The absolute value of the difference between the starting index and
-                           // the maximum/minimum possible index.
-        Pattern indexPattern_;
-        bool isLocal_; // Useless, delete this.
+    class FunctionContractPlugin : public ACSLPlugin {
+      public:
+        Kind kind() const override { return Kind::FunctionContract; }
+        virtual std::optional<std::string> generate(const analyzer::ProgramState &pre,
+                                                    const analyzer::ProgramState &post) const = 0;
     };
-    optional<IndexInfo> indexInfo_;
 
-    // SetIndexPlugin
-    vector<const clang::Expr *> extraCondConjuncts_; // extraCondConjuncts holds those conjunctive
-                                                     // clauses extracted from the loop
-    // condition that are **not** the simple index condition (e.g., i < n).
+    class LoopInfoPlugin : public ACSLPlugin {
+      public:
+        Kind kind() const override { return Kind::LoopInfo; }
 
-    // SetPatternsPlugin
-    // Address with pattern has constant step.
-    // Address with nullopt means too complex.
-    // Other addresses' values hold through loop.
-    struct PatternInfo {
-        Symbolic::AddressBoxMap<std::optional<const Pattern>> patternsMap_;
+        /// @brief Parse the given loop and fill in loopInfo.
+        /// @param preState
+        /// @param loopEntry
+        /// @param loopEntryPoint
+        /// @param loopInfo info to be filled in
+        /// @return return false means this loop is too complex and will abort whole parsing!
+        virtual bool parse(const analyzer::ProgramState &preState,
+                           const analyzer::ProgramState &loopEntry,
+                           LoopInfo &loopInfo) const = 0;
     };
-    optional<PatternInfo> patternInfo_;
 
-    // TODO(more info to be added)
-};
-
-std::pair<LoopInfo, bool> parseLoopInfo(
-    const ProgramState &preState,
-    const ProgramState &loopEntry,
-    const clang::Stmt *loopStmt,
-    std::string_view groupName = DEFAULT_LOOP_INFO_PLUGINS,
-    std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
-        std::nullopt);
-
-void parseComplexLoopInfo(
-    const ProgramState &preState,
-    const ProgramState &loopEntry,
-    LoopInfo &loopInfo,
-    std::string_view groupName                                       = COMPLEX_LOOP_INFO_PLUGINS,
-    optional<reference_wrapper<const vector<string>>> extraPluginIds = std::nullopt);
-
-std::pair<std::string, unique_ptr<ProgramState>> emitLoopInvariant(
-    const ProgramState &preState,
-    const ProgramState &loopEntry,
-    const LoopInfo &loopInfo,
-    std::string_view groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
-    std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
-        std::nullopt);
-
-std::string emitInlineContract(const ProgramState &state,
-                               std::string_view groupName,
-                               const std::vector<std::string> &extraPluginIds);
-
-/**
- * @brief Substitute symbolic variables/addresses in an expression using the memory state
- *        captured at the loop-entry path.
- *
- * This routine walks the symbolic expression tree and, when a Variable or SymbolAddress
- * carries a resolvable "from" origin (i.e., an address), it queries the loop-entry
- * memory model to obtain the concrete symbolic value stored at that origin and
- * replaces the current node with that value (cloned). If the origin cannot be
- * resolved/read at loop-entry, the node is kept as-is.
- *
- * @param expr           (in/out) The symbolic expression to be substituted in-place.
- *                       The unique_ptr reference may be reassigned to a cloned node
- *                       when substitution succeeds.
- * @param loopEntryPath  The path that provides the memory state at loop entry.
- *
- * @param fromPoint      The expected fromPoint of symbols. Met unexpected fromPoint will
- *                       just ignore it.
- *
- * @note Only Variable and Address (SymbolAddress) and Structure nodes are substituted directly.
- *       Composite nodes (BinaryOp/UnaryOp) are traversed recursively.
- *       Unknown nodes are ignored.
- * @warning When the "from" variant is std::monostate, behavior is marked as TODO().
- * @see getSubstitutedAddr()
- */
-void substituteSymbols(not_null<std::unique_ptr<SymbolicExpr>> &expr,
-                       const Path &loopEntryPath,
-                       const SourcePoint &fromPoint);
-
-/**
- * @brief Compute the address obtained by substituting the symbolic origin of @p addr
- *        using the loop-entry memory, and re-applying the original offset/length.
- *
- * If @p addr is a SymbolAddress whose "from" origin resolves (via loop-entry memory)
- * to a concrete address expression, this function:
- *   1) extracts the real base address via tryEvalAsSymbolAddr();
- *   2) substitutes the SymbolAddress's offset (and length if range) via substituteSymbols();
- *   3) applies the substituted offset/length to the real address;
- *   4) returns the resulting concrete address clone.
- *
- * If the origin cannot be resolved/read, it returns a clone of the original @p addr.
- * Non-SymbolAddr inputs are cloned and returned unchanged.
- *
- * @param addr           The input address expression to substitute.
- * @param loopEntryPath  The path that provides the memory state at loop entry.
- * @param fromPoint      The expected fromPoint of `SymbolAddress`. Met unexpected fromPoint will
- *                       just return unchanged `SymbolAddress`.
- * @return not_null<unique_ptr<Address>>  The substituted (or cloned) address.
- *
- * @note When the "from" variant is std::monostate, behavior is marked as TODO().
- * @warning If the resolved value is not an address-like expression, the function errors out.
- * @see substituteSymbols()
- */
-not_null<std::unique_ptr<Address>> getSubstitutedAddr(const Address &addr,
-                                                      const Path &loopEntryPath,
-                                                      const SourcePoint &fromPoint);
-
-/*---------------------------------------*/
-/*-------Framework for ACSLPlugin--------*/
-/*---------------------------------------*/
-
-class ACSLPlugin {
-  public:
-    virtual ~ACSLPlugin()               = default;
-    virtual std::string_view id() const = 0;
-    enum class Kind {
-        FunctionContract,
-        LoopInvariant,
-        InlineAssertion,
-        LoopInfo
+    struct PostInfo {
+        analyzer::symbolic::AddressBoxMap<
+            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
+            memoryMap_;
+        std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pathConds_;
     };
-    virtual Kind kind() const = 0;
-};
+    class LoopInvariantPlugin : public ACSLPlugin {
+      public:
+        Kind kind() const override { return Kind::LoopInvariant; }
 
-class FunctionContractPlugin : public ACSLPlugin {
-  public:
-    Kind kind() const override { return Kind::FunctionContract; }
-    virtual std::optional<std::string> generate(const ProgramState &pre,
-                                                const ProgramState &post) const = 0;
-};
+        virtual std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
+            const analyzer::ProgramState &preState,
+            const analyzer::ProgramState &loopEntry,
+            const LoopInfo &loopInfo) const = 0;
+    };
 
-class LoopInfoPlugin : public ACSLPlugin {
-  public:
-    Kind kind() const override { return Kind::LoopInfo; }
+    class InlinePlugin : public ACSLPlugin {
+      public:
+        Kind kind() const override { return Kind::InlineAssertion; }
+        virtual std::optional<std::string> generate(
+            const analyzer::ProgramState &state /* enough? */) = 0;
+    };
 
-    /// @brief Parse the given loop and fill in loopInfo.
-    /// @param preState
-    /// @param loopEntry
-    /// @param loopEntryPoint
-    /// @param loopInfo info to be filled in
-    /// @return return false means this loop is too complex and will abort whole parsing!
-    virtual bool parse(const ProgramState &preState,
-                       const ProgramState &loopEntry,
-                       LoopInfo &loopInfo) const = 0;
-};
+    class ACSLPluginRegistry {
+      public:
+        static ACSLPluginRegistry &instance() {
+            static ACSLPluginRegistry R;
+            return R;
+        }
 
-struct PostInfo {
-    Symbolic::AddressBoxMap<not_null<std::unique_ptr<SymbolicExpr>>> memoryMap_;
-    vector<not_null<unique_ptr<SymbolicExpr>>> pathConds_;
-};
-class LoopInvariantPlugin : public ACSLPlugin {
-  public:
-    Kind kind() const override { return Kind::LoopInvariant; }
+        void registerPlugin(std::unique_ptr<ACSLPlugin> P) {
+            plugins_.emplace(P->id(), std::move(P));
+        }
 
-    virtual std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
-        const ProgramState &preState,
-        const ProgramState &loopEntry,
-        const LoopInfo &loopInfo) const = 0;
-};
+        ACSLPlugin *get(std::string_view id) const {
+            auto it = plugins_.find(id);
+            return it == plugins_.end() ? nullptr : it->second.get();
+        }
 
-class InlinePlugin : public ACSLPlugin {
-  public:
-    Kind kind() const override { return Kind::InlineAssertion; }
-    virtual std::optional<std::string> generate(const ProgramState &state /* enough? */) = 0;
-};
+        std::vector<std::string> idsByKind(ACSLPlugin::Kind k) const {
+            std::vector<std::string> v;
+            for (auto const &p : plugins_)
+                if (p.second->kind() == k)
+                    v.push_back(p.first);
+            return v;
+        }
 
-class ACSLPluginRegistry {
-  public:
-    static ACSLPluginRegistry &instance() {
-        static ACSLPluginRegistry R;
-        return R;
-    }
-
-    void registerPlugin(std::unique_ptr<ACSLPlugin> P) { plugins_.emplace(P->id(), std::move(P)); }
-
-    ACSLPlugin *get(std::string_view id) const {
-        auto it = plugins_.find(id);
-        return it == plugins_.end() ? nullptr : it->second.get();
-    }
-
-    std::vector<std::string> idsByKind(ACSLPlugin::Kind k) const {
-        std::vector<std::string> v;
-        for (auto const &p : plugins_)
-            if (p.second->kind() == k)
-                v.push_back(p.first);
-        return v;
-    }
-
-  private:
-    std::unordered_map<std::string,
-                       std::unique_ptr<ACSLPlugin>,
-                       TransparentStringHash,
-                       TransparentStringEqual>
-        plugins_;
-};
+      private:
+        std::unordered_map<std::string,
+                           std::unique_ptr<ACSLPlugin>,
+                           utils::TransparentStringHash,
+                           utils::TransparentStringEqual>
+            plugins_;
+    };
 
 #define REGISTER_ACSL_PLUGIN(PluginType, PluginID)                                                 \
     namespace {                                                                                    \
@@ -271,36 +287,39 @@ class ACSLPluginRegistry {
         } _##PluginType##Reg;                                                                      \
     }
 
-struct ACSLPluginGroup {
-    std::string name;
-    std::vector<std::string> pluginIds;
-};
+    struct ACSLPluginGroup {
+        std::string name;
+        std::vector<std::string> pluginIds;
+    };
 
-class ACSLPluginGroupRegistry {
-  public:
-    static ACSLPluginGroupRegistry &instance() {
-        static ACSLPluginGroupRegistry R;
-        return R;
-    }
+    class ACSLPluginGroupRegistry {
+      public:
+        static ACSLPluginGroupRegistry &instance() {
+            static ACSLPluginGroupRegistry R;
+            return R;
+        }
 
-    void registerGroup(ACSLPluginGroup G) { groups_.emplace(G.name, std::move(G)); }
+        void registerGroup(ACSLPluginGroup G) { groups_.emplace(G.name, std::move(G)); }
 
-    const ACSLPluginGroup *getGroup(std::string_view name) const {
-        auto it = groups_.find(name);
-        return it == groups_.end() ? nullptr : &it->second;
-    }
+        const ACSLPluginGroup *getGroup(std::string_view name) const {
+            auto it = groups_.find(name);
+            return it == groups_.end() ? nullptr : &it->second;
+        }
 
-    std::vector<std::string_view> allGroupNames() const {
-        std::vector<std::string_view> v;
-        for (auto &[name, _] : groups_)
-            v.push_back(name);
-        return v;
-    }
+        std::vector<std::string_view> allGroupNames() const {
+            std::vector<std::string_view> v;
+            for (auto &[name, _] : groups_)
+                v.push_back(name);
+            return v;
+        }
 
-  private:
-    std::unordered_map<std::string, ACSLPluginGroup, TransparentStringHash, TransparentStringEqual>
-        groups_;
-};
+      private:
+        std::unordered_map<std::string,
+                           ACSLPluginGroup,
+                           utils::TransparentStringHash,
+                           utils::TransparentStringEqual>
+            groups_;
+    };
 
 #define REGISTER_ACSL_GROUP(GroupName, ...)                                                        \
     namespace {                                                                                    \
@@ -319,5 +338,6 @@ class ACSLPluginGroupRegistry {
             }                                                                                      \
         } _##GroupName##Reg;                                                                       \
     }
+} // namespace acslg::spec_generator
 
 #endif

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <cstdlib>
 
+namespace acslg {
 #define ANSI_RESET "\033[0m"
 #define ANSI_CUSTOM_BLUE "\033[38;2;120;220;232m"
 #define ANSI_BRIGHT_YELLOW "\033[0;33m"
@@ -122,6 +123,7 @@
 #define DEBUG(...)
 #endif
 
-inline void _noWarn() { PROCESS("unreachable"); }
+    inline void _noWarn() { PROCESS("unreachable"); }
+} // namespace acslg
 
 #endif

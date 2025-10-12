@@ -22,32 +22,35 @@ using ::testing::HasSubstr;
 using ::testing::StartsWith;
 using ::testing::StrEq;
 
-TEST(IntegrationTest, SyntaxNoDeath) {
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(R"(
+namespace acslg::test::integration {
+    using namespace utils;
+
+    TEST(IntegrationTest, SyntaxNoDeath) {
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(R"(
     void func(){
         return;
     }
     )");
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(R"(
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(R"(
     void func(int x){
         x++;
         int y = x + 1;
         return;
     }
     )");
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(R"(
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(R"(
     void func(int x, int *pt){
         x++;
         ++(*pt);
@@ -55,12 +58,12 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         return;
     }
     )");
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(R"(
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(R"(
     void func(int x, int *pt){
         x++;
         ++(*pt);
@@ -68,12 +71,12 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         return;
     }
     )");
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(R"(
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(R"(
     int func(int x, int n){
         for(int i = 0; i < n; i++){
             x = x - 1;
@@ -81,12 +84,12 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         return x;
     }
     )");
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(R"(
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(R"(
     struct A{
         int x;
         unsigned long y;
@@ -97,13 +100,13 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         return z;
     }
     )");
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
 
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(R"(
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(R"(
     struct A{
         int x;
         unsigned long y;
@@ -115,12 +118,12 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         return c.x + b.y;
     }
     )");
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(R"(
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(R"(
     void func(int x, int *pt){
         x++;
         ++*(pt+1);
@@ -128,12 +131,12 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         return;
     }
     )");
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(R"(
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(R"(
     void func(int x, int *pt){
         x++;
         ++pt[2];
@@ -141,12 +144,12 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         return;
     }
     )");
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(R"(
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(R"(
     void func(int x, int *pt){
         x++;
         pt[1]++;
@@ -155,13 +158,13 @@ TEST(IntegrationTest, SyntaxNoDeath) {
         return;
     }
     )");
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-}
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+    }
 
-TEST(IntegrationTest, CorrectStateWithPointerArithmetic) {
-    auto code = R"(
+    TEST(IntegrationTest, CorrectStateWithPointerArithmetic) {
+        auto code = R"(
     int func(int *pt){
         *pt = 0;
         (*pt)++;
@@ -171,19 +174,19 @@ TEST(IntegrationTest, CorrectStateWithPointerArithmetic) {
         return *pt;
     }
     )"s;
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    auto postState = execOnFirstFunc(code);
-    ASSERT_EQ(*getReturnExprOfFirstPath(*postState)->simplifiedExpr(),
-              *LiteralExpr{0}.simplifiedExpr());
-}
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        auto postState = execOnFirstFunc(code);
+        ASSERT_EQ(*getReturnExprOfFirstPath(*postState)->simplifiedExpr(),
+                  *analyzer::symbolic::LiteralExpr{0}.simplifiedExpr());
+    }
 
-TEST(IntegrationTest, CorrectPostStateOfLoop_1) {
-    auto code = R"(
+    TEST(IntegrationTest, CorrectPostStateOfLoop_1) {
+        auto code = R"(
         void func(int n){
             int x = 0, y = n, z = 10;
             for(int i = 0; i < n; i++){
@@ -193,37 +196,37 @@ TEST(IntegrationTest, CorrectPostStateOfLoop_1) {
             } 
         }
     )";
-    ASSERT_EXIT(
-        {
-            getPostStateOfFirstLoop(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    auto postState = getPostStateOfFirstLoop(code);
-    auto &paths    = postState->getPaths();
-    ASSERT_EQ(paths.size(), 1);
-    for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
-        auto var  = addr.get().regularFormOfValue();
-        auto expr = value->simplifiedExpr()->regularForm();
-        ASSERT_NE(var, nullopt);
-        ASSERT_NE(expr, nullopt);
-        if (var.value() == "x") {
-            EXPECT_EQ(expr.value(), "n");
-        } else if (var.value() == "y") {
-            EXPECT_EQ(expr.value(), "0");
-        } else if (var.value() == "z") {
-            EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("10"), HasSubstr("+ 10")),
-                                            AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
-        } else if (var.value() == "n") {
-            EXPECT_EQ(expr.value(), "n");
-        } else {
-            FAIL() << var.value() << ": " << expr.value();
+        ASSERT_EXIT(
+            {
+                getPostStateOfFirstLoop(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        auto postState = getPostStateOfFirstLoop(code);
+        auto &paths    = postState->getPaths();
+        ASSERT_EQ(paths.size(), 1);
+        for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
+            auto var  = addr.get().regularFormOfValue();
+            auto expr = value->simplifiedExpr()->regularForm();
+            ASSERT_NE(var, nullopt);
+            ASSERT_NE(expr, nullopt);
+            if (var.value() == "x") {
+                EXPECT_EQ(expr.value(), "n");
+            } else if (var.value() == "y") {
+                EXPECT_EQ(expr.value(), "0");
+            } else if (var.value() == "z") {
+                EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("10"), HasSubstr("+ 10")),
+                                                AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
+            } else if (var.value() == "n") {
+                EXPECT_EQ(expr.value(), "n");
+            } else {
+                FAIL() << var.value() << ": " << expr.value();
+            }
         }
     }
-}
 
-TEST(IntegrationTest, CorrectPostStateOfLoop_2) {
-    auto code = R"(
+    TEST(IntegrationTest, CorrectPostStateOfLoop_2) {
+        auto code = R"(
     void func(int *p, int n) {
         int *pt = p;
         for(int i = 0; i < n; ++i){
@@ -232,37 +235,37 @@ TEST(IntegrationTest, CorrectPostStateOfLoop_2) {
         }
     }
     )";
-    ASSERT_EXIT(
-        {
-            getPostStateOfFirstLoop(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    auto postState = getPostStateOfFirstLoop(code);
-    auto &paths    = postState->getPaths();
-    ASSERT_EQ(paths.size(), 1);
-    for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
-        auto var  = addr.get().regularFormOfValue();
-        auto expr = value->simplifiedExpr()->regularForm();
-        ASSERT_NE(var, nullopt);
-        ASSERT_NE(expr, nullopt);
-        if (var.value() == "p") {
-            EXPECT_EQ(expr.value(), "p");
-        } else if (var.value() == "n") {
-            EXPECT_EQ(expr.value(), "n");
-        } else if (var.value() == "pt") {
-            EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
-                                            AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-        } else if (var.value() == "p[0..n - 1]") {
-            EXPECT_TRUE(value->isUnknown());
-        } else {
-            FAIL() << var.value() << ": " << expr.value();
+        ASSERT_EXIT(
+            {
+                getPostStateOfFirstLoop(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        auto postState = getPostStateOfFirstLoop(code);
+        auto &paths    = postState->getPaths();
+        ASSERT_EQ(paths.size(), 1);
+        for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
+            auto var  = addr.get().regularFormOfValue();
+            auto expr = value->simplifiedExpr()->regularForm();
+            ASSERT_NE(var, nullopt);
+            ASSERT_NE(expr, nullopt);
+            if (var.value() == "p") {
+                EXPECT_EQ(expr.value(), "p");
+            } else if (var.value() == "n") {
+                EXPECT_EQ(expr.value(), "n");
+            } else if (var.value() == "pt") {
+                EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
+                                                AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+            } else if (var.value() == "p[0..n - 1]") {
+                EXPECT_TRUE(value->isUnknown());
+            } else {
+                FAIL() << var.value() << ": " << expr.value();
+            }
         }
     }
-}
 
-TEST(IntegrationTest, CorrectPostStateOfLoop_3) {
-    auto code = R"(
+    TEST(IntegrationTest, CorrectPostStateOfLoop_3) {
+        auto code = R"(
     void func(int *p, int n) {
         int *pt = p + 1;
         for(int i = 0; i < n; ++i){
@@ -271,37 +274,37 @@ TEST(IntegrationTest, CorrectPostStateOfLoop_3) {
         }
     }
     )";
-    ASSERT_EXIT(
-        {
-            getPostStateOfFirstLoop(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    auto postState = getPostStateOfFirstLoop(code);
-    auto &paths    = postState->getPaths();
-    ASSERT_EQ(paths.size(), 1);
-    for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
-        auto var  = addr.get().regularFormOfValue();
-        auto expr = value->simplifiedExpr()->regularForm();
-        ASSERT_NE(var, nullopt);
-        ASSERT_NE(expr, nullopt);
-        if (var.value() == "p") {
-            EXPECT_EQ(expr.value(), "p");
-        } else if (var.value() == "n") {
-            EXPECT_EQ(expr.value(), "n");
-        } else if (var.value() == "pt") {
-            EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("(p+1)"), HasSubstr("+ (p+1)")),
-                                            AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-        } else if (var.value() == "p[1..n]") {
-            EXPECT_TRUE(value->isUnknown());
-        } else {
-            FAIL() << var.value() << ": " << expr.value();
+        ASSERT_EXIT(
+            {
+                getPostStateOfFirstLoop(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        auto postState = getPostStateOfFirstLoop(code);
+        auto &paths    = postState->getPaths();
+        ASSERT_EQ(paths.size(), 1);
+        for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
+            auto var  = addr.get().regularFormOfValue();
+            auto expr = value->simplifiedExpr()->regularForm();
+            ASSERT_NE(var, nullopt);
+            ASSERT_NE(expr, nullopt);
+            if (var.value() == "p") {
+                EXPECT_EQ(expr.value(), "p");
+            } else if (var.value() == "n") {
+                EXPECT_EQ(expr.value(), "n");
+            } else if (var.value() == "pt") {
+                EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("(p+1)"), HasSubstr("+ (p+1)")),
+                                                AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+            } else if (var.value() == "p[1..n]") {
+                EXPECT_TRUE(value->isUnknown());
+            } else {
+                FAIL() << var.value() << ": " << expr.value();
+            }
         }
     }
-}
 
-TEST(IntegrationTest, openHiTLS_1) {
-    auto code = R"(
+    TEST(IntegrationTest, openHiTLS_1) {
+        auto code = R"(
     #include <stdint.h>
     #define BN_UINT uint32_t
 
@@ -331,16 +334,16 @@ TEST(IntegrationTest, openHiTLS_1) {
     return carry;
 }
     )";
-    ASSERT_EXIT(
-        {
-            doAll(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-}
+        ASSERT_EXIT(
+            {
+                doAll(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+    }
 
-TEST(IntegrationTest, openHiTLS_2) {
-    auto code = R"(
+    TEST(IntegrationTest, openHiTLS_2) {
+        auto code = R"(
     #include <stdint.h>
     #define BN_UINT uint32_t
 
@@ -377,16 +380,16 @@ TEST(IntegrationTest, openHiTLS_2) {
     return carry;
 }
     )";
-    ASSERT_EXIT(
-        {
-            doAll(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-}
+        ASSERT_EXIT(
+            {
+                doAll(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+    }
 
-TEST(IntegrationTest, openHiTLS_3) {
-    auto code = R"(
+    TEST(IntegrationTest, openHiTLS_3) {
+        auto code = R"(
     #include <stdint.h>
     #define BN_UINT uint32_t
 
@@ -426,16 +429,16 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
     return borrow;
 }
     )";
-    ASSERT_EXIT(
-        {
-            doAll(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-}
+        ASSERT_EXIT(
+            {
+                doAll(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+    }
 
-TEST(IntegrationTest, openHiTLS_4) {
-    auto code = R"(
+    TEST(IntegrationTest, openHiTLS_4) {
+        auto code = R"(
     #include <stdint.h>
     #define BN_UINT uint32_t
 
@@ -462,16 +465,16 @@ TEST(IntegrationTest, openHiTLS_4) {
     return carry;
 }
     )";
-    ASSERT_EXIT(
-        {
-            doAll(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-}
+        ASSERT_EXIT(
+            {
+                doAll(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+    }
 
-TEST(ResultTest, WithStructure_1) {
-    auto code = R"(
+    TEST(ResultTest, WithStructure_1) {
+        auto code = R"(
         struct A{
             int x;
             unsigned long y;
@@ -480,24 +483,24 @@ TEST(ResultTest, WithStructure_1) {
             return x.x - x.y + n - 100;
         }
     )";
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-    auto resultStr = result->regularForm();
-    if (resultStr == nullopt)
-        FAIL() << result->dump();
-    EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
-                                         AnyOf(StartsWith("-1 * x.y"), HasSubstr("- x.y")),
-                                         AnyOf(StartsWith("n"), HasSubstr("+ n")),
-                                         AnyOf(StartsWith("-1 * 100"), HasSubstr("- 100"))));
-}
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        auto resultStr = result->regularForm();
+        if (resultStr == nullopt)
+            FAIL() << result->dump();
+        EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
+                                             AnyOf(StartsWith("-1 * x.y"), HasSubstr("- x.y")),
+                                             AnyOf(StartsWith("n"), HasSubstr("+ n")),
+                                             AnyOf(StartsWith("-1 * 100"), HasSubstr("- 100"))));
+    }
 
-TEST(ResultTest, WithStructure_2) {
-    auto code = R"(
+    TEST(ResultTest, WithStructure_2) {
+        auto code = R"(
         struct A{
             int x;
             unsigned long y;
@@ -512,23 +515,23 @@ TEST(ResultTest, WithStructure_2) {
             return x.x - x.y;
         }
     )";
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-    auto resultStr = result->regularForm();
-    if (resultStr == nullopt)
-        FAIL() << result->dump();
-    EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
-                                         AnyOf(StartsWith("-1 * 99"), HasSubstr("- 99")),
-                                         AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-}
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        auto resultStr = result->regularForm();
+        if (resultStr == nullopt)
+            FAIL() << result->dump();
+        EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
+                                             AnyOf(StartsWith("-1 * 99"), HasSubstr("- 99")),
+                                             AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+    }
 
-TEST(ResultTest, WithStructure_3) {
-    auto code = R"(
+    TEST(ResultTest, WithStructure_3) {
+        auto code = R"(
         struct A{
             int* x;
             unsigned long y;
@@ -542,23 +545,23 @@ TEST(ResultTest, WithStructure_3) {
             return *x.x - x.y;
         }
     )";
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-    auto resultStr = result->regularForm();
-    if (resultStr == nullopt)
-        FAIL() << result->dump();
-    EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("(*x.x)"), HasSubstr("+ (*x.x)")),
-                                         AnyOf(StartsWith("-1 * 98"), HasSubstr("- 98")),
-                                         AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-}
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        auto resultStr = result->regularForm();
+        if (resultStr == nullopt)
+            FAIL() << result->dump();
+        EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("(*x.x)"), HasSubstr("+ (*x.x)")),
+                                             AnyOf(StartsWith("-1 * 98"), HasSubstr("- 98")),
+                                             AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+    }
 
-TEST(ResultTest, WithStructure_4) {
-    auto code = R"(
+    TEST(ResultTest, WithStructure_4) {
+        auto code = R"(
         struct A{
             int* x;
             unsigned long y;
@@ -573,18 +576,19 @@ TEST(ResultTest, WithStructure_4) {
             return *a.x + a.y + *b.x + b.y;
         }
     )";
-    ASSERT_EXIT(
-        {
-            execOnFirstFunc(code);
-            std::_Exit(0);
-        },
-        ::testing::ExitedWithCode(0), "");
-    auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-    auto resultStr = result->regularForm();
-    if (resultStr == nullopt)
-        FAIL() << result->dump();
-    EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("(*a.x)"), HasSubstr("+ (*a.x)")),
-                                         AnyOf(StartsWith("(*b.x)"), HasSubstr("+ (*b.x)")),
-                                         AnyOf(StartsWith("b.y"), HasSubstr("+ b.y")),
-                                         AnyOf(StartsWith("142"), HasSubstr("+ 142"))));
-}
+        ASSERT_EXIT(
+            {
+                execOnFirstFunc(code);
+                std::_Exit(0);
+            },
+            ::testing::ExitedWithCode(0), "");
+        auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        auto resultStr = result->regularForm();
+        if (resultStr == nullopt)
+            FAIL() << result->dump();
+        EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("(*a.x)"), HasSubstr("+ (*a.x)")),
+                                             AnyOf(StartsWith("(*b.x)"), HasSubstr("+ (*b.x)")),
+                                             AnyOf(StartsWith("b.y"), HasSubstr("+ b.y")),
+                                             AnyOf(StartsWith("142"), HasSubstr("+ 142"))));
+    }
+} // namespace acslg::test::integration

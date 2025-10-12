@@ -5,11 +5,11 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include <unordered_set>
 
-bool isAssignOp(const clang::BinaryOperator *binOp);
-bool ignoreTopBinop(const clang::BinaryOperator *binOp);
-std::unordered_set<const clang::VarDecl *> collectLocalVars(const clang::Stmt *stmt);
+namespace acslg::utils {
+    bool isAssignOp(const clang::BinaryOperator *binOp);
+    bool ignoreTopBinop(const clang::BinaryOperator *binOp);
+    std::unordered_set<const clang::VarDecl *> collectLocalVars(const clang::Stmt *stmt);
 
-namespace acslg {
     // handy hash
     // from boost (functional/hash):
     // see http://www.boost.org/doc/libs/1_35_0/doc/html/hash/combine.html template
@@ -346,53 +346,53 @@ namespace acslg {
       private:
         T ptr_;
     };
-} // namespace acslg
 
-struct TransparentStringHash {
-    using is_transparent           = void;
-    using is_transparent_key_equal = void;
+    struct TransparentStringHash {
+        using is_transparent           = void;
+        using is_transparent_key_equal = void;
 
-    size_t operator()(std::string_view sv) const noexcept {
-        return std::hash<std::string_view>{}(sv);
-    }
-};
-
-struct TransparentStringEqual {
-    using is_transparent = void;
-    bool operator()(std::string_view a, std::string_view b) const noexcept { return a == b; }
-};
-
-template <typename StmtType, typename CallbackType>
-class StmtVisitor : public clang::RecursiveASTVisitor<StmtVisitor<StmtType, CallbackType>> {
-  public:
-    StmtVisitor() = delete;
-    explicit StmtVisitor(CallbackType &&cb) : callback_(std::forward<CallbackType>(cb)) {}
-
-    bool VisitStmt(clang::Stmt *s) {
-        if (!s)
-            return true;
-        if (auto *node = llvm::dyn_cast<StmtType>(s)) {
-            if constexpr (std::is_pointer_v<Param0Type>) {
-                callback_(node);
-            } else {
-                callback_(*node);
-            }
+        size_t operator()(std::string_view sv) const noexcept {
+            return std::hash<std::string_view>{}(sv);
         }
-        return true;
-    }
+    };
 
-    void runOn(const clang::Stmt *root) { this->TraverseStmt(const_cast<clang::Stmt *>(root)); }
+    struct TransparentStringEqual {
+        using is_transparent = void;
+        bool operator()(std::string_view a, std::string_view b) const noexcept { return a == b; }
+    };
 
-  private:
-    CallbackType callback_;
-    using CallbackTraits = acslg::function_traits<std::decay_t<CallbackType>>;
-    using Param0Type     = typename CallbackTraits::template argn<0>;
-};
+    template <typename StmtType, typename CallbackType>
+    class StmtVisitor : public clang::RecursiveASTVisitor<StmtVisitor<StmtType, CallbackType>> {
+      public:
+        StmtVisitor() = delete;
+        explicit StmtVisitor(CallbackType &&cb) : callback_(std::forward<CallbackType>(cb)) {}
 
-template <typename CallbackT,
-          typename Arg = typename acslg::function_traits<std::decay_t<CallbackT>>::template argn<0>>
-StmtVisitor(CallbackT)
-    -> StmtVisitor<std::remove_const_t<std::remove_pointer_t<std::remove_reference_t<Arg>>>,
-                   CallbackT>;
+        bool VisitStmt(clang::Stmt *s) {
+            if (!s)
+                return true;
+            if (auto *node = llvm::dyn_cast<StmtType>(s)) {
+                if constexpr (std::is_pointer_v<Param0Type>) {
+                    callback_(node);
+                } else {
+                    callback_(*node);
+                }
+            }
+            return true;
+        }
+
+        void runOn(const clang::Stmt *root) { this->TraverseStmt(const_cast<clang::Stmt *>(root)); }
+
+      private:
+        CallbackType callback_;
+        using CallbackTraits = function_traits<std::decay_t<CallbackType>>;
+        using Param0Type     = typename CallbackTraits::template argn<0>;
+    };
+
+    template <typename CallbackT,
+              typename Arg = typename function_traits<std::decay_t<CallbackT>>::template argn<0>>
+    StmtVisitor(CallbackT)
+        -> StmtVisitor<std::remove_const_t<std::remove_pointer_t<std::remove_reference_t<Arg>>>,
+                       CallbackT>;
+} // namespace acslg::utils
 
 #endif // ACSLG_UTILS_H

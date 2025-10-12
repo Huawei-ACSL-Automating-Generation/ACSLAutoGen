@@ -8,593 +8,610 @@
 using namespace std;
 using namespace clang;
 
-class SetLoopEntryPlugin : public LoopInfoPlugin {
-  public:
-    SetLoopEntryPlugin(const string &ID) : id_(ID) {}
-    string_view id() const override { return id_; }
-    bool parse(const ProgramState &,
-               const ProgramState &loopEntry,
-               LoopInfo &loopInfo) const override {
-        auto symbolicState = loopEntry.clone();
+namespace acslg::spec_generator {
+    using namespace analyzer;
+    using namespace utils;
 
-        auto loopEntryPoint = SourcePoint::fromStmtBefore(
-            loopInfo.loopStmt_, symbolicState->getContext().getSourceManager(),
-            symbolicState->getContext().getLangOptions());
+    class SetLoopEntryPlugin : public LoopInfoPlugin {
+      public:
+        SetLoopEntryPlugin(const string &ID) : id_(ID) {}
+        string_view id() const override { return id_; }
+        bool parse(const ProgramState &,
+                   const ProgramState &loopEntry,
+                   LoopInfo &loopInfo) const override {
+            auto symbolicState = loopEntry.clone();
 
-        symbolicState->resymbolize(std::move(loopEntryPoint));
-        loopInfo.loopEntryInfo_.emplace(std::move(symbolicState));
-        return true;
-    }
+            auto loopEntryPoint = symbolic::SourcePoint::fromStmtBefore(
+                loopInfo.loopStmt_, symbolicState->getContext().getSourceManager(),
+                symbolicState->getContext().getLangOptions());
 
-  private:
-    string id_;
-};
-REGISTER_ACSL_PLUGIN(SetLoopEntryPlugin, "setLoopEntry");
-
-// Preprocess simple patterns of regions.
-class SetPatternsPlugin : public LoopInfoPlugin {
-  public:
-    SetPatternsPlugin(const string &ID) : id_(ID) {}
-    string_view id() const override { return id_; }
-    bool parse(const ProgramState &,
-               const ProgramState &loopEntry,
-               LoopInfo &loopInfo) const override {
-        if (loopInfo.loopEntryInfo_ == nullopt)
-            ERROR("Dependencies are not met.");
-
-        auto &loopEntryInfo = loopInfo.loopEntryInfo_.value();
-
-        if (loopEntryInfo.symbolicLoopEntry_->getPaths().size() != 1) {
-            ERROR("SymbolicLoopEntry_ has something wrong, check the SetLoopEntryPlugin?");
+            symbolicState->resymbolize(std::move(loopEntryPoint));
+            loopInfo.loopEntryInfo_.emplace(std::move(symbolicState));
+            return true;
         }
 
-        auto loopCurrent = loopEntryInfo.symbolicLoopEntry_->clone();
+      private:
+        string id_;
+    };
+    REGISTER_ACSL_PLUGIN(SetLoopEntryPlugin, "setLoopEntry");
 
-        using Pattern = LoopInfo::Pattern;
+    // Preprocess simple patterns of regions.
+    class SetPatternsPlugin : public LoopInfoPlugin {
+      public:
+        SetPatternsPlugin(const string &ID) : id_(ID) {}
+        string_view id() const override { return id_; }
+        bool parse(const ProgramState &,
+                   const ProgramState &loopEntry,
+                   LoopInfo &loopInfo) const override {
+            if (loopInfo.loopEntryInfo_ == nullopt)
+                ERROR("Dependencies are not met.");
 
-        loopCurrent->step(loopInfo.condExpr_);
-        loopCurrent->step(loopInfo.bodyStmt_);
-        loopCurrent->step(loopInfo.incStmt_);
+            auto &loopEntryInfo = loopInfo.loopEntryInfo_.value();
 
-        auto getPatternsFromPath = [&](const Path &currentEntry) {
-            AddressBoxMap<optional<const Pattern>> patterns;
-            auto &preVA = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->getVarAddr();
-            auto &preMS = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->getMemoryState();
-            for (auto &&[addr, currentExpr] : currentEntry.getMemoryState().flat()) {
-                if (auto rootDecl = addr.get().getFromRoot();
-                    rootDecl == nullopt || !preVA.contains(rootDecl.value()))
-                    continue; // local variable
-                if (auto preValue = preMS.read(addr)) {
-                    if (*preValue.value() == *currentExpr)
-                        continue; // unchanged
-                } else {
-                    if (currentEntry.isUnchanged(addr))
-                        continue; // unchanged
-                }
-                optional<not_null<unique_ptr<SymbolicExpr>>> entryExpr;
-                if (auto preValue = preMS.read(addr)) {
-                    entryExpr = preValue.value()->clone();
-                } else {
-                    auto [hashAddrMap, _] = SymbolicExpr::collectUsedVarsAndAddrs(*currentExpr);
-                    if (hashAddrMap.size() != 1) {
-                        patterns.emplace(addr, nullopt);
-                        continue;
+            if (loopEntryInfo.symbolicLoopEntry_->getPaths().size() != 1) {
+                ERROR("SymbolicLoopEntry_ has something wrong, check the SetLoopEntryPlugin?");
+            }
+
+            auto loopCurrent = loopEntryInfo.symbolicLoopEntry_->clone();
+
+            using Pattern = LoopInfo::Pattern;
+
+            loopCurrent->step(loopInfo.condExpr_);
+            loopCurrent->step(loopInfo.bodyStmt_);
+            loopCurrent->step(loopInfo.incStmt_);
+
+            auto getPatternsFromPath = [&](const Path &currentEntry) {
+                symbolic::AddressBoxMap<optional<const Pattern>> patterns;
+                auto &preVA = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->getVarAddr();
+                auto &preMS = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->getMemoryState();
+                for (auto &&[addr, currentExpr] : currentEntry.getMemoryState().flat()) {
+                    if (auto rootDecl = addr.get().getFromRoot();
+                        rootDecl == nullopt || !preVA.contains(rootDecl.value()))
+                        continue; // local variable
+                    if (auto preValue = preMS.read(addr)) {
+                        if (*preValue.value() == *currentExpr)
+                            continue; // unchanged
+                    } else {
+                        if (currentEntry.isUnchanged(addr))
+                            continue; // unchanged
                     }
-                    if (visit(
-                            [&](auto &&arg) -> bool {
-                                return isFrom(*arg, addr,
-                                              loopEntryInfo.symbolicLoopEntry_->getStartPoint());
-                            },
-                            hashAddrMap.begin()->second)) {
-                        entryExpr = visit([](auto &&arg) { return arg->clone(); },
-                                          hashAddrMap.begin()->second);
+                    optional<not_null<unique_ptr<symbolic::SymbolicExpr>>> entryExpr;
+                    if (auto preValue = preMS.read(addr)) {
+                        entryExpr = preValue.value()->clone();
+                    } else {
+                        auto [hashAddrMap, _] =
+                            symbolic::SymbolicExpr::collectUsedVarsAndAddrs(*currentExpr);
+                        if (hashAddrMap.size() != 1) {
+                            patterns.emplace(addr, nullopt);
+                            continue;
+                        }
+                        if (visit(
+                                [&](auto &&arg) -> bool {
+                                    return isFrom(
+                                        *arg, addr,
+                                        loopEntryInfo.symbolicLoopEntry_->getStartPoint());
+                                },
+                                hashAddrMap.begin()->second)) {
+                            entryExpr = visit([](auto &&arg) { return arg->clone(); },
+                                              hashAddrMap.begin()->second);
+                        } else {
+                            patterns.emplace(addr, nullopt);
+                            continue;
+                        }
+                    }
+
+                    if (entryExpr == nullopt)
+                        UNREACHABLE();
+                    auto [hashAddrMap, hashIdMap] = symbolic::SymbolicExpr::collectUsedVarsAndAddrs(
+                        *currentExpr, *entryExpr.value());
+                    if (auto diff = currentExpr->toLinearExpr(hashIdMap) -
+                                    entryExpr.value()->toLinearExpr(hashIdMap);
+                        diff.all_homogeneous_terms_are_zero()) {
+                        auto step = diff.inhomogeneous_term().get_si();
+                        patterns.emplace(
+                            addr, Pattern{entryExpr.value()->clone().into_underlying(), step});
                     } else {
                         patterns.emplace(addr, nullopt);
-                        continue;
                     }
                 }
+                return patterns;
+            }; // getPatternsFromPath end
 
-                if (entryExpr == nullopt)
-                    UNREACHABLE();
-                auto [hashAddrMap, hashIdMap] =
-                    SymbolicExpr::collectUsedVarsAndAddrs(*currentExpr, *entryExpr.value());
-                if (auto diff = currentExpr->toLinearExpr(hashIdMap) -
-                                entryExpr.value()->toLinearExpr(hashIdMap);
-                    diff.all_homogeneous_terms_are_zero()) {
-                    auto step = diff.inhomogeneous_term().get_si();
-                    patterns.emplace(addr,
-                                     Pattern{entryExpr.value()->clone().into_underlying(), step});
-                } else {
-                    patterns.emplace(addr, nullopt);
-                }
-            }
-            return patterns;
-        }; // getPatternsFromPath end
+            symbolic::AddressBoxMap<optional<const Pattern>> patterns;
 
-        AddressBoxMap<optional<const Pattern>> patterns;
-
-        for (auto &path : loopCurrent->getPaths()) {
-            switch (path->getPathState()) {
-                using enum Path::PathState;
-                case Break:
-                case Continue:
-                case Return: TODO();
-                case Step: {
-                    auto currentPatterns = getPatternsFromPath(*path);
-                    if (patterns.empty())
-                        patterns = std::move(currentPatterns);
-                    else {
-                        auto isEqual = [](const optional<const Pattern> &LHS,
-                                          const optional<const Pattern> &RHS) {
-                            if (LHS == nullopt && RHS == nullopt)
-                                return true;
-                            if (LHS && RHS) {
-                                if (*(*LHS).initialValue_ != *(*RHS).initialValue_)
-                                    UNREACHABLE();
-                                if ((*LHS).step_ == (*RHS).step_)
+            for (auto &path : loopCurrent->getPaths()) {
+                switch (path->getPathState()) {
+                    using enum Path::PathState;
+                    case Break:
+                    case Continue:
+                    case Return: TODO();
+                    case Step: {
+                        auto currentPatterns = getPatternsFromPath(*path);
+                        if (patterns.empty())
+                            patterns = std::move(currentPatterns);
+                        else {
+                            auto isEqual = [](const optional<const Pattern> &LHS,
+                                              const optional<const Pattern> &RHS) {
+                                if (LHS == nullopt && RHS == nullopt)
                                     return true;
+                                if (LHS && RHS) {
+                                    if (*(*LHS).initialValue_ != *(*RHS).initialValue_)
+                                        UNREACHABLE();
+                                    if ((*LHS).step_ == (*RHS).step_)
+                                        return true;
+                                }
+                                return false;
+                            }; // isEqual end
+
+                            // Is this addr has same pattern on every step-path?
+                            for (auto &[addr, pattern] : patterns) {
+                                if (auto it = currentPatterns.find(addr);
+                                    it == currentPatterns.end() || !isEqual(it->second, pattern))
+                                    patterns[addr] = nullopt;
                             }
-                            return false;
-                        }; // isEqual end
-
-                        // Is this addr has same pattern on every step-path?
-                        for (auto &[addr, pattern] : patterns) {
-                            if (auto it = currentPatterns.find(addr);
-                                it == currentPatterns.end() || !isEqual(it->second, pattern))
-                                patterns[addr] = nullopt;
+                            for (auto &[addr, pattern] : currentPatterns) {
+                                if (auto it = patterns.find(addr);
+                                    it == patterns.end() || !isEqual(it->second, pattern))
+                                    patterns[addr] = nullopt;
+                            }
                         }
-                        for (auto &[addr, pattern] : currentPatterns) {
-                            if (auto it = patterns.find(addr);
-                                it == patterns.end() || !isEqual(it->second, pattern))
-                                patterns[addr] = nullopt;
-                        }
-                    }
-                    break;
-                }
-                default: UNREACHABLE();
-            }
-        }
-
-        loopInfo.patternInfo_.emplace(std::move(patterns));
-        // TODO: may do another round to improve rubustness.
-        return true;
-    }
-
-  private:
-    string id_;
-};
-REGISTER_ACSL_PLUGIN(SetPatternsPlugin, "setPatterns");
-
-class SetIndexPlugin : public LoopInfoPlugin {
-  public:
-    SetIndexPlugin(const string &ID) : id_(ID) {}
-    string_view id() const override { return id_; }
-    bool parse(const ProgramState &preState,
-               const ProgramState &loopEntry,
-               LoopInfo &loopInfo) const override {
-        if (loopInfo.loopEntryInfo_ == nullopt || loopInfo.patternInfo_ == nullopt)
-            ERROR("Dependencies are not met.");
-
-        auto &loopEntryInfo = loopInfo.loopEntryInfo_.value();
-        auto &patternInfo   = loopInfo.patternInfo_.value();
-
-        if (loopEntryInfo.symbolicLoopEntry_->getPaths().size() != 1) {
-            ERROR("SymbolicLoopEntry_ has something wrong, check the SetLoopEntryPlugin?");
-        }
-        auto &entryPath = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0);
-
-        auto sameAddressBetweenEveryPaths =
-            [&](const Expr *expr) -> optional<not_null<unique_ptr<Address>>> {
-            auto lValue = optional<not_null<unique_ptr<Address>>>{};
-            for (auto &path : loopEntry.getPaths()) {
-                if (lValue == nullopt) {
-                    lValue.emplace(path->extractLValue(expr));
-                    continue;
-                }
-
-                auto nowLValue = path->extractLValue(expr);
-                if (*lValue.value() != *nowLValue) {
-                    // lValue and nowLValue are both unique_ptr<Address> and not
-                    // equal.
-                    return nullopt;
-                }
-            }
-            if (lValue == nullopt)
-                UNREACHABLE();
-            return std::move(lValue);
-        }; // sameAddressBetweenEveryPaths end
-
-        auto hasPattern = [&](const Address &addr) -> optional<const LoopInfo::Pattern> {
-            if (auto it = patternInfo.patternsMap_.find(addr); it != patternInfo.patternsMap_.end())
-                return it->second;
-            return nullopt;
-        }; // hasPattern end
-
-        auto unchangedAfterOneRound = [&](const Expr *expr) -> bool {
-            auto state = loopEntryInfo.symbolicLoopEntry_->clone();
-            state->step(loopInfo.condExpr_);
-            state->step(loopInfo.bodyStmt_);
-            state->step(loopInfo.incStmt_);
-            auto [_, valueVector] = entryPath->evalExpr(expr);
-            if (valueVector.size() != 1)
-                ERROR("Do not support branch at here");
-            auto preValue = std::move(valueVector[0]);
-
-            for (auto &path : state->getPaths()) {
-                std::tie(ignore, valueVector) = path->evalExpr(expr);
-                if (valueVector.size() != 1)
-                    ERROR("Do not support branch at here");
-                auto currentValue = std::move(valueVector[0]);
-                if (*preValue != *currentValue)
-                    return false;
-            }
-            return true;
-        }; // unchangedAfterOneRound end
-
-        // Split a boolean condition expression by built-in logical AND (&&).
-        auto splitByAnd = [](const Expr *cond) -> std::vector<const Expr *> {
-            std::vector<const Expr *> clauses;
-
-            // recursive lambda via std::function
-            std::function<void(const Expr *)> split = [&](const Expr *e) {
-                if (!e)
-                    return;
-                // Normalize: drop parens and implicit casts
-                const Expr *core = e->IgnoreParenImpCasts();
-
-                // Built-in && is represented by BinaryOperator with opcode BO_LAnd
-                if (const auto *BO = llvm::dyn_cast<BinaryOperator>(core)) {
-                    if (BO->getOpcode() == BO_LAnd) {
-                        split(BO->getLHS());
-                        split(BO->getRHS());
-                        return;
-                    }
-                }
-
-                // Any other form (including overloaded operator&&) is a single clause
-                clauses.push_back(core);
-            };
-
-            split(cond);
-            return clauses;
-        }; // splitByAnd end
-
-        // Check whether an expression is a "simple index condition".
-        auto isSimpleIndexCond = [](const Expr *e) -> bool {
-            if (!e)
-                return false;
-
-            const Expr *core = e->IgnoreParenImpCasts();
-
-            auto asDeclRefVar = [](const Expr *x) -> const VarDecl * {
-                if (const auto *dre = llvm::dyn_cast<DeclRefExpr>(x->IgnoreParenImpCasts()))
-                    if (llvm::isa<VarDecl>(dre->getDecl()))
-                        return llvm::cast<VarDecl>(dre->getDecl());
-                return nullptr;
-            };
-
-            // 1) Bare variable: i
-            if (asDeclRefVar(core))
-                return true;
-
-            // 2) Deref: *i
-            if (const auto *uo = llvm::dyn_cast<UnaryOperator>(core)) {
-                if (uo->getOpcode() == UO_Deref) {
-                    if (asDeclRefVar(uo->getSubExpr()))
-                        return true;
-                }
-            }
-
-            // 3) Relational comparison: i < n, n > i, etc.
-            if (const auto *bo = llvm::dyn_cast<BinaryOperator>(core)) {
-                auto op = bo->getOpcode();
-                switch (op) {
-                    case BO_LT:
-                    case BO_LE:
-                    case BO_GT:
-                    case BO_GE:
-                    case BO_EQ:
-                    case BO_NE: {
-                        const Expr *l = bo->getLHS()->IgnoreParenImpCasts();
-                        const Expr *r = bo->getRHS()->IgnoreParenImpCasts();
-                        if (asDeclRefVar(l) || asDeclRefVar(r))
-                            return true;
                         break;
                     }
-                    default: break;
+                    default: UNREACHABLE();
                 }
             }
 
-            return false;
-        }; // isSimpleIndexCond end
+            loopInfo.patternInfo_.emplace(std::move(patterns));
+            // TODO: may do another round to improve rubustness.
+            return true;
+        }
 
-        auto condCNF = splitByAnd(loopInfo.condExpr_);
-        const clang::Expr *indexCond{};
-        for (auto &clause : condCNF) {
-            if (isSimpleIndexCond(clause)) {
-                indexCond = clause;
-                break;
+      private:
+        string id_;
+    };
+    REGISTER_ACSL_PLUGIN(SetPatternsPlugin, "setPatterns");
+
+    class SetIndexPlugin : public LoopInfoPlugin {
+      public:
+        SetIndexPlugin(const string &ID) : id_(ID) {}
+        string_view id() const override { return id_; }
+        bool parse(const ProgramState &preState,
+                   const ProgramState &loopEntry,
+                   LoopInfo &loopInfo) const override {
+            if (loopInfo.loopEntryInfo_ == nullopt || loopInfo.patternInfo_ == nullopt)
+                ERROR("Dependencies are not met.");
+
+            auto &loopEntryInfo = loopInfo.loopEntryInfo_.value();
+            auto &patternInfo   = loopInfo.patternInfo_.value();
+
+            if (loopEntryInfo.symbolicLoopEntry_->getPaths().size() != 1) {
+                ERROR("SymbolicLoopEntry_ has something wrong, check the SetLoopEntryPlugin?");
             }
-        }
-        if (indexCond == nullptr)
-            return false; // Too complex
+            auto &entryPath = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0);
 
-        vector<const clang::Expr *> extraConds{};
-        extraConds.reserve(condCNF.size() - 1);
-        for (auto &clause : condCNF) {
-            if (clause == indexCond)
-                continue;
-            extraConds.push_back(clause);
-        }
+            auto sameAddressBetweenEveryPaths =
+                [&](const Expr *expr) -> optional<not_null<unique_ptr<symbolic::Address>>> {
+                auto lValue = optional<not_null<unique_ptr<symbolic::Address>>>{};
+                for (auto &path : loopEntry.getPaths()) {
+                    if (lValue == nullopt) {
+                        lValue.emplace(path->extractLValue(expr));
+                        continue;
+                    }
 
-        optional<not_null<const clang::Expr *>> indexExpr;
-        optional<not_null<unique_ptr<Address>>> indexRealAddr;
-        optional<not_null<unique_ptr<Symbolic::SymbolicExpr>>> indexValue;
-        optional<BinaryOperator::Opcode> opCode;
-        optional<not_null<unique_ptr<SymbolicExpr>>> boundValue;
-        optional<not_null<unique_ptr<SymbolicExpr>>> preciseLoopCount;
-        optional<not_null<unique_ptr<SymbolicExpr>>> maxLoopCount;
-        optional<LoopInfo::Pattern> indexPattern;
-        optional<bool> isLocal;
+                    auto nowLValue = path->extractLValue(expr);
+                    if (*lValue.value() != *nowLValue) {
+                        // lValue and nowLValue are both unique_ptr<Address> and not
+                        // equal.
+                        return nullopt;
+                    }
+                }
+                if (lValue == nullopt)
+                    UNREACHABLE();
+                return std::move(lValue);
+            }; // sameAddressBetweenEveryPaths end
 
-        if (auto binExpr = dyn_cast<BinaryOperator>(indexCond->IgnoreParenImpCasts())) {
-            // Yes, assume it's on the left.
-            auto index = binExpr->getLHS()->IgnoreParenImpCasts();
-            auto bound = binExpr->getRHS()->IgnoreParenImpCasts();
+            auto hasPattern =
+                [&](const symbolic::Address &addr) -> optional<const LoopInfo::Pattern> {
+                if (auto it = patternInfo.patternsMap_.find(addr);
+                    it != patternInfo.patternsMap_.end())
+                    return it->second;
+                return nullopt;
+            }; // hasPattern end
 
-            indexExpr = index;
+            auto unchangedAfterOneRound = [&](const Expr *expr) -> bool {
+                auto state = loopEntryInfo.symbolicLoopEntry_->clone();
+                state->step(loopInfo.condExpr_);
+                state->step(loopInfo.bodyStmt_);
+                state->step(loopInfo.incStmt_);
+                auto [_, valueVector] = entryPath->evalExpr(expr);
+                if (valueVector.size() != 1)
+                    ERROR("Do not support branch at here");
+                auto preValue = std::move(valueVector[0]);
 
-            using enum BinaryOperator::Opcode;
+                for (auto &path : state->getPaths()) {
+                    tie(ignore, valueVector) = path->evalExpr(expr);
+                    if (valueVector.size() != 1)
+                        ERROR("Do not support branch at here");
+                    auto currentValue = std::move(valueVector[0]);
+                    if (*preValue != *currentValue)
+                        return false;
+                }
+                return true;
+            }; // unchangedAfterOneRound end
 
-            if (auto addr = sameAddressBetweenEveryPaths(index)) {
-                if (auto pattern = hasPattern(**addr); pattern == nullopt) {
-                    INFO("Index has no parseable pattern.");
-                    return false;
-                } else {
-                    indexPattern = std::move(pattern.value());
+            // Split a boolean condition expression by built-in logical AND (&&).
+            auto splitByAnd = [](const Expr *cond) -> vector<const Expr *> {
+                vector<const Expr *> clauses;
 
-                    for (auto &prePath : preState.getPaths()) {
-                        if (prePath->isActive()) {
-                            if (prePath->getMemoryState().contains(*addr.value()))
-                                isLocal = false;
-                            else
-                                isLocal = true;
-                            break;
+                // recursive lambda via function
+                function<void(const Expr *)> split = [&](const Expr *e) {
+                    if (!e)
+                        return;
+                    // Normalize: drop parens and implicit casts
+                    const Expr *core = e->IgnoreParenImpCasts();
+
+                    // Built-in && is represented by BinaryOperator with opcode BO_LAnd
+                    if (const auto *BO = llvm::dyn_cast<BinaryOperator>(core)) {
+                        if (BO->getOpcode() == BO_LAnd) {
+                            split(BO->getLHS());
+                            split(BO->getRHS());
+                            return;
                         }
                     }
 
-                    if (isLocal == nullopt)
-                        UNREACHABLE();
+                    // Any other form (including overloaded operator&&) is a single clause
+                    clauses.push_back(core);
+                };
+
+                split(cond);
+                return clauses;
+            }; // splitByAnd end
+
+            // Check whether an expression is a "simple index condition".
+            auto isSimpleIndexCond = [](const Expr *e) -> bool {
+                if (!e)
+                    return false;
+
+                const Expr *core = e->IgnoreParenImpCasts();
+
+                auto asDeclRefVar = [](const Expr *x) -> const VarDecl * {
+                    if (const auto *dre = llvm::dyn_cast<DeclRefExpr>(x->IgnoreParenImpCasts()))
+                        if (llvm::isa<VarDecl>(dre->getDecl()))
+                            return llvm::cast<VarDecl>(dre->getDecl());
+                    return nullptr;
+                };
+
+                // 1) Bare variable: i
+                if (asDeclRefVar(core))
+                    return true;
+
+                // 2) Deref: *i
+                if (const auto *uo = llvm::dyn_cast<UnaryOperator>(core)) {
+                    if (uo->getOpcode() == UO_Deref) {
+                        if (asDeclRefVar(uo->getSubExpr()))
+                            return true;
+                    }
                 }
-                indexRealAddr = std::move(*addr);
-            } else {
-                INFO("Same expr in different path points to different location!");
+
+                // 3) Relational comparison: i < n, n > i, etc.
+                if (const auto *bo = llvm::dyn_cast<BinaryOperator>(core)) {
+                    auto op = bo->getOpcode();
+                    switch (op) {
+                        case BO_LT:
+                        case BO_LE:
+                        case BO_GT:
+                        case BO_GE:
+                        case BO_EQ:
+                        case BO_NE: {
+                            const Expr *l = bo->getLHS()->IgnoreParenImpCasts();
+                            const Expr *r = bo->getRHS()->IgnoreParenImpCasts();
+                            if (asDeclRefVar(l) || asDeclRefVar(r))
+                                return true;
+                            break;
+                        }
+                        default: break;
+                    }
+                }
+
                 return false;
+            }; // isSimpleIndexCond end
+
+            auto condCNF = splitByAnd(loopInfo.condExpr_);
+            const Expr *indexCond{};
+            for (auto &clause : condCNF) {
+                if (isSimpleIndexCond(clause)) {
+                    indexCond = clause;
+                    break;
+                }
+            }
+            if (indexCond == nullptr)
+                return false; // Too complex
+
+            vector<const Expr *> extraConds{};
+            extraConds.reserve(condCNF.size() - 1);
+            for (auto &clause : condCNF) {
+                if (clause == indexCond)
+                    continue;
+                extraConds.push_back(clause);
             }
 
-            auto [_, values] = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->evalExpr(index);
-            if (values.size() != 1)
-                UNREACHABLE();
-            indexValue = std::move(values.at(0));
+            optional<not_null<const Expr *>> indexExpr;
+            optional<not_null<unique_ptr<symbolic::Address>>> indexRealAddr;
+            optional<not_null<unique_ptr<symbolic::SymbolicExpr>>> indexValue;
+            optional<BinaryOperator::Opcode> opCode;
+            optional<not_null<unique_ptr<symbolic::SymbolicExpr>>> boundValue;
+            optional<not_null<unique_ptr<symbolic::SymbolicExpr>>> preciseLoopCount;
+            optional<not_null<unique_ptr<symbolic::SymbolicExpr>>> maxLoopCount;
+            optional<LoopInfo::Pattern> indexPattern;
+            optional<bool> isLocal;
 
-            if (unchangedAfterOneRound(bound)) {
-                auto evalResult = entryPath->evalExpr(bound);
-                if (evalResult.second.size() != 1)
-                    ERROR("This location does not support control flow branches.");
-                boundValue = std::move(evalResult.second.front());
-            } else {
-                INFO("Bound expr is changed after one round.");
-                return false;
-            }
+            if (auto binExpr = dyn_cast<BinaryOperator>(indexCond->IgnoreParenImpCasts())) {
+                // Yes, assume it's on the left.
+                auto index = binExpr->getLHS()->IgnoreParenImpCasts();
+                auto bound = binExpr->getRHS()->IgnoreParenImpCasts();
 
-            // TODO: more operators
-            switch (binExpr->getOpcode()) {
-                case BO_LT:
-                case BO_GT:
-                case BO_LE:
-                case BO_GE:
-                case BO_NE: opCode = binExpr->getOpcode(); break;
-                default:
-                    // too complex
-                    INFO("Loop's condition expr is too complex! Unimplemented binary "
+                indexExpr = index;
+
+                using enum BinaryOperator::Opcode;
+
+                if (auto addr = sameAddressBetweenEveryPaths(index)) {
+                    if (auto pattern = hasPattern(**addr); pattern == nullopt) {
+                        INFO("Index has no parseable pattern.");
+                        return false;
+                    } else {
+                        indexPattern = std::move(pattern.value());
+
+                        for (auto &prePath : preState.getPaths()) {
+                            if (prePath->isActive()) {
+                                if (prePath->getMemoryState().contains(*addr.value()))
+                                    isLocal = false;
+                                else
+                                    isLocal = true;
+                                break;
+                            }
+                        }
+
+                        if (isLocal == nullopt)
+                            UNREACHABLE();
+                    }
+                    indexRealAddr = std::move(*addr);
+                } else {
+                    INFO("Same expr in different path points to different location!");
+                    return false;
+                }
+
+                auto [_, values] =
+                    loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->evalExpr(index);
+                if (values.size() != 1)
+                    UNREACHABLE();
+                indexValue = std::move(values.at(0));
+
+                if (unchangedAfterOneRound(bound)) {
+                    auto evalResult = entryPath->evalExpr(bound);
+                    if (evalResult.second.size() != 1)
+                        ERROR("This location does not support control flow branches.");
+                    boundValue = std::move(evalResult.second.front());
+                } else {
+                    INFO("Bound expr is changed after one round.");
+                    return false;
+                }
+
+                // TODO: more operators
+                switch (binExpr->getOpcode()) {
+                    case BO_LT:
+                    case BO_GT:
+                    case BO_LE:
+                    case BO_GE:
+                    case BO_NE: opCode = binExpr->getOpcode(); break;
+                    default:
+                        // too complex
+                        INFO("Loop's condition expr is too complex! Unimplemented binary "
+                             "operator.");
+                        return false;
+                }
+
+                using enum symbolic::BinaryOpExpr::Operator;
+                if (indexPattern == nullopt || boundValue == nullopt || opCode == nullopt)
+                    UNREACHABLE();
+
+                // abs(n - i + step - 1)
+                maxLoopCount = indexPattern.value().step_ > 0
+                                   ? make_unique<symbolic::BinaryOpExpr>(
+                                         make_unique<symbolic::BinaryOpExpr>(
+                                             boundValue.value()->clone(), Add,
+                                             make_unique<symbolic::LiteralExpr>(
+                                                 indexPattern.value().step_ - 1)),
+                                         Subtract, indexPattern.value().initialValue_->clone())
+                                   : make_unique<symbolic::BinaryOpExpr>(
+                                         indexPattern.value().initialValue_->clone(), Subtract,
+                                         make_unique<symbolic::BinaryOpExpr>(
+                                             boundValue.value()->clone(), Add,
+                                             make_unique<symbolic::LiteralExpr>(
+                                                 indexPattern.value().step_ + 1)));
+                if (opCode.value() == BO_LE || opCode.value() == BO_GE)
+                    maxLoopCount =
+                        make_unique<symbolic::BinaryOpExpr>(std::move(maxLoopCount.value()), Add,
+                                                            make_unique<symbolic::LiteralExpr>(1));
+
+                if (abs(indexPattern.value().step_) == 1 && extraConds.empty()) {
+                    preciseLoopCount = maxLoopCount.value()->clone();
+                } else {
+                    preciseLoopCount = symbolic::UnknownExpr::makeUnknown().into_underlying();
+                }
+            } else if (auto unaryExpr = dyn_cast<UnaryOperator>(indexCond->IgnoreParenImpCasts())) {
+                // TODO: more operators
+                if (unaryExpr->getOpcode() != UnaryOperatorKind::UO_Deref) {
+                    INFO("Loop's condition expr is too complex! Unimplemented unary "
                          "operator.");
                     return false;
-            }
-
-            using enum BinaryOpExpr::Operator;
-            if (indexPattern == nullopt || boundValue == nullopt || opCode == nullopt)
-                UNREACHABLE();
-
-            // abs(n - i + step - 1)
-            maxLoopCount = indexPattern.value().step_ > 0
-                               ? make_unique<BinaryOpExpr>(
-                                     make_unique<BinaryOpExpr>(
-                                         boundValue.value()->clone(), Add,
-                                         make_unique<LiteralExpr>(indexPattern.value().step_ - 1)),
-                                     Subtract, indexPattern.value().initialValue_->clone())
-                               : make_unique<BinaryOpExpr>(
-                                     indexPattern.value().initialValue_->clone(), Subtract,
-                                     make_unique<BinaryOpExpr>(
-                                         boundValue.value()->clone(), Add,
-                                         make_unique<LiteralExpr>(indexPattern.value().step_ + 1)));
-            if (opCode.value() == BO_LE || opCode.value() == BO_GE)
-                maxLoopCount = make_unique<BinaryOpExpr>(std::move(maxLoopCount.value()), Add,
-                                                         make_unique<LiteralExpr>(1));
-
-            if (abs(indexPattern.value().step_) == 1 && extraConds.empty()) {
-                preciseLoopCount = maxLoopCount.value()->clone();
-            } else {
-                preciseLoopCount = UnknownExpr::makeUnknown().into_underlying();
-            }
-        } else if (auto unaryExpr = dyn_cast<UnaryOperator>(indexCond->IgnoreParenImpCasts())) {
-            // TODO: more operators
-            if (unaryExpr->getOpcode() != UnaryOperatorKind::UO_Deref) {
-                INFO("Loop's condition expr is too complex! Unimplemented unary "
-                     "operator.");
-                return false;
-            }
-
-            indexExpr = unaryExpr;
-            if (auto addr = sameAddressBetweenEveryPaths(unaryExpr)) {
-                if (auto pattern = hasPattern(**addr); pattern == nullopt) {
-                    INFO("Index has no parseable pattern.");
-                    return false;
-                } else {
-                    indexPattern = std::move(pattern.value());
-
-                    for (auto &prePath : preState.getPaths()) {
-                        if (prePath->isActive()) {
-                            if (prePath->getMemoryState().contains(*addr.value()))
-                                isLocal = false;
-                            else
-                                isLocal = true;
-                            break;
-                        }
-                    }
-
-                    if (isLocal == nullopt)
-                        UNREACHABLE();
                 }
-                indexRealAddr = std::move(*addr);
-            } else {
-                INFO("Same expr in different path points to different location!");
-                return false;
-            }
 
-            auto [_, values] =
-                loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->evalExpr(unaryExpr);
-            if (values.size() != 1)
-                UNREACHABLE();
-            indexValue = std::move(values.at(0));
+                indexExpr = unaryExpr;
+                if (auto addr = sameAddressBetweenEveryPaths(unaryExpr)) {
+                    if (auto pattern = hasPattern(**addr); pattern == nullopt) {
+                        INFO("Index has no parseable pattern.");
+                        return false;
+                    } else {
+                        indexPattern = std::move(pattern.value());
 
-            opCode     = BO_NE;
-            boundValue = make_unique<LiteralExpr>((int64_t)0);
-
-            using enum BinaryOpExpr::Operator;
-            if (indexPattern == nullopt || boundValue == nullopt)
-                UNREACHABLE();
-
-            // abs(n - i + step - 1)
-            maxLoopCount = indexPattern.value().step_ > 0
-                               ? make_unique<BinaryOpExpr>(
-                                     make_unique<BinaryOpExpr>(
-                                         boundValue.value()->clone(), Add,
-                                         make_unique<LiteralExpr>(indexPattern.value().step_ - 1)),
-                                     Subtract, indexPattern.value().initialValue_->clone())
-                               : make_unique<BinaryOpExpr>(
-                                     indexPattern.value().initialValue_->clone(), Subtract,
-                                     make_unique<BinaryOpExpr>(
-                                         boundValue.value()->clone(), Add,
-                                         make_unique<LiteralExpr>(indexPattern.value().step_ + 1)));
-            if (abs(indexPattern.value().step_) == 1 && extraConds.empty()) {
-                preciseLoopCount = maxLoopCount.value()->clone();
-            } else {
-                preciseLoopCount = UnknownExpr::makeUnknown().into_underlying();
-            }
-        } else if (auto refExpr = dyn_cast<DeclRefExpr>(indexCond->IgnoreParenImpCasts())) {
-            if (loopEntry.getPaths().empty()) {
-                ERROR("Pre-state has no path, something goes wrong.");
-            }
-
-            auto varDecl = dyn_cast<VarDecl>(refExpr->getDecl())
-                               ? dyn_cast<VarDecl>(refExpr->getDecl())->getCanonicalDecl()
-                               : nullptr;
-
-            if (varDecl == nullptr) {
-                INFO("Parsing loop's index vaibale has failed. Does loop's "
-                     "condition expr have a "
-                     "variable?");
-                return false;
-            }
-
-            indexExpr = refExpr;
-
-            if (auto it = loopEntry.getPaths()[0]->getVarAddr().find(varDecl);
-                it != loopEntry.getPaths()[0]->getVarAddr().end()) {
-                if (auto pattern = hasPattern(*it->second); pattern == nullopt) {
-                    INFO("Index has no parseable pattern.");
-                    return false;
-                } else {
-                    indexPattern = std::move(pattern.value());
-
-                    for (auto &prePath : preState.getPaths()) {
-                        if (prePath->isActive()) {
-                            if (prePath->getMemoryState().contains(*it->second))
-                                isLocal = false;
-                            else
-                                isLocal = true;
-                            break;
+                        for (auto &prePath : preState.getPaths()) {
+                            if (prePath->isActive()) {
+                                if (prePath->getMemoryState().contains(*addr.value()))
+                                    isLocal = false;
+                                else
+                                    isLocal = true;
+                                break;
+                            }
                         }
+
+                        if (isLocal == nullopt)
+                            UNREACHABLE();
                     }
-
-                    if (isLocal == nullopt)
-                        UNREACHABLE();
+                    indexRealAddr = std::move(*addr);
+                } else {
+                    INFO("Same expr in different path points to different location!");
+                    return false;
                 }
-                indexRealAddr = it->second->addressClone();
+
+                auto [_, values] =
+                    loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->evalExpr(unaryExpr);
+                if (values.size() != 1)
+                    UNREACHABLE();
+                indexValue = std::move(values.at(0));
+
+                opCode     = BO_NE;
+                boundValue = make_unique<symbolic::LiteralExpr>((int64_t)0);
+
+                using enum symbolic::BinaryOpExpr::Operator;
+                if (indexPattern == nullopt || boundValue == nullopt)
+                    UNREACHABLE();
+
+                // abs(n - i + step - 1)
+                maxLoopCount = indexPattern.value().step_ > 0
+                                   ? make_unique<symbolic::BinaryOpExpr>(
+                                         make_unique<symbolic::BinaryOpExpr>(
+                                             boundValue.value()->clone(), Add,
+                                             make_unique<symbolic::LiteralExpr>(
+                                                 indexPattern.value().step_ - 1)),
+                                         Subtract, indexPattern.value().initialValue_->clone())
+                                   : make_unique<symbolic::BinaryOpExpr>(
+                                         indexPattern.value().initialValue_->clone(), Subtract,
+                                         make_unique<symbolic::BinaryOpExpr>(
+                                             boundValue.value()->clone(), Add,
+                                             make_unique<symbolic::LiteralExpr>(
+                                                 indexPattern.value().step_ + 1)));
+                if (abs(indexPattern.value().step_) == 1 && extraConds.empty()) {
+                    preciseLoopCount = maxLoopCount.value()->clone();
+                } else {
+                    preciseLoopCount = symbolic::UnknownExpr::makeUnknown().into_underlying();
+                }
+            } else if (auto refExpr = dyn_cast<DeclRefExpr>(indexCond->IgnoreParenImpCasts())) {
+                if (loopEntry.getPaths().empty()) {
+                    ERROR("Pre-state has no path, something goes wrong.");
+                }
+
+                auto varDecl = dyn_cast<VarDecl>(refExpr->getDecl())
+                                   ? dyn_cast<VarDecl>(refExpr->getDecl())->getCanonicalDecl()
+                                   : nullptr;
+
+                if (varDecl == nullptr) {
+                    INFO("Parsing loop's index vaibale has failed. Does loop's "
+                         "condition expr have a "
+                         "variable?");
+                    return false;
+                }
+
+                indexExpr = refExpr;
+
+                if (auto it = loopEntry.getPaths()[0]->getVarAddr().find(varDecl);
+                    it != loopEntry.getPaths()[0]->getVarAddr().end()) {
+                    if (auto pattern = hasPattern(*it->second); pattern == nullopt) {
+                        INFO("Index has no parseable pattern.");
+                        return false;
+                    } else {
+                        indexPattern = std::move(pattern.value());
+
+                        for (auto &prePath : preState.getPaths()) {
+                            if (prePath->isActive()) {
+                                if (prePath->getMemoryState().contains(*it->second))
+                                    isLocal = false;
+                                else
+                                    isLocal = true;
+                                break;
+                            }
+                        }
+
+                        if (isLocal == nullopt)
+                            UNREACHABLE();
+                    }
+                    indexRealAddr = it->second->addressClone();
+                } else {
+                    ERROR("A varDecl* has no Address mapped, something must goes wrong.");
+                }
+
+                auto [_, values] =
+                    loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->evalExpr(refExpr);
+                if (values.size() != 1)
+                    UNREACHABLE();
+                indexValue = std::move(values.at(0));
+
+                opCode     = BO_NE;
+                boundValue = make_unique<symbolic::LiteralExpr>((int64_t)0);
+
+                using enum symbolic::BinaryOpExpr::Operator;
+                if (indexPattern == nullopt || boundValue == nullopt)
+                    UNREACHABLE();
+
+                // abs(n - i + step - 1)
+                maxLoopCount = indexPattern.value().step_ > 0
+                                   ? make_unique<symbolic::BinaryOpExpr>(
+                                         make_unique<symbolic::BinaryOpExpr>(
+                                             boundValue.value()->clone(), Add,
+                                             make_unique<symbolic::LiteralExpr>(
+                                                 indexPattern.value().step_ - 1)),
+                                         Subtract, indexPattern.value().initialValue_->clone())
+                                   : make_unique<symbolic::BinaryOpExpr>(
+                                         indexPattern.value().initialValue_->clone(), Subtract,
+                                         make_unique<symbolic::BinaryOpExpr>(
+                                             boundValue.value()->clone(), Add,
+                                             make_unique<symbolic::LiteralExpr>(
+                                                 indexPattern.value().step_ + 1)));
+                if (abs(indexPattern.value().step_) == 1 && extraConds.empty()) {
+                    preciseLoopCount = maxLoopCount.value()->clone();
+                } else {
+                    preciseLoopCount = symbolic::UnknownExpr::makeUnknown().into_underlying();
+                }
             } else {
-                ERROR("A varDecl* has no Address mapped, something must goes wrong.");
+                INFO("Loop's condition expr is too complex.");
+                return false;
             }
 
-            auto [_, values] =
-                loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->evalExpr(refExpr);
-            if (values.size() != 1)
+            // 	Check and assign in bulk
+            if (indexExpr == nullopt || indexRealAddr == nullopt || indexValue == nullopt ||
+                opCode == nullopt || boundValue == nullopt || preciseLoopCount == nullopt ||
+                maxLoopCount == nullopt || indexPattern == nullopt || isLocal == nullopt)
                 UNREACHABLE();
-            indexValue = std::move(values.at(0));
-
-            opCode     = BO_NE;
-            boundValue = make_unique<LiteralExpr>((int64_t)0);
-
-            using enum BinaryOpExpr::Operator;
-            if (indexPattern == nullopt || boundValue == nullopt)
-                UNREACHABLE();
-
-            // abs(n - i + step - 1)
-            maxLoopCount = indexPattern.value().step_ > 0
-                               ? make_unique<BinaryOpExpr>(
-                                     make_unique<BinaryOpExpr>(
-                                         boundValue.value()->clone(), Add,
-                                         make_unique<LiteralExpr>(indexPattern.value().step_ - 1)),
-                                     Subtract, indexPattern.value().initialValue_->clone())
-                               : make_unique<BinaryOpExpr>(
-                                     indexPattern.value().initialValue_->clone(), Subtract,
-                                     make_unique<BinaryOpExpr>(
-                                         boundValue.value()->clone(), Add,
-                                         make_unique<LiteralExpr>(indexPattern.value().step_ + 1)));
-            if (abs(indexPattern.value().step_) == 1 && extraConds.empty()) {
-                preciseLoopCount = maxLoopCount.value()->clone();
-            } else {
-                preciseLoopCount = UnknownExpr::makeUnknown().into_underlying();
+            loopInfo.indexInfo_ =
+                LoopInfo::IndexInfo{.indexExpr_          = std::move(indexExpr.value()),
+                                    .indexRealAddr_      = std::move(indexRealAddr.value()),
+                                    .indexSymbolicValue_ = std::move(indexValue.value()),
+                                    .op_                 = std::move(opCode.value()),
+                                    .indexBound_         = std::move(boundValue.value()),
+                                    .preciseLoopCount_   = std::move(preciseLoopCount.value()),
+                                    .maxLoopCount_       = std::move(maxLoopCount.value()),
+                                    .indexPattern_       = std::move(indexPattern.value()),
+                                    .isLocal_            = std::move(isLocal.value())};
+            loopInfo.extraCondConjuncts_ = std::move(extraConds);
+            if (abs(loopInfo.indexInfo_.value().indexPattern_.step_) != 1) {
+                return false;
+            } else if (!loopInfo.extraCondConjuncts_.empty()) {
+                return false;
             }
-        } else {
-            INFO("Loop's condition expr is too complex.");
-            return false;
+            return true;
         }
 
-        // 	Check and assign in bulk
-        if (indexExpr == nullopt || indexRealAddr == nullopt || indexValue == nullopt ||
-            opCode == nullopt || boundValue == nullopt || preciseLoopCount == nullopt ||
-            maxLoopCount == nullopt || indexPattern == nullopt || isLocal == nullopt)
-            UNREACHABLE();
-        loopInfo.indexInfo_ =
-            LoopInfo::IndexInfo{.indexExpr_          = std::move(indexExpr.value()),
-                                .indexRealAddr_      = std::move(indexRealAddr.value()),
-                                .indexSymbolicValue_ = std::move(indexValue.value()),
-                                .op_                 = std::move(opCode.value()),
-                                .indexBound_         = std::move(boundValue.value()),
-                                .preciseLoopCount_   = std::move(preciseLoopCount.value()),
-                                .maxLoopCount_       = std::move(maxLoopCount.value()),
-                                .indexPattern_       = std::move(indexPattern.value()),
-                                .isLocal_            = std::move(isLocal.value())};
-        loopInfo.extraCondConjuncts_ = std::move(extraConds);
-        if (abs(loopInfo.indexInfo_.value().indexPattern_.step_) != 1) {
-            return false;
-        } else if (!loopInfo.extraCondConjuncts_.empty()) {
-            return false;
-        }
-        return true;
-    }
-
-  private:
-    string id_;
-};
-REGISTER_ACSL_PLUGIN(SetIndexPlugin, "setIndex");
+      private:
+        string id_;
+    };
+    REGISTER_ACSL_PLUGIN(SetIndexPlugin, "setIndex");
+} // namespace acslg::spec_generator

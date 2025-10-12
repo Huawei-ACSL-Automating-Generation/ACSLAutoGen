@@ -21,28 +21,17 @@ using ::testing::HasSubstr;
 using ::testing::StartsWith;
 using ::testing::StrEq;
 
-namespace Symbolic {
-    std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType e) {
-        using enum SymbolicExpr::ExprType;
-        switch (e) {
-            case Literal: return os << "Literal";
-            case Variable: return os << "Variable";
-            case Address: return os << "Address";
-            case BinaryOp: return os << "BinaryOp";
-            case UnaryOp: return os << "UnaryOp";
-            case Structure: return os << "Structure";
-            case Unknown: return os << "Unknown";
-        }
-        return os << static_cast<std::underlying_type_t<SymbolicExpr::ExprType>>(e);
-    }
-} // namespace Symbolic
+namespace acslg::test::unit::spec_generator {
+    using namespace acslg::spec_generator;
+    using namespace acslg::analyzer::symbolic;
+    using namespace utils;
 
-using ::testing::HasSubstr;
-using ::testing::MatchesRegex;
+    using ::testing::HasSubstr;
+    using ::testing::MatchesRegex;
 
-TEST(LoopAssignsPluginTest, Simple_0) {
-    auto pluginId                        = "loopAssigns";
-    auto code                            = R"(
+    TEST(LoopAssignsPluginTest, Simple_0) {
+        auto pluginId                        = "loopAssigns";
+        auto code                            = R"(
         void func(int *p, int n){
             int mx = 0;
             for(int i = 0; i < n; i++){
@@ -51,19 +40,19 @@ TEST(LoopAssignsPluginTest, Simple_0) {
             } 
         }
     )";
-    auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_THAT(*spec, HasSubstr("mx"));
-    EXPECT_EQ(continueFlag, true);
-    ASSERT_EQ(postState.size(), 1);
-    ASSERT_EQ(postState.at(0).memoryMap_.size(), 1);
-    EXPECT_EQ(postState.at(0).memoryMap_.begin()->second->getType(),
-              SymbolicExpr::ExprType::Unknown);
-}
+        auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_THAT(*spec, HasSubstr("mx"));
+        EXPECT_EQ(continueFlag, true);
+        ASSERT_EQ(postState.size(), 1);
+        ASSERT_EQ(postState.at(0).memoryMap_.size(), 1);
+        EXPECT_EQ(postState.at(0).memoryMap_.begin()->second->getType(),
+                  SymbolicExpr::ExprType::Unknown);
+    }
 
-TEST(LoopAssignsPluginTest, Simple_1) {
-    auto pluginId                        = "loopAssigns";
-    auto code                            = R"(
+    TEST(LoopAssignsPluginTest, Simple_1) {
+        auto pluginId                        = "loopAssigns";
+        auto code                            = R"(
         void func(int *p, int n){
             int cnt = 0;
             for(int i = 0; i < n; i++){
@@ -72,35 +61,35 @@ TEST(LoopAssignsPluginTest, Simple_1) {
             } 
         }
     )";
-    auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_THAT(*spec, HasSubstr("cnt"));
-    EXPECT_THAT(*spec, HasSubstr("p[0..n - 1]"));
-    EXPECT_EQ(continueFlag, true);
-    ASSERT_EQ(postState.size(), 1);
-    EXPECT_EQ(postState.at(0).memoryMap_.size(), 2);
-    for (auto &[addr, value] : postState.at(0).memoryMap_) {
-        auto addrStr = addr.get().regularFormOfValue();
-        if (addrStr == nullopt)
-            FAIL() << "address {" + addr.get().dump() + "} has no regular form.";
-        auto valueStr = value->simplifiedExpr()->regularForm();
-        if (valueStr == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        if (addrStr.value() == "p[i..n - 1]") { // Too lazy to write the matching logic.
-            EXPECT_TRUE(value->isUnknown()) << valueStr.value();
-        } else if (addrStr.value() == "cnt") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("cnt"), HasSubstr("+ cnt")),
-                                                AnyOf(StartsWith("-1 * n"), HasSubstr("- n")),
-                                                AnyOf(StartsWith("i"), HasSubstr("+ i"))));
-        } else {
-            FAIL() << addrStr.value() << valueStr.value();
+        auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_THAT(*spec, HasSubstr("cnt"));
+        EXPECT_THAT(*spec, HasSubstr("p[0..n - 1]"));
+        EXPECT_EQ(continueFlag, true);
+        ASSERT_EQ(postState.size(), 1);
+        EXPECT_EQ(postState.at(0).memoryMap_.size(), 2);
+        for (auto &[addr, value] : postState.at(0).memoryMap_) {
+            auto addrStr = addr.get().regularFormOfValue();
+            if (addrStr == nullopt)
+                FAIL() << "address {" + addr.get().dump() + "} has no regular form.";
+            auto valueStr = value->simplifiedExpr()->regularForm();
+            if (valueStr == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            if (addrStr.value() == "p[i..n - 1]") { // Too lazy to write the matching logic.
+                EXPECT_TRUE(value->isUnknown()) << valueStr.value();
+            } else if (addrStr.value() == "cnt") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("cnt"), HasSubstr("+ cnt")),
+                                                    AnyOf(StartsWith("-1 * n"), HasSubstr("- n")),
+                                                    AnyOf(StartsWith("i"), HasSubstr("+ i"))));
+            } else {
+                FAIL() << addrStr.value() << valueStr.value();
+            }
         }
     }
-}
 
-TEST(LoopAssignsPluginTest, Simple_2) {
-    auto pluginId                        = "loopAssigns";
-    auto code                            = R"(
+    TEST(LoopAssignsPluginTest, Simple_2) {
+        auto pluginId                        = "loopAssigns";
+        auto code                            = R"(
         void func(int *p, int n){
             int cnt = 0;
             int i = 0;
@@ -111,38 +100,38 @@ TEST(LoopAssignsPluginTest, Simple_2) {
             } 
         }
     )";
-    auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_THAT(*spec, HasSubstr("i"));
-    EXPECT_THAT(*spec, HasSubstr("cnt"));
-    EXPECT_THAT(*spec, HasSubstr("p[0..n - 1]"));
-    EXPECT_EQ(continueFlag, true);
-    ASSERT_EQ(postState.size(), 1);
-    EXPECT_EQ(postState.at(0).memoryMap_.size(), 3);
-    for (auto &[addr, value] : postState.at(0).memoryMap_) {
-        auto addrStr = addr.get().regularFormOfValue();
-        if (addrStr == nullopt)
-            FAIL() << "address {" + addr.get().dump() + "} has no regular form.";
-        auto valueStr = value->simplifiedExpr()->regularForm();
-        if (valueStr == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        if (addrStr == "p[i..n - 1]") {
-            EXPECT_TRUE(value->isUnknown()) << valueStr.value();
-        } else if (addrStr.value() == "cnt") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("cnt"), HasSubstr("+ cnt")),
-                                                AnyOf(StartsWith("-1 * n"), HasSubstr("- n")),
-                                                AnyOf(StartsWith("i"), HasSubstr("+ i"))));
-        } else if (addrStr.value() == "i") {
-            EXPECT_EQ(valueStr.value(), "n");
-        } else {
-            FAIL() << addrStr.value() << valueStr.value();
+        auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_THAT(*spec, HasSubstr("i"));
+        EXPECT_THAT(*spec, HasSubstr("cnt"));
+        EXPECT_THAT(*spec, HasSubstr("p[0..n - 1]"));
+        EXPECT_EQ(continueFlag, true);
+        ASSERT_EQ(postState.size(), 1);
+        EXPECT_EQ(postState.at(0).memoryMap_.size(), 3);
+        for (auto &[addr, value] : postState.at(0).memoryMap_) {
+            auto addrStr = addr.get().regularFormOfValue();
+            if (addrStr == nullopt)
+                FAIL() << "address {" + addr.get().dump() + "} has no regular form.";
+            auto valueStr = value->simplifiedExpr()->regularForm();
+            if (valueStr == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            if (addrStr == "p[i..n - 1]") {
+                EXPECT_TRUE(value->isUnknown()) << valueStr.value();
+            } else if (addrStr.value() == "cnt") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("cnt"), HasSubstr("+ cnt")),
+                                                    AnyOf(StartsWith("-1 * n"), HasSubstr("- n")),
+                                                    AnyOf(StartsWith("i"), HasSubstr("+ i"))));
+            } else if (addrStr.value() == "i") {
+                EXPECT_EQ(valueStr.value(), "n");
+            } else {
+                FAIL() << addrStr.value() << valueStr.value();
+            }
         }
     }
-}
 
-TEST(LoopAssignsPluginTest, Simple_3) {
-    auto pluginId                        = "loopAssigns";
-    auto code                            = R"(
+    TEST(LoopAssignsPluginTest, Simple_3) {
+        auto pluginId                        = "loopAssigns";
+        auto code                            = R"(
         void func(int *p, int n){
             int cnt = 0;
             int i = 0;
@@ -154,42 +143,42 @@ TEST(LoopAssignsPluginTest, Simple_3) {
             } 
         }
     )";
-    auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_THAT(*spec, HasSubstr("i"));
-    EXPECT_THAT(*spec, HasSubstr("cnt"));
-    EXPECT_THAT(*spec, HasSubstr("p[0..n - 1]"));
-    EXPECT_EQ(continueFlag, true);
-    ASSERT_EQ(postState.size(), 1);
-    EXPECT_EQ(postState.at(0).memoryMap_.size(), 4);
-    for (auto &[addr, value] : postState.at(0).memoryMap_) {
-        auto addrStr = addr.get().regularFormOfValue();
-        if (addrStr == nullopt)
-            FAIL() << "address {" + addr.get().dump() + "} has no regular form.";
-        auto valueStr = value->simplifiedExpr()->regularForm();
-        if (valueStr == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        if (addrStr.value() == "p") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
-                                                AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-        } else if (addrStr.value() ==
-                   "p[0..-1 * i + n - 1]") { // Too lazy to write the matching logic.
-            EXPECT_TRUE(value->isUnknown()) << valueStr.value();
-        } else if (addrStr.value() == "cnt") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("cnt"), HasSubstr("+ cnt")),
-                                                AnyOf(StartsWith("-1 * n"), HasSubstr("- n")),
-                                                AnyOf(StartsWith("i"), HasSubstr("+ i"))));
-        } else if (addrStr.value() == "i") {
-            EXPECT_EQ(valueStr.value(), "n");
-        } else {
-            FAIL() << addrStr.value() << valueStr.value();
+        auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_THAT(*spec, HasSubstr("i"));
+        EXPECT_THAT(*spec, HasSubstr("cnt"));
+        EXPECT_THAT(*spec, HasSubstr("p[0..n - 1]"));
+        EXPECT_EQ(continueFlag, true);
+        ASSERT_EQ(postState.size(), 1);
+        EXPECT_EQ(postState.at(0).memoryMap_.size(), 4);
+        for (auto &[addr, value] : postState.at(0).memoryMap_) {
+            auto addrStr = addr.get().regularFormOfValue();
+            if (addrStr == nullopt)
+                FAIL() << "address {" + addr.get().dump() + "} has no regular form.";
+            auto valueStr = value->simplifiedExpr()->regularForm();
+            if (valueStr == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            if (addrStr.value() == "p") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
+                                                    AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+            } else if (addrStr.value() ==
+                       "p[0..-1 * i + n - 1]") { // Too lazy to write the matching logic.
+                EXPECT_TRUE(value->isUnknown()) << valueStr.value();
+            } else if (addrStr.value() == "cnt") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("cnt"), HasSubstr("+ cnt")),
+                                                    AnyOf(StartsWith("-1 * n"), HasSubstr("- n")),
+                                                    AnyOf(StartsWith("i"), HasSubstr("+ i"))));
+            } else if (addrStr.value() == "i") {
+                EXPECT_EQ(valueStr.value(), "n");
+            } else {
+                FAIL() << addrStr.value() << valueStr.value();
+            }
         }
     }
-}
 
-TEST(LoopAssignsPluginTest, openHiTLS_1) {
-    auto pluginId                        = "loopAssigns";
-    auto code                            = R"(
+    TEST(LoopAssignsPluginTest, openHiTLS_1) {
+        auto pluginId                        = "loopAssigns";
+        auto code                            = R"(
     #include <stdint.h>
     #define BN_UINT uint32_t
 
@@ -219,47 +208,47 @@ TEST(LoopAssignsPluginTest, openHiTLS_1) {
     return carry;
 }
     )";
-    auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_THAT(*spec, HasSubstr("aa"));
-    EXPECT_THAT(*spec, HasSubstr("bb"));
-    EXPECT_THAT(*spec, HasSubstr("rr"));
-    EXPECT_THAT(*spec, HasSubstr("nn"));
-    EXPECT_THAT(*spec, HasSubstr("r[0..n - 1]"));
-    EXPECT_EQ(continueFlag, true);
-    ASSERT_EQ(postState.size(), 1);
-    EXPECT_EQ(postState.at(0).memoryMap_.size(), 6);
-    for (auto &[addr, value] : postState.at(0).memoryMap_) {
-        auto addrStr = addr.get().regularFormOfValue();
-        if (addrStr == nullopt)
-            FAIL() << "address {" + addr.get().dump() + "} has no regular form.";
-        auto valueStr = value->simplifiedExpr()->regularForm();
-        if (valueStr == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        if (addrStr.value() == "aa") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("a"), HasSubstr("+ a")),
-                                                AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-        } else if (addrStr.value() == "bb") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("b"), HasSubstr("+ b")),
-                                                AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-        } else if (addrStr.value() == "rr") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("r"), HasSubstr("+ r")),
-                                                AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-        } else if (addrStr.value() == "nn") {
-            EXPECT_EQ(valueStr.value(), "0");
-        } else if (addrStr.value() == "rr[0..nn - 1]") {
-            EXPECT_TRUE(value->isUnknown());
-        } else if (addrStr.value() == "carry") {
-            EXPECT_TRUE(value->isUnknown());
-        } else {
-            FAIL() << addrStr.value() << valueStr.value();
+        auto [spec, continueFlag, postState] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_THAT(*spec, HasSubstr("aa"));
+        EXPECT_THAT(*spec, HasSubstr("bb"));
+        EXPECT_THAT(*spec, HasSubstr("rr"));
+        EXPECT_THAT(*spec, HasSubstr("nn"));
+        EXPECT_THAT(*spec, HasSubstr("r[0..n - 1]"));
+        EXPECT_EQ(continueFlag, true);
+        ASSERT_EQ(postState.size(), 1);
+        EXPECT_EQ(postState.at(0).memoryMap_.size(), 6);
+        for (auto &[addr, value] : postState.at(0).memoryMap_) {
+            auto addrStr = addr.get().regularFormOfValue();
+            if (addrStr == nullopt)
+                FAIL() << "address {" + addr.get().dump() + "} has no regular form.";
+            auto valueStr = value->simplifiedExpr()->regularForm();
+            if (valueStr == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            if (addrStr.value() == "aa") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("a"), HasSubstr("+ a")),
+                                                    AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+            } else if (addrStr.value() == "bb") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("b"), HasSubstr("+ b")),
+                                                    AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+            } else if (addrStr.value() == "rr") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("r"), HasSubstr("+ r")),
+                                                    AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+            } else if (addrStr.value() == "nn") {
+                EXPECT_EQ(valueStr.value(), "0");
+            } else if (addrStr.value() == "rr[0..nn - 1]") {
+                EXPECT_TRUE(value->isUnknown());
+            } else if (addrStr.value() == "carry") {
+                EXPECT_TRUE(value->isUnknown());
+            } else {
+                FAIL() << addrStr.value() << valueStr.value();
+            }
         }
     }
-}
 
-TEST(ParadigmMaxMinPluginTest, Simple_0) {
-    auto pluginId                = "paradigmMaxMin";
-    auto code                    = R"(
+    TEST(ParadigmMaxMinPluginTest, Simple_0) {
+        auto pluginId                = "paradigmMaxMin";
+        auto code                    = R"(
         void func(int *p, int n){
             int mx = 0;
             for(int i = 0; i < n; i++){
@@ -268,14 +257,14 @@ TEST(ParadigmMaxMinPluginTest, Simple_0) {
             } 
         }
     )";
-    auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_EQ(continueFlag, true);
-}
+        auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_EQ(continueFlag, true);
+    }
 
-TEST(ParadigmMaxMinPluginTest, Simple_1) {
-    auto pluginId                = "paradigmMaxMin";
-    auto code                    = R"(
+    TEST(ParadigmMaxMinPluginTest, Simple_1) {
+        auto pluginId                = "paradigmMaxMin";
+        auto code                    = R"(
         void func(int *p, int n){
             int ms = 0;
             for(int i = 0; i < n; i++){
@@ -284,14 +273,14 @@ TEST(ParadigmMaxMinPluginTest, Simple_1) {
             } 
         }
     )";
-    auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_EQ(continueFlag, true);
-}
+        auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_EQ(continueFlag, true);
+    }
 
-TEST(ParadigmMaxMinPluginTest, Simple_2) {
-    auto pluginId                = "paradigmMaxMin";
-    auto code                    = R"(
+    TEST(ParadigmMaxMinPluginTest, Simple_2) {
+        auto pluginId                = "paradigmMaxMin";
+        auto code                    = R"(
         void func(int *p, int n){
             int mx = 0;
             for(int i = 0; i < n; i++){
@@ -300,14 +289,14 @@ TEST(ParadigmMaxMinPluginTest, Simple_2) {
             } 
         }
     )";
-    auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_EQ(continueFlag, true);
-}
+        auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_EQ(continueFlag, true);
+    }
 
-TEST(ParadigmMaxMinPluginTest, Simple_3) {
-    auto pluginId                = "paradigmMaxMin";
-    auto code                    = R"(
+    TEST(ParadigmMaxMinPluginTest, Simple_3) {
+        auto pluginId                = "paradigmMaxMin";
+        auto code                    = R"(
         void func(int *p, int n){
             int mx = 0;
             int cnt = 0;
@@ -322,14 +311,14 @@ TEST(ParadigmMaxMinPluginTest, Simple_3) {
             } 
         }
     )";
-    auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_EQ(continueFlag, true);
-}
+        auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_EQ(continueFlag, true);
+    }
 
-TEST(ParadigmMaxMinPluginTest, Simple_4) {
-    auto pluginId                = "paradigmMaxMin";
-    auto code                    = R"(
+    TEST(ParadigmMaxMinPluginTest, Simple_4) {
+        auto pluginId                = "paradigmMaxMin";
+        auto code                    = R"(
         void func(int *p, int n){
             int mx = 0;
             int i = 0;
@@ -340,14 +329,14 @@ TEST(ParadigmMaxMinPluginTest, Simple_4) {
             }
         }
     )";
-    auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_EQ(continueFlag, true);
-}
+        auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_EQ(continueFlag, true);
+    }
 
-TEST(ParadigmMaxMinPluginTest, Simple_5) {
-    auto pluginId                = "paradigmMaxMin";
-    auto code                    = R"(
+    TEST(ParadigmMaxMinPluginTest, Simple_5) {
+        auto pluginId                = "paradigmMaxMin";
+        auto code                    = R"(
         void func(int *p, int n){
             int bound = 100;
             int count = 0;
@@ -359,14 +348,14 @@ TEST(ParadigmMaxMinPluginTest, Simple_5) {
             }
         }
     )";
-    auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_EQ(spec, nullopt);
-    EXPECT_EQ(continueFlag, true);
-}
+        auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_EQ(spec, nullopt);
+        EXPECT_EQ(continueFlag, true);
+    }
 
-TEST(ParadigmMaxMinPluginTest, Simple_6) {
-    auto pluginId                = "paradigmMaxMin";
-    auto code                    = R"(
+    TEST(ParadigmMaxMinPluginTest, Simple_6) {
+        auto pluginId                = "paradigmMaxMin";
+        auto code                    = R"(
         void func(int *p, int n){
             int mx = 0;
             int i = 0;
@@ -380,14 +369,14 @@ TEST(ParadigmMaxMinPluginTest, Simple_6) {
             }
         }
     )";
-    auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_EQ(continueFlag, true);
-}
+        auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_EQ(continueFlag, true);
+    }
 
-TEST(LinearInvariantPluginTest, Simple_1) {
-    auto pluginId                         = "StInGXPlugin";
-    auto code                             = R"(
+    TEST(LinearInvariantPluginTest, Simple_1) {
+        auto pluginId                         = "StInGXPlugin";
+        auto code                             = R"(
         void func(int n){
             int x = 0, y = n, z = 10;
             for(int i = 0; i < n; i++){
@@ -397,39 +386,39 @@ TEST(LinearInvariantPluginTest, Simple_1) {
             } 
         }
     )";
-    auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_EQ(continueFlag, true);
-    ASSERT_EQ(postStates.size(), 1);
-    auto &postState = postStates.at(0);
-    for (auto &[addr, value] : postState.memoryMap_) {
-        auto var = addr.get().regularFormOfValue();
-        if (var == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        auto valueStr = value->simplifiedExpr()->regularForm();
-        if (valueStr == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        if (var.value() == "x") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("x"), HasSubstr("+ x")),
-                                                AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
-                                                AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-        } else if (var.value() == "y") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("y"), HasSubstr("+ y")),
-                                                AnyOf(StartsWith("i"), HasSubstr("+ i")),
-                                                AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
-        } else if (var.value() == "z") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("z"), HasSubstr("+ z")),
-                                                AnyOf(StartsWith("i"), HasSubstr("+ i")),
-                                                AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
-        } else if (var.value() != "i" && var.value() != "n") {
-            FAIL() << var.value();
+        auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_EQ(continueFlag, true);
+        ASSERT_EQ(postStates.size(), 1);
+        auto &postState = postStates.at(0);
+        for (auto &[addr, value] : postState.memoryMap_) {
+            auto var = addr.get().regularFormOfValue();
+            if (var == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            auto valueStr = value->simplifiedExpr()->regularForm();
+            if (valueStr == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            if (var.value() == "x") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("x"), HasSubstr("+ x")),
+                                                    AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
+                                                    AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+            } else if (var.value() == "y") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("y"), HasSubstr("+ y")),
+                                                    AnyOf(StartsWith("i"), HasSubstr("+ i")),
+                                                    AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
+            } else if (var.value() == "z") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("z"), HasSubstr("+ z")),
+                                                    AnyOf(StartsWith("i"), HasSubstr("+ i")),
+                                                    AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
+            } else if (var.value() != "i" && var.value() != "n") {
+                FAIL() << var.value();
+            }
         }
     }
-}
 
-TEST(LinearInvariantPluginTest, Simple_2) {
-    auto pluginId                         = "StInGXPlugin";
-    auto code                             = R"(
+    TEST(LinearInvariantPluginTest, Simple_2) {
+        auto pluginId                         = "StInGXPlugin";
+        auto code                             = R"(
         void func(int n){
             int x = 0, sum = 0;
             for(int i = 0; i < n; i++){
@@ -438,31 +427,31 @@ TEST(LinearInvariantPluginTest, Simple_2) {
             } 
         }
     )";
-    auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_EQ(continueFlag, true);
-    ASSERT_EQ(postStates.size(), 1);
-    auto &postState = postStates.at(0);
-    for (auto &[addr, value] : postState.memoryMap_) {
-        auto var = addr.get().regularFormOfValue();
-        if (var == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        auto valueStr = value->simplifiedExpr()->regularForm();
-        if (valueStr == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        if (var.value() == "x") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("x"), HasSubstr("+ x")),
-                                                AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
-                                                AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-        } else if (var.value() != "i" && var.value() != "n") {
-            FAIL() << var.value();
+        auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_EQ(continueFlag, true);
+        ASSERT_EQ(postStates.size(), 1);
+        auto &postState = postStates.at(0);
+        for (auto &[addr, value] : postState.memoryMap_) {
+            auto var = addr.get().regularFormOfValue();
+            if (var == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            auto valueStr = value->simplifiedExpr()->regularForm();
+            if (valueStr == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            if (var.value() == "x") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("x"), HasSubstr("+ x")),
+                                                    AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
+                                                    AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+            } else if (var.value() != "i" && var.value() != "n") {
+                FAIL() << var.value();
+            }
         }
     }
-}
 
-TEST(LinearInvariantPluginTest, Simple_3) {
-    auto pluginId                         = "StInGXPlugin";
-    auto code                             = R"(
+    TEST(LinearInvariantPluginTest, Simple_3) {
+        auto pluginId                         = "StInGXPlugin";
+        auto code                             = R"(
     int func() {
         int i, j;
         i = 1;
@@ -474,33 +463,34 @@ TEST(LinearInvariantPluginTest, Simple_3) {
         return 0;
     }
     )";
-    auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_EQ(continueFlag, true);
-    ASSERT_EQ(postStates.size(), 1);
-    auto &postState = postStates.at(0);
-    for (auto &[addr, value] : postState.memoryMap_) {
-        auto var = addr.get().regularFormOfValue();
-        if (var == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        auto valueStr = value->simplifiedExpr()->regularForm();
-        if (valueStr == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        if (var.value() == "i") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("i"), HasSubstr("+ i")),
-                                                AnyOf(StartsWith("2 * j"), HasSubstr("+ 2 * j")),
-                                                AnyOf(StartsWith("22"), HasSubstr("+ 22"))));
-        } else if (var.value() == "j") {
-            EXPECT_THAT(valueStr.value(), "-11");
-        } else {
-            FAIL() << var.value();
+        auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_EQ(continueFlag, true);
+        ASSERT_EQ(postStates.size(), 1);
+        auto &postState = postStates.at(0);
+        for (auto &[addr, value] : postState.memoryMap_) {
+            auto var = addr.get().regularFormOfValue();
+            if (var == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            auto valueStr = value->simplifiedExpr()->regularForm();
+            if (valueStr == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            if (var.value() == "i") {
+                EXPECT_THAT(valueStr.value(),
+                            AllOf(AnyOf(StartsWith("i"), HasSubstr("+ i")),
+                                  AnyOf(StartsWith("2 * j"), HasSubstr("+ 2 * j")),
+                                  AnyOf(StartsWith("22"), HasSubstr("+ 22"))));
+            } else if (var.value() == "j") {
+                EXPECT_THAT(valueStr.value(), "-11");
+            } else {
+                FAIL() << var.value();
+            }
         }
     }
-}
 
-TEST(LinearInvariantPluginTest, Simple_4) {
-    auto pluginId                         = "StInGXPlugin";
-    auto code                             = R"(
+    TEST(LinearInvariantPluginTest, Simple_4) {
+        auto pluginId                         = "StInGXPlugin";
+        auto code                             = R"(
     void func(int *p, int n) {
         int *pt = p;
         for(int i = 0; i < n; ++i){
@@ -509,40 +499,41 @@ TEST(LinearInvariantPluginTest, Simple_4) {
         }
     }
     )";
-    auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
-    EXPECT_NE(spec, nullopt);
-    EXPECT_EQ(continueFlag, true);
-    ASSERT_EQ(postStates.size(), 1);
-    auto &postState = postStates.at(0);
-    for (auto &[addr, value] : postState.memoryMap_) {
-        auto var = addr.get().regularFormOfValue();
-        if (var == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        auto valueStr = value->simplifiedExpr()->regularForm();
-        if (valueStr == nullopt)
-            FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
-        if (var.value() == "pt") {
-            EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
-                                                AnyOf(StartsWith("n"), HasSubstr("+ n")),
-                                                AnyOf(StartsWith("p"), HasSubstr("+ p"))));
-        } else if (var.value() != "p" && var.value() != "n" && var.value() != "i") {
-            FAIL() << var.value();
+        auto [spec, continueFlag, postStates] = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_EQ(continueFlag, true);
+        ASSERT_EQ(postStates.size(), 1);
+        auto &postState = postStates.at(0);
+        for (auto &[addr, value] : postState.memoryMap_) {
+            auto var = addr.get().regularFormOfValue();
+            if (var == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            auto valueStr = value->simplifiedExpr()->regularForm();
+            if (valueStr == nullopt)
+                FAIL() << "value {" + addr.get().dump() + "} has no regular form.";
+            if (var.value() == "pt") {
+                EXPECT_THAT(valueStr.value(), AllOf(AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
+                                                    AnyOf(StartsWith("n"), HasSubstr("+ n")),
+                                                    AnyOf(StartsWith("p"), HasSubstr("+ p"))));
+            } else if (var.value() != "p" && var.value() != "n" && var.value() != "i") {
+                FAIL() << var.value();
+            }
         }
     }
-}
 
-// TEST(LinearInvariantPluginTest, Simple_5) {
-//     auto pluginId                = "StInGXPlugin";
-//     auto code                    = R"(
-//         void func(int *p, int n){
-//             int mx = 0;
-//             for(int i = 0; i < n; i++){
-//                 if(mx < p[i])
-//                     mx = p[i];
-//             }
-//         }
-//     )";
-//     auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-//     EXPECT_NE(spec, nullopt);
-//     EXPECT_EQ(continueFlag, true);
-// }
+    // TEST(LinearInvariantPluginTest, Simple_5) {
+    //     auto pluginId                = "StInGXPlugin";
+    //     auto code                    = R"(
+    //         void func(int *p, int n){
+    //             int mx = 0;
+    //             for(int i = 0; i < n; i++){
+    //                 if(mx < p[i])
+    //                     mx = p[i];
+    //             }
+    //         }
+    //     )";
+    //     auto [spec, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
+    //     EXPECT_NE(spec, nullopt);
+    //     EXPECT_EQ(continueFlag, true);
+    // }
+} // namespace acslg::test::unit::spec_generator

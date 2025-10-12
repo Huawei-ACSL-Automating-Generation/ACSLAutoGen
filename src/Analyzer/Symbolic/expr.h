@@ -19,9 +19,7 @@
 #include "macros.h"
 #include "Utils/utils.h"
 
-using namespace acslg;
-
-namespace Symbolic {
+namespace acslg::analyzer::symbolic {
     class Address;
     class SymbolAddress;
     class Variable;
@@ -77,7 +75,7 @@ namespace Symbolic {
 
         /// @brief Clone the expression.
         /// @return Deep copy of the expression.
-        virtual not_null<std::unique_ptr<SymbolicExpr>> clone() const = 0;
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const = 0;
 
         /// @brief Dump debug string of the expression.
         /// @return Human-readable representation.
@@ -117,11 +115,11 @@ namespace Symbolic {
 
         /// @brief Get a simplified version of the expression.
         /// @return Simplified expression.
-        virtual not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const = 0;
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const = 0;
 
         using UsedMap = std::unordered_map<
             size_t,
-            std::variant<not_null<const Variable *>, not_null<const SymbolAddress *>>>;
+            std::variant<utils::not_null<const Variable *>, utils::not_null<const SymbolAddress *>>>;
         using HashIdMap = std::unordered_map<size_t, size_t>;
         /// @brief Collect Variables and Addresses used in the expression.
         /// @return Map from hash to Variable and Address pointer.
@@ -168,7 +166,7 @@ namespace Symbolic {
 
         /// @brief Try to evaluate the expression to an symbol address.
         /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
-        std::optional<not_null<std::unique_ptr<SymbolAddress>>> tryEvalAsSymbolAddr() const {
+        std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> tryEvalAsSymbolAddr() const {
             return callTryEvalAsAddr(*simplifiedExpr());
         };
 
@@ -237,9 +235,9 @@ namespace Symbolic {
 
       protected:
         /// @brief Simplify expression if it's linear, just call clone() otherwise.
-        not_null<std::unique_ptr<SymbolicExpr>> simplifiedExprIfLinear() const;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExprIfLinear() const;
 
-        static std::optional<not_null<std::unique_ptr<SymbolAddress>>> callTryEvalAsAddr(
+        static std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> callTryEvalAsAddr(
             const SymbolicExpr &e) {
             return e.doTryEvalAsSymbolAddr();
         }
@@ -247,7 +245,7 @@ namespace Symbolic {
       private:
         /// @brief Try to evaluate the expression to an symbol address.
         /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
-        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
+        virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
             const {
             // TODO: cache the result.
             return std::nullopt;
@@ -312,14 +310,14 @@ namespace Symbolic {
 
         LiteralType getLiteralType() const { return type_; }
 
-        not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::optional<std::string> regularForm(
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
-        virtual not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
 
@@ -378,31 +376,33 @@ namespace Symbolic {
         }
 
         // TODO(style): May use template to unify constructors.
-        BinaryOpExpr(not_null<std::unique_ptr<SymbolicExpr>> left,
+        BinaryOpExpr(utils::not_null<std::unique_ptr<SymbolicExpr>> left,
                      Operator op,
-                     not_null<std::unique_ptr<SymbolicExpr>> right)
+                     utils::not_null<std::unique_ptr<SymbolicExpr>> right)
             : SymbolicExpr(ExprType::BinaryOp, left->getValType()), left_(std::move(left)), op_(op),
               right_(std::move(right)) {}
 
-        BinaryOpExpr(not_null<SymbolicExpr *> left, Operator op, not_null<SymbolicExpr *> right)
+        BinaryOpExpr(utils::not_null<SymbolicExpr *> left,
+                     Operator op,
+                     utils::not_null<SymbolicExpr *> right)
             : SymbolicExpr(ExprType::BinaryOp, left->getValType()),
               left_(std::unique_ptr<SymbolicExpr>{left}), op_(op),
               right_(std::unique_ptr<SymbolicExpr>{right}) {}
 
-        not_null<const SymbolicExpr *> getLeft() const { return left_.get().get(); }
-        not_null<const SymbolicExpr *> getRight() const { return right_.get().get(); }
+        utils::not_null<const SymbolicExpr *> getLeft() const { return left_.get().get(); }
+        utils::not_null<const SymbolicExpr *> getRight() const { return right_.get().get(); }
         auto getLeft() -> auto & { return left_; }
         auto getRight() -> auto & { return right_; }
         Operator getOperator() const { return op_; }
 
-        not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::optional<std::string> regularForm(
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
-        virtual not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
 
@@ -421,12 +421,12 @@ namespace Symbolic {
             const std::unordered_map<size_t, size_t> &) const override;
 
       private:
-        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
+        virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
             const override;
 
-        not_null<std::unique_ptr<SymbolicExpr>> left_;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> left_;
         Operator op_;
-        not_null<std::unique_ptr<SymbolicExpr>> right_;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> right_;
     };
 
     /// @class UnaryOpExpr
@@ -456,22 +456,22 @@ namespace Symbolic {
             }
         }
 
-        UnaryOpExpr(Operator op, not_null<std::unique_ptr<SymbolicExpr>> expr)
+        UnaryOpExpr(Operator op, utils::not_null<std::unique_ptr<SymbolicExpr>> expr)
             : SymbolicExpr(ExprType::UnaryOp, expr->getValType()), op_(op), expr_(std::move(expr)) {
         }
 
-        not_null<const SymbolicExpr *> getSub() const { return expr_.get().get(); }
+        utils::not_null<const SymbolicExpr *> getSub() const { return expr_.get().get(); }
         auto getSub() -> auto & { return expr_; }
         Operator getOperator() const { return op_; }
 
-        not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::optional<std::string> regularForm(
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
-        virtual not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
 
@@ -489,7 +489,7 @@ namespace Symbolic {
 
       private:
         Operator op_;
-        not_null<std::unique_ptr<SymbolicExpr>> expr_;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> expr_;
     };
 
     /// @class UnknownExpr
@@ -502,16 +502,16 @@ namespace Symbolic {
 
         /// @brief Create a unknown symbolic expression.
         /// @return Unique pointer to a Unknown expression.
-        static not_null<std::unique_ptr<UnknownExpr>> makeUnknown();
+        static utils::not_null<std::unique_ptr<UnknownExpr>> makeUnknown();
 
-        not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::optional<std::string> regularForm(
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
-        virtual not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return true; };
@@ -608,7 +608,7 @@ namespace Symbolic {
          *
          * @return Hash value suitable for use in unordered containers.
          */
-        size_t hash() const { return hash_val(loc_.getHashValue()); }
+        size_t hash() const { return utils::hash_val(loc_.getHashValue()); }
 
         /**
          * @brief Dump a human-readable string representation of the SourcePoint.
@@ -639,7 +639,7 @@ namespace Symbolic {
         Symbol &operator=(const Symbol &) = default;
         Symbol(Symbol &&)                 = default;
         Symbol &operator=(Symbol &&)      = default;
-        virtual std::variant<std::monostate, not_null<std::unique_ptr<const Symbolic::Address>>> getFromAddr()
+        virtual std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> getFromAddr()
             const                                               = 0;
         virtual std::optional<SourcePoint> getFromPoint() const = 0;
     };
@@ -670,10 +670,10 @@ namespace Symbolic {
     class Structure : public SymbolicExpr, public Symbol {
       public:
         struct Info {
-            not_null<const clang::RecordDecl *> definition_;
+            utils::not_null<const clang::RecordDecl *> definition_;
             const clang::ASTRecordLayout &layout_;
             Info(const clang::RecordDecl *RD, const clang::ASTRecordLayout &layout)
-                : definition_(RD) /*not_null has no default constructor*/, layout_(layout) {
+                : definition_(RD) /*utils::not_null has no default constructor*/, layout_(layout) {
                 if (!RD->isCompleteDefinition())
                     ERROR("Incomplete struct definition");
                 definition_ = RD->getDefinition();
@@ -687,29 +687,29 @@ namespace Symbolic {
             size_t getNumFields() const { return layout_.getFieldCount(); }
         };
 
-        Structure(
-            const clang::RecordDecl *RD,
-            const clang::ASTRecordLayout &layout,
-            std::variant<std::monostate, not_null<std::unique_ptr<const Symbolic::Address>>> from,
-            SourcePoint fromPoint);
+        Structure(const clang::RecordDecl *RD,
+                  const clang::ASTRecordLayout &layout,
+                  std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
+                  SourcePoint fromPoint);
 
         Structure(const Structure &other) : SymbolicExpr(other), info_(other.info_) {
             fields_.clear();
             fields_.reserve(other.fields_.size());
-            std::ranges::transform(other.fields_, std::back_inserter(fields_),
-                                   [](auto &field) -> not_null<std::unique_ptr<SymbolicExpr>> {
-                                       return field->clone();
-                                   });
+            std::ranges::transform(
+                other.fields_, std::back_inserter(fields_),
+                [](auto &field) -> utils::not_null<std::unique_ptr<SymbolicExpr>> {
+                    return field->clone();
+                });
         }
 
         size_t getNumFields() const { return info_.getNumFields(); }
-        void setFieldValue(size_t index, not_null<std::unique_ptr<SymbolicExpr>> expr);
-        not_null<const SymbolicExpr *> getFieldValue(size_t index) const {
+        void setFieldValue(size_t index, utils::not_null<std::unique_ptr<SymbolicExpr>> expr);
+        utils::not_null<const SymbolicExpr *> getFieldValue(size_t index) const {
             if (index >= fields_.size())
                 ERROR("Out-of-bounds access");
             return fields_[index].get().get();
         };
-        not_null<std::unique_ptr<SymbolicExpr>> &getFieldValue(size_t index) {
+        utils::not_null<std::unique_ptr<SymbolicExpr>> &getFieldValue(size_t index) {
             if (index >= fields_.size())
                 ERROR("Out-of-bounds access");
             return fields_[index];
@@ -717,15 +717,15 @@ namespace Symbolic {
         auto fieldsValues() { return std::span{fields_}; }
         auto fieldsValues() const {
             return fields_ | std::views::transform(
-                                 [](auto const &up) -> not_null<const Symbolic::SymbolicExpr *> {
+                                 [](auto const &up) -> utils::not_null<const SymbolicExpr *> {
                                      return up.value().get().get();
                                  });
         }
         auto getInfo() const -> const auto & { return info_; }
 
-        not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> getFromAddr()
+        std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> getFromAddr()
             const override;
         std::optional<SourcePoint> getFromPoint() const override;
         std::optional<std::string> regularForm(
@@ -739,7 +739,7 @@ namespace Symbolic {
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const;
-        not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         bool equal(const SymbolicExpr &expr) const override;
 
@@ -755,13 +755,13 @@ namespace Symbolic {
 
       protected:
         using From =
-            std::pair<std::variant<std::monostate, not_null<std::unique_ptr<const Address>>>,
+            std::pair<std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>>,
                       std::optional<SourcePoint>>;
         From getFrom() const;
 
       private:
         Info info_;
-        std::vector<not_null<std::unique_ptr<SymbolicExpr>>> fields_;
+        std::vector<utils::not_null<std::unique_ptr<SymbolicExpr>>> fields_;
     };
 
     class Address : public SymbolicExpr {
@@ -784,10 +784,10 @@ namespace Symbolic {
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
-            bool isRightChild                      = false) const                                        = 0;
-        virtual std::optional<not_null<const clang::VarDecl *>> getFromRoot() const = 0;
-        virtual int getDimension() const                                            = 0;
-        virtual not_null<std::unique_ptr<Address>> addressClone() const             = 0;
+            bool isRightChild                      = false) const                                               = 0;
+        virtual std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const = 0;
+        virtual int getDimension() const                                                   = 0;
+        virtual utils::not_null<std::unique_ptr<Address>> addressClone() const             = 0;
 
         auto getAddressType() const -> const auto & { return addrType_; }
 
@@ -797,7 +797,8 @@ namespace Symbolic {
 
     class AddressBox {
       public:
-        explicit AddressBox(not_null<std::unique_ptr<Address>> p) noexcept : ptr_(std::move(p)) {}
+        explicit AddressBox(utils::not_null<std::unique_ptr<Address>> p) noexcept
+            : ptr_(std::move(p)) {}
         AddressBox(const Address &other) : ptr_(other.addressClone()) {};
 
         AddressBox(const AddressBox &other) : ptr_(other.ptr_->addressClone()) {}
@@ -826,7 +827,7 @@ namespace Symbolic {
         std::size_t hash() const noexcept { return ptr_->hash(); }
 
       private:
-        not_null<std::unique_ptr<Address>> ptr_;
+        utils::not_null<std::unique_ptr<Address>> ptr_;
     };
 
     struct AddressBoxHash {
@@ -853,13 +854,13 @@ namespace Symbolic {
     class SymbolAddress : public Address, public Symbol {
       private:
         struct Range {
-            not_null<std::unique_ptr<const SymbolicExpr>>
+            utils::not_null<std::unique_ptr<const SymbolicExpr>>
                 len_; ///< The length of an address. The Address type does not store pointer types
                       ///< currently, thus it does not support C-style pointer conversion.
-            // not_null<std::unique_ptr<const Variable>>
+            // utils::not_null<std::unique_ptr<const Variable>>
             //     index_; ///< Vaule of this AddressRange may rely on this ghost variable.
 
-            Range(not_null<std::unique_ptr<const SymbolicExpr>> len)
+            Range(utils::not_null<std::unique_ptr<const SymbolicExpr>> len)
                 : len_(std::move(len)) /*,
                    index_(make_unique<Variable>(SymbolicExpr::Type{ScalarKind::UInt, 32},
                                                 std::monostate{}))*/
@@ -885,10 +886,11 @@ namespace Symbolic {
                ///< type comparison in LiteralExpr's equal method.
 
         struct BaseInfo {
-            std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from_;
+            std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from_;
             SourcePoint fromPoint_;
-            BaseInfo(std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
-                     SourcePoint fromPoint)
+            BaseInfo(
+                std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
+                SourcePoint fromPoint)
                 : from_(std::move(from)), fromPoint_(std::move(fromPoint)) {}
             BaseInfo(const BaseInfo &);
             BaseInfo(BaseInfo &&) = default;
@@ -902,9 +904,10 @@ namespace Symbolic {
                         if constexpr (std::is_same_v<T, std::monostate>) {
                             TODO();
                         } else if constexpr (std::is_same_v<
-                                                 T, not_null<std::unique_ptr<const Address>>>) {
+                                                 T,
+                                                 utils::not_null<std::unique_ptr<const Address>>>) {
                             if (auto addrPtr =
-                                    std::get_if<not_null<std::unique_ptr<const Address>>>(
+                                    std::get_if<utils::not_null<std::unique_ptr<const Address>>>(
                                         &other.from_);
                                 addrPtr != nullptr && *arg == **addrPtr) {
                                 return true;
@@ -915,7 +918,7 @@ namespace Symbolic {
                     from_);
             }
 
-            std::optional<not_null<const clang::VarDecl *>> getFromRoot() const;
+            std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const;
         };
 
         SymbolAddress(const SymbolAddress &other);
@@ -924,19 +927,21 @@ namespace Symbolic {
         bool operator==(const SymbolAddress &other) const { return equal(other); }
 
         SymbolAddress(
-            std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
+            std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
             SourcePoint fromPoint,
-            std::optional<not_null<std::unique_ptr<const SymbolicExpr>>> offset = std::nullopt,
-            std::optional<not_null<std::unique_ptr<const SymbolicExpr>>> length = std::nullopt);
+            std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> offset =
+                std::nullopt,
+            std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> length =
+                std::nullopt);
 
-        not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::optional<std::string> regularForm(
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
-        virtual not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::size_t hash() const override;
 
@@ -946,33 +951,33 @@ namespace Symbolic {
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
-        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> getFromAddr()
+        std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> getFromAddr()
             const override {
             return std::visit(
-                [&](auto &&arg)
-                    -> std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> {
+                [&](auto &&arg) -> std::variant<std::monostate,
+                                                utils::not_null<std::unique_ptr<const Address>>> {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, std::monostate>) {
                         return std::monostate();
-                    } else if constexpr (std::is_same_v<T,
-                                                        not_null<std::unique_ptr<const Address>>>) {
+                    } else if constexpr (std::is_same_v<
+                                             T, utils::not_null<std::unique_ptr<const Address>>>) {
                         return arg->addressClone().into_underlying();
                     }
                 },
                 from_);
         }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
-        std::optional<not_null<const clang::VarDecl *>> getFromRoot() const override;
+        std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;
-        virtual not_null<std::unique_ptr<Address>> addressClone() const override;
+        virtual utils::not_null<std::unique_ptr<Address>> addressClone() const override;
 
-        not_null<const SymbolicExpr *> getOffset() const { return offset_.get().get(); }
-        void setOffset(not_null<std::unique_ptr<SymbolicExpr>> offset);
-        void addOffset(not_null<std::unique_ptr<SymbolicExpr>> extra);
-        void subOffset(not_null<std::unique_ptr<SymbolicExpr>> extra);
+        utils::not_null<const SymbolicExpr *> getOffset() const { return offset_.get().get(); }
+        void setOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> offset);
+        void addOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
+        void subOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
         void resetOffset() { offset_ = std::make_unique<LiteralExpr>(ZERO_OFFSET); }
 
-        void setLength(not_null<std::unique_ptr<SymbolicExpr>> len);
+        void setLength(utils::not_null<std::unique_ptr<SymbolicExpr>> len);
         auto getLength() const -> const auto & {
             if (range_ == std::nullopt)
                 ERROR("Is not a range! Do isRange first.");
@@ -1007,12 +1012,13 @@ namespace Symbolic {
             const std::unordered_map<size_t, size_t> &) const override;
 
       private:
-        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
+        virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
             const override;
 
-        not_null<std::unique_ptr<const SymbolicExpr>> offset_; ///< Offset relative to an address.
+        utils::not_null<std::unique_ptr<const SymbolicExpr>>
+            offset_; ///< Offset relative to an address.
         std::variant<std::monostate,
-                     not_null<std::unique_ptr<const Address>>>
+                     utils::not_null<std::unique_ptr<const Address>>>
             from_; ///< From another Address p means this is a value(may with offset) of a
                    ///< pointer variable whose address is p, from {Structure::Info, size_t} means
                    ///< this is a field(a pointer)'s value.
@@ -1032,28 +1038,28 @@ namespace Symbolic {
 
         bool operator==(const VariableAddress &other) const { return equal(other); }
 
-        VariableAddress(std::variant<std::monostate, not_null<const clang::VarDecl *>> from)
+        VariableAddress(std::variant<std::monostate, utils::not_null<const clang::VarDecl *>> from)
             : Address(AddressType::VariableAddr) {
             std::visit(
                 [&](auto &&arg) {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, std::monostate>) {
                         from_ = std::monostate{};
-                    } else if constexpr (std::is_same_v<T, not_null<const clang::VarDecl *>>) {
+                    } else if constexpr (std::is_same_v<T, utils::not_null<const clang::VarDecl *>>) {
                         from_ = arg->getCanonicalDecl();
                     }
                 },
                 from);
         };
 
-        not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::optional<std::string> regularForm(
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
-        virtual not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override {
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override {
             ERROR("VariableAddress should not appear in expressions, and therefore, this function "
                   "should not be called.");
         };
@@ -1067,9 +1073,9 @@ namespace Symbolic {
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
         auto getFrom() const -> const auto & { return from_; }
-        std::optional<not_null<const clang::VarDecl *>> getFromRoot() const override;
+        std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;
-        virtual not_null<std::unique_ptr<Address>> addressClone() const override;
+        virtual utils::not_null<std::unique_ptr<Address>> addressClone() const override;
 
         // StInG: Support functions for affine invariant analysis
         UsedMap collectUsedVarsAndAddrs() const override {
@@ -1096,13 +1102,13 @@ namespace Symbolic {
         };
 
       private:
-        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
+        virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
             const override {
             ERROR("VariableAddress should not appear in expressions, and therefore, this function "
                   "should not be called.");
         };
 
-        std::variant<std::monostate, not_null<const clang::VarDecl *>> from_;
+        std::variant<std::monostate, utils::not_null<const clang::VarDecl *>> from_;
     };
 
     /// @class FieldAddress
@@ -1116,21 +1122,22 @@ namespace Symbolic {
         FieldAddress(
             const clang::RecordDecl *RD,
             std::variant<std::monostate,
-                         std::pair<not_null<std::unique_ptr<const Address>>, const size_t>> from)
+                         std::pair<utils::not_null<std::unique_ptr<const Address>>, const size_t>>
+                from)
             : Address(AddressType::FieldAddr), definition_(RD), from_(std::move(from)) {
             if (!RD->isCompleteDefinition())
                 ERROR("Incomplete struct definition");
             definition_ = RD->getDefinition();
         };
 
-        not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::optional<std::string> regularForm(
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
-        virtual not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override {
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override {
             ERROR("FieldAddress should not appear in expressions, and therefore, this function "
                   "should not be called.");
         };
@@ -1145,9 +1152,9 @@ namespace Symbolic {
             bool isRightChild                      = false) const override;
         auto getDefinition() const -> const auto & { return definition_; }
         auto getFrom() const -> const auto & { return from_; }
-        std::optional<not_null<const clang::VarDecl *>> getFromRoot() const override;
+        std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;
-        virtual not_null<std::unique_ptr<Address>> addressClone() const override;
+        virtual utils::not_null<std::unique_ptr<Address>> addressClone() const override;
 
         // StInG: Support functions for affine invariant analysis
         UsedMap collectUsedVarsAndAddrs() const override {
@@ -1174,15 +1181,15 @@ namespace Symbolic {
         };
 
       private:
-        virtual std::optional<not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
+        virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
             const override {
             ERROR("FieldAddress should not appear in expressions, and therefore, this function "
                   "should not be called.");
         };
 
-        not_null<const clang::RecordDecl *> definition_;
+        utils::not_null<const clang::RecordDecl *> definition_;
         std::variant<std::monostate,
-                     std::pair<not_null<std::unique_ptr<const Address>>, const size_t>>
+                     std::pair<utils::not_null<std::unique_ptr<const Address>>, const size_t>>
             from_;
     };
 
@@ -1196,7 +1203,7 @@ namespace Symbolic {
     class Variable : public SymbolicExpr, public Symbol {
       public:
         Variable(Type varType,
-                 std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
+                 std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
                  SourcePoint fromPoint)
             : SymbolicExpr(ExprType::Variable, varType), varType_(varType), from_(std::move(from)),
               fromPoint_(std::move(fromPoint)) {}
@@ -1210,33 +1217,33 @@ namespace Symbolic {
             setValType(vt);
         }
 
-        not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::optional<std::string> regularForm(
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt,
             int parentPrec                         = 0,
             bool isRightChild                      = false) const override;
-        virtual not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
-        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> getFromAddr()
+        std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> getFromAddr()
             const override {
             return std::visit(
-                [&](auto &&arg)
-                    -> std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> {
+                [&](auto &&arg) -> std::variant<std::monostate,
+                                                utils::not_null<std::unique_ptr<const Address>>> {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, std::monostate>) {
                         return std::monostate();
-                    } else if constexpr (std::is_same_v<T,
-                                                        not_null<std::unique_ptr<const Address>>>) {
+                    } else if constexpr (std::is_same_v<
+                                             T, utils::not_null<std::unique_ptr<const Address>>>) {
                         return arg->addressClone().into_underlying();
                     }
                 },
                 from_);
         }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
-        std::optional<not_null<const clang::VarDecl *>> getFromRoot() const;
+        std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const;
 
         // StInG: Support functions for affine invariant analysis
         UsedMap collectUsedVarsAndAddrs() const override;
@@ -1250,37 +1257,43 @@ namespace Symbolic {
       private:
         Type varType_; ///< Symbol value's type.
         std::variant<std::monostate,
-                     not_null<std::unique_ptr<const Address>>>
+                     utils::not_null<std::unique_ptr<const Address>>>
             from_; ///< The original Address of the value or the Structure it belongs.
 
         SourcePoint fromPoint_;
     };
 
-    std::unique_ptr<SymbolicExpr> createLNotExpr(not_null<std::unique_ptr<SymbolicExpr>> expr);
+    std::unique_ptr<SymbolicExpr> createLNotExpr(
+        utils::not_null<std::unique_ptr<SymbolicExpr>> expr);
     BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
     BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
     SymbolicExpr::Type deriveVarType(clang::QualType type);
     bool isValidOffsetOrLength(const SymbolicExpr &expr);
 
-    bool is_symbol_addr(const Symbolic::Address &a) noexcept;
+    bool is_symbol_addr(const Address &a) noexcept;
 
-    bool isFrom(const SymbolicExpr &expr, const Symbolic::Address &fromAddr, SourcePoint fromPoint);
+    bool isFrom(const SymbolicExpr &expr, const Address &fromAddr, SourcePoint fromPoint);
 
-    not_null<std::unique_ptr<SymbolicExpr>> getSymbol(
+    utils::not_null<std::unique_ptr<SymbolicExpr>> getSymbol(
         clang::QualType type,
-        std::variant<std::monostate, not_null<std::unique_ptr<const Address>>> from,
+        std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
         SourcePoint fromPoint);
-} // namespace Symbolic
+} // namespace acslg::analyzer::symbolic
 
 namespace std {
-    template <> struct hash<Symbolic::VariableAddress> {
-        size_t operator()(const Symbolic::VariableAddress &va) const noexcept { return va.hash(); }
+    template <> struct hash<acslg::analyzer::symbolic::VariableAddress> {
+        size_t operator()(const acslg::analyzer::symbolic::VariableAddress &va) const noexcept {
+            return va.hash();
+        }
     };
-    template <> struct hash<Symbolic::SymbolAddress> {
-        size_t operator()(const Symbolic::SymbolAddress &sa) const noexcept { return sa.hash(); }
+    template <> struct hash<acslg::analyzer::symbolic::SymbolAddress> {
+        size_t operator()(const acslg::analyzer::symbolic::SymbolAddress &sa) const noexcept {
+            return sa.hash();
+        }
     };
-    template <> struct hash<Symbolic::SymbolAddress::BaseInfo> {
-        size_t operator()(const Symbolic::SymbolAddress::BaseInfo &bi) const noexcept {
+    template <> struct hash<acslg::analyzer::symbolic::SymbolAddress::BaseInfo> {
+        size_t operator()(
+            const acslg::analyzer::symbolic::SymbolAddress::BaseInfo &bi) const noexcept {
             return bi.hash();
         }
     };
