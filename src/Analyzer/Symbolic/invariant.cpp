@@ -4,13 +4,118 @@
 #include "Stingx/LinTS.h"
 #include <queue>
 
-using namespace std;
-
 namespace acslg::analyzer::symbolic {
-    using namespace utils;
+    namespace {
+        [[maybe_unused]]
+        inline void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm) {
+            using namespace Parma_Polyhedra_Library;
 
-    void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm);
-    void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManager &vm);
+            const Constraint_System &cs = poly.constraints();
+            size_t n                    = vm.numVars;
+            size_t half                 = n / 2;
+
+            for (const auto &c : cs) {
+                std::ostringstream oss;
+                bool first = true;
+
+                size_t dim = c.space_dimension();
+                for (size_t i = 0; i < dim; ++i) {
+                    Coefficient coeff = c.coefficient(Parma_Polyhedra_Library::Variable(i));
+                    if (coeff == 0)
+                        continue;
+
+                    if (!first && coeff > 0)
+                        oss << " + ";
+                    if (coeff < 0)
+                        oss << " - ";
+                    if (abs(coeff) != 1)
+                        oss << abs(coeff);
+
+                    std::string varName;
+                    if (i < half) {
+                        varName = vm.orderedVars[i];
+                    } else if (i < n) {
+                        varName = vm.orderedVars[i - half] + "_init";
+                    } else if (i < n + half) {
+                        varName = vm.orderedVars[i - n] + "'";
+                    } else {
+                        varName = vm.orderedVars[i - n - half] + "_init'";
+                    }
+
+                    oss << varName;
+                    first = false;
+                }
+
+                Coefficient inhom = c.inhomogeneous_term();
+                if (inhom != 0) {
+                    if (!first && inhom > 0)
+                        oss << " + ";
+                    if (inhom < 0)
+                        oss << " - ";
+                    oss << abs(inhom);
+                }
+
+                switch (c.type()) {
+                    case Constraint::EQUALITY: oss << " == 0"; break;
+                    case Constraint::NONSTRICT_INEQUALITY: oss << " >= 0"; break;
+                    case Constraint::STRICT_INEQUALITY: oss << " > 0"; break;
+                    default: oss << " ?? 0"; break;
+                }
+
+                INFO("Constraint: " + oss.str());
+            }
+        }
+
+        [[maybe_unused]]
+        void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManager &vm) {
+            using namespace Parma_Polyhedra_Library;
+
+            std::ostringstream oss;
+            bool first = true;
+
+            size_t n    = vm.numVars;
+            size_t half = n / 2;
+            size_t dim  = expr.space_dimension();
+
+            for (size_t i = 0; i < dim; ++i) {
+                Coefficient coeff = expr.coefficient(Parma_Polyhedra_Library::Variable(i));
+                if (coeff == 0)
+                    continue;
+
+                if (!first && coeff > 0)
+                    oss << " + ";
+                if (coeff < 0)
+                    oss << " - ";
+                if (abs(coeff) != 1)
+                    oss << abs(coeff);
+
+                std::string varName;
+                if (i < half) {
+                    varName = vm.orderedVars[i];
+                } else if (i < n) {
+                    varName = vm.orderedVars[i - half] + "_init";
+                } else if (i < n + half) {
+                    varName = vm.orderedVars[i - n] + "'";
+                } else {
+                    varName = vm.orderedVars[i - n - half] + "_init'";
+                }
+
+                oss << varName;
+                first = false;
+            }
+
+            Coefficient inhom = expr.inhomogeneous_term();
+            if (inhom != 0 || first) {
+                if (!first && inhom > 0)
+                    oss << " + ";
+                if (inhom < 0)
+                    oss << " - ";
+                oss << abs(inhom);
+            }
+
+            INFO("LinearExpr: " + oss.str());
+        }
+    } // namespace
 
     bool UnaryOpExpr::isLinear() const {
         switch (op_) {
@@ -54,8 +159,8 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    optional<Parma_Polyhedra_Library::Linear_Expression> LiteralExpr::toLinearExpr(
-        const unordered_map<string, size_t> &) const {
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> LiteralExpr::toLinearExpr(
+        const std::unordered_map<std::string, size_t> &) const {
         using namespace Parma_Polyhedra_Library;
         switch (type_) {
             case LiteralType::Boolean: return Linear_Expression(data_.boolValue ? 1 : 0);
@@ -73,12 +178,12 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    optional<Parma_Polyhedra_Library::Linear_Expression> BinaryOpExpr::toLinearExpr(
-        const unordered_map<string, size_t> &varIndexMap) const {
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> BinaryOpExpr::toLinearExpr(
+        const std::unordered_map<std::string, size_t> &varIndexMap) const {
         auto L = left_->toLinearExpr(varIndexMap);
         auto R = right_->toLinearExpr(varIndexMap);
-        if (L == nullopt || R == nullopt)
-            return nullopt;
+        if (L == std::nullopt || R == std::nullopt)
+            return std::nullopt;
 
         switch (op_) {
             case Operator::Add: return L.value() + R.value();
@@ -112,11 +217,11 @@ namespace acslg::analyzer::symbolic {
         ERROR("BinaryOpExpr: non-affine or unsupported operator");
     }
 
-    optional<Parma_Polyhedra_Library::Linear_Expression> UnaryOpExpr::toLinearExpr(
-        const unordered_map<string, size_t> &varIndexMap) const {
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> UnaryOpExpr::toLinearExpr(
+        const std::unordered_map<std::string, size_t> &varIndexMap) const {
         auto E = expr_->toLinearExpr(varIndexMap);
-        if (E == nullopt)
-            return nullopt;
+        if (E == std::nullopt)
+            return std::nullopt;
 
         switch (op_) {
             case Operator::Plus: return E.value();
@@ -125,30 +230,31 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    optional<Parma_Polyhedra_Library::Linear_Expression> Variable::toLinearExpr(
-        const unordered_map<string, size_t> &varIndexMap) const {
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> symbolic::Variable::toLinearExpr(
+        const std::unordered_map<std::string, size_t> &varIndexMap) const {
         using namespace Parma_Polyhedra_Library;
         Linear_Expression e(0);
 
-        if (auto fromAddr = get_if<not_null<unique_ptr<const Address>>>(&from_)) {
+        if (auto fromAddr = std::get_if<utils::not_null<unique_ptr<const Address>>>(&from_)) {
             if ((*fromAddr)->getAddressType() != Address::AddressType::VariableAddr)
-                return nullopt;
+                return std::nullopt;
             auto varAddr = dynamic_cast<const VariableAddress &>(**fromAddr);
-            if (auto fromDecl = get_if<not_null<const clang::VarDecl *>>(&varAddr.getFrom())) {
+            if (auto fromDecl =
+                    std::get_if<utils::not_null<const clang::VarDecl *>>(&varAddr.getFrom())) {
                 auto it = varIndexMap.find((*fromDecl)->getNameAsString());
                 if (it == varIndexMap.end()) {
                     ERROR("Variable '" + (*fromDecl)->getNameAsString() +
-                          "' not found in index map.");
+                          "' not found in index std::map.");
                 }
                 e += Parma_Polyhedra_Library::Variable(it->second);
                 return e;
             }
         }
-        return nullopt;
+        return std::nullopt;
     }
 
     Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr(
-        const unordered_map<size_t, size_t> &) const {
+        const std::unordered_map<size_t, size_t> &) const {
         switch (type_) {
             case LiteralType::Boolean:
                 return Parma_Polyhedra_Library::Linear_Expression(data_.boolValue ? 1 : 0);
@@ -174,7 +280,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr(
-        const unordered_map<size_t, size_t> &hashIdMap) const {
+        const std::unordered_map<size_t, size_t> &hashIdMap) const {
         auto L = left_->toLinearExpr(hashIdMap);
         auto R = right_->toLinearExpr(hashIdMap);
 
@@ -209,30 +315,31 @@ namespace acslg::analyzer::symbolic {
         ERROR("non-affine or unsupported op");
     }
 
-    optional<Parma_Polyhedra_Library::Linear_Expression> SymbolAddress::toLinearExpr(
-        const unordered_map<string, size_t> &varIndexMap) const {
-        if (range_ != nullopt)
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> SymbolAddress::toLinearExpr(
+        const std::unordered_map<std::string, size_t> &varIndexMap) const {
+        if (range_ != std::nullopt)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
         using namespace Parma_Polyhedra_Library;
         Linear_Expression e(0);
         if (getDimension() != 1)
-            return nullopt;
+            return std::nullopt;
 
         auto varDecl = getFromRoot();
-        if (varDecl == nullopt)
+        if (varDecl == std::nullopt)
             ERROR("Failed to retrieve the original varDecl.");
         auto it = varIndexMap.find(varDecl.value()->getNameAsString());
         if (it == varIndexMap.end()) {
             auto regFrom = regularForm();
-            ERROR("Address '" + (regFrom ? regFrom.value() : dump()) + "' not found in index map.");
+            ERROR("Address '" + (regFrom ? regFrom.value() : dump()) +
+                  "' not found in index std::map.");
         }
         e += Parma_Polyhedra_Library::Variable(it->second);
         return e;
     }
 
     Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr(
-        const unordered_map<size_t, size_t> &hashIdMap) const {
+        const std::unordered_map<size_t, size_t> &hashIdMap) const {
         auto E = expr_->toLinearExpr(hashIdMap);
 
         switch (op_) {
@@ -244,8 +351,8 @@ namespace acslg::analyzer::symbolic {
         ERROR("non-affine or unsupported op");
     }
 
-    Parma_Polyhedra_Library::Linear_Expression Variable::toLinearExpr(
-        const unordered_map<size_t, size_t> &hashIdMap) const {
+    Parma_Polyhedra_Library::Linear_Expression symbolic::Variable::toLinearExpr(
+        const std::unordered_map<size_t, size_t> &hashIdMap) const {
         Parma_Polyhedra_Library::Linear_Expression e(0);
         if (auto it = hashIdMap.find(hash()); it != hashIdMap.end()) {
             auto id  = it->second;
@@ -258,8 +365,8 @@ namespace acslg::analyzer::symbolic {
     }
 
     Parma_Polyhedra_Library::Linear_Expression SymbolAddress::toLinearExpr(
-        const unordered_map<size_t, size_t> &hashIdMap) const {
-        if (range_ != nullopt)
+        const std::unordered_map<size_t, size_t> &hashIdMap) const {
+        if (range_ != std::nullopt)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
         Parma_Polyhedra_Library::Linear_Expression e(0);
@@ -273,159 +380,51 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    Parma_Polyhedra_Library::Constraint primedConstriant(
-        const Parma_Polyhedra_Library::Constraint &c,
-        const VarManager &vm) {
-        Linear_Expression shiftedExpr(0);
-        auto spaceDim = c.space_dimension();
-
-        for (size_t i = 0; i < spaceDim; ++i) {
-            Parma_Polyhedra_Library::Variable oldVar(i);
-            Coefficient coeff = c.coefficient(oldVar);
-            if (coeff != 0) {
-                Parma_Polyhedra_Library::Variable newVar(i + vm.numVars);
-                shiftedExpr += coeff * newVar;
-            }
-        }
-
-        shiftedExpr += c.inhomogeneous_term();
-
-        switch (c.type()) {
-            case Constraint::Type::EQUALITY: return Constraint(shiftedExpr == 0);
-            case Constraint::Type::NONSTRICT_INEQUALITY: return Constraint(shiftedExpr >= 0);
-            case Constraint::Type::STRICT_INEQUALITY: ERROR("Strict inequality not supported");
-            default: ERROR("Unsupported constraint type");
-        }
-    }
-
-    Parma_Polyhedra_Library::C_Polyhedron primedPolyhedron(
-        const Parma_Polyhedra_Library::C_Polyhedron &poly,
-        const VarManager &vm) {
-        using namespace Parma_Polyhedra_Library;
-
-        auto primed = C_Polyhedron{vm.numVars * 2, UNIVERSE};
-
-        Constraint_System cs = poly.constraints();
-        for (Constraint_System::const_iterator it = cs.begin(); it != cs.end(); ++it) {
-            Constraint primedC = primedConstriant(*it, vm);
-            primed.add_constraint(primedC);
-        }
-
-        return primed;
-    }
-
-    inline void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm) {
-        using namespace Parma_Polyhedra_Library;
-
-        const Constraint_System &cs = poly.constraints();
-        size_t n                    = vm.numVars;
-        size_t half                 = n / 2;
-
-        for (const auto &c : cs) {
-            ostringstream oss;
-            bool first = true;
-
-            size_t dim = c.space_dimension();
-            for (size_t i = 0; i < dim; ++i) {
-                Coefficient coeff = c.coefficient(Parma_Polyhedra_Library::Variable(i));
-                if (coeff == 0)
-                    continue;
-
-                if (!first && coeff > 0)
-                    oss << " + ";
-                if (coeff < 0)
-                    oss << " - ";
-                if (abs(coeff) != 1)
-                    oss << abs(coeff);
-
-                string varName;
-                if (i < half) {
-                    varName = vm.orderedVars[i];
-                } else if (i < n) {
-                    varName = vm.orderedVars[i - half] + "_init";
-                } else if (i < n + half) {
-                    varName = vm.orderedVars[i - n] + "'";
-                } else {
-                    varName = vm.orderedVars[i - n - half] + "_init'";
-                }
-
-                oss << varName;
-                first = false;
-            }
-
-            Coefficient inhom = c.inhomogeneous_term();
-            if (inhom != 0) {
-                if (!first && inhom > 0)
-                    oss << " + ";
-                if (inhom < 0)
-                    oss << " - ";
-                oss << abs(inhom);
-            }
-
-            switch (c.type()) {
-                case Constraint::EQUALITY: oss << " == 0"; break;
-                case Constraint::NONSTRICT_INEQUALITY: oss << " >= 0"; break;
-                case Constraint::STRICT_INEQUALITY: oss << " > 0"; break;
-                default: oss << " ?? 0"; break;
-            }
-
-            INFO("Constraint: " + oss.str());
-        }
-    }
-
-    void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManager &vm) {
-        using namespace Parma_Polyhedra_Library;
-
-        ostringstream oss;
-        bool first = true;
-
-        size_t n    = vm.numVars;
-        size_t half = n / 2;
-        size_t dim  = expr.space_dimension();
-
-        for (size_t i = 0; i < dim; ++i) {
-            Coefficient coeff = expr.coefficient(Parma_Polyhedra_Library::Variable(i));
-            if (coeff == 0)
-                continue;
-
-            if (!first && coeff > 0)
-                oss << " + ";
-            if (coeff < 0)
-                oss << " - ";
-            if (abs(coeff) != 1)
-                oss << abs(coeff);
-
-            string varName;
-            if (i < half) {
-                varName = vm.orderedVars[i];
-            } else if (i < n) {
-                varName = vm.orderedVars[i - half] + "_init";
-            } else if (i < n + half) {
-                varName = vm.orderedVars[i - n] + "'";
-            } else {
-                varName = vm.orderedVars[i - n - half] + "_init'";
-            }
-
-            oss << varName;
-            first = false;
-        }
-
-        Coefficient inhom = expr.inhomogeneous_term();
-        if (inhom != 0 || first) {
-            if (!first && inhom > 0)
-                oss << " + ";
-            if (inhom < 0)
-                oss << " - ";
-            oss << abs(inhom);
-        }
-
-        INFO("LinearExpr: " + oss.str());
-    }
 } // namespace acslg::analyzer::symbolic
 
 namespace acslg::analyzer {
-    using namespace symbolic;
     namespace {
+        Parma_Polyhedra_Library::Constraint primedConstriant(
+            const Parma_Polyhedra_Library::Constraint &c,
+            const VarManager &vm) {
+            Linear_Expression shiftedExpr(0);
+            auto spaceDim = c.space_dimension();
+
+            for (size_t i = 0; i < spaceDim; ++i) {
+                Parma_Polyhedra_Library::Variable oldVar(i);
+                Coefficient coeff = c.coefficient(oldVar);
+                if (coeff != 0) {
+                    Parma_Polyhedra_Library::Variable newVar(i + vm.numVars);
+                    shiftedExpr += coeff * newVar;
+                }
+            }
+
+            shiftedExpr += c.inhomogeneous_term();
+
+            switch (c.type()) {
+                case Constraint::Type::EQUALITY: return Constraint(shiftedExpr == 0);
+                case Constraint::Type::NONSTRICT_INEQUALITY: return Constraint(shiftedExpr >= 0);
+                case Constraint::Type::STRICT_INEQUALITY: ERROR("Strict inequality not supported");
+                default: ERROR("Unsupported constraint type");
+            }
+        }
+
+        Parma_Polyhedra_Library::C_Polyhedron primedPolyhedron(
+            const Parma_Polyhedra_Library::C_Polyhedron &poly,
+            const VarManager &vm) {
+            using namespace Parma_Polyhedra_Library;
+
+            auto primed = C_Polyhedron{vm.numVars * 2, UNIVERSE};
+
+            Constraint_System cs = poly.constraints();
+            for (Constraint_System::const_iterator it = cs.begin(); it != cs.end(); ++it) {
+                Constraint primedC = primedConstriant(*it, vm);
+                primed.add_constraint(primedC);
+            }
+
+            return primed;
+        }
+
         /******************************************************************************\
      *                              Path Preprocessing                            *
      *  This section handles symbolic path condition construction and transition  *
@@ -451,11 +450,11 @@ namespace acslg::analyzer {
             return poly;
         }
 
-        vector<Formulas> negateFormulas(Formulas input) {
-            using Op = BinaryOpExpr::Operator;
+        std::vector<Formulas> negateFormulas(Formulas input) {
+            using Op = symbolic::BinaryOpExpr::Operator;
 
-            vector<Formulas> result;
-            queue<pair<Formulas, const size_t>> worklist;
+            std::vector<Formulas> result;
+            std::queue<pair<Formulas, const size_t>> worklist;
             worklist.push({std::move(input), 0});
 
             while (!worklist.empty()) {
@@ -465,7 +464,7 @@ namespace acslg::analyzer {
                 bool expanded = false;
 
                 for (size_t i = startIdx; i < current.size(); ++i) {
-                    auto *bin = dynamic_cast<BinaryOpExpr *>(current[i].get().get());
+                    auto *bin = dynamic_cast<symbolic::BinaryOpExpr *>(current[i].get().get());
                     if (!bin) {
                         ERROR("negateFormulas: input[" + to_string(i) + "] is not a BinaryOpExpr");
                     }
@@ -476,33 +475,36 @@ namespace acslg::analyzer {
                     // @WindOctober: try to optimize clone.
                     switch (bin->getOperator()) {
                         case Op::LessEqual: {
-                            auto newRHS = make_unique<BinaryOpExpr>(rhs->clone(), Op::Add,
-                                                                    make_unique<LiteralExpr>(1));
-                            current[i]  = make_unique<BinaryOpExpr>(lhs->clone(), Op::GreaterEqual,
-                                                                    std::move(newRHS));
+                            auto newRHS = std::make_unique<symbolic::BinaryOpExpr>(
+                                rhs->clone(), Op::Add, std::make_unique<symbolic::LiteralExpr>(1));
+                            current[i] = std::make_unique<symbolic::BinaryOpExpr>(
+                                lhs->clone(), Op::GreaterEqual, std::move(newRHS));
                             worklist.push({std::move(current), i + 1});
                             expanded = true;
                             break;
                         }
                         case Op::GreaterEqual: {
-                            auto newRHS = make_unique<BinaryOpExpr>(rhs->clone(), Op::Subtract,
-                                                                    make_unique<LiteralExpr>(1));
-                            current[i]  = make_unique<BinaryOpExpr>(lhs->clone(), Op::LessEqual,
-                                                                    std::move(newRHS));
+                            auto newRHS = std::make_unique<symbolic::BinaryOpExpr>(
+                                rhs->clone(), Op::Subtract,
+                                std::make_unique<symbolic::LiteralExpr>(1));
+                            current[i] = std::make_unique<symbolic::BinaryOpExpr>(
+                                lhs->clone(), Op::LessEqual, std::move(newRHS));
                             worklist.push({std::move(current), i + 1});
                             expanded = true;
                             break;
                         }
                         case Op::Equal: {
-                            auto leExpr = make_unique<BinaryOpExpr>(
+                            auto leExpr = std::make_unique<symbolic::BinaryOpExpr>(
                                 lhs->clone(), Op::LessEqual,
-                                make_unique<BinaryOpExpr>(rhs->clone(), Op::Subtract,
-                                                          make_unique<LiteralExpr>(1)));
+                                std::make_unique<symbolic::BinaryOpExpr>(
+                                    rhs->clone(), Op::Subtract,
+                                    std::make_unique<symbolic::LiteralExpr>(1)));
 
-                            auto geExpr = make_unique<BinaryOpExpr>(
+                            auto geExpr = std::make_unique<symbolic::BinaryOpExpr>(
                                 lhs->clone(), Op::GreaterEqual,
-                                make_unique<BinaryOpExpr>(rhs->clone(), Op::Add,
-                                                          make_unique<LiteralExpr>(1)));
+                                std::make_unique<symbolic::BinaryOpExpr>(
+                                    rhs->clone(), Op::Add,
+                                    std::make_unique<symbolic::LiteralExpr>(1)));
 
                             Formulas branch;
                             branch.reserve(current.size());
@@ -535,9 +537,9 @@ namespace acslg::analyzer {
         }
 
         [[deprecated("Loop condition shouldn't be multiple")]] [[maybe_unused]]
-        vector<Formulas> preprocessLoopCond(Formulas loopCond) {
-            vector<Formulas> result;
-            queue<pair<Formulas, const size_t>> worklist;
+        std::vector<Formulas> preprocessLoopCond(Formulas loopCond) {
+            std::vector<Formulas> result;
+            std::queue<pair<Formulas, const size_t>> worklist;
             worklist.push({std::move(loopCond), 0});
 
             while (!worklist.empty()) {
@@ -547,27 +549,27 @@ namespace acslg::analyzer {
                 bool expanded = false;
 
                 for (size_t i = startIdx; i < current.size(); ++i) {
-                    auto *bin = dynamic_cast<BinaryOpExpr *>(current[i].get().get());
+                    auto *bin = dynamic_cast<symbolic::BinaryOpExpr *>(current[i].get().get());
                     if (!bin) {
                         ERROR("preprocessLoopCond: loopCond[" + to_string(i) +
                               "] is not a BinaryOpExpr");
                     }
 
-                    using enum BinaryOpExpr::Operator;
+                    using enum symbolic::BinaryOpExpr::Operator;
                     const auto &lhs = bin->getLeft();
                     const auto &rhs = bin->getRight();
 
                     switch (bin->getOperator()) {
                         case NotEqual: {
-                            auto rhsPlus1 = make_unique<BinaryOpExpr>(rhs->clone(), Add,
-                                                                      make_unique<LiteralExpr>(1));
-                            auto geExpr   = make_unique<BinaryOpExpr>(lhs->clone(), GreaterEqual,
-                                                                      std::move(rhsPlus1));
+                            auto rhsPlus1 = std::make_unique<symbolic::BinaryOpExpr>(
+                                rhs->clone(), Add, std::make_unique<symbolic::LiteralExpr>(1));
+                            auto geExpr = std::make_unique<symbolic::BinaryOpExpr>(
+                                lhs->clone(), GreaterEqual, std::move(rhsPlus1));
 
-                            auto rhsMinus1 = make_unique<BinaryOpExpr>(rhs->clone(), Subtract,
-                                                                       make_unique<LiteralExpr>(1));
-                            auto leExpr    = make_unique<BinaryOpExpr>(lhs->clone(), LessEqual,
-                                                                       std::move(rhsMinus1));
+                            auto rhsMinus1 = std::make_unique<symbolic::BinaryOpExpr>(
+                                rhs->clone(), Subtract, std::make_unique<symbolic::LiteralExpr>(1));
+                            auto leExpr = std::make_unique<symbolic::BinaryOpExpr>(
+                                lhs->clone(), LessEqual, std::move(rhsMinus1));
 
                             Formulas branch;
                             branch.reserve(current.size());
@@ -586,19 +588,19 @@ namespace acslg::analyzer {
                             break;
                         }
                         case GreaterThan: {
-                            auto newRHS = make_unique<BinaryOpExpr>(rhs->clone(), Add,
-                                                                    make_unique<LiteralExpr>(1));
-                            current[i]  = make_unique<BinaryOpExpr>(lhs->clone(), GreaterEqual,
-                                                                    std::move(newRHS));
+                            auto newRHS = std::make_unique<symbolic::BinaryOpExpr>(
+                                rhs->clone(), Add, std::make_unique<symbolic::LiteralExpr>(1));
+                            current[i] = std::make_unique<symbolic::BinaryOpExpr>(
+                                lhs->clone(), GreaterEqual, std::move(newRHS));
                             worklist.push({std::move(current), i + 1});
                             expanded = true;
                             break;
                         }
                         case LessThan: {
-                            auto newRHS = make_unique<BinaryOpExpr>(rhs->clone(), Subtract,
-                                                                    make_unique<LiteralExpr>(1));
-                            current[i]  = make_unique<BinaryOpExpr>(lhs->clone(), LessEqual,
-                                                                    std::move(newRHS));
+                            auto newRHS = std::make_unique<symbolic::BinaryOpExpr>(
+                                rhs->clone(), Subtract, std::make_unique<symbolic::LiteralExpr>(1));
+                            current[i] = std::make_unique<symbolic::BinaryOpExpr>(
+                                lhs->clone(), LessEqual, std::move(newRHS));
                             worklist.push({std::move(current), i + 1});
                             expanded = true;
                             break;
@@ -627,12 +629,12 @@ namespace acslg::analyzer {
             auto result = C_Polyhedron{dim, UNIVERSE};
 
             const auto &varAddrMap = path.getVarAddr();
-            unordered_set<string> assignedVars;
+            std::unordered_set<std::string> assignedVars;
 
             for (const auto &[varDecl, addrPtr] : varAddrMap) {
                 if (!varDecl)
                     UNREACHABLE();
-                string varName = varDecl->getNameAsString();
+                std::string varName = varDecl->getNameAsString();
 
                 auto varIt = vm.varIndexMap.find(varName);
                 if (varIt == vm.varIndexMap.end())
@@ -649,7 +651,7 @@ namespace acslg::analyzer {
                 Linear_Expression lhs = Parma_Polyhedra_Library::Variable(idx);
 
                 auto rhs = expr->toLinearExpr(vm.varIndexMap);
-                if (rhs == nullopt)
+                if (rhs == std::nullopt)
                     continue; // Ignore this variable.
 
                 Linear_Expression eq = lhs - rhs.value();
@@ -659,7 +661,8 @@ namespace acslg::analyzer {
             }
             if (!init) {
                 // Variables that can't be deal with (mainly because their value contains symbolic
-                // values from pointer or array). for (const auto &[name, idx] : vm.varIndexMap) {
+                // values from pointer or std::array). for (const auto &[name, idx] :
+                // vm.varIndexMap) {
                 //     if (assignedVars.contains(name))
                 //         continue;
 
@@ -692,27 +695,28 @@ namespace acslg::analyzer {
             return result;
         }
 
-        optional<Parma_Polyhedra_Library::Constraint> toConstraint(const SymbolicExpr *expr,
-                                                                   const VarManager &vm) {
-            if (!expr || expr->getType() != SymbolicExpr::ExprType::BinaryOp) {
+        std::optional<Parma_Polyhedra_Library::Constraint> toConstraint(
+            const symbolic::SymbolicExpr *expr,
+            const VarManager &vm) {
+            if (!expr || expr->getType() != symbolic::SymbolicExpr::ExprType::BinaryOp) {
                 ERROR("toConstraint: expression must be a BinaryOpExpr.");
             }
 
-            const BinaryOpExpr *bin = static_cast<const BinaryOpExpr *>(expr);
-            const auto &op          = bin->getOperator();
+            auto bin       = static_cast<const symbolic::BinaryOpExpr *>(expr);
+            const auto &op = bin->getOperator();
 
             auto lhs = bin->getLeft()->toLinearExpr(vm.varIndexMap);
             auto rhs = bin->getRight()->toLinearExpr(vm.varIndexMap);
-            if (lhs == nullopt || rhs == nullopt)
-                return nullopt;
+            if (lhs == std::nullopt || rhs == std::nullopt)
+                return std::nullopt;
             auto le = lhs.value() - rhs.value();
 
             switch (op) {
-                case BinaryOpExpr::Operator::LessEqual:
+                case symbolic::BinaryOpExpr::Operator::LessEqual:
                     return Parma_Polyhedra_Library::Constraint(le <= 0);
-                case BinaryOpExpr::Operator::GreaterEqual:
+                case symbolic::BinaryOpExpr::Operator::GreaterEqual:
                     return Parma_Polyhedra_Library::Constraint(le >= 0);
-                case BinaryOpExpr::Operator::Equal:
+                case symbolic::BinaryOpExpr::Operator::Equal:
                     return Parma_Polyhedra_Library::Constraint(le == 0);
                 default:
                     ERROR("toConstraint: unsupported binary operator in assertion (must be <=, >=, "
@@ -720,11 +724,11 @@ namespace acslg::analyzer {
             }
         }
 
-        optional<Parma_Polyhedra_Library::C_Polyhedron> convertFormulaToPoly(
+        std::optional<Parma_Polyhedra_Library::C_Polyhedron> convertFormulaToPoly(
             const Formulas &assertions,
             const VarManager &vm) {
             if (vm.numVars == 0) {
-                ERROR("convertFormulaToPoly: empty variable map");
+                ERROR("convertFormulaToPoly: empty variable std::map");
             }
 
             auto dimension = vm.numVars * 2;
@@ -732,10 +736,10 @@ namespace acslg::analyzer {
                 Parma_Polyhedra_Library::C_Polyhedron{dimension, Parma_Polyhedra_Library::UNIVERSE};
 
             for (const auto &assertion : assertions) {
-                const SymbolicExpr *rawExpr = assertion.get().get();
-                auto constraint             = toConstraint(rawExpr, vm);
-                if (constraint == nullopt)
-                    return nullopt;
+                const symbolic::SymbolicExpr *rawExpr = assertion.get().get();
+                auto constraint                       = toConstraint(rawExpr, vm);
+                if (constraint == std::nullopt)
+                    return std::nullopt;
                 poly.add_constraint(constraint.value());
             }
 
@@ -743,23 +747,23 @@ namespace acslg::analyzer {
         }
 
         struct PathsAndExitInvs {
-            vector<vector<Parma_Polyhedra_Library::C_Polyhedron>> pathsInvs_;
-            vector<Parma_Polyhedra_Library::C_Polyhedron> exitInvs_;
+            std::vector<vector<Parma_Polyhedra_Library::C_Polyhedron>> pathsInvs_;
+            std::vector<Parma_Polyhedra_Library::C_Polyhedron> exitInvs_;
         };
 
         [[deprecated("Arguments simplified")]] [[maybe_unused]]
-        PathsAndExitInvs computeLinearInv(const vector<string> &locations,
-                                          const vector<TransRel> &transitions,
+        PathsAndExitInvs computeLinearInv(const std::vector<std::string> &locations,
+                                          const std::vector<TransRel> &transitions,
                                           const InitRel &initial,
                                           const VarManager &vm) {
-            auto linTS = make_unique<LinTS>();
+            auto linTS = std::make_unique<LinTS>();
 
-            for (const string &name : vm.orderedVars) {
+            for (const std::string &name : vm.orderedVars) {
                 linTS->addVariable(name.c_str());
             }
 
             for (size_t i = 0; i < locations.size(); ++i) {
-                const string &locName = locations[i];
+                const std::string &locName = locations[i];
                 if (static_cast<int>(i) == initial.first) {
                     linTS->addLocInit(locName.c_str(), initial.second);
                 } else {
@@ -769,7 +773,7 @@ namespace acslg::analyzer {
 
             for (size_t i = 0; i < transitions.size(); ++i) {
                 const auto &[src, dst, transPoly] = transitions[i];
-                string transName                  = "t" + to_string(i);
+                std::string transName             = "t" + to_string(i);
 
                 linTS->addTransRel(transName.c_str(), locations[src].c_str(),
                                    locations[dst].c_str(), transPoly);
@@ -783,7 +787,7 @@ namespace acslg::analyzer {
                 if (pathName == "init" || pathName == "exit")
                     continue;
 
-                vector<Parma_Polyhedra_Library::C_Polyhedron> pathInvs;
+                std::vector<Parma_Polyhedra_Library::C_Polyhedron> pathInvs;
 
                 for (auto pathInv : invariants[pathName])
                     pathInvs.push_back(*pathInv);
@@ -804,11 +808,12 @@ namespace acslg::analyzer {
             return result;
         }
 
-        PathsAndExitInvs computeLinearInv(const vector<string> &locations,
-                                          vector<tuple<size_t, size_t, C_Polyhedron>> &transitions,
-                                          const pair<size_t, C_Polyhedron> &initial,
-                                          const VarManager &vm) {
-            auto linTS = make_unique<LinTS>();
+        PathsAndExitInvs computeLinearInv(
+            const std::vector<std::string> &locations,
+            std::vector<std::tuple<size_t, size_t, C_Polyhedron>> &transitions,
+            const std::pair<size_t, C_Polyhedron> &initial,
+            const VarManager &vm) {
+            auto linTS = std::make_unique<LinTS>();
 
             for (auto &name : vm.orderedVars) {
                 linTS->addVariable(name.c_str());
@@ -825,7 +830,7 @@ namespace acslg::analyzer {
 
             for (size_t i = 0; i < transitions.size(); ++i) {
                 auto &[src, dst, transPoly] = transitions[i];
-                string transName            = "t" + to_string(i);
+                std::string transName       = "t" + to_string(i);
 
                 linTS->addTransRel(transName.c_str(), locations[src].c_str(),
                                    locations[dst].c_str(), &transPoly);
@@ -839,7 +844,7 @@ namespace acslg::analyzer {
                 if (pathName == "init" || pathName == "exit")
                     continue;
 
-                vector<Parma_Polyhedra_Library::C_Polyhedron> pathInvs;
+                std::vector<Parma_Polyhedra_Library::C_Polyhedron> pathInvs;
 
                 for (auto pathInv : invariants[pathName])
                     pathInvs.push_back(*pathInv);
@@ -881,8 +886,8 @@ namespace acslg::analyzer {
          *  verification-based consumption.                                           *
         \******************************************************************************/
 
-        optional<string> buildInvs(const C_Polyhedron &poly, const VarManager &vm) {
-            string spec;
+        std::optional<std::string> buildInvs(const C_Polyhedron &poly, const VarManager &vm) {
+            std::string spec;
             bool firstLine = true;
             for (auto &constraint : poly.constraints()) {
                 using namespace Parma_Polyhedra_Library;
@@ -908,7 +913,7 @@ namespace acslg::analyzer {
                     if (abs(coeff) != 1)
                         spec += to_string(abs(coeff.get_si()));
 
-                    string varName;
+                    std::string varName;
                     if (i < half) {
                         varName = vm.orderedVars[i];
                     } else if (i < n) {
@@ -940,23 +945,27 @@ namespace acslg::analyzer {
                 spec += ";\n";
             }
             if (spec.empty())
-                return nullopt;
+                return std::nullopt;
             // restd::move '\n'
             spec.pop_back();
             return spec;
         }
 
-        pair<AddressBoxMap<not_null<unique_ptr<SymbolicExpr>>>, vector<not_null<unique_ptr<SymbolicExpr>>>> buildPostState(
-            const C_Polyhedron &poly,
-            const Path &initPath,
-            const VarManager &vm) {
+        using AddrValueAndCondsPair =
+            std::pair<symbolic::AddressBoxMap<utils::not_null<unique_ptr<symbolic::SymbolicExpr>>>,
+                      std::vector<utils::not_null<unique_ptr<symbolic::SymbolicExpr>>>>;
+        AddrValueAndCondsPair buildPostState(const C_Polyhedron &poly,
+                                             const Path &initPath,
+                                             const VarManager &vm) {
             using namespace Parma_Polyhedra_Library;
-            using R   = pair<AddressBoxMap<not_null<unique_ptr<SymbolicExpr>>>,
-                             vector<not_null<unique_ptr<SymbolicExpr>>>>;
+            using R = std::pair<
+                symbolic::AddressBoxMap<utils::not_null<unique_ptr<symbolic::SymbolicExpr>>>,
+                std::vector<utils::not_null<unique_ptr<symbolic::SymbolicExpr>>>>;
             auto n    = vm.numVars;
             auto half = n / 2;
 
-            unordered_map<int, not_null<unique_ptr<SymbolicExpr>>> resolvedExprs;
+            std::unordered_map<int, utils::not_null<unique_ptr<symbolic::SymbolicExpr>>>
+                resolvedExprs;
             for (size_t i = half; i < n; ++i) {
                 auto trueDecl = vm.varDecls.at(i - half);
                 resolvedExprs.emplace(i, initPath.getVarState(trueDecl));
@@ -972,7 +981,7 @@ namespace acslg::analyzer {
                     if (!constraint.is_equality())
                         continue;
 
-                    map<size_t, Coefficient> coeffs;
+                    std::map<size_t, Coefficient> coeffs;
                     Coefficient constant = constraint.inhomogeneous_term();
                     auto maxIdx          = constraint.space_dimension();
 
@@ -983,7 +992,7 @@ namespace acslg::analyzer {
                             coeffs[i] = c;
                     }
 
-                    vector<size_t> unknowns;
+                    std::vector<size_t> unknowns;
                     for (const auto &[idx, coeff] : coeffs) {
                         if (idx < half && !resolvedExprs.contains(idx))
                             unknowns.push_back(idx);
@@ -998,33 +1007,35 @@ namespace acslg::analyzer {
                         continue;
                     }
 
-                    unique_ptr<SymbolicExpr> rhs = make_unique<LiteralExpr>(-constant.get_si());
+                    std::unique_ptr<symbolic::SymbolicExpr> rhs =
+                        std::make_unique<symbolic::LiteralExpr>(-constant.get_si());
 
                     for (const auto &[idx, coeff] : coeffs) {
                         if (idx == target)
                             continue;
 
-                        SymbolicExpr *base = resolvedExprs.at(idx).get().get();
+                        symbolic::SymbolicExpr *base = resolvedExprs.at(idx).get().get();
 
                         auto term = base->clone();
                         if (coeff != 1) {
-                            term = make_unique<BinaryOpExpr>(
+                            term = std::make_unique<symbolic::BinaryOpExpr>(
 
-                                make_unique<LiteralExpr>(coeff.get_si()),
-                                BinaryOpExpr::Operator::Multiply, std::move(term));
+                                std::make_unique<symbolic::LiteralExpr>(coeff.get_si()),
+                                symbolic::BinaryOpExpr::Operator::Multiply, std::move(term));
                         }
 
-                        rhs = make_unique<BinaryOpExpr>(
-                            std::move(rhs), BinaryOpExpr::Operator::Subtract, std::move(term));
+                        rhs = std::make_unique<symbolic::BinaryOpExpr>(
+                            std::move(rhs), symbolic::BinaryOpExpr::Operator::Subtract,
+                            std::move(term));
                     }
 
                     if (coeffs[target] == -1) {
-                        rhs =
-                            make_unique<UnaryOpExpr>(UnaryOpExpr::Operator::Minus, std::move(rhs));
+                        rhs = std::make_unique<symbolic::UnaryOpExpr>(
+                            symbolic::UnaryOpExpr::Operator::Minus, std::move(rhs));
                     } else if (coeffs[target] != 1) {
-                        rhs = make_unique<BinaryOpExpr>(
-                            std::move(rhs), BinaryOpExpr::Operator::Divide,
-                            make_unique<LiteralExpr>(coeffs[target].get_si()));
+                        rhs = std::make_unique<symbolic::BinaryOpExpr>(
+                            std::move(rhs), symbolic::BinaryOpExpr::Operator::Divide,
+                            std::make_unique<symbolic::LiteralExpr>(coeffs[target].get_si()));
                     }
 
                     auto [_, ok] = resolvedExprs.emplace(target, std::move(rhs));
@@ -1035,8 +1046,9 @@ namespace acslg::analyzer {
                 }
             }
 
-            AddressBoxMap<not_null<unique_ptr<SymbolicExpr>>> newVars;
-            vector<not_null<unique_ptr<SymbolicExpr>>> conds;
+            symbolic::AddressBoxMap<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>
+                newVars;
+            std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> conds;
 
             for (size_t i = 0; i < half; ++i) {
                 auto varDecl = vm.varDecls.at(i);
@@ -1049,14 +1061,14 @@ namespace acslg::analyzer {
             }
 
             for (auto &constraint : cs) {
-                optional<not_null<unique_ptr<SymbolicExpr>>> lhs{};
+                std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> lhs{};
                 auto maxIdx = constraint.space_dimension();
                 for (size_t i = 0; i < maxIdx; ++i) {
                     Coefficient c = constraint.coefficient(Parma_Polyhedra_Library::Variable(i));
                     if (c == 0)
                         continue;
 
-                    SymbolicExpr *base = nullptr;
+                    symbolic::SymbolicExpr *base = nullptr;
                     if (resolvedExprs.contains(i))
                         base = resolvedExprs.at(i).get().get();
                     else {
@@ -1067,16 +1079,17 @@ namespace acslg::analyzer {
 
                     auto term = base->clone();
                     if (c != 1) {
-                        term = make_unique<BinaryOpExpr>(make_unique<LiteralExpr>(c.get_si()),
-                                                         BinaryOpExpr::Operator::Multiply,
-                                                         std::move(term));
+                        term = std::make_unique<symbolic::BinaryOpExpr>(
+                            std::make_unique<symbolic::LiteralExpr>(c.get_si()),
+                            symbolic::BinaryOpExpr::Operator::Multiply, std::move(term));
                     }
 
                     if (!lhs) {
                         lhs = std::move(term);
                     } else {
-                        lhs = make_unique<BinaryOpExpr>(
-                            std::move(lhs.value()), BinaryOpExpr::Operator::Add, std::move(term));
+                        lhs = std::make_unique<symbolic::BinaryOpExpr>(
+                            std::move(lhs.value()), symbolic::BinaryOpExpr::Operator::Add,
+                            std::move(term));
                     }
                 }
 
@@ -1085,24 +1098,24 @@ namespace acslg::analyzer {
 
                 Coefficient c0 = constraint.inhomogeneous_term();
                 if (c0 != 0) {
-                    lhs = make_unique<BinaryOpExpr>(std::move(lhs.value()),
-                                                    BinaryOpExpr::Operator::Add,
-                                                    make_unique<LiteralExpr>(c0.get_si()));
+                    lhs = std::make_unique<symbolic::BinaryOpExpr>(
+                        std::move(lhs.value()), symbolic::BinaryOpExpr::Operator::Add,
+                        std::make_unique<symbolic::LiteralExpr>(c0.get_si()));
                 }
 
-                BinaryOpExpr::Operator op;
+                symbolic::BinaryOpExpr::Operator op;
                 if (constraint.is_equality()) {
-                    op = BinaryOpExpr::Operator::Equal;
+                    op = symbolic::BinaryOpExpr::Operator::Equal;
                 } else if (constraint.is_strict_inequality()) {
-                    op = BinaryOpExpr::Operator::GreaterEqual;
+                    op = symbolic::BinaryOpExpr::Operator::GreaterEqual;
                 } else if (constraint.is_inequality()) {
-                    op = BinaryOpExpr::Operator::GreaterThan;
+                    op = symbolic::BinaryOpExpr::Operator::GreaterThan;
                 } else {
                     continue;
                 }
 
-                auto cond = make_unique<BinaryOpExpr>(std::move(lhs.value()), op,
-                                                      make_unique<LiteralExpr>(0));
+                auto cond = std::make_unique<symbolic::BinaryOpExpr>(
+                    std::move(lhs.value()), op, std::make_unique<symbolic::LiteralExpr>(0));
 
                 conds.push_back(std::move(cond));
             }
@@ -1111,17 +1124,17 @@ namespace acslg::analyzer {
     } // namespace
 
     // [[deprecated("Loop condition shouldn't be multiple")]]
-    // vector<InvsAndPostStates> buildLoopInvariant(Formulas loopCond,
-    //                                              const vector<unique_ptr<Path>> &paths,
+    // std::vector<InvsAndPostStates> buildLoopInvariant(Formulas loopCond,
+    //                                              const std::vector<unique_ptr<Path>> &paths,
     //                                              const ProgramState &initState) {
     //     // TODO: process case that paths contain return.
-    //     vector<InvsAndPostStates> invsAndPostStates;
+    //     std::vector<InvsAndPostStates> invsAndPostStates;
     //     VarManager vm = VarManager::fromPaths(paths);
 
-    //     vector<Formulas> processedCond = preprocessLoopCond(std::move(loopCond));
+    //     std::vector<Formulas> processedCond = preprocessLoopCond(std::move(loopCond));
 
     //     const auto &initPaths = initState.getPaths();
-    //     vector<Parma_Polyhedra_Library::C_Polyhedron *> initPathPolys;
+    //     std::vector<Parma_Polyhedra_Library::C_Polyhedron *> initPathPolys;
     //     for (size_t i = 0; i < initPaths.size(); ++i) {
     //         if (initPaths[i])
     //             initPathPolys.push_back(buildPathPoly(*initPaths[i], vm, true));
@@ -1129,7 +1142,7 @@ namespace acslg::analyzer {
     //             UNREACHABLE();
     //     }
 
-    //     vector<Parma_Polyhedra_Library::C_Polyhedron *> transPolys;
+    //     std::vector<Parma_Polyhedra_Library::C_Polyhedron *> transPolys;
     //     for (const auto &path : paths) {
     //         if (path)
     //             transPolys.push_back(buildPathPoly(*path, vm));
@@ -1137,7 +1150,7 @@ namespace acslg::analyzer {
     //             UNREACHABLE();
     //     }
 
-    //     vector<string> locations;
+    //     std::vector<std::string> locations;
 
     //     locations.push_back("init");
     //     for (size_t i = 0; i < paths.size(); ++i) {
@@ -1158,14 +1171,14 @@ namespace acslg::analyzer {
     //         auto negatedConds = negateFormulas(cloneFormulas(assertions));
 
     //         // === Precompute negated polyhedra
-    //         vector<C_Polyhedron *> negatedPolys;
+    //         std::vector<C_Polyhedron *> negatedPolys;
     //         for (const auto &neg : negatedConds) {
     //             auto *poly = convertFormulaToPoly(neg, vm);
     //             negatedPolys.push_back(poly);
     //         }
     //         for (size_t path_i = 0; path_i < initPathPolys.size(); ++path_i) {
     //             auto *initPoly = initPathPolys[path_i];
-    //             vector<TransRel> transitions;
+    //             std::vector<TransRel> transitions;
 
     //             // === init -> path_k ===
     //             for (size_t k = 0; k < paths.size(); ++k) {
@@ -1258,22 +1271,23 @@ namespace acslg::analyzer {
     //     return invsAndPostStates;
     // }
 
-    vector<InvsAndPostStates> buildLoopInvariant(unique_ptr<symbolic::SymbolicExpr> loopCond,
-                                                 const ProgramState &loopEntry,
-                                                 const ProgramState &loopCurrent) {
-        vector<InvsAndPostStates> invsAndPostStates;
+    std::vector<InvsAndPostStates> buildLoopInvariant(
+        std::unique_ptr<symbolic::SymbolicExpr> loopCond,
+        const ProgramState &loopEntry,
+        const ProgramState &loopCurrent) {
+        std::vector<InvsAndPostStates> invsAndPostStates;
         auto &paths   = loopCurrent.getPaths();
         VarManager vm = VarManager::fromPaths(loopEntry.getPaths());
 
         auto &initPath    = loopEntry.getPaths().at(0);
         auto initPathPoly = buildPathPoly(*initPath, vm, true);
 
-        vector<Parma_Polyhedra_Library::C_Polyhedron> transPolys;
+        std::vector<Parma_Polyhedra_Library::C_Polyhedron> transPolys;
         for (const auto &path : paths) {
             transPolys.push_back(buildPathPoly(*path, vm));
         }
 
-        vector<string> locations;
+        std::vector<std::string> locations;
 
         locations.push_back("init");
         for (size_t i = 0; i < paths.size(); ++i) {
@@ -1289,7 +1303,7 @@ namespace acslg::analyzer {
         Formulas assertions;
         assertions.push_back(std::move(loopCond)); // Yes, there is only one.
         auto baseConditionPoly = convertFormulaToPoly(assertions, vm);
-        if (baseConditionPoly == nullopt)
+        if (baseConditionPoly == std::nullopt)
             TODO(); // Condition contains values form Pointed-to Address.
         auto primedConditionPoly = primedPolyhedron(baseConditionPoly.value(), vm);
 
@@ -1300,10 +1314,10 @@ namespace acslg::analyzer {
 
         // === Precompute negated polyhedra
         auto negatedCondPoly = convertFormulaToPoly(negatedConds.at(0), vm);
-        if (negatedCondPoly == nullopt)
+        if (negatedCondPoly == std::nullopt)
             TODO(); // Condition contains values form Pointed-to Address.
 
-        vector<tuple<size_t, size_t, Parma_Polyhedra_Library::C_Polyhedron>> transitions;
+        std::vector<std::tuple<size_t, size_t, Parma_Polyhedra_Library::C_Polyhedron>> transitions;
 
         // === init -> path_k ===
         for (size_t k = 0; k < paths.size(); ++k) {

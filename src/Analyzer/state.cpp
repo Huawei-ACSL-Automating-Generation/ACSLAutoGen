@@ -16,14 +16,9 @@
 #include "Utils/utils.h"
 #include "SpecGenerator/specGenerator.h"
 
-using namespace std;
-using namespace clang;
-using namespace llvm;
-
 namespace acslg::analyzer {
-    using namespace symbolic;
-    using namespace utils;
-    using namespace spec_generator;
+    namespace symb = acslg::analyzer::symbolic;
+    using std::literals::string_literals::operator""s;
 
     Path::Path(const Path &other, bool shallowCopy)
         : context_(other.context_), startPoint_(other.startPoint_) {
@@ -51,7 +46,7 @@ namespace acslg::analyzer {
         swap(startPoint_, o.startPoint_);
     }
 
-    void Path::resymbolize(SourcePoint newStartPoint) {
+    void Path::resymbolize(symb::SourcePoint newStartPoint) {
         memoryState_.clear();
         pathConditions_.clear();
 
@@ -64,12 +59,12 @@ namespace acslg::analyzer {
         }
     }
 
-    not_null<unique_ptr<Address>> Path::extractLValue(const Expr *lhs) {
+    utils::not_null<std::unique_ptr<symb::Address>> Path::extractLValue(const clang::Expr *lhs) {
         auto lexpr = lhs->IgnoreParenImpCasts();
-        if (auto declRef = dyn_cast<DeclRefExpr>(lexpr)) {
+        if (auto declRef = dyn_cast<clang::DeclRefExpr>(lexpr)) {
             if (auto varDecl = llvm::dyn_cast<clang::VarDecl>(declRef->getDecl())) {
                 if (auto it = varAddr_.find(varDecl->getCanonicalDecl()); it != varAddr_.end()) {
-                    return make_unique<VariableAddress>(*it->second);
+                    return std::make_unique<symb::VariableAddress>(*it->second);
                 } else {
                     ERROR("varState has no ArraySubscriptExpr's base, undefined variable?");
                 }
@@ -77,14 +72,15 @@ namespace acslg::analyzer {
             ERROR("Not a varDecl Ref.");
         }
 
-        if (auto *arr = dyn_cast<ArraySubscriptExpr>(lexpr)) {
+        if (auto *arr = dyn_cast<clang::ArraySubscriptExpr>(lexpr)) {
             auto baseAddr = extractLValue(arr->getBase());
             if (const auto symbol = memoryState_.read(*baseAddr)) {
-                auto symbolAddr = dynamic_cast<const SymbolAddress *>(symbol.value().get());
+                auto symbolAddr = dynamic_cast<const symb::SymbolAddress *>(symbol.value().get());
                 if (symbolAddr == nullptr)
-                    ERROR("Value of ArraySubscriptExpr's base is not 'SymbolAddress', base is "
-                          "neither pointer nor array?");
-                auto resultAddr = make_unique<SymbolAddress>(*symbolAddr);
+                    ERROR(
+                        "Value of ArraySubscriptExpr's base is not 'symb::SymbolAddress', base is "
+                        "neither pointer nor std::array?");
+                auto resultAddr = std::make_unique<symb::SymbolAddress>(*symbolAddr);
                 auto idxEval    = evalExpr(arr->getIdx());
                 if (idxEval.second.size() != 1)
                     ERROR("This location does not support control flow branches.");
@@ -102,8 +98,8 @@ namespace acslg::analyzer {
             }
         }
 
-        if (auto *uop = dyn_cast<UnaryOperator>(lexpr)) {
-            if (uop->getOpcode() == UO_Deref) {
+        if (auto *uop = dyn_cast<clang::UnaryOperator>(lexpr)) {
+            if (uop->getOpcode() == clang::UnaryOperatorKind::UO_Deref) {
                 auto addrEval = evalExpr(uop->getSubExpr());
                 if (addrEval.second.size() != 1)
                     TODO();
@@ -118,16 +114,16 @@ namespace acslg::analyzer {
                     }
                     return std::move(addr).value().into_underlying();
                 } else {
-                    ERROR("Expected Address in deref, got: " << addrExpr->dump());
+                    ERROR("Expected symb::Address in deref, got: " << addrExpr->dump());
                 }
             }
         }
 
-        if (auto *mem = dyn_cast<MemberExpr>(lexpr)) {
+        if (auto *mem = dyn_cast<clang::MemberExpr>(lexpr)) {
             auto base = mem->getBase()->IgnoreParenImpCasts();
             auto FD   = llvm::dyn_cast<clang::FieldDecl>(mem->getMemberDecl());
             if (FD == nullptr)
-                ERROR("RHS of memberExpr is not a `FieldDecl`?");
+                ERROR("RHS of memberExpr is not a `clang::FieldDecl`?");
             if (FD->getParent() == nullptr)
                 ERROR("No parent!");
             auto RD      = FD->getParent();
@@ -139,42 +135,43 @@ namespace acslg::analyzer {
                     ERROR("This location does not support control flow branches.");
                 auto baseExpr = std::move(addrEval.second[0]);
                 auto baseAddr = baseExpr->tryEvalAsSymbolAddr();
-                if (baseAddr == nullopt)
-                    ERROR("Expected Address for '->' base, got: " << baseExpr->dump());
+                if (baseAddr == std::nullopt)
+                    ERROR("Expected symb::Address for '->' base, got: " << baseExpr->dump());
 
                 if (!memoryState_.contains(*baseAddr.value())) {
-                    auto st = make_unique<Structure>(
+                    auto st = std::make_unique<symb::Structure>(
                         RD, layout, baseAddr.value()->addressClone().into_underlying(),
                         startPoint_);
                     memoryState_.write(*baseAddr.value(), std::move(st));
                 }
-                return make_unique<FieldAddress>(
-                    RD,
-                    pair{baseAddr.value()->addressClone().into_underlying(), FD->getFieldIndex()});
+                return std::make_unique<symb::FieldAddress>(
+                    RD, std::pair{baseAddr.value()->addressClone().into_underlying(),
+                                  FD->getFieldIndex()});
             } else {
                 auto baseAddr = extractLValue(base);
 
                 if (!memoryState_.contains(*baseAddr)) {
-                    auto st = make_unique<Structure>(
+                    auto st = std::make_unique<symb::Structure>(
                         RD, layout, baseAddr->addressClone().into_underlying(), startPoint_);
                     memoryState_.write(*baseAddr, std::move(st));
                 }
-                return make_unique<FieldAddress>(
-                    RD, pair{baseAddr->addressClone().into_underlying(), FD->getFieldIndex()});
+                return std::make_unique<symb::FieldAddress>(
+                    RD, std::pair{baseAddr->addressClone().into_underlying(), FD->getFieldIndex()});
             }
         }
 
         UNIMPLEMENT("Unsupported LHS expression: " << lexpr->getStmtClassName());
     }
 
-    not_null<unique_ptr<SymbolicExpr>> Path::getVarState(const VarDecl *var) const {
+    utils::not_null<std::unique_ptr<symb::SymbolicExpr>> Path::getVarState(
+        const clang::VarDecl *var) const {
         auto canonicalVar = var->getCanonicalDecl();
         auto varIt        = varAddr_.find(canonicalVar);
         if (varIt == varAddr_.end())
             ERROR("Variable '" + canonicalVar->getNameAsString() + "' has no allocated address");
         auto addr  = varIt->second.get().get();
         auto value = memoryState_.read(*addr);
-        if (value == nullopt)
+        if (value == std::nullopt)
             ERROR("Variable '" + canonicalVar->getNameAsString() +
                   "' has no memory state entry for allocated address");
         return value.value()->clone();
@@ -182,27 +179,28 @@ namespace acslg::analyzer {
 
     const Formulas &Path::getPathConditions() const { return pathConditions_; }
 
-    not_null<VariableAddress *> Path::allocMemory(const VarDecl *var) {
+    utils::not_null<symb::VariableAddress *> Path::allocMemory(const clang::VarDecl *var) {
         auto canonicalVar = var->getCanonicalDecl();
         if (varAddr_.contains(canonicalVar)) {
-            // All `VariableAddress` built from same canonicalVar are same.
+            // All `symb::VariableAddress` built from same canonicalVar are same.
             return varAddr_.at(canonicalVar).get().get();
         }
-        auto newAddr = make_unique<VariableAddress>(var);
+        auto newAddr = std::make_unique<symb::VariableAddress>(var);
         auto rawPtr  = newAddr.get();
         varAddr_.emplace(canonicalVar, std::move(newAddr));
 
         // Prevent uninitialized variables.
-        memoryState_.write(*rawPtr, UnknownExpr::makeUnknown().into_underlying());
+        memoryState_.write(*rawPtr, symb::UnknownExpr::makeUnknown().into_underlying());
         return rawPtr;
     }
 
-    void Path::updateMemory(const Address &addr, not_null<unique_ptr<SymbolicExpr>> expr) {
+    void Path::updateMemory(const symb::Address &addr,
+                            utils::not_null<std::unique_ptr<symb::SymbolicExpr>> expr) {
         memoryState_.write(addr, std::move(expr).into_underlying());
     }
 
-    void Path::updateVarState(not_null<const VarDecl *> var,
-                              not_null<unique_ptr<SymbolicExpr>> expr) {
+    void Path::updateVarState(utils::not_null<const clang::VarDecl *> var,
+                              utils::not_null<std::unique_ptr<symb::SymbolicExpr>> expr) {
         auto canonicalVar = var->getCanonicalDecl();
         auto addrIt       = varAddr_.find(canonicalVar);
         if (addrIt == varAddr_.end())
@@ -212,40 +210,41 @@ namespace acslg::analyzer {
         memoryState_.write(*addr, std::move(expr).into_underlying());
     }
 
-    void Path::insertPathCondition(not_null<unique_ptr<SymbolicExpr>> cond) {
+    void Path::insertPathCondition(utils::not_null<std::unique_ptr<symb::SymbolicExpr>> cond) {
         pathConditions_.push_back(std::move(cond));
     }
 
-    unique_ptr<Path> Path::clone() const {
-        auto cloned           = make_unique<Path>(context_, startPoint_);
+    std::unique_ptr<Path> Path::clone() const {
+        auto cloned           = std::make_unique<Path>(context_, startPoint_);
         cloned->currentState_ = currentState_;
         for (const auto &entry : varAddr_)
-            cloned->varAddr_.emplace(entry.first, make_unique<VariableAddress>(*entry.second));
+            cloned->varAddr_.emplace(entry.first,
+                                     std::make_unique<symb::VariableAddress>(*entry.second));
         cloned->memoryState_ = memoryState_;
         for (const auto &cond : pathConditions_)
             cloned->pathConditions_.push_back(cond->clone());
         if (returnExpr_)
             cloned->returnExpr_.emplace(returnExpr_.value()->clone().into_underlying());
         else
-            cloned->returnExpr_ = nullopt;
+            cloned->returnExpr_ = std::nullopt;
         cloned->StmtCtx = StmtCtx;
         return cloned;
     }
 
     struct CallArgs {
         std::unique_ptr<Path> path;
-        std::vector<std::unique_ptr<SymbolicExpr>> args;
+        std::vector<std::unique_ptr<symb::SymbolicExpr>> args;
     };
 
     void bindParams(Path *calleePath,
-                    const FunctionDecl *FD,
-                    const std::vector<std::unique_ptr<SymbolicExpr>> &args) {
+                    const clang::FunctionDecl *FD,
+                    const std::vector<std::unique_ptr<symb::SymbolicExpr>> &args) {
         const unsigned n = FD->getNumParams();
         assert(args.size() == n);
 
         for (unsigned i = 0; i < n; ++i) {
-            const ParmVarDecl *param = FD->getParamDecl(i);
-            QualType T               = param->getType();
+            const clang::ParmVarDecl *param = FD->getParamDecl(i);
+            clang::QualType T               = param->getType();
 
             auto slot = calleePath->allocMemory(param);
 
@@ -264,13 +263,13 @@ namespace acslg::analyzer {
         }
     }
 
-    static std::vector<CallArgs> evalCallArgs(Path *basePath, const CallExpr *call) {
+    static std::vector<CallArgs> evalCallArgs(Path *basePath, const clang::CallExpr *call) {
         std::vector<CallArgs> args;
         args.push_back({nullptr, {}});
 
         const unsigned n = call->getNumArgs();
         for (unsigned i = 0; i < n; ++i) {
-            const Expr *arg = call->getArg(i);
+            const clang::Expr *arg = call->getArg(i);
             std::vector<CallArgs> next;
             for (auto &evalArg : args) {
                 Path *p = evalArg.path ? evalArg.path.get() : basePath;
@@ -297,47 +296,50 @@ namespace acslg::analyzer {
         return args;
     }
 
-    Path::EvalResult Path::evalExpr(const Expr *expr) {
+    Path::EvalResult Path::evalExpr(const clang::Expr *expr) {
         if (!expr)
-            ERROR("Fail to convert an empty Expr");
+            ERROR("Fail to convert an empty clang::Expr");
 
         EvalResult eval_result =
-            TypeSwitch<const Expr *, EvalResult>(expr)
-                .Case<IntegerLiteral>([](const IntegerLiteral *lit) -> EvalResult {
+            llvm::TypeSwitch<const clang::Expr *, EvalResult>(expr)
+                .Case<clang::IntegerLiteral>([](const clang::IntegerLiteral *lit) -> EvalResult {
                     DEBUG("evaluating IntegerLiteral...");
-                    APInt ap         = lit->getValue();
-                    QualType litType = lit->getType();
-                    unique_ptr<SymbolicExpr> result;
+                    llvm::APInt ap          = lit->getValue();
+                    clang::QualType litType = lit->getType();
+                    std::unique_ptr<symb::SymbolicExpr> result;
 
                     if (litType->isBooleanType()) {
-                        result = make_unique<LiteralExpr>(static_cast<bool>(ap.getZExtValue()));
+                        result = std::make_unique<symb::LiteralExpr>(
+                            static_cast<bool>(ap.getZExtValue()));
                     } else if (litType->isUnsignedIntegerType()) {
                         if (ap.getBitWidth() <= 8)
-                            result = make_unique<LiteralExpr>(
+                            result = std::make_unique<symb::LiteralExpr>(
                                 static_cast<unsigned char>(ap.getZExtValue()));
                         else if (ap.getBitWidth() <= 16)
-                            result = make_unique<LiteralExpr>(
+                            result = std::make_unique<symb::LiteralExpr>(
                                 static_cast<unsigned short>(ap.getZExtValue()));
                         else if (ap.getBitWidth() <= 32)
-                            result = make_unique<LiteralExpr>(
+                            result = std::make_unique<symb::LiteralExpr>(
                                 static_cast<unsigned int>(ap.getZExtValue()));
                         else if (ap.getBitWidth() <= 64)
-                            result =
-                                make_unique<LiteralExpr>(static_cast<uint64_t>(ap.getZExtValue()));
+                            result = std::make_unique<symb::LiteralExpr>(
+                                static_cast<uint64_t>(ap.getZExtValue()));
                         else
                             UNIMPLEMENT("Unsupported unsigned integer literal with bit width > 64: "
                                         << ap.getBitWidth());
                     } else {
                         if (ap.getBitWidth() <= 8)
-                            result = make_unique<LiteralExpr>(static_cast<char>(ap.getSExtValue()));
+                            result = std::make_unique<symb::LiteralExpr>(
+                                static_cast<char>(ap.getSExtValue()));
                         else if (ap.getBitWidth() <= 16)
-                            result =
-                                make_unique<LiteralExpr>(static_cast<short>(ap.getSExtValue()));
+                            result = std::make_unique<symb::LiteralExpr>(
+                                static_cast<short>(ap.getSExtValue()));
                         else if (ap.getBitWidth() <= 32)
-                            result = make_unique<LiteralExpr>(static_cast<int>(ap.getSExtValue()));
+                            result = std::make_unique<symb::LiteralExpr>(
+                                static_cast<int>(ap.getSExtValue()));
                         else if (ap.getBitWidth() <= 64)
-                            result =
-                                make_unique<LiteralExpr>(static_cast<int64_t>(ap.getSExtValue()));
+                            result = std::make_unique<symb::LiteralExpr>(
+                                static_cast<int64_t>(ap.getSExtValue()));
                         else
                             UNIMPLEMENT("Unsupported signed integer literal with bit width > 64: "
                                         << ap.getBitWidth());
@@ -347,132 +349,142 @@ namespace acslg::analyzer {
                     exprs.reserve(1);
                     exprs.push_back(std::move(result));
 
-                    return {vector<not_null<unique_ptr<Path>>>{}, std::move(exprs)};
+                    return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
+                            std::move(exprs)};
                 })
-                .Case<BinaryOperator>([this](const BinaryOperator *binOp) -> EvalResult {
-                    DEBUG("evaluating BinaryOperator...");
-                    // TODO: maybe pack the logic in BO, ArraySub into a function?
-                    EvalResult lhs            = evalExpr(binOp->getLHS());
-                    BinaryOpExpr::Operator op = getBinaryOp(binOp->getOpcode());
+                .Case<clang::BinaryOperator>(
+                    [this](const clang::BinaryOperator *binOp) -> EvalResult {
+                        DEBUG("evaluating BinaryOperator...");
+                        // TODO: maybe pack the logic in BO, ArraySub into a function?
+                        EvalResult lhs                  = evalExpr(binOp->getLHS());
+                        symb::BinaryOpExpr::Operator op = symb::getBinaryOp(binOp->getOpcode());
 
-                    vector<not_null<unique_ptr<Path>>> outPaths;
-                    Formulas outExprs;
+                        std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
+                        Formulas outExprs;
 
-                    size_t lhsCount = lhs.second.size();
-                    for (size_t i = 0; i < lhsCount; ++i) {
-                        auto lhsExpr    = std::move(lhs.second[i]);
-                        Path *path      = (i == 0) ? this : lhs.first[i - 1].get().get();
-                        EvalResult rhs  = path->evalExpr(binOp->getRHS());
-                        size_t rhsCount = rhs.second.size();
+                        size_t lhsCount = lhs.second.size();
+                        for (size_t i = 0; i < lhsCount; ++i) {
+                            auto lhsExpr    = std::move(lhs.second[i]);
+                            Path *path      = (i == 0) ? this : lhs.first[i - 1].get().get();
+                            EvalResult rhs  = path->evalExpr(binOp->getRHS());
+                            size_t rhsCount = rhs.second.size();
 
-                        for (size_t j = 0; j < rhsCount; ++j) {
-                            auto rhsExpr = std::move(rhs.second[j]);
+                            for (size_t j = 0; j < rhsCount; ++j) {
+                                auto rhsExpr = std::move(rhs.second[j]);
 
-                            outExprs.emplace_back(make_unique<BinaryOpExpr>(lhsExpr->clone(), op,
-                                                                            std::move(rhsExpr)));
+                                outExprs.emplace_back(std::make_unique<symb::BinaryOpExpr>(
+                                    lhsExpr->clone(), op, std::move(rhsExpr)));
 
-                            if (i == 0 && j == 0)
-                                continue;
+                                if (i == 0 && j == 0)
+                                    continue;
 
-                            outPaths.emplace_back(j == 0 ? std::move(lhs.first[i - 1])
-                                                         : std::move(rhs.first[j - 1]));
+                                outPaths.emplace_back(j == 0 ? std::move(lhs.first[i - 1])
+                                                             : std::move(rhs.first[j - 1]));
+                            }
                         }
-                    }
 
-                    return {std::move(outPaths), std::move(outExprs)};
-                })
-                .Case<ParenExpr>([this](const ParenExpr *paren) -> EvalResult {
+                        return {std::move(outPaths), std::move(outExprs)};
+                    })
+                .Case<clang::ParenExpr>([this](const clang::ParenExpr *paren) -> EvalResult {
                     DEBUG("evaluating ParenExpr...");
                     return evalExpr(paren->getSubExpr());
                 })
-                .Case<DeclRefExpr>([this](const DeclRefExpr *declRef) -> EvalResult {
-                    DEBUG("evaluating DeclRefExpr...");
-                    if (const auto *varDecl = dyn_cast<VarDecl>(declRef->getDecl())) {
+                .Case<clang::DeclRefExpr>([this](const clang::DeclRefExpr *declRef) -> EvalResult {
+                    DEBUG("evaluating clang::DeclRefExpr...");
+                    if (const auto *varDecl = dyn_cast<clang::VarDecl>(declRef->getDecl())) {
                         auto varExpr = getVarState(varDecl);
                         Formulas exprs;
                         exprs.push_back(std::move(varExpr));
-                        return {vector<not_null<unique_ptr<Path>>>{}, std::move(exprs)};
+                        return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
+                                std::move(exprs)};
                     }
 
-                    if (const auto *enumDecl = dyn_cast<EnumConstantDecl>(declRef->getDecl())) {
-                        APSInt value = enumDecl->getInitVal();
-                        auto litExpr =
-                            make_unique<LiteralExpr>(static_cast<int>(value.getSExtValue()));
+                    if (const auto *enumDecl =
+                            dyn_cast<clang::EnumConstantDecl>(declRef->getDecl())) {
+                        llvm::APSInt value = enumDecl->getInitVal();
+                        auto litExpr       = std::make_unique<symb::LiteralExpr>(
+                            static_cast<int>(value.getSExtValue()));
                         Formulas exprs;
                         exprs.push_back(std::move(litExpr));
-                        return {vector<not_null<unique_ptr<Path>>>{}, std::move(exprs)};
+                        return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
+                                std::move(exprs)};
                     }
 
-                    UNIMPLEMENT("Unsupported Decl type: " << declRef->getDecl()->getDeclKindName());
+                    UNIMPLEMENT(
+                        "Unsupported clang::Decl type: " << declRef->getDecl()->getDeclKindName());
                     return Path::EvalResult{};
                 })
-                .Case<ArraySubscriptExpr>([this](const ArraySubscriptExpr *arrSub) -> EvalResult {
-                    DEBUG("evaluating ArraySubscriptExpr...");
-                    auto variableAddr = extractLValue(arrSub->getBase());
-                    unique_ptr<SymbolAddress> addr;
-                    if (const auto symbol = memoryState_.read(*variableAddr)) {
-                        auto ptr = dynamic_cast<const SymbolAddress *>(symbol.value().get());
-                        if (ptr == nullptr)
-                            ERROR("Value of ArraySubscriptExpr's base is not 'SymbolAddress', base "
-                                  "is "
-                                  "neither "
-                                  "pointer nor "
-                                  "array?");
-                        addr = make_unique<SymbolAddress>(*ptr);
-                    } else {
-                        ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither "
-                              "pointer "
-                              "nor "
-                              "array?");
-                    }
-                    EvalResult idx = evalExpr(arrSub->getIdx());
-
-                    vector<not_null<unique_ptr<Path>>> outPaths;
-                    Formulas outExprs;
-
-                    for (size_t i = 0; i < idx.second.size(); ++i) {
-                        auto idxExpr   = std::move(idx.second[i]);
-                        string idxDump = idxExpr->dump();
-                        auto newAddr   = make_unique<SymbolAddress>(*addr);
-                        newAddr->setOffset(std::move(idxExpr));
-                        if (auto value = memoryState_.read(*newAddr); value == nullopt) {
-                            auto elemType = arrSub->getType();
-                            auto symbol   = getSymbol(
-                                elemType, newAddr->addressClone().into_underlying(), startPoint_);
-                            memoryState_.write(*newAddr, symbol->clone());
-                            outExprs.emplace_back(std::move(symbol));
+                .Case<clang::ArraySubscriptExpr>(
+                    [this](const clang::ArraySubscriptExpr *arrSub) -> EvalResult {
+                        DEBUG("evaluating ArraySubscriptExpr...");
+                        auto variableAddr = extractLValue(arrSub->getBase());
+                        std::unique_ptr<symb::SymbolAddress> addr;
+                        if (const auto symbol = memoryState_.read(*variableAddr)) {
+                            auto ptr =
+                                dynamic_cast<const symb::SymbolAddress *>(symbol.value().get());
+                            if (ptr == nullptr)
+                                ERROR("Value of ArraySubscriptExpr's base is not "
+                                      "'symb::SymbolAddress', base "
+                                      "is "
+                                      "neither "
+                                      "pointer nor "
+                                      "array?");
+                            addr = std::make_unique<symb::SymbolAddress>(*ptr);
                         } else {
-                            outExprs.emplace_back(value.value()->clone());
+                            ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither "
+                                  "pointer "
+                                  "nor "
+                                  "array?");
                         }
-                        if (i > 0)
-                            outPaths.emplace_back(std::move(idx.first[i - 1]));
-                    }
+                        EvalResult idx = evalExpr(arrSub->getIdx());
 
-                    return {std::move(outPaths), std::move(outExprs)};
-                })
-                .Case<CallExpr>([this](const CallExpr *call) -> EvalResult {
-                    DEBUG("evaluating CallExpr...");
-                    const FunctionDecl *callee = call->getDirectCallee();
+                        std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
+                        Formulas outExprs;
+
+                        for (size_t i = 0; i < idx.second.size(); ++i) {
+                            auto idxExpr        = std::move(idx.second[i]);
+                            std::string idxDump = idxExpr->dump();
+                            auto newAddr        = std::make_unique<symb::SymbolAddress>(*addr);
+                            newAddr->setOffset(std::move(idxExpr));
+                            if (auto value = memoryState_.read(*newAddr); value == std::nullopt) {
+                                auto elemType = arrSub->getType();
+                                auto symbol =
+                                    getSymbol(elemType, newAddr->addressClone().into_underlying(),
+                                              startPoint_);
+                                memoryState_.write(*newAddr, symbol->clone());
+                                outExprs.emplace_back(std::move(symbol));
+                            } else {
+                                outExprs.emplace_back(value.value()->clone());
+                            }
+                            if (i > 0)
+                                outPaths.emplace_back(std::move(idx.first[i - 1]));
+                        }
+
+                        return {std::move(outPaths), std::move(outExprs)};
+                    })
+                .Case<clang::CallExpr>([this](const clang::CallExpr *call) -> EvalResult {
+                    DEBUG("evaluating clang::CallExpr...");
+                    const clang::FunctionDecl *callee = call->getDirectCallee();
                     if (!callee) {
                         Formulas exprs;
-                        exprs.emplace_back(UnknownExpr::makeUnknown().into_underlying());
-                        std::vector<not_null<std::unique_ptr<Path>>> empty;
+                        exprs.emplace_back(symb::UnknownExpr::makeUnknown().into_underlying());
+                        std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
-                    static const set<string> ignoreNames = {
+                    static const std::set<std::string> ignoreNames = {
                         "llvm.dbg.declare", "llvm.lifetime.start", "llvm.lifetime.end", "printf",
                         "__assert_fail"};
-                    string name = callee->getNameAsString();
+                    std::string name = callee->getNameAsString();
                     if (ignoreNames.contains(name)) {
                         Formulas exprs;
-                        exprs.emplace_back(UnknownExpr::makeUnknown().into_underlying());
-                        std::vector<not_null<std::unique_ptr<Path>>> empty;
+                        exprs.emplace_back(symb::UnknownExpr::makeUnknown().into_underlying());
+                        std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
 
                     auto callArgs = evalCallArgs(this, call);
 
-                    std::vector<not_null<std::unique_ptr<Path>>> outPaths;
+                    std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                     Formulas outExprs;
 
                     bool firstTaken = false;
@@ -486,10 +498,10 @@ namespace acslg::analyzer {
 
                         auto produced = calleeState.takeAllPaths();
                         for (size_t i = 0; i < produced.size(); ++i) {
-                            auto p = std::move(produced[i]);
-                            auto ret =
-                                (p->getReturnExpr() ? p->getReturnExpr().value()->clone()
-                                                    : UnknownExpr::makeUnknown().into_underlying());
+                            auto p   = std::move(produced[i]);
+                            auto ret = (p->getReturnExpr()
+                                            ? p->getReturnExpr().value()->clone()
+                                            : symb::UnknownExpr::makeUnknown().into_underlying());
 
                             p->setPathState(PathState::Step);
 
@@ -505,71 +517,74 @@ namespace acslg::analyzer {
                     }
 
                     if (!firstTaken) {
-                        outExprs.emplace_back(UnknownExpr::makeUnknown().into_underlying());
+                        outExprs.emplace_back(symb::UnknownExpr::makeUnknown().into_underlying());
                     }
 
                     return {std::move(outPaths), std::move(outExprs)};
                 })
-                .Case<ConditionalOperator>([this](const ConditionalOperator *condOp) -> EvalResult {
-                    DEBUG("evaluating ConditionalOperator...");
-                    EvalResult cond = evalExpr(condOp->getCond());
+                .Case<clang::ConditionalOperator>(
+                    [this](const clang::ConditionalOperator *condOp) -> EvalResult {
+                        DEBUG("evaluating ConditionalOperator...");
+                        EvalResult cond = evalExpr(condOp->getCond());
 
-                    vector<not_null<unique_ptr<Path>>> outPaths;
-                    Formulas outExprs;
+                        std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
+                        Formulas outExprs;
 
-                    for (size_t i = 0; i < cond.second.size(); ++i) {
-                        Path *condPath = (i == 0) ? this : cond.first[i - 1].get().get();
-                        auto condExpr  = std::move(cond.second[i]);
+                        for (size_t i = 0; i < cond.second.size(); ++i) {
+                            Path *condPath = (i == 0) ? this : cond.first[i - 1].get().get();
+                            auto condExpr  = std::move(cond.second[i]);
 
-                        // false branch
-                        auto falsePath   = condPath->clone();
-                        auto negatedCond = make_unique<UnaryOpExpr>(
-                            UnaryOpExpr::Operator::LogicalNot, condExpr->clone());
-                        falsePath->insertPathCondition(std::move(negatedCond));
+                            // false branch
+                            auto falsePath   = condPath->clone();
+                            auto negatedCond = std::make_unique<symb::UnaryOpExpr>(
+                                symb::UnaryOpExpr::Operator::LogicalNot, condExpr->clone());
+                            falsePath->insertPathCondition(std::move(negatedCond));
 
-                        EvalResult falseVal = falsePath->evalExpr(condOp->getFalseExpr());
+                            EvalResult falseVal = falsePath->evalExpr(condOp->getFalseExpr());
 
-                        // true branch
-                        auto truePath = condPath;
-                        truePath->insertPathCondition(std::move(condExpr));
+                            // true branch
+                            auto truePath = condPath;
+                            truePath->insertPathCondition(std::move(condExpr));
 
-                        EvalResult trueVal = truePath->evalExpr(condOp->getTrueExpr());
+                            EvalResult trueVal = truePath->evalExpr(condOp->getTrueExpr());
 
-                        // merge results
-                        for (size_t j = 0; j < trueVal.second.size(); ++j) {
-                            outExprs.emplace_back(std::move(trueVal.second[j]));
-                            if (j > 0)
-                                outPaths.emplace_back(std::move(trueVal.first[j - 1]));
+                            // merge results
+                            for (size_t j = 0; j < trueVal.second.size(); ++j) {
+                                outExprs.emplace_back(std::move(trueVal.second[j]));
+                                if (j > 0)
+                                    outPaths.emplace_back(std::move(trueVal.first[j - 1]));
+                            }
+                            for (size_t j = 0; j < falseVal.second.size(); ++j) {
+                                outExprs.emplace_back(std::move(falseVal.second[j]));
+                                if (j == 0)
+                                    outPaths.emplace_back(std::move(falsePath));
+                                else
+                                    outPaths.emplace_back(std::move(falseVal.first[j - 1]));
+                            }
                         }
-                        for (size_t j = 0; j < falseVal.second.size(); ++j) {
-                            outExprs.emplace_back(std::move(falseVal.second[j]));
-                            if (j == 0)
-                                outPaths.emplace_back(std::move(falsePath));
-                            else
-                                outPaths.emplace_back(std::move(falseVal.first[j - 1]));
-                        }
-                    }
 
-                    return {std::move(outPaths), std::move(outExprs)};
-                })
-                .Case<UnaryOperator>([this](const UnaryOperator *uop) -> EvalResult {
+                        return {std::move(outPaths), std::move(outExprs)};
+                    })
+                .Case<clang::UnaryOperator>([this](const clang::UnaryOperator *uop) -> EvalResult {
                     DEBUG("evaluating UnaryOperator...");
                     auto operand = evalExpr(uop->getSubExpr());
-                    vector<not_null<unique_ptr<Path>>> outPaths;
+                    std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                     Formulas outExprs;
 
-                    UnaryOpExpr::Operator op;
+                    symb::UnaryOpExpr::Operator op;
                     switch (uop->getOpcode()) {
-                        case UO_Plus: op = UnaryOpExpr::Operator::Plus; break;
-                        case UO_Minus: op = UnaryOpExpr::Operator::Minus; break;
-                        case UO_LNot: op = UnaryOpExpr::Operator::LogicalNot; break;
-                        case UO_Not: op = UnaryOpExpr::Operator::BitwiseNot; break;
-                        case UO_PreInc: op = UnaryOpExpr::Operator::PreInc; break;
-                        case UO_PreDec: op = UnaryOpExpr::Operator::PreDec; break;
-                        case UO_PostInc: op = UnaryOpExpr::Operator::PostInc; break;
-                        case UO_PostDec: op = UnaryOpExpr::Operator::PostDec; break;
-                        case UO_AddrOf: op = UnaryOpExpr::Operator::AddrOf; break;
-                        case UO_Deref: op = UnaryOpExpr::Operator::Dereference; break;
+                        using enum clang::UnaryOperatorKind;
+                        using enum symb::UnaryOpExpr::Operator;
+                        case UO_Plus: op = Plus; break;
+                        case UO_Minus: op = Minus; break;
+                        case UO_LNot: op = LogicalNot; break;
+                        case UO_Not: op = BitwiseNot; break;
+                        case UO_PreInc: op = PreInc; break;
+                        case UO_PreDec: op = PreDec; break;
+                        case UO_PostInc: op = PostInc; break;
+                        case UO_PostDec: op = PostDec; break;
+                        case UO_AddrOf: op = AddrOf; break;
+                        case UO_Deref: op = Dereference; break;
                         default:
                             UNIMPLEMENT("Unsupported UnaryOperator: "
                                         << uop->getOpcodeStr(uop->getOpcode()).str());
@@ -581,27 +596,23 @@ namespace acslg::analyzer {
 
                         // Prevent misuse by not capturing this and operand.
                         [this, &path, &unExpr, &op, &outExprs, &uop]() {
-                            if (op == UnaryOpExpr::Operator::PreInc ||
-                                op == UnaryOpExpr::Operator::PostInc ||
-                                op == UnaryOpExpr::Operator::PreDec ||
-                                op == UnaryOpExpr::Operator::PostDec) {
+                            using enum symb::UnaryOpExpr::Operator;
+                            if (op == PreInc || op == PostInc || op == PreDec || op == PostDec) {
                                 // ++x / x++ / --x / x--
                                 auto addr = path->extractLValue(uop->getSubExpr());
                                 // old value
                                 auto oldVal = path->memoryState_.read(*addr);
-                                if (oldVal == nullopt)
+                                if (oldVal == std::nullopt)
                                     ERROR("memoryState_ doesn't contain addr.");
                                 // compute new = old +/- 1
-                                auto one    = make_unique<LiteralExpr>(1);
-                                auto binOp  = (op == UnaryOpExpr::Operator::PreInc ||
-                                              op == UnaryOpExpr::Operator::PostInc)
-                                                  ? BinaryOpExpr::Operator::Add
-                                                  : BinaryOpExpr::Operator::Subtract;
-                                auto newVal = make_unique<BinaryOpExpr>(oldVal.value()->clone(),
-                                                                        binOp, std::move(one));
+                                auto one    = std::make_unique<symb::LiteralExpr>(1);
+                                auto binOp  = (op == PreInc || op == PostInc)
+                                                  ? symb::BinaryOpExpr::Operator::Add
+                                                  : symb::BinaryOpExpr::Operator::Subtract;
+                                auto newVal = std::make_unique<symb::BinaryOpExpr>(
+                                    oldVal.value()->clone(), binOp, std::move(one));
                                 // return pre vs post
-                                if (op == UnaryOpExpr::Operator::PreInc ||
-                                    op == UnaryOpExpr::Operator::PreDec)
+                                if (op == PreInc || op == PreDec)
                                     outExprs.emplace_back(newVal->clone());
                                 else {
                                     outExprs.emplace_back(oldVal.value()->clone());
@@ -609,13 +620,13 @@ namespace acslg::analyzer {
                                 // Writing back first will cause oldVal to become dangling.
                                 // write back
                                 path->memoryState_.write(*addr, std::move(newVal));
-                            } else if (op == UnaryOpExpr::Operator::Dereference) {
+                            } else if (op == Dereference) {
                                 // *x
                                 auto addr = unExpr->tryEvalAsSymbolAddr();
-                                if (addr == nullopt)
-                                    ERROR("Expected Address, got: " << unExpr->dump());
+                                if (addr == std::nullopt)
+                                    ERROR("Expected symb::Address, got: " << unExpr->dump());
                                 if (auto value = path->memoryState_.read(*addr.value());
-                                    value == nullopt) {
+                                    value == std::nullopt) {
                                     auto symbol =
                                         getSymbol(uop->getType(),
                                                   addr.value()->addressClone().into_underlying(),
@@ -625,11 +636,11 @@ namespace acslg::analyzer {
                                 } else {
                                     outExprs.emplace_back(value.value()->clone());
                                 }
-                            } else if (op == UnaryOpExpr::Operator::AddrOf)
+                            } else if (op == AddrOf)
                                 TODO();
                             else
                                 outExprs.emplace_back(
-                                    make_unique<UnaryOpExpr>(op, std::move(unExpr)));
+                                    std::make_unique<symb::UnaryOpExpr>(op, std::move(unExpr)));
                         }();
                         if (i > 0)
                             outPaths.emplace_back(std::move(operand.first[i - 1]));
@@ -637,22 +648,22 @@ namespace acslg::analyzer {
 
                     return {std::move(outPaths), std::move(outExprs)};
                 })
-                .Case<CastExpr>([this](const CastExpr *castExpr) -> EvalResult {
+                .Case<clang::CastExpr>([this](const clang::CastExpr *castExpr) -> EvalResult {
                     DEBUG("evaluating CastExpr...");
                     auto sub = evalExpr(castExpr->getSubExpr());
                     if (castExpr->getType()->isStructureType())
                         return sub;
 
-                    auto targetType = deriveVarType(castExpr->getType());
+                    auto targetType = symbolic::deriveVarType(castExpr->getType());
 
                     for (auto &subExpr : sub.second)
                         subExpr->setValType(targetType);
 
                     return {std::move(sub.first), std::move(sub.second)};
                 })
-                .Case<MemberExpr>([this](const MemberExpr *memberExpr) -> EvalResult {
+                .Case<clang::MemberExpr>([this](const clang::MemberExpr *memberExpr) -> EvalResult {
                     DEBUG("evaluating MemberExpr...");
-                    auto FD = dyn_cast_if_present<FieldDecl>(memberExpr->getMemberDecl());
+                    auto FD = dyn_cast_if_present<clang::FieldDecl>(memberExpr->getMemberDecl());
                     if (FD == nullptr)
                         UNREACHABLE();
                     if (!FD->getParent())
@@ -664,30 +675,31 @@ namespace acslg::analyzer {
                         ERROR("No control flow branching permitted within a pointer-to-member "
                               "expression.");
 
-                    std::unique_ptr<Structure> st;
+                    std::unique_ptr<symb::Structure> st;
                     auto baseExpr = std::move(base.second[0]).into_underlying();
 
                     if (memberExpr->isArrow()) {
                         auto baseAddr = baseExpr->tryEvalAsSymbolAddr();
-                        if (baseAddr == nullopt)
+                        if (baseAddr == std::nullopt)
                             ERROR("LHS of '->' is not an address");
                         auto val = memoryState_.read(*baseAddr.value());
-                        if (val == nullopt) {
-                            st = make_unique<Structure>(
+                        if (val == std::nullopt) {
+                            st = std::make_unique<symb::Structure>(
                                 RD, layout, baseAddr.value()->addressClone().into_underlying(),
                                 startPoint_);
                             memoryState_.write(*baseAddr.value(), st->clone());
-                        } else if (val.value()->getType() == SymbolicExpr::ExprType::Structure) {
-                            auto &stVal = dynamic_cast<Structure &>(*val.value());
-                            st          = make_unique<Structure>(stVal);
+                        } else if (val.value()->getType() ==
+                                   symb::SymbolicExpr::ExprType::Structure) {
+                            auto &stVal = dynamic_cast<symb::Structure &>(*val.value());
+                            st          = std::make_unique<symb::Structure>(stVal);
                         } else {
                             ERROR("Dereferenced value is not a structure");
                         }
                     } else {
-                        if (baseExpr->getType() != SymbolicExpr::ExprType::Structure)
+                        if (baseExpr->getType() != symb::SymbolicExpr::ExprType::Structure)
                             ERROR("LHS of '.' is not a structure");
-                        st = std::unique_ptr<Structure>(
-                            static_cast<Structure *>(baseExpr.release()));
+                        st = std::unique_ptr<symb::Structure>(
+                            static_cast<symb::Structure *>(baseExpr.release()));
                     }
 
                     size_t idx = FD->getFieldIndex();
@@ -700,11 +712,11 @@ namespace acslg::analyzer {
                     return result;
                 })
 
-                .Case<ConstantExpr>([this](const ConstantExpr *ce) -> EvalResult {
+                .Case<clang::ConstantExpr>([this](const clang::ConstantExpr *ce) -> EvalResult {
                     DEBUG("evaluating ConstantExpr...");
-                    APSInt v;
+                    llvm::APSInt v;
                     bool ok = false;
-                    if (ce->getResultAPValueKind() == APValue::Int) {
+                    if (ce->getResultAPValueKind() == clang::APValue::Int) {
                         v  = ce->getResultAsAPSInt();
                         ok = (v.getBitWidth() != 0);
                     }
@@ -712,12 +724,12 @@ namespace acslg::analyzer {
                         EvalResult sub = evalExpr(ce->getSubExpr());
                         if (sub.second.size() != 1)
                             ERROR("ConstantExpr subExpr produced multiple results");
-                        auto resultTy = deriveVarType(ce->getType());
+                        auto resultTy = symbolic::deriveVarType(ce->getType());
                         sub.second[0]->setValType(resultTy);
                         return {std::move(sub.first), std::move(sub.second)};
                     }
-                    auto resultTy = deriveVarType(ce->getType());
-                    auto lit      = std::make_unique<LiteralExpr>(
+                    auto resultTy = symbolic::deriveVarType(ce->getType());
+                    auto lit      = std::make_unique<symb::LiteralExpr>(
                         v.isSigned() ? static_cast<int64_t>(v.getSExtValue())
                                      : static_cast<uint64_t>(v.getZExtValue()));
                     lit->setValType(resultTy);
@@ -725,15 +737,15 @@ namespace acslg::analyzer {
                     r.second.emplace_back(std::move(lit));
                     return r;
                 })
-                .Default([](const Expr *e) -> EvalResult {
-                    UNIMPLEMENT("Unsupported Expr type: " << e->getStmtClassName());
+                .Default([](const clang::Expr *e) -> EvalResult {
+                    UNIMPLEMENT("Unsupported clang::Expr type: " << e->getStmtClassName());
                     return Path::EvalResult{};
                 });
         return eval_result;
     }
 
-    string Path::dump() const {
-        ostringstream oss;
+    std::string Path::dump() const {
+        std::ostringstream oss;
 
         oss << "\nPath State: " << [&]() {
             switch (currentState_) {
@@ -757,11 +769,11 @@ namespace acslg::analyzer {
             oss << "  [" << i << "]: " << pathConditions_[i]->dump() << "\n";
         }
 
-        oss << "Variable Address Mapping:\n";
+        oss << "Variable symb::Address Mapping:\n";
         for (auto &[varDecl, addr] : varAddr_) {
-            string name;
+            std::string name;
             if (auto opt = context_.getDeclInfo(varDecl))
-                tie(name, ignore, ignore, ignore, ignore) = *opt;
+                tie(name, std::ignore, std::ignore, std::ignore, std::ignore) = *opt;
 
             oss << "  @" << name << " -> " << addr->dump();
 
@@ -780,8 +792,7 @@ namespace acslg::analyzer {
 
         if (StmtCtx) {
             if (auto opt = context_.getStmtInfo(StmtCtx)) {
-                StringRef sourceText;
-                tie(sourceText, ignore, ignore, ignore) = *opt;
+                auto [sourceText, _, _, _] = *opt;
                 if (!sourceText.empty()) {
                     oss << "Stmt Context: " << sourceText.str() << "\n";
                 }
@@ -790,23 +801,24 @@ namespace acslg::analyzer {
         return oss.str();
     }
 
-    bool Path::isUnchanged(const Address &addr, optional<SourcePoint> since) const {
+    bool Path::isUnchanged(const symb::Address &addr,
+                           std::optional<symb::SourcePoint> since) const {
         auto value = memoryState_.read(addr);
-        if (value == nullopt)
+        if (value == std::nullopt)
             return true; // Assume it has not been accessed yet.
 
-        if (since != nullopt)
+        if (since != std::nullopt)
             return isFrom(*value.value(), addr, std::move(since).value());
         return isFrom(*value.value(), addr, startPoint_);
     }
 
-    bool Path::is_point_to_structure(const Address &addr) const {
+    bool Path::is_point_to_structure(const symb::Address &addr) const {
         auto opt = memoryState_.read(addr);
         if (!opt)
             return false;
 
-        const SymbolicExpr *expr = opt.value().get();
-        return expr->getType() == SymbolicExpr::ExprType::Structure;
+        const symb::SymbolicExpr *expr = opt.value().get();
+        return expr->getType() == symb::SymbolicExpr::ExprType::Structure;
     }
 
     MemoryModel::MemoryModel(const MemoryModel &other) {
@@ -854,15 +866,16 @@ namespace acslg::analyzer {
         return *this;
     }
 
-    optional<not_null<const SymbolicExpr *>> MemoryModel::read(const Address &addr) const {
-        using enum Address::AddressType;
+    std::optional<utils::not_null<const symb::SymbolicExpr *>> MemoryModel::read(
+        const symb::Address &addr) const {
+        using enum symb::Address::AddressType;
         if (addr.getAddressType() == VariableAddr) {
-            auto &varAddr = dynamic_cast<const VariableAddress &>(addr);
+            auto &varAddr = dynamic_cast<const symb::VariableAddress &>(addr);
             if (memoryMap_variableAddr_.contains(varAddr))
                 return memoryMap_variableAddr_.at(varAddr).get().get();
-            return nullopt;
+            return std::nullopt;
         } else if (addr.getAddressType() == SymbolAddr) {
-            auto symbolAddr = dynamic_cast<const SymbolAddress &>(addr);
+            auto symbolAddr = dynamic_cast<const symb::SymbolAddress &>(addr);
             auto baseInfo   = symbolAddr.getBaseInfo();
 
             if (memoryMap_constantRange_.contains(baseInfo)) {
@@ -873,14 +886,15 @@ namespace acslg::analyzer {
                         ERROR("Negetive offset.");
                     auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
                     auto &rangeExprMap  = memoryMap_constantRange_.at(baseInfo);
-                    auto range          = pair{unsignedOffset, unsignedOffset + 1};
-                    auto rangeForSearch = pair{unsignedOffset, numeric_limits<uint64_t>::max()};
-                    auto upperBoundIt   = rangeExprMap.upper_bound(rangeForSearch);
-                    auto firstLEIt      = upperBoundIt == rangeExprMap.begin() ? rangeExprMap.end()
-                                                                               : prev(upperBoundIt);
+                    auto range          = std::pair{unsignedOffset, unsignedOffset + 1};
+                    auto rangeForSearch =
+                        std::pair{unsignedOffset, std::numeric_limits<uint64_t>::max()};
+                    auto upperBoundIt = rangeExprMap.upper_bound(rangeForSearch);
+                    auto firstLEIt    = upperBoundIt == rangeExprMap.begin() ? rangeExprMap.end()
+                                                                             : prev(upperBoundIt);
                     if (firstLEIt == rangeExprMap.end() ||
                         firstLEIt->first.second <= unsignedOffset)
-                        return nullopt;
+                        return std::nullopt;
                     return firstLEIt->second.get().get();
                 } else if (constOffset && symbolAddr.isRange() &&
                            symbolAddr.getLength()->tryEvalAsConstant()) {
@@ -891,29 +905,29 @@ namespace acslg::analyzer {
             }
 
             if (!memoryMap_symbolicRange_.contains(baseInfo))
-                return nullopt;
+                return std::nullopt;
             auto &addrValueMap = memoryMap_symbolicRange_.at(baseInfo);
             auto it            = addrValueMap.find(symbolAddr);
             if (it == addrValueMap.end())
-                return nullopt;
+                return std::nullopt;
             return it->second.get().get();
         } else if (addr.getAddressType() == FieldAddr) {
-            auto fieldAddr = dynamic_cast<const FieldAddress &>(addr);
+            auto fieldAddr = dynamic_cast<const symb::FieldAddress &>(addr);
             return std::visit(
-                [this](auto &&arg) -> optional<not_null<const SymbolicExpr *>> {
+                [this](auto &&arg) -> std::optional<utils::not_null<const symb::SymbolicExpr *>> {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, std::monostate>) {
                         TODO();
-                    } else if constexpr (std::is_same_v<T, std::pair<not_null<std::unique_ptr<
+                    } else if constexpr (std::is_same_v<T, std::pair<utils::not_null<std::unique_ptr<
                                                                          const symbolic::Address>>,
                                                                      const size_t>>) {
                         auto &[baseAddr, index] = arg;
                         auto baseValue          = read(*baseAddr);
-                        if (baseValue == nullopt)
-                            return nullopt;
-                        if (baseValue.value()->getType() != SymbolicExpr::ExprType::Structure)
+                        if (baseValue == std::nullopt)
+                            return std::nullopt;
+                        if (baseValue.value()->getType() != symb::SymbolicExpr::ExprType::Structure)
                             ERROR("Value of address from a `fieldAddress` is not a structure.");
-                        auto &baseSt = dynamic_cast<const Structure &>(*baseValue.value());
+                        auto &baseSt = dynamic_cast<const symb::Structure &>(*baseValue.value());
                         return baseSt.getFieldValue(index);
                     }
                 },
@@ -922,26 +936,28 @@ namespace acslg::analyzer {
         UNREACHABLE();
     }
 
-    optional<not_null<SymbolicExpr *>> MemoryModel::read(const Address &addr) {
+    std::optional<utils::not_null<symb::SymbolicExpr *>> MemoryModel::read(
+        const symb::Address &addr) {
         auto value = std::as_const(*this).read(addr);
-        if (value == nullopt)
-            return nullopt;
-        return const_cast<SymbolicExpr *>(value.value().get());
+        if (value == std::nullopt)
+            return std::nullopt;
+        return const_cast<symb::SymbolicExpr *>(value.value().get());
     }
 
-    void MemoryModel::write(const Address &addr, not_null<unique_ptr<SymbolicExpr>> value) {
-        using enum Address::AddressType;
+    void MemoryModel::write(const symb::Address &addr,
+                            utils::not_null<std::unique_ptr<symb::SymbolicExpr>> value) {
+        using enum symb::Address::AddressType;
         if (addr.getAddressType() == VariableAddr) {
-            auto &varAddr = dynamic_cast<const VariableAddress &>(addr);
+            auto &varAddr = dynamic_cast<const symb::VariableAddress &>(addr);
             memoryMap_variableAddr_.insert_or_assign(varAddr, std::move(value));
             return;
         } else if (addr.getAddressType() == SymbolAddr) {
-            auto &symbolAddr = dynamic_cast<const SymbolAddress &>(addr);
+            auto &symbolAddr = dynamic_cast<const symb::SymbolAddress &>(addr);
             auto baseInfo    = symbolAddr.getBaseInfo();
 
             auto constOffset = symbolAddr.getOffset()->tryEvalAsConstant();
             auto constLen =
-                symbolAddr.isRange() ? symbolAddr.getLength()->tryEvalAsConstant() : nullopt;
+                symbolAddr.isRange() ? symbolAddr.getLength()->tryEvalAsConstant() : std::nullopt;
 
             if (constOffset && (!symbolAddr.isRange() || constLen)) {
                 if (constOffset.value() < 0 || (constLen && constLen.value() <= 0))
@@ -951,12 +967,14 @@ namespace acslg::analyzer {
                 auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
                 auto unsignedLen = constLen ? static_cast<uint64_t>(constLen.value()) : uint64_t{1};
                 memoryMap_constantRange_.try_emplace(
-                    baseInfo, map<ConstRange, not_null<unique_ptr<SymbolicExpr>>>{});
+                    baseInfo,
+                    std::map<ConstRange, utils::not_null<std::unique_ptr<symb::SymbolicExpr>>>{});
                 auto &rangeValueMap = memoryMap_constantRange_.at(baseInfo);
-                auto range          = pair{unsignedOffset, unsignedOffset + unsignedLen};
-                auto rangeForSearch = pair{unsignedOffset, numeric_limits<uint64_t>::max()};
-                auto endIt          = rangeValueMap.end();
-                auto upperBoundIt   = rangeValueMap.upper_bound(rangeForSearch);
+                auto range          = std::pair{unsignedOffset, unsignedOffset + unsignedLen};
+                auto rangeForSearch =
+                    std::pair{unsignedOffset, std::numeric_limits<uint64_t>::max()};
+                auto endIt        = rangeValueMap.end();
+                auto upperBoundIt = rangeValueMap.upper_bound(rangeForSearch);
                 auto firstLEIt = upperBoundIt == rangeValueMap.begin() ? endIt : prev(upperBoundIt);
 
                 auto &[range_leftBound, range_rightBound] = range;
@@ -964,11 +982,11 @@ namespace acslg::analyzer {
                     auto &[firstLE_leftBound, firstLE_rightBound] = firstLEIt->first;
                     auto &firstLE_value                           = firstLEIt->second;
                     if (firstLE_leftBound < range_leftBound) {
-                        auto leftRange = pair{firstLE_leftBound, range_leftBound};
+                        auto leftRange = std::pair{firstLE_leftBound, range_leftBound};
                         rangeValueMap.insert_or_assign(leftRange, firstLE_value->clone());
                     }
                     if (firstLE_rightBound > range_rightBound) {
-                        auto rightRange = pair{range_rightBound, firstLE_rightBound};
+                        auto rightRange = std::pair{range_rightBound, firstLE_rightBound};
                         rangeValueMap.insert_or_assign(rightRange, firstLE_value->clone());
                     }
                     rangeValueMap.erase(firstLEIt);
@@ -977,7 +995,7 @@ namespace acslg::analyzer {
                     auto &[upperBound_leftBound, upperBound_rightBound] = upperBoundIt->first;
                     auto &upperBound_value                              = upperBoundIt->second;
                     if (upperBound_rightBound > range_rightBound) {
-                        auto rightRange = pair{range_rightBound, upperBound_rightBound};
+                        auto rightRange = std::pair{range_rightBound, upperBound_rightBound};
                         rangeValueMap.insert_or_assign(rightRange, upperBound_value->clone());
                     }
                     rangeValueMap.erase(upperBoundIt);
@@ -990,22 +1008,22 @@ namespace acslg::analyzer {
             addrValueMap.insert_or_assign(symbolAddr, std::move(value));
             return;
         } else if (addr.getAddressType() == FieldAddr) {
-            auto fieldAddr = dynamic_cast<const FieldAddress &>(addr);
+            auto fieldAddr = dynamic_cast<const symb::FieldAddress &>(addr);
             std::visit(
                 [&, this](auto &&arg) {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, std::monostate>) {
                         TODO();
-                    } else if constexpr (std::is_same_v<T, std::pair<not_null<std::unique_ptr<
+                    } else if constexpr (std::is_same_v<T, std::pair<utils::not_null<std::unique_ptr<
                                                                          const symbolic::Address>>,
                                                                      const size_t>>) {
                         auto &[baseAddr, index] = arg;
                         auto baseValue          = read(*baseAddr);
-                        if (baseValue == nullopt)
+                        if (baseValue == std::nullopt)
                             ERROR("Structure isn't existed in MemoryModel, insert it first.");
-                        if (baseValue.value()->getType() != SymbolicExpr::ExprType::Structure)
+                        if (baseValue.value()->getType() != symb::SymbolicExpr::ExprType::Structure)
                             ERROR("Value of address from a `fieldAddress` is not a structure.");
-                        auto &baseSt = dynamic_cast<Structure &>(*baseValue.value());
+                        auto &baseSt = dynamic_cast<symb::Structure &>(*baseValue.value());
                         baseSt.setFieldValue(index, std::move(value));
                     }
                 },
@@ -1015,49 +1033,52 @@ namespace acslg::analyzer {
         UNREACHABLE();
     }
 
-    bool MemoryModel::contains(const Address &addr) const { return read(addr) ? true : false; }
+    bool MemoryModel::contains(const symb::Address &addr) const {
+        return read(addr) ? true : false;
+    }
 
     // MemoryModel::flat_view MemoryModel::flat() { return MemoryModel::flat_view{*this}; }
     const MemoryModel::flat_view MemoryModel::flat() const {
         return MemoryModel::flat_view{const_cast<MemoryModel &>(*this)};
     }
 
-    void MemoryModel::eraseExpiredLocals(const unordered_set<const clang::VarDecl *> &localVars) {
+    void MemoryModel::eraseExpiredLocals(
+        const std::unordered_set<const clang::VarDecl *> &localVars) {
         std::erase_if(memoryMap_variableAddr_, [&](auto const &kv) {
             auto fromRoot = kv.first.getFromRoot();
-            if (fromRoot == nullopt)
+            if (fromRoot == std::nullopt)
                 TODO();
             return localVars.contains(fromRoot.value());
         });
         std::erase_if(memoryMap_constantRange_, [&](auto const &kv) {
             auto fromRoot = kv.first.getFromRoot();
-            if (fromRoot == nullopt)
+            if (fromRoot == std::nullopt)
                 TODO();
             return localVars.contains(fromRoot.value());
         });
         std::erase_if(memoryMap_symbolicRange_, [&](auto const &kv) {
             auto fromRoot = kv.first.getFromRoot();
-            if (fromRoot == nullopt)
+            if (fromRoot == std::nullopt)
                 TODO();
             return localVars.contains(fromRoot.value());
         });
     }
 
-    ProgramState::ProgramState(unique_ptr<Path> initialPath,
-                               unique_ptr<ACSLFunction> func,
+    ProgramState::ProgramState(std::unique_ptr<Path> initialPath,
+                               std::unique_ptr<ACSLFunction> func,
                                context::ACSLContext &context)
         : func_(std::move(func)), context_(context),
-          startPoint_(SourcePoint::fromFuncDeclBefore(func_->getFunctionDecl(),
-                                                      context_.getSourceManager(),
-                                                      context_.getLangOptions())) {
+          startPoint_(symb::SourcePoint::fromFuncDeclBefore(func_->getFunctionDecl(),
+                                                            context_.getSourceManager(),
+                                                            context_.getLangOptions())) {
         paths_.push_back(std::move(initialPath));
     }
 
-    ProgramState::ProgramState(unique_ptr<ACSLFunction> func, context::ACSLContext &context)
+    ProgramState::ProgramState(std::unique_ptr<ACSLFunction> func, context::ACSLContext &context)
         : func_(std::move(func)), context_(context),
-          startPoint_(SourcePoint::fromFuncDeclBefore(func_->getFunctionDecl(),
-                                                      context_.getSourceManager(),
-                                                      context_.getLangOptions())) {}
+          startPoint_(symb::SourcePoint::fromFuncDeclBefore(func_->getFunctionDecl(),
+                                                            context_.getSourceManager(),
+                                                            context_.getLangOptions())) {}
 
     ProgramState::ProgramState(const ProgramState &other)
         : func_(other.func_->clone()), context_(other.context_), startPoint_(other.startPoint_) {
@@ -1083,8 +1104,8 @@ namespace acslg::analyzer {
     void ProgramState::init() {
         auto FD       = func_->getFunctionDecl();
         auto initPath = std::make_unique<Path>(context_, startPoint_);
-        for (const ParmVarDecl *param : FD->parameters()) {
-            QualType paramType = param->getType();
+        for (const clang::ParmVarDecl *param : FD->parameters()) {
+            clang::QualType paramType = param->getType();
 
             auto paramAddr = initPath->allocMemory(param);
             auto value =
@@ -1095,21 +1116,21 @@ namespace acslg::analyzer {
         paths_.push_back(std::move(initPath));
     }
 
-    void ProgramState::step(const Stmt *stmt) {
+    void ProgramState::step(const clang::Stmt *stmt) {
         if (!stmt)
             return;
-        TypeSwitch<const Stmt *, void>(stmt)
-            .Case<CompoundStmt>([this](const CompoundStmt *cs) {
-                DEBUG("stepping CompoundStmt...");
-                for (const Stmt *child : cs->children()) {
+        llvm::TypeSwitch<const clang::Stmt *, void>(stmt)
+            .Case<clang::CompoundStmt>([this](const clang::CompoundStmt *cs) {
+                DEBUG("stepping clang::CompoundStmt...");
+                for (const clang::Stmt *child : cs->children()) {
                     if (child)
                         step(child);
                 }
             })
-            .Case<IfStmt>([this](const IfStmt *ifStmt) {
+            .Case<clang::IfStmt>([this](const clang::IfStmt *ifStmt) {
                 DEBUG("stepping IfStmt...");
-                vector<const Expr *> branchConds;
-                vector<const Stmt *> branchStmts;
+                std::vector<const clang::Expr *> branchConds;
+                std::vector<const clang::Stmt *> branchStmts;
                 branchConds.push_back(ifStmt->getCond());
                 branchStmts.push_back(ifStmt->getThen());
                 if (ifStmt->getElse())
@@ -1119,47 +1140,49 @@ namespace acslg::analyzer {
 
                 stepBranch(branchConds, branchStmts);
             })
-            .Case<ReturnStmt>([this](const ReturnStmt *retStmt) {
+            .Case<clang::ReturnStmt>([this](const clang::ReturnStmt *retStmt) {
                 DEBUG("stepping ReturnStmt...");
                 setReturnExpr(retStmt->getRetValue());
                 setStates(Path::PathState::Return, NULL);
             })
-            .Case<DeclStmt>([this](const DeclStmt *declStmt) {
-                DEBUG("stepping DeclStmt...");
-                vector<const VarDecl *> varDecls;
+            .Case<clang::DeclStmt>([this](const clang::DeclStmt *declStmt) {
+                DEBUG("stepping clang::DeclStmt...");
+                std::vector<const clang::VarDecl *> varDecls;
                 for (auto it = declStmt->decl_begin(); it != declStmt->decl_end(); ++it) {
-                    Decl *decl = *it;
-                    if (!isa<VarDecl>(decl))
-                        UNIMPLEMENT("Unhandled Decl type: "s + decl->getDeclKindName());
-                    varDecls.push_back(dyn_cast<VarDecl>(decl));
+                    clang::Decl *decl = *it;
+                    if (!isa<clang::VarDecl>(decl))
+                        UNIMPLEMENT("Unhandled clang::Decl type: "s + decl->getDeclKindName());
+                    varDecls.push_back(dyn_cast<clang::VarDecl>(decl));
                 }
                 addNewDecls(varDecls);
             })
-            .Case<BinaryOperator>([this](const BinaryOperator *binOp) {
+            .Case<clang::BinaryOperator>([this](const clang::BinaryOperator *binOp) {
                 DEBUG("stepping BinaryOperator...");
-                if (ignoreTopBinop(binOp))
+                if (utils::ignoreTopBinop(binOp))
                     return;
-                if (!isAssignOp(binOp))
+                if (!utils::isAssignOp(binOp))
                     UNIMPLEMENT("BinaryOperator not implemented: " << binOp->getOpcode());
                 updateVarState(binOp);
             })
-            .Case<Expr>([this](const Expr *expr) {
-                DEBUG("stepping Expr...");
+            .Case<clang::Expr>([this](const clang::Expr *expr) {
+                DEBUG("stepping clang::Expr...");
                 stepExpr(expr);
             })
-            .Case<ImplicitCastExpr>(
-                [](const ImplicitCastExpr *) -> unique_ptr<SymbolicExpr> { UNREACHABLE(); })
-            .Case<CaseStmt>([this](const CaseStmt *caseStmt) {
+            .Case<clang::ImplicitCastExpr>(
+                [](const clang::ImplicitCastExpr *) -> std::unique_ptr<symb::SymbolicExpr> {
+                    UNREACHABLE();
+                })
+            .Case<clang::CaseStmt>([this](const clang::CaseStmt *caseStmt) {
                 DEBUG("stepping CaseStmt...");
                 // Can only be met during step(SwitchStmt), just ignore it.
                 step(caseStmt->getSubStmt());
             })
-            .Case<DefaultStmt>([this](const DefaultStmt *defaultStmt) {
+            .Case<clang::DefaultStmt>([this](const clang::DefaultStmt *defaultStmt) {
                 DEBUG("stepping DefaultStmt...");
                 // Can only be met during step(SwitchStmt), just ignore it.
                 step(defaultStmt->getSubStmt());
             })
-            .Case<SwitchStmt>([this](const SwitchStmt *switchStmt) {
+            .Case<clang::SwitchStmt>([this](const clang::SwitchStmt *switchStmt) {
                 DEBUG("stepping SwitchStmt...");
                 auto prevStmtCtx = this->StmtCtx;
                 this->StmtCtx    = switchStmt;
@@ -1167,46 +1190,48 @@ namespace acslg::analyzer {
                 if (switchStmt->hasInitStorage())
                     UNIMPLEMENT("Unsupported Switch type, Cond has init statement: "
                                 << switchStmt->getCond());
-                if (auto bodyStmt = dyn_cast_if_present<CompoundStmt>(switchStmt->getBody())) {
-                    if (isa_and_present<CaseStmt>(bodyStmt->body_front())) {
+                if (auto bodyStmt =
+                        dyn_cast_if_present<clang::CompoundStmt>(switchStmt->getBody())) {
+                    if (isa_and_present<clang::CaseStmt>(bodyStmt->body_front())) {
                         stepSimpleSwitch(switchStmt);
                     } else {
-                        UNIMPLEMENT("Unsupported Switch type, body's first Stmt is not CaseStmt: "
-                                    << switchStmt->getBody());
+                        UNIMPLEMENT(
+                            "Unsupported Switch type, body's first clang::Stmt is not CaseStmt: "
+                            << switchStmt->getBody());
                     }
                 } else {
-                    WARN("A SwtichStmt without CompoundStmt body (why?) has been ignored: "
+                    WARN("A SwtichStmt without clang::CompoundStmt body (why?) has been ignored: "
                          << switchStmt);
                 }
 
                 resetState();
                 this->StmtCtx = prevStmtCtx;
             })
-            .Case<ForStmt>([this](const ForStmt *forStmt) {
-                DEBUG("stepping ForStmt...");
+            .Case<clang::ForStmt>([this](const clang::ForStmt *forStmt) {
+                DEBUG("stepping clang::ForStmt...");
                 auto prevStmtCtx = this->StmtCtx;
                 this->StmtCtx    = forStmt;
                 stepLoop(forStmt);
                 resetState();
                 this->StmtCtx = prevStmtCtx;
             })
-            .Case<WhileStmt>([this](const WhileStmt *whileStmt) {
-                DEBUG("stepping WhileStmt...");
+            .Case<clang::WhileStmt>([this](const clang::WhileStmt *whileStmt) {
+                DEBUG("stepping clang::WhileStmt...");
                 auto prevStmtCtx = this->StmtCtx;
                 this->StmtCtx    = whileStmt;
                 stepLoop(whileStmt);
                 resetState();
                 this->StmtCtx = prevStmtCtx;
             })
-            .Case<DoStmt>([this](const DoStmt *doStmt) {
-                DEBUG("stepping DoStmt...");
+            .Case<clang::DoStmt>([this](const clang::DoStmt *doStmt) {
+                DEBUG("stepping clang::DoStmt...");
                 auto prevStmtCtx = this->StmtCtx;
                 this->StmtCtx    = doStmt;
                 stepLoop(doStmt);
                 resetState();
                 this->StmtCtx = prevStmtCtx;
             })
-            .Case<CXXForRangeStmt>([this](const CXXForRangeStmt *rangeStmt) {
+            .Case<clang::CXXForRangeStmt>([this](const clang::CXXForRangeStmt *rangeStmt) {
                 DEBUG("stepping CXXForRangeStmt...");
                 auto prevStmtCtx = this->StmtCtx;
                 this->StmtCtx    = rangeStmt;
@@ -1214,19 +1239,19 @@ namespace acslg::analyzer {
                 resetState();
                 this->StmtCtx = prevStmtCtx;
             })
-            .Case<BreakStmt>([this](const BreakStmt *) {
+            .Case<clang::BreakStmt>([this](const clang::BreakStmt *) {
                 DEBUG("stepping BreakStmt...");
                 setStates(Path::PathState::Break, StmtCtx);
             })
-            .Case<ContinueStmt>([](const ContinueStmt *) {
+            .Case<clang::ContinueStmt>([](const clang::ContinueStmt *) {
                 DEBUG("stepping ContinueStmt...");
                 TODO();
             })
-            .Case<NullStmt>([](const NullStmt *) { DEBUG("stepping NullStmt..."); })
+            .Case<clang::NullStmt>([](const clang::NullStmt *) { DEBUG("stepping NullStmt..."); })
             // .Case<UnaryExprOrTypeTraitExpr>([this](const UnaryExprOrTypeTraitExpr *u) ->
             // EvalResult {
             //     SymbolicExpr::Type resultTy = deriveVarType(u->getType());
-            //     QualType argTy =
+            //     clang::QualType argTy =
             //         u->isArgumentType() ? u->getArgumentType() : u->getArgumentExpr()->getType();
             //     if (argTy->isVariableArrayType())
             //         UNIMPLEMENT("VLA in sizeof/alignof");
@@ -1251,7 +1276,7 @@ namespace acslg::analyzer {
             //             else if (auto ext = argTy->getAs<ExtVectorType>())
             //                 value = static_cast<uint64_t>(ext->getNumElements());
             //             else
-            //                 UNIMPLEMENT("vec_step on non-vector");
+            //                 UNIMPLEMENT("vec_step on non-std::vector");
             //             break;
             //         }
             //         default: UNIMPLEMENT("unsupported unary type trait");
@@ -1263,11 +1288,11 @@ namespace acslg::analyzer {
             //     R.second.emplace_back(std::move(lit));
             //     return R;
             // })
-            .Default([](const Stmt *s) {
-                UNIMPLEMENT("Unsupported Stmt type: " << s->getStmtClassName());
+            .Default([](const clang::Stmt *s) {
+                UNIMPLEMENT("Unsupported clang::Stmt type: " << s->getStmtClassName());
             });
 
-        auto localVars = collectLocalVars(stmt);
+        auto localVars = utils::collectLocalVars(stmt);
         for (auto &path : paths_) {
             auto &memoryState = path->getMutMemoryState();
             std::erase_if(path->varAddr_, [&](auto &&kv) { return localVars.contains(kv.first); });
@@ -1276,8 +1301,8 @@ namespace acslg::analyzer {
         return;
     }
 
-    Formulas ProgramState::stepExpr(const Expr *expr) {
-        std::vector<not_null<std::unique_ptr<Path>>> updatedPaths;
+    Formulas ProgramState::stepExpr(const clang::Expr *expr) {
+        std::vector<utils::not_null<std::unique_ptr<Path>>> updatedPaths;
         Formulas evaluated;
 
         for (auto &path : paths_) {
@@ -1296,19 +1321,19 @@ namespace acslg::analyzer {
         return evaluated;
     }
 
-    void ProgramState::stepBranch(const vector<const Expr *> &branchConds,
-                                  const vector<const Stmt *> &branchStmts) {
+    void ProgramState::stepBranch(const std::vector<const clang::Expr *> &branchConds,
+                                  const std::vector<const clang::Stmt *> &branchStmts) {
         assert(branchStmts.size() == branchConds.size() + 1);
 
-        vector<unique_ptr<ProgramState>> clones;
-        vector<const ProgramState *> statesForMerge;
+        std::vector<std::unique_ptr<ProgramState>> clones;
+        std::vector<const ProgramState *> statesForMerge;
 
         auto splitPair = splitActiveInactive();
         size_t n       = branchConds.size();
         for (size_t i = 0; i < n; ++i) {
             auto newState = splitPair.first->clone();
 
-            vector<not_null<unique_ptr<Path>>> updatedPaths;
+            std::vector<utils::not_null<std::unique_ptr<Path>>> updatedPaths;
 
             for (auto &path : newState->paths_) {
                 Path::EvalResult eval = path->evalExpr(branchConds[i]);
@@ -1341,8 +1366,8 @@ namespace acslg::analyzer {
             clones.push_back(std::move(newState));
         }
 
-        queue<pair<not_null<unique_ptr<Path>>, size_t>> worklist;
-        vector<not_null<unique_ptr<Path>>> finalPaths;
+        std::queue<std::pair<utils::not_null<std::unique_ptr<Path>>, size_t>> worklist;
+        std::vector<utils::not_null<std::unique_ptr<Path>>> finalPaths;
 
         for (auto &path : splitPair.first->paths_) {
             worklist.emplace(std::move(path), 0);
@@ -1389,17 +1414,17 @@ namespace acslg::analyzer {
         paths_ = std::move(mergedActive->paths_);
     }
 
-    void ProgramState::stepLoop(const Stmt *loopStmt) {
+    void ProgramState::stepLoop(const clang::Stmt *loopStmt) {
         auto preState  = clone();
         auto loopEntry = preState->clone();
 
-        if (auto forLoop = dyn_cast<ForStmt>(loopStmt); forLoop && forLoop->getInit())
+        if (auto forLoop = dyn_cast<clang::ForStmt>(loopStmt); forLoop && forLoop->getInit())
             loopEntry->step(forLoop->getInit());
 
-        if (const auto *doWhileStmt = dyn_cast<DoStmt>(loopStmt)) {
+        if (const auto *doWhileStmt = dyn_cast<clang::DoStmt>(loopStmt)) {
             auto cond = doWhileStmt->getCond()->IgnoreParenImpCasts();
             auto body = doWhileStmt->getBody();
-            if (auto *literal = llvm::dyn_cast<IntegerLiteral>(cond);
+            if (auto *literal = llvm::dyn_cast<clang::IntegerLiteral>(cond);
                 literal && literal->getValue() == 0) {
                 step(body);
                 return;
@@ -1407,10 +1432,10 @@ namespace acslg::analyzer {
             UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
         }
 
-        auto [loopInfo, ok] = parseLoopInfo(*preState, *loopEntry, loopStmt);
+        auto [loopInfo, ok] = spec_generator::parseLoopInfo(*preState, *loopEntry, loopStmt);
 
-        string spec;
-        unique_ptr<ProgramState> postState;
+        std::string spec;
+        std::unique_ptr<ProgramState> postState;
         if (ok) {
             tie(spec, postState) = emitLoopInvariant(*preState, *loopEntry, loopInfo);
         } else {
@@ -1431,7 +1456,7 @@ namespace acslg::analyzer {
         INFO(this->dump());
     }
 
-    void ProgramState::setStates(Path::PathState state, const Stmt *stmt) {
+    void ProgramState::setStates(Path::PathState state, const clang::Stmt *stmt) {
         for (auto &pathPtr : paths_) {
             if (pathPtr->isActive()) {
                 pathPtr->setPathState(state);
@@ -1440,18 +1465,18 @@ namespace acslg::analyzer {
         }
     }
 
-    void ProgramState::setReturnExpr(const Expr *expr) {
+    void ProgramState::setReturnExpr(const clang::Expr *expr) {
         if (expr == nullptr) {
             for (auto &pathPtr : paths_) {
                 if (!pathPtr->isActive())
                     continue;
-                pathPtr->setReturnExpr(nullopt);
+                pathPtr->setReturnExpr(std::nullopt);
             }
             return;
         }
         expr = expr->IgnoreParenImpCasts();
 
-        vector<not_null<unique_ptr<Path>>> updatedPaths;
+        std::vector<utils::not_null<std::unique_ptr<Path>>> updatedPaths;
 
         for (auto &pathPtr : paths_) {
             if (!pathPtr->isActive()) {
@@ -1475,8 +1500,8 @@ namespace acslg::analyzer {
         paths_ = std::move(updatedPaths);
     }
 
-    void ProgramState::updateVarState(const BinaryOperator *binOp) {
-        vector<not_null<unique_ptr<Path>>> updatedPaths;
+    void ProgramState::updateVarState(const clang::BinaryOperator *binOp) {
+        std::vector<utils::not_null<std::unique_ptr<Path>>> updatedPaths;
 
         for (auto &path : paths_) {
             if (!path->isActive()) {
@@ -1487,11 +1512,11 @@ namespace acslg::analyzer {
             Path::EvalResult eval;
 
             if (binOp->isCompoundAssignmentOp()) {
-                BinaryOpExpr::Operator op = getCompoundAssignOp(binOp->getOpcode());
+                symb::BinaryOpExpr::Operator op = symb::getCompoundAssignOp(binOp->getOpcode());
 
                 Path::EvalResult lhs = path->evalExpr(binOp->getLHS());
 
-                vector<not_null<unique_ptr<Path>>> outPaths;
+                std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                 Formulas outExprs;
 
                 for (size_t i = 0; i < lhs.second.size(); ++i) {
@@ -1500,8 +1525,8 @@ namespace acslg::analyzer {
                     Path::EvalResult rhs = lhsPath.evalExpr(binOp->getRHS());
 
                     for (size_t j = 0; j < rhs.second.size(); ++j) {
-                        outExprs.emplace_back(make_unique<BinaryOpExpr>(lhs.second[i]->clone(), op,
-                                                                        std::move(rhs.second[j])));
+                        outExprs.emplace_back(std::make_unique<symb::BinaryOpExpr>(
+                            lhs.second[i]->clone(), op, std::move(rhs.second[j])));
 
                         if (i != 0 || j != 0)
                             outPaths.emplace_back(std::move(rhs.first[j - 1]));
@@ -1525,10 +1550,10 @@ namespace acslg::analyzer {
         paths_ = std::move(updatedPaths);
     }
 
-    void ProgramState::addNewDecls(const vector<const VarDecl *> &varDecls) {
-        for (const VarDecl *varDecl : varDecls) {
-            const Expr *initExpr = varDecl->getInit();
-            vector<not_null<unique_ptr<Path>>> updatedPaths;
+    void ProgramState::addNewDecls(const std::vector<const clang::VarDecl *> &varDecls) {
+        for (const clang::VarDecl *varDecl : varDecls) {
+            const clang::Expr *initExpr = varDecl->getInit();
+            std::vector<utils::not_null<std::unique_ptr<Path>>> updatedPaths;
 
             for (auto &path : paths_) {
                 if (!path->isActive()) {
@@ -1545,13 +1570,13 @@ namespace acslg::analyzer {
                     auto varType = varDecl->getType();
                     if (auto RD = varType->getAsRecordDecl();
                         RD != nullptr && varType->isStructureType()) {
-                        // If varDecl is a struct, memoryState_ should map an incomplete Structure
-                        // (with no field values initialized).
+                        // If varDecl is a struct, memoryState_ should std::map an incomplete
+                        // symb::Structure (with no field values initialized).
                         if (!RD->isCompleteDefinition())
                             ERROR("Struct with incomplete definition!");
 
                         RD      = RD->getDefinition();
-                        auto st = make_unique<Structure>(
+                        auto st = std::make_unique<symb::Structure>(
                             RD, RD->getASTContext().getASTRecordLayout(RD),
                             varAddr_->addressClone().into_underlying(), startPoint_);
                         path->updateVarState(varDecl, std::move(st));
@@ -1560,7 +1585,7 @@ namespace acslg::analyzer {
                     updatedPaths.push_back(std::move(path));
                     continue;
                 }
-                if (auto initListExpr = dyn_cast<InitListExpr>(initExpr)) {
+                if (auto initListExpr = dyn_cast<clang::InitListExpr>(initExpr)) {
                     auto varType = varDecl->getType();
 
                     if (varType->isAnyPointerType() || varType->isArrayType()) {
@@ -1572,14 +1597,15 @@ namespace acslg::analyzer {
 
                         RD = RD->getDefinition();
 
-                        auto st = make_unique<Structure>(
+                        auto st = std::make_unique<symb::Structure>(
                             RD, RD->getASTContext().getASTRecordLayout(RD),
                             varAddr_->addressClone().into_underlying(), startPoint_);
                         if (initListExpr->getNumInits() != st->getNumFields())
-                            ERROR("Initializer list size mismatches the struct's field count.");
+                            ERROR(
+                                "Initializer std::list size mismatches the struct's field count.");
                         auto slots = st->fieldsValues();
                         for (size_t i = 0; i < slots.size(); ++i) {
-                            const Expr *init = initListExpr->getInit(i);
+                            const clang::Expr *init = initListExpr->getInit(i);
 
                             Path::EvalResult eval = path->evalExpr(init);
                             if (eval.second.size() != 1)
@@ -1594,7 +1620,7 @@ namespace acslg::analyzer {
                         continue;
                     } else {
                         UNIMPLEMENT(
-                            "An initializer list was used to initialize an unimplemented or "
+                            "An initializer std::list was used to initialize an unimplemented or "
                             "incorrect type "s +
                             varType->getTypeClassName() + ".");
                     }
@@ -1623,10 +1649,11 @@ namespace acslg::analyzer {
         }
     }
 
-    pair<unique_ptr<ProgramState>, unique_ptr<ProgramState>> ProgramState::splitActiveInactive() {
-        auto activeState           = make_unique<ProgramState>(func_->clone(), context_);
+    std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<ProgramState>> ProgramState::
+        splitActiveInactive() {
+        auto activeState           = std::make_unique<ProgramState>(func_->clone(), context_);
         activeState->startPoint_   = startPoint_;
-        auto inactiveState         = make_unique<ProgramState>(func_->clone(), context_);
+        auto inactiveState         = std::make_unique<ProgramState>(func_->clone(), context_);
         inactiveState->startPoint_ = startPoint_;
 
         for (auto &path : paths_) {
@@ -1639,13 +1666,14 @@ namespace acslg::analyzer {
         return {std::move(activeState), std::move(inactiveState)};
     }
 
-    unique_ptr<ProgramState> ProgramState::merge(const vector<const ProgramState *> &states) {
+    std::unique_ptr<ProgramState> ProgramState::merge(
+        const std::vector<const ProgramState *> &states) {
         if (states.empty())
             ERROR("Nothing to be merged.");
-        optional<not_null<unique_ptr<ProgramState>>> merged{};
+        std::optional<utils::not_null<std::unique_ptr<ProgramState>>> merged{};
 
         for (auto &state : states) {
-            if (merged == nullopt) {
+            if (merged == std::nullopt) {
                 merged.emplace(state->clone());
                 continue;
             }
@@ -1662,13 +1690,14 @@ namespace acslg::analyzer {
         return std::move(merged).value().into_underlying();
     }
 
-    unique_ptr<ProgramState> ProgramState::merge(const vector<unique_ptr<ProgramState>> &states) {
+    std::unique_ptr<ProgramState> ProgramState::merge(
+        const std::vector<std::unique_ptr<ProgramState>> &states) {
         if (states.empty())
             ERROR("Nothing to be merged.");
-        optional<not_null<unique_ptr<ProgramState>>> merged{};
+        std::optional<utils::not_null<std::unique_ptr<ProgramState>>> merged{};
 
         for (auto &state : states) {
-            if (merged == nullopt) {
+            if (merged == std::nullopt) {
                 merged.emplace(state->clone());
                 continue;
             }
@@ -1685,8 +1714,8 @@ namespace acslg::analyzer {
         return std::move(merged).value().into_underlying();
     }
 
-    unique_ptr<ProgramState> ProgramState::clone(bool withPath) const {
-        auto newState         = make_unique<ProgramState>(func_->clone(), context_);
+    std::unique_ptr<ProgramState> ProgramState::clone(bool withPath) const {
+        auto newState         = std::make_unique<ProgramState>(func_->clone(), context_);
         newState->startPoint_ = startPoint_;
 
         if (withPath) {
@@ -1699,7 +1728,8 @@ namespace acslg::analyzer {
         return newState;
     }
 
-    unique_ptr<ProgramState> ProgramState::cloneWithPaths(vector<unique_ptr<Path>> &newPaths) const {
+    std::unique_ptr<ProgramState> ProgramState::cloneWithPaths(
+        std::vector<std::unique_ptr<Path>> &newPaths) const {
         auto clone = this->clone(false);
         clone->paths_.clear();
         clone->paths_.reserve(newPaths.size());
@@ -1714,22 +1744,22 @@ namespace acslg::analyzer {
                 path->setPathState(Path::PathState::Step);
         }
     }
-    static void collectCaseBlocks(const CompoundStmt *body,
-                                  vector<vector<const Stmt *>> &blocks,
-                                  vector<const Expr *> &conds) {
+    static void collectCaseBlocks(const clang::CompoundStmt *body,
+                                  std::vector<std::vector<const clang::Stmt *>> &blocks,
+                                  std::vector<const clang::Expr *> &conds) {
         if (!body)
             ERROR("dyn_cast failed for switch body.");
         blocks.clear();
         conds.clear();
 
-        for (const Stmt *top : body->body()) {
-            if (const CaseStmt *cs = dyn_cast<CaseStmt>(top)) {
-                const CaseStmt *cur = cs;
+        for (const clang::Stmt *top : body->body()) {
+            if (auto cs = dyn_cast<const clang::CaseStmt>(top)) {
+                auto cur = cs;
                 while (cur) {
                     blocks.emplace_back();
                     conds.push_back(cur->getLHS());
-                    const Stmt *sub = cur->getSubStmt();
-                    if (const CaseStmt *next = dyn_cast<CaseStmt>(sub)) {
+                    const clang::Stmt *sub = cur->getSubStmt();
+                    if (auto next = dyn_cast<const clang::CaseStmt>(sub)) {
                         cur = next;
                     } else {
                         if (sub) {
@@ -1739,10 +1769,10 @@ namespace acslg::analyzer {
                         break;
                     }
                 }
-            } else if (const DefaultStmt *ds = dyn_cast<DefaultStmt>(top)) {
+            } else if (auto ds = dyn_cast<const clang::DefaultStmt>(top)) {
                 blocks.emplace_back();
                 conds.push_back(nullptr);
-                const Stmt *sub = ds->getSubStmt();
+                const clang::Stmt *sub = ds->getSubStmt();
                 if (sub) {
                     for (size_t i = 0; i < blocks.size(); ++i)
                         blocks[i].push_back(sub);
@@ -1754,12 +1784,13 @@ namespace acslg::analyzer {
         }
     }
 
-    vector<pair<unique_ptr<ProgramState>, unique_ptr<SymbolicExpr>>> ProgramState::
-        splitStateBySwitchCond(const Expr *switchCond) {
+    std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<symb::SymbolicExpr>>> ProgramState::
+        splitStateBySwitchCond(const clang::Expr *switchCond) {
         if (!switchCond) {
             TODO();
         }
-        vector<pair<unique_ptr<ProgramState>, unique_ptr<SymbolicExpr>>> result;
+        std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<symb::SymbolicExpr>>>
+            result;
 
         for (auto &path : paths_) {
             auto evalResult = path->evalExpr(switchCond);
@@ -1768,7 +1799,7 @@ namespace acslg::analyzer {
                 ERROR("evalExpr produced unexpected side paths");
             }
 
-            vector<unique_ptr<Path>> onePath;
+            std::vector<std::unique_ptr<Path>> onePath;
             onePath.push_back(std::move(path).into_underlying());
             auto stateClone = cloneWithPaths(onePath);
 
@@ -1779,13 +1810,14 @@ namespace acslg::analyzer {
         return result;
     }
 
-    void ProgramState::stepSimpleSwitch(const SwitchStmt *switchStmt) {
+    void ProgramState::stepSimpleSwitch(const clang::SwitchStmt *switchStmt) {
         auto partitions = splitStateBySwitchCond(switchStmt->getCond());
-        vector<vector<const Stmt *>> blocks;
-        vector<const Expr *> conds;
-        collectCaseBlocks(dyn_cast<CompoundStmt>(switchStmt->getBody()), blocks, conds);
+        std::vector<std::vector<const clang::Stmt *>> blocks;
+        std::vector<const clang::Expr *> conds;
+        collectCaseBlocks(llvm::dyn_cast<clang::CompoundStmt>(switchStmt->getBody()), blocks,
+                          conds);
 
-        vector<unique_ptr<ProgramState>> finalStates;
+        std::vector<std::unique_ptr<ProgramState>> finalStates;
         for (auto &pr : partitions) {
             auto current  = std::move(pr.first);
             auto symValue = std::move(pr.second);
@@ -1808,23 +1840,24 @@ namespace acslg::analyzer {
                 auto caseSymExpr = std::move(caseCondEval.second[0]);
                 auto eqState     = current->clone();
 
-                auto condExprEq = make_unique<BinaryOpExpr>(
-                    symValue->clone(), BinaryOpExpr::Operator::Equal, caseSymExpr->clone());
+                auto condExprEq = std::make_unique<symb::BinaryOpExpr>(
+                    symValue->clone(), symb::BinaryOpExpr::Operator::Equal, caseSymExpr->clone());
                 for (auto &p : eqState->paths_)
                     p->insertPathCondition(condExprEq->clone());
 
                 for (auto *s : stmts)
                     eqState->step(s);
 
-                auto condExprNe = make_unique<BinaryOpExpr>(
-                    symValue->clone(), BinaryOpExpr::Operator::NotEqual, std::move(caseSymExpr));
+                auto condExprNe = std::make_unique<symb::BinaryOpExpr>(
+                    symValue->clone(), symb::BinaryOpExpr::Operator::NotEqual,
+                    std::move(caseSymExpr));
                 for (auto &p : current->paths_)
                     p->insertPathCondition(condExprNe->clone());
 
                 if (eqState->isInactive()) {
                     finalStates.push_back(std::move(eqState));
                 } else {
-                    vector<const ProgramState *> mergeInputs;
+                    std::vector<const ProgramState *> mergeInputs;
                     mergeInputs.push_back(eqState.get());
                     mergeInputs.push_back(current.get());
                     auto merged = merge(mergeInputs);
@@ -1835,7 +1868,7 @@ namespace acslg::analyzer {
             finalStates.push_back(std::move(current));
         }
 
-        vector<const ProgramState *> ptrs;
+        std::vector<const ProgramState *> ptrs;
         ptrs.reserve(finalStates.size());
         for (auto &st : finalStates)
             ptrs.push_back(st.get());
@@ -1853,7 +1886,7 @@ namespace acslg::analyzer {
         return true;
     }
 
-    void ProgramState::resymbolize(SourcePoint newStartPoint) {
+    void ProgramState::resymbolize(symb::SourcePoint newStartPoint) {
         startPoint_ = std::move(newStartPoint);
         for (auto &path : paths_) {
             if (path->isActive()) {
@@ -1866,22 +1899,22 @@ namespace acslg::analyzer {
         }
     }
 
-    optional<not_null<std::unique_ptr<Path>>> ProgramState::takePath(size_t i) {
+    std::optional<utils::not_null<std::unique_ptr<Path>>> ProgramState::takePath(size_t i) {
         if (i >= paths_.size())
-            return nullopt;
+            return std::nullopt;
         auto p = std::move(paths_.at(i));
         paths_.erase(paths_.begin() + i);
         return p;
     }
 
-    std::vector<not_null<std::unique_ptr<Path>>> ProgramState::takeAllPaths() {
-        std::vector<not_null<std::unique_ptr<Path>>> out;
+    std::vector<utils::not_null<std::unique_ptr<Path>>> ProgramState::takeAllPaths() {
+        std::vector<utils::not_null<std::unique_ptr<Path>>> out;
         out.swap(paths_);
         return out;
     }
 
-    string ProgramState::dump() const {
-        ostringstream oss;
+    std::string ProgramState::dump() const {
+        std::ostringstream oss;
         for (const auto &p : paths_) {
             oss << p->dump() << "\n";
         }

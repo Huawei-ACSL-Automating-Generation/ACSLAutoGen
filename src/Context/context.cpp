@@ -3,53 +3,49 @@
 #include "clang/AST/Stmt.h"
 #include "clang/Basic/SourceManager.h"
 
-using namespace std;
-using namespace clang;
-using namespace llvm;
-
 namespace acslg::context {
-    vector<const FunctionDecl *> ACSLContext::getFunctions() const {
-        vector<const FunctionDecl *> funcs;
+    std::vector<const clang::FunctionDecl *> ACSLContext::getFunctions() const {
+        std::vector<const clang::FunctionDecl *> funcs;
         for (const auto *decl : TU_->decls()) {
-            if (const auto *funcDecl = dyn_cast<FunctionDecl>(decl))
+            if (const auto *funcDecl = dyn_cast<clang::FunctionDecl>(decl))
                 funcs.push_back(funcDecl);
         }
         return funcs;
     }
 
-    optional<tuple<string, StringRef, StringRef, unsigned, unsigned>> ACSLContext::getDeclInfo(
-        const Decl *decl) {
-        tuple<string, StringRef, StringRef, unsigned, unsigned> result;
+    std::optional<std::tuple<std::string, llvm::StringRef, llvm::StringRef, unsigned, unsigned>> ACSLContext::
+        getDeclInfo(const clang::Decl *decl) {
+        std::tuple<std::string, llvm::StringRef, llvm::StringRef, unsigned, unsigned> result;
         if (!decl)
-            return nullopt;
-        if (auto namedDecl = dyn_cast<NamedDecl>(decl); namedDecl)
+            return std::nullopt;
+        if (auto namedDecl = dyn_cast<clang::NamedDecl>(decl); namedDecl)
             get<0>(result) = namedDecl->getNameAsString();
 
-        SourceRange range         = decl->getSourceRange();
-        CharSourceRange charRange = CharSourceRange::getTokenRange(range);
-        get<1>(result)            = Lexer::getSourceText(charRange, SM_, LO_);
+        clang::SourceRange range         = decl->getSourceRange();
+        clang::CharSourceRange charRange = clang::CharSourceRange::getTokenRange(range);
+        get<1>(result)                   = clang::Lexer::getSourceText(charRange, SM_, LO_);
 
-        SourceLocation loc = decl->getBeginLoc();
-        get<2>(result)     = SM_.getFilename(loc);
-        get<3>(result)     = SM_.getSpellingLineNumber(loc);
-        get<4>(result)     = SM_.getSpellingColumnNumber(loc);
+        clang::SourceLocation loc = decl->getBeginLoc();
+        get<2>(result)            = SM_.getFilename(loc);
+        get<3>(result)            = SM_.getSpellingLineNumber(loc);
+        get<4>(result)            = SM_.getSpellingColumnNumber(loc);
         return result;
     }
 
-    optional<tuple<StringRef, StringRef, unsigned, unsigned>> ACSLContext::getStmtInfo(
-        const Stmt *stmt) {
-        tuple<StringRef, StringRef, unsigned, unsigned> result;
+    std::optional<std::tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned>> ACSLContext::
+        getStmtInfo(const clang::Stmt *stmt) {
+        std::tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned> result;
         if (!stmt)
-            return nullopt;
+            return std::nullopt;
 
-        SourceRange range         = stmt->getSourceRange();
-        CharSourceRange charRange = CharSourceRange::getTokenRange(range);
-        get<0>(result)            = Lexer::getSourceText(charRange, SM_, LO_);
+        clang::SourceRange range         = stmt->getSourceRange();
+        clang::CharSourceRange charRange = clang::CharSourceRange::getTokenRange(range);
+        get<0>(result)                   = clang::Lexer::getSourceText(charRange, SM_, LO_);
 
-        SourceLocation loc = stmt->getBeginLoc();
-        get<1>(result)     = SM_.getFilename(loc);
-        get<2>(result)     = SM_.getSpellingLineNumber(loc);
-        get<3>(result)     = SM_.getSpellingColumnNumber(loc);
+        clang::SourceLocation loc = stmt->getBeginLoc();
+        get<1>(result)            = SM_.getFilename(loc);
+        get<2>(result)            = SM_.getSpellingLineNumber(loc);
+        get<3>(result)            = SM_.getSpellingColumnNumber(loc);
         return result;
     }
 } // namespace acslg::context

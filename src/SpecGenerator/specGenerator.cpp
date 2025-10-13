@@ -6,22 +6,19 @@
 #include "macros.h"
 #include "state.h"
 
-using namespace std;
-using namespace clang;
-
 namespace acslg::spec_generator {
-    using namespace analyzer;
-    using namespace utils;
+    namespace symb = acslg::analyzer::symbolic;
+
     namespace {
         // auxiliary function
         template <typename T>
-        vector<const T *> getPlugins(
-            string_view groupName,
-            optional<reference_wrapper<const vector<string>>> extraPluginIds) {
+        std::vector<const T *> getPlugins(
+            std::string_view groupName,
+            std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
             const ACSLPluginGroup *group = ACSLPluginGroupRegistry::instance().getGroup(groupName);
             if (!group) {
                 auto names = ACSLPluginGroupRegistry::instance().allGroupNames();
-                string allName;
+                std::string allName;
                 allName += "[";
                 for (auto &name : names) {
                     allName += name;
@@ -33,16 +30,16 @@ namespace acslg::spec_generator {
                     allName.pop_back();
                 }
                 allName += "]";
-                ERROR("Unknown ACSL group: " + string{groupName} +
+                ERROR("Unknown ACSL group: " + std::string{groupName} +
                       ". All registered groups: " + allName);
             }
 
-            vector<string> ids = group->pluginIds;
+            std::vector<std::string> ids = group->pluginIds;
             if (extraPluginIds)
                 ids.insert(ids.end(), (*extraPluginIds).get().begin(),
                            (*extraPluginIds).get().end());
 
-            vector<const T *> plugins;
+            std::vector<const T *> plugins;
             for (auto &pid : ids) {
                 auto *pl = ACSLPluginRegistry::instance().get(pid);
                 if (!pl)
@@ -64,46 +61,47 @@ namespace acslg::spec_generator {
         return *this;
     }
 
-    string LoopInfo::Pattern::dump() const {
-        ostringstream oss;
+    std::string LoopInfo::Pattern::dump() const {
+        std::ostringstream oss;
         oss << "initialValue_: "
             << (initialValue_->regularForm() ? initialValue_->regularForm().value()
                                              : initialValue_->dump())
             << "\n";
-        oss << "step_: " << to_string(step_) << "\n";
+        oss << "step_: " << std::to_string(step_) << "\n";
         return oss.str();
     }
 
     LoopInfo::LoopInfo(const clang::Stmt *loopStmt)
         : loopStmt_(loopStmt), initStmt_{nullptr}, condExpr_{nullptr}, incStmt_(nullptr),
           bodyStmt_(nullptr) {
-        if (const auto *forStmt = dyn_cast<ForStmt>(loopStmt)) {
+        if (const auto *forStmt = dyn_cast<clang::ForStmt>(loopStmt)) {
             initStmt_ = forStmt->getInit();
             condExpr_ = forStmt->getCond();
             incStmt_  = forStmt->getInc();
             bodyStmt_ = forStmt->getBody();
-        } else if (const auto *whileStmt = dyn_cast<WhileStmt>(loopStmt)) {
+        } else if (const auto *whileStmt = dyn_cast<clang::WhileStmt>(loopStmt)) {
             condExpr_ = whileStmt->getCond();
             bodyStmt_ = whileStmt->getBody();
-        } else if (const auto *doWhileStmt = dyn_cast<DoStmt>(loopStmt)) {
+        } else if (const auto *doWhileStmt = dyn_cast<clang::DoStmt>(loopStmt)) {
             condExpr_ = doWhileStmt->getCond();
             bodyStmt_ = doWhileStmt->getBody();
         } else {
-            ERROR("LoopStmt should be a Stmt of loop.");
+            ERROR("LoopStmt should be a clang::Stmt of loop.");
         }
     }
 
-    string emitFunctionContract(const ProgramState &pre,
-                                const ProgramState &post,
-                                string_view groupName,
-                                optional<reference_wrapper<const vector<string>>> extraPluginIds) {
-        auto plugins = getPlugins<FunctionContractPlugin>(groupName, extraPluginIds);
-        string spec  = ACSL_HEAD.to_string();
+    std::string emitFunctionContract(
+        const analyzer::ProgramState &pre,
+        const analyzer::ProgramState &post,
+        std::string_view groupName,
+        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
+        auto plugins     = getPlugins<FunctionContractPlugin>(groupName, extraPluginIds);
+        std::string spec = ACSL_HEAD.to_string();
 
         for (auto &plugin : plugins) {
             if (plugin == nullptr)
                 continue;
-            DEBUG("Plugin {" + string{plugin->id()} + "} is generating...");
+            DEBUG("Plugin {" + std::string{plugin->id()} + "} is generating...");
             if (auto s = plugin->generate(pre, post); s)
                 spec += *s;
         }
@@ -111,62 +109,63 @@ namespace acslg::spec_generator {
         return spec;
     }
 
-    pair<LoopInfo, bool> parseLoopInfo(
-        const ProgramState &preState,
-        const ProgramState &loopEntry,
+    std::pair<LoopInfo, bool> parseLoopInfo(
+        const analyzer::ProgramState &preState,
+        const analyzer::ProgramState &loopEntry,
         const clang::Stmt *loopStmt,
-        string_view groupName,
-        optional<reference_wrapper<const vector<string>>> extraPluginIds) {
+        std::string_view groupName,
+        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
         auto plugins = getPlugins<LoopInfoPlugin>(groupName, extraPluginIds);
 
         LoopInfo loopInfo{loopStmt};
         for (auto &plugin : plugins) {
             if (plugin == nullptr)
                 UNREACHABLE();
-            DEBUG("Plugin {" + string{plugin->id()} + "} is parsing...");
+            DEBUG("Plugin {" + std::string{plugin->id()} + "} is parsing...");
             if (!plugin->parse(preState, loopEntry, loopInfo))
-                return pair{std::move(loopInfo), false};
+                return std::pair{std::move(loopInfo), false};
         }
-        return pair{std::move(loopInfo), true};
+        return std::pair{std::move(loopInfo), true};
     }
 
-    void parseComplexLoopInfo(const ProgramState &preState,
-                              const ProgramState &loopEntry,
-                              LoopInfo &loopInfo,
-                              string_view groupName,
-                              optional<reference_wrapper<const vector<string>>> extraPluginIds) {
+    void parseComplexLoopInfo(
+        const analyzer::ProgramState &preState,
+        const analyzer::ProgramState &loopEntry,
+        LoopInfo &loopInfo,
+        std::string_view groupName,
+        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
         auto plugins = getPlugins<LoopInfoPlugin>(groupName, extraPluginIds);
 
         for (auto &plugin : plugins) {
             if (plugin == nullptr)
                 UNREACHABLE();
-            DEBUG("Plugin {" + string{plugin->id()} + "} is parsing...");
+            DEBUG("Plugin {" + std::string{plugin->id()} + "} is parsing...");
             if (!plugin->parse(preState, loopEntry, loopInfo))
-                ERROR("Plugin: {" + string{plugin->id()} +
+                ERROR("Plugin: {" + std::string{plugin->id()} +
                       "} parsing complex loop's information failed.");
         }
     }
 
-    pair<string, unique_ptr<ProgramState>> emitLoopInvariant(
-        const ProgramState &preState,
-        const ProgramState &loopEntry,
+    std::pair<std::string, std::unique_ptr<analyzer::ProgramState>> emitLoopInvariant(
+        const analyzer::ProgramState &preState,
+        const analyzer::ProgramState &loopEntry,
         const LoopInfo &loopInfo,
-        string_view groupName,
-        optional<reference_wrapper<const vector<string>>> extraPluginIds) {
+        std::string_view groupName,
+        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
         auto plugins = getPlugins<LoopInvariantPlugin>(groupName, extraPluginIds);
-        vector<unique_ptr<Path>> invariants;
-        string spec = ACSL_HEAD.to_string();
+        std::vector<std::unique_ptr<analyzer::Path>> invariants;
+        std::string spec = ACSL_HEAD.to_string();
 
-        auto loopEntryPoint = symbolic::SourcePoint::fromStmtBefore(
+        auto loopEntryPoint = symb::SourcePoint::fromStmtBefore(
             loopInfo.loopStmt_, loopEntry.getContext().getSourceManager(),
             loopEntry.getContext().getLangOptions());
         auto postState   = preState.clone();
         auto &postPaths  = postState->getPaths();
         auto pathNum     = postPaths.size();
-        auto resultInfos = vector<vector<PostInfo>>{pathNum};
+        auto resultInfos = std::vector<std::vector<PostInfo>>{pathNum};
 
         // Update the resultInfos with a plugin's postInfo.
-        auto updateResultInfos = [&](vector<PostInfo> &infos) {
+        auto updateResultInfos = [&](std::vector<PostInfo> &infos) {
             if (infos.empty())
                 return;
             if (preState.getPaths().size() != loopEntry.getPaths().size()) {
@@ -175,7 +174,7 @@ namespace acslg::spec_generator {
 
             auto &entryPaths = loopEntry.getPaths();
 
-            for (auto i : views::iota(size_t{0}, pathNum)) {
+            for (auto i : std::views::iota(size_t{0}, pathNum)) {
                 auto &entryPath         = *entryPaths.at(i);
                 auto &postBranchesInfos = resultInfos.at(i);
 
@@ -209,7 +208,7 @@ namespace acslg::spec_generator {
         for (auto &plugin : plugins) {
             if (plugin == nullptr)
                 UNREACHABLE();
-            DEBUG("Plugin {" + string{plugin->id()} + "} is generating...");
+            DEBUG("Plugin {" + std::string{plugin->id()} + "} is generating...");
             auto [s, continueFlag, postInfos] = plugin->generate(preState, loopEntry, loopInfo);
 
             if (s) {
@@ -224,7 +223,7 @@ namespace acslg::spec_generator {
         spec += ACSL_END.to_string();
 
         // Build post-state from result infos.
-        for (auto i : views::iota(size_t{0}, pathNum)) {
+        for (auto i : std::views::iota(size_t{0}, pathNum)) {
             auto &prePath           = preState.getPaths().at(i);
             auto &postPath          = postPaths.at(i);
             auto &postBranchesInfos = resultInfos.at(i);
@@ -240,7 +239,7 @@ namespace acslg::spec_generator {
             auto &postBranchInfo = postBranchesInfos.at(0);
             for (auto &[addr, value] : postBranchInfo.memoryMap_) {
                 auto root = addr.get().getFromRoot();
-                if (root == nullopt)
+                if (root == std::nullopt)
                     TODO();
                 if (!postPath->getVarAddr().contains(root.value()))
                     continue;
@@ -258,30 +257,30 @@ namespace acslg::spec_generator {
                 postPath->insertPathCondition(std::move(pathCond));
         }
 
-        return pair{spec, std::move(postState)};
+        return std::pair{spec, std::move(postState)};
     }
 
-    void substituteSymbols(not_null<unique_ptr<symbolic::SymbolicExpr>> &expr,
-                           const Path &loopEntryPath,
-                           const symbolic::SourcePoint &fromPoint) {
+    void substituteSymbols(utils::not_null<std::unique_ptr<symb::SymbolicExpr>> &expr,
+                           const analyzer::Path &loopEntryPath,
+                           const symb::SourcePoint &fromPoint) {
         auto &mem = loopEntryPath.getMemoryState(); // Memory snapshot at loop entry
         switch (expr->getType()) {
-            using enum symbolic::SymbolicExpr::ExprType;
+            using enum symb::SymbolicExpr::ExprType;
             case Literal: return; // Literals have no symbolic origin; nothing to substitute.
             case Variable: {
                 // Try to resolve where this variable comes from and substitute with the value at
                 // that address.
-                auto &var = dynamic_cast<const symbolic::Variable &>(*expr.get().get());
+                auto &var = dynamic_cast<const symb::Variable &>(*expr.get().get());
                 if (var.getFromPoint() && var.getFromPoint().value() != fromPoint)
                     return;
-                visit(
+                std::visit(
                     [&](auto &&arg) -> void {
-                        using T = decay_t<decltype(arg)>;
-                        if constexpr (is_same_v<T, monostate>) {
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, std::monostate>) {
                             // No origin info; not substitutable at the moment.
                             TODO();
-                        } else if constexpr (is_same_v<
-                                                 T, not_null<unique_ptr<const symbolic::Address>>>) {
+                        } else if constexpr (std::is_same_v<T, utils::not_null<std::unique_ptr<
+                                                                   const symb::Address>>>) {
                             auto realFromAddr = getSubstitutedAddr(*arg, loopEntryPath, fromPoint);
                             // Origin is an address-like handle; try reading from loop-entry memory.
                             if (auto value = mem.read(*realFromAddr)) {
@@ -291,7 +290,7 @@ namespace acslg::spec_generator {
                                 // Address originates from an address present on this path at loop
                                 // entry but hasn't been accessed -> construct a Variable with
                                 // corrext fromAddr and fromPoint.
-                                expr = make_unique<symbolic::Variable>(
+                                expr = std::make_unique<symb::Variable>(
                                     var.getVarType(), std::move(realFromAddr).into_underlying(),
                                     loopEntryPath.getStartPoint());
                             }
@@ -303,7 +302,7 @@ namespace acslg::spec_generator {
             case Address: {
                 // For a SymbolAddress node, try to read its "from" origin and substitute the node
                 // by the value.
-                auto symbolAddr = dynamic_cast<const symbolic::SymbolAddress *>(expr.get().get());
+                auto symbolAddr = dynamic_cast<const symb::SymbolAddress *>(expr.get().get());
                 if (symbolAddr == nullptr)
                     UNREACHABLE();
                 if (symbolAddr->getFromPoint() && symbolAddr->getFromPoint().value() != fromPoint)
@@ -313,19 +312,19 @@ namespace acslg::spec_generator {
             }
             case BinaryOp: {
                 // Recursively substitute in both children (non-const downcast is intentional).
-                auto &bin = dynamic_cast<symbolic::BinaryOpExpr &>(*expr.get().get());
+                auto &bin = dynamic_cast<symb::BinaryOpExpr &>(*expr.get().get());
                 substituteSymbols(bin.getLeft(), loopEntryPath, fromPoint);
                 substituteSymbols(bin.getRight(), loopEntryPath, fromPoint);
                 return;
             }
             case UnaryOp: {
                 // Recursively substitute in sub-expression (non-const downcast is intentional).
-                auto &un = dynamic_cast<symbolic::UnaryOpExpr &>(*expr.get().get());
+                auto &un = dynamic_cast<symb::UnaryOpExpr &>(*expr.get().get());
                 substituteSymbols(un.getSub(), loopEntryPath, fromPoint);
                 return;
             }
             case Structure: {
-                auto &st = dynamic_cast<symbolic::Structure &>(*expr.get().get());
+                auto &st = dynamic_cast<symb::Structure &>(*expr.get().get());
                 for (auto &field : st.fieldsValues()) {
                     // Substitute all fields of structure.
                     substituteSymbols(field, loopEntryPath, fromPoint);
@@ -338,61 +337,63 @@ namespace acslg::spec_generator {
         UNREACHABLE();
     };
 
-    not_null<unique_ptr<symbolic::Address>> getSubstitutedAddr(
-        const symbolic::Address &addr,
-        const Path &loopEntryPath,
-        const symbolic::SourcePoint &fromPoint) {
+    utils::not_null<std::unique_ptr<symb::Address>> getSubstitutedAddr(
+        const symb::Address &addr,
+        const analyzer::Path &loopEntryPath,
+        const symb::SourcePoint &fromPoint) {
         // If it's not a symbolic address, simply return a clone.
-        if (addr.getAddressType() == symbolic::Address::AddressType::VariableAddr)
+        if (addr.getAddressType() == symb::Address::AddressType::VariableAddr)
             return addr.addressClone();
 
         auto &mem = loopEntryPath.getMemoryState();
 
-        if (addr.getAddressType() == symbolic::Address::AddressType::FieldAddr) {
-            auto &fieldAddr = dynamic_cast<const symbolic::FieldAddress &>(addr);
-            return visit(
-                [&](auto &&arg) -> not_null<unique_ptr<symbolic::Address>> {
-                    using T = decay_t<decltype(arg)>;
-                    if constexpr (is_same_v<T, monostate>) {
+        if (addr.getAddressType() == symb::Address::AddressType::FieldAddr) {
+            auto &fieldAddr = dynamic_cast<const symb::FieldAddress &>(addr);
+            return std::visit(
+                [&](auto &&arg) -> utils::not_null<std::unique_ptr<symb::Address>> {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, std::monostate>) {
                         // No origin info — unresolved substitution.
                         TODO();
-                    } else if constexpr (is_same_v<
-                                             T, pair<not_null<unique_ptr<const symbolic::Address>>,
-                                                     const size_t>>) {
+                    } else if constexpr (std::is_same_v<T, std::pair<utils::not_null<std::unique_ptr<
+                                                                         const symb::Address>>,
+                                                                     const size_t>>) {
                         // Substitute the base address.
                         auto &[baseAddr, index] = arg;
                         auto trueBaseAddr = getSubstitutedAddr(*baseAddr, loopEntryPath, fromPoint);
-                        return make_unique<symbolic::FieldAddress>(
+                        return std::make_unique<symb::FieldAddress>(
                             fieldAddr.getDefinition(),
-                            pair<not_null<unique_ptr<const symbolic::Address>>, const size_t>{
-                                std::move(trueBaseAddr).into_underlying(), index});
+                            std::pair<utils::not_null<std::unique_ptr<const symb::Address>>,
+                                      const size_t>{std::move(trueBaseAddr).into_underlying(),
+                                                    index});
                     }
                 },
                 fieldAddr.getFrom());
         }
 
-        auto &symbolAddr = dynamic_cast<const symbolic::SymbolAddress &>(addr);
+        auto &symbolAddr = dynamic_cast<const symb::SymbolAddress &>(addr);
 
         if (symbolAddr.getFromPoint() != fromPoint)
             return addr.addressClone();
         // Try to resolve the "from" origin of the SymbolAddress via loop-entry memory.
-        return visit(
-            [&](auto &&arg) -> not_null<unique_ptr<symbolic::Address>> {
-                using T = decay_t<decltype(arg)>;
-                if constexpr (is_same_v<T, monostate>) {
+        return std::visit(
+            [&](auto &&arg) -> utils::not_null<std::unique_ptr<symb::Address>> {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, std::monostate>) {
                     // No origin info — unresolved substitution.
                     TODO();
-                } else if constexpr (is_same_v<T, not_null<unique_ptr<const symbolic::Address>>>) {
+                } else if constexpr (std::is_same_v<
+                                         T, utils::not_null<std::unique_ptr<const symb::Address>>>) {
                     auto realFromAddr = getSubstitutedAddr(*arg, loopEntryPath, fromPoint);
 
                     // Clone and substitute the offset of the original SymbolAddress.
                     auto offset = symbolAddr.getOffset()->clone();
                     substituteSymbols(offset, loopEntryPath,
-                                      fromPoint); // substitute any vars/addresses in offset
+                                      fromPoint); // substitute std::any vars/addresses in offset
                     offset = offset->simplifiedExpr();
 
-                    optional<not_null<unique_ptr<symbolic::SymbolicExpr>>> length{};
-                    // If original was a range, also substitute and set the length.
+                    std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> length{};
+                    // If original was a range, also substitute and std::set the length.
                     if (symbolAddr.isRange()) {
                         length = symbolAddr.getLength()->clone();
                         substituteSymbols(length.value(), loopEntryPath, fromPoint);
@@ -404,7 +405,7 @@ namespace acslg::spec_generator {
                         // The origin resolves to a value; it must be convertible to an "offseted
                         // address".
                         auto realAddr = value.value()->tryEvalAsSymbolAddr();
-                        if (realAddr == nullopt)
+                        if (realAddr == std::nullopt)
                             ERROR("This expr should be a address");
 
                         // Apply substituted offset to the concrete address.
@@ -413,18 +414,18 @@ namespace acslg::spec_generator {
                         if (length) {
                             realAddr.value()->setLength(std::move(length).value());
                         }
-                        // Return the underlying concrete address (unique_ptr<Address>).
+                        // Return the underlying concrete address (std::unique_ptr<Address>).
                         return std::move(realAddr).value().into_underlying();
                     } else {
                         // The origin hasn't been accessed at loop entry -> construct a
                         // SymbolAddress with corrext fromAddr and fromPoint.
-                        if (length == nullopt) {
-                            return make_unique<symbolic::SymbolAddress>(
+                        if (length == std::nullopt) {
+                            return std::make_unique<symb::SymbolAddress>(
                                 std::move(realFromAddr).into_underlying(),
                                 loopEntryPath.getStartPoint(), std::move(offset).into_underlying(),
-                                nullopt);
+                                std::nullopt);
                         }
-                        return make_unique<symbolic::SymbolAddress>(
+                        return std::make_unique<symb::SymbolAddress>(
                             std::move(realFromAddr).into_underlying(),
                             loopEntryPath.getStartPoint(), std::move(offset).into_underlying(),
                             std::move(length).value().into_underlying());

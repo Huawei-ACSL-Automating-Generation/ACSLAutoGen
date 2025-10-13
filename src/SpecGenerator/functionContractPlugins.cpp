@@ -6,23 +6,22 @@
 #include "utils.h"
 #include "expr.h"
 
-using namespace std;
-using namespace clang;
-
 namespace acslg::spec_generator {
-    using namespace analyzer;
+    namespace symb = acslg::analyzer::symbolic;
 
-    const string IND1 = "  ";
-    const string IND2 = "    ";
+    namespace {
+        const std::string IND1 = "  ";
+        const std::string IND2 = "    ";
+    } // namespace
 
     class TopAssignsPlugin : public FunctionContractPlugin {
       public:
-        TopAssignsPlugin(const string &ID) : id_(ID) {}
-        string_view id() const override { return id_; }
-        optional<string> generate(const ProgramState &pre,
-                                  const ProgramState &post) const override {
-            string spec;
-            unordered_map<size_t, const symbolic::AddressBox> assignedAddrs;
+        TopAssignsPlugin(const std::string &ID) : id_(ID) {}
+        std::string_view id() const override { return id_; }
+        std::optional<std::string> generate(const analyzer::ProgramState &pre,
+                                            const analyzer::ProgramState &post) const override {
+            std::string spec;
+            std::unordered_map<size_t, const symb::AddressBox> assignedAddrs;
 
             // Function's pre-state should have exactly one path.
             if (auto &paths = pre.getPaths(); paths.size() == 1) {
@@ -50,7 +49,7 @@ namespace acslg::spec_generator {
 
             for (auto &[_, addr] : assignedAddrs) {
                 auto regForm = addr.get().regularFormOfValue();
-                if (regForm == nullopt) {
+                if (regForm == std::nullopt) {
                     WARN("Value of {" + addr.get().dump() + "} has no regular form.");
                     continue;
                 }
@@ -58,31 +57,32 @@ namespace acslg::spec_generator {
             }
 
             if (spec.empty())
-                return IND1 + string("assigns \\nothing;\n");
+                return IND1 + std::string("assigns \\nothing;\n");
             else
-                return IND1 + string("assigns ") + spec.substr(0, spec.length() - 2) + ";\n";
+                return IND1 + std::string("assigns ") + spec.substr(0, spec.length() - 2) + ";\n";
         }
 
       private:
-        string id_;
+        std::string id_;
     };
     REGISTER_ACSL_PLUGIN(TopAssignsPlugin, "assigns");
 
     class DetailBehaviorPlugin : public FunctionContractPlugin {
       public:
-        DetailBehaviorPlugin(const string &ID) : id_(ID) {}
-        string_view id() const override { return id_; }
+        DetailBehaviorPlugin(const std::string &ID) : id_(ID) {}
+        std::string_view id() const override { return id_; }
 
-        optional<string> generate(const ProgramState &, const ProgramState &post) const override {
-            vector<string> behaviors;
+        std::optional<std::string> generate(const analyzer::ProgramState &,
+                                            const analyzer::ProgramState &post) const override {
+            std::vector<std::string> behaviors;
             int idx = 0;
 
             for (auto &pathPtr : post.getPaths()) {
                 const auto &path = *pathPtr;
-                if (path.getPathState() != Path::PathState::Return)
+                if (path.getPathState() != analyzer::Path::PathState::Return)
                     continue;
 
-                unordered_map<size_t, const symbolic::AddressBox> assignedAddrs;
+                std::unordered_map<size_t, const symb::AddressBox> assignedAddrs;
                 for (auto &&[a, v] : path.getMemoryState().flat()) {
                     if (is_symbol_addr(a) && path.is_point_to_structure(a))
                         continue;
@@ -90,7 +90,7 @@ namespace acslg::spec_generator {
                         (void)assignedAddrs.try_emplace(a.hash(), std::move(a));
                 }
 
-                string assignsSpec;
+                std::string assignsSpec;
                 for (auto &[_, a] : assignedAddrs) {
                     auto rf = a.get().regularFormOfValue();
                     if (!rf) {
@@ -104,7 +104,7 @@ namespace acslg::spec_generator {
                 else
                     assignsSpec.erase(assignsSpec.size() - 2);
 
-                vector<string> ensures;
+                std::vector<std::string> ensures;
 
                 // result
                 if (auto &ret = path.getReturnExpr()) {
@@ -115,7 +115,7 @@ namespace acslg::spec_generator {
                 // Memory equations
                 for (auto &&[addr, value] : path.getMemoryState().flat()) {
                     if (is_symbol_addr(addr) &&
-                        value->getType() == symbolic::SymbolicExpr::ExprType::Structure)
+                        value->getType() == symb::SymbolicExpr::ExprType::Structure)
                         continue;
 
                     auto lhsOpt = addr.get().regularFormOfValue();
@@ -133,8 +133,8 @@ namespace acslg::spec_generator {
                 if (ensures.empty() && req.empty() && assignsSpec == "\\nothing")
                     continue;
 
-                string bname = "b" + to_string(idx++);
-                string block;
+                std::string bname = "b" + std::to_string(idx++);
+                std::string block;
                 block += IND1 + "behavior " + bname + ":\n";
                 if (!req.empty())
                     block += IND2 + "requires " + req + ";\n";
@@ -146,24 +146,24 @@ namespace acslg::spec_generator {
             }
 
             if (behaviors.empty())
-                return nullopt;
+                return std::nullopt;
 
-            string out;
+            std::string out;
             for (auto &b : behaviors)
                 out += b;
 
-            vector<string> names;
+            std::vector<std::string> names;
             for (int i = 0; i < (int)behaviors.size(); ++i)
-                names.push_back("b" + to_string(i));
+                names.push_back("b" + std::to_string(i));
             out += IND1 + "complete behaviors " + joinCSV(names) + ";\n";
             return out;
         }
 
       private:
-        string id_;
+        std::string id_;
 
-        static string joinConj(const Formulas &conds) {
-            string s;
+        static std::string joinConj(const analyzer::Formulas &conds) {
+            std::string s;
             for (size_t i = 0; i < conds.size(); ++i) {
                 const auto &c = conds[i];
                 if (c->isUnknown())
@@ -178,8 +178,8 @@ namespace acslg::spec_generator {
             return s;
         }
 
-        static string joinCSV(const vector<string> &v) {
-            string s;
+        static std::string joinCSV(const std::vector<std::string> &v) {
+            std::string s;
             for (size_t i = 0; i < v.size(); ++i) {
                 if (i)
                     s += ", ";

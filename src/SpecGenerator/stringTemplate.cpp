@@ -2,8 +2,6 @@
 
 #include "stringTemplate.h"
 
-using namespace std;
-
 namespace acslg::spec_generator {
     StringTemplate::StringTemplate(const char *str) {
         if (str == nullptr)
@@ -16,7 +14,7 @@ namespace acslg::spec_generator {
     StringTemplate::StringTemplate(const StringTemplate &templ)
         : rawText_(templ.rawText_), placeholders_(templ.placeholders_), nameToPh_(templ.nameToPh_) {
         if (templ.next_)
-            next_ = make_unique<StringTemplate>(*templ.next_);
+            next_ = std::make_unique<StringTemplate>(*templ.next_);
     }
 
     void StringTemplate::initialize() {
@@ -55,7 +53,7 @@ namespace acslg::spec_generator {
 
     size_t StringTemplate::remap(const NameMap &nameMap) {
         size_t count = 0;
-        unordered_map<string, unordered_set<size_t>> temp;
+        std::unordered_map<std::string, std::unordered_set<size_t>> temp;
         for (auto &nameMap_it : nameMap) {
             if (auto nameToPh_it = nameToPh_.find(nameMap_it.first);
                 nameToPh_it != nameToPh_.end()) {
@@ -77,11 +75,11 @@ namespace acslg::spec_generator {
         return count;
     }
 
-    void StringTemplate::withPrefix(const string &prefix) {
+    void StringTemplate::withPrefix(const std::string &prefix) {
         for (auto &ph : placeholders_) {
             ph.name = prefix + ph.name;
         }
-        unordered_map<string, unordered_set<size_t>> temp;
+        std::unordered_map<std::string, std::unordered_set<size_t>> temp;
         for (auto &kv : nameToPh_) {
             temp[prefix + kv.first] = std::move(kv.second);
         }
@@ -91,8 +89,8 @@ namespace acslg::spec_generator {
             next_->withPrefix(prefix);
     }
 
-    string StringTemplate::to_string(const NameMap &phMap) const {
-        string result;
+    std::string StringTemplate::to_string(const NameMap &phMap) const {
+        std::string result;
         size_t curPos = 0;
         for (auto &ph : placeholders_) {
             result += rawText_.substr(curPos, ph.pos - curPos);
@@ -110,7 +108,7 @@ namespace acslg::spec_generator {
         return result;
     }
 
-    string StringTemplate::to_string() const {
+    std::string StringTemplate::to_string() const {
         NameMap emptyMap;
         return this->to_string(emptyMap);
     }

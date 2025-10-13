@@ -7,10 +7,6 @@
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "clang/Basic/SourceManager.h"
 
-using namespace clang;
-using namespace llvm;
-using namespace std;
-
 namespace acslg::analyzer {
     void ACSLAnalyzer::analyzeFunctions() {
         PROCESS("Running analysis functions...");
@@ -19,14 +15,14 @@ namespace acslg::analyzer {
             if (!context_.getSourceManager().isInMainFile(loc))
                 continue;
 
-            auto wrappedFunc = make_unique<ACSLFunction>(func);
+            auto wrappedFunc = std::make_unique<ACSLFunction>(func);
             generateFunctionSpec(wrappedFunc.get());
             functions_.push_back(std::move(wrappedFunc));
         }
     }
 
     void ACSLAnalyzer::generateFunctionSpec(ACSLFunction *func) {
-        const FunctionDecl *FD = func->getFunctionDecl();
+        const clang::FunctionDecl *FD = func->getFunctionDecl();
 
         if (FD->getNameAsString() == "main") {
             WARN("Ignore MAIN Function.");
@@ -38,17 +34,18 @@ namespace acslg::analyzer {
         //     return;
         // INFO("Processing Function " + FD->getNameAsString());
 
-        auto state = make_unique<ProgramState>(make_unique<ACSLFunction>(FD), context_);
+        auto state = std::make_unique<ProgramState>(std::make_unique<ACSLFunction>(FD), context_);
 
-        if (const Stmt *Body = FD->getBody()) {
-            if (!isa<CompoundStmt>(Body))
-                UNIMPLEMENT("Function body of " + FD->getNameAsString() + " is not a CompoundStmt");
+        if (const clang::Stmt *Body = FD->getBody()) {
+            if (!isa<clang::CompoundStmt>(Body))
+                UNIMPLEMENT("Function body of " + FD->getNameAsString() +
+                            " is not a clang::CompoundStmt");
 
             state->init();
-            const CompoundStmt *CS = cast<CompoundStmt>(Body);
-            auto preState          = state->clone();
+            const clang::CompoundStmt *CS = cast<clang::CompoundStmt>(Body);
+            auto preState                 = state->clone();
 
-            for (const Stmt *stmt : CS->children())
+            for (const clang::Stmt *stmt : CS->children())
                 state->step(stmt);
             INFO(state->dump());
 
@@ -57,8 +54,9 @@ namespace acslg::analyzer {
                 if (value->getType() == symbolic::SymbolicExpr::ExprType::Address)
                     hasPointer = true;
             }
-            for (auto stmt : dyn_cast<CompoundStmt>(Body)->children()) {
-                if (isa<ForStmt>(stmt) || isa<WhileStmt>(stmt) || isa<DoStmt>(stmt))
+            for (auto stmt : dyn_cast<clang::CompoundStmt>(Body)->children()) {
+                if (isa<clang::ForStmt>(stmt) || isa<clang::WhileStmt>(stmt) ||
+                    isa<clang::DoStmt>(stmt))
                     hasLoop = true;
             }
 
@@ -75,4 +73,4 @@ namespace acslg::analyzer {
             INFO("No function body found for: " + FD->getNameAsString());
         }
     }
-}
+} // namespace acslg::analyzer

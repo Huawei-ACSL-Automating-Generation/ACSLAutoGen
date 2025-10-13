@@ -6,16 +6,12 @@
 #include <llvm/ADT/TypeSwitch.h>
 #include <string>
 
-using namespace clang;
-using namespace llvm;
-using namespace std;
-
 namespace acslg::utils {
-
-    bool isAssignOp(const BinaryOperator *binOp) {
+    bool isAssignOp(const clang::BinaryOperator *binOp) {
         if (!binOp)
             return false;
         switch (binOp->getOpcode()) {
+            using enum clang::BinaryOperatorKind;
             case BO_Assign:
             case BO_MulAssign:
             case BO_DivAssign:
@@ -31,11 +27,12 @@ namespace acslg::utils {
         }
     }
 
-    bool ignoreTopBinop(const BinaryOperator *binOp) {
+    bool ignoreTopBinop(const clang::BinaryOperator *binOp) {
         if (!binOp)
             return false;
-        string opName;
+        std::string opName;
         switch (binOp->getOpcode()) {
+            using enum clang::BinaryOperatorKind;
             case BO_Mul: opName = "Multiply"; break;
             case BO_Div: opName = "Divide"; break;
             case BO_Rem: opName = "Remainder"; break;
@@ -61,48 +58,52 @@ namespace acslg::utils {
     }
 
     namespace {
-        void collectFromDeclStmt(const DeclStmt *ds, unordered_set<const VarDecl *> &out) {
+        void collectFromDeclStmt(const clang::DeclStmt *ds,
+                                 std::unordered_set<const clang::VarDecl *> &out) {
             if (!ds)
                 return;
-            for (Decl *d : ds->decls()) {
-                if (auto *vd = dyn_cast<VarDecl>(d)) {
+            for (clang::Decl *d : ds->decls()) {
+                if (auto *vd = dyn_cast<clang::VarDecl>(d)) {
                     out.insert(vd);
                 }
             }
         }
 
-        void collectFromCompound(const CompoundStmt *cs, unordered_set<const VarDecl *> &out) {
+        void collectFromCompound(const clang::CompoundStmt *cs,
+                                 std::unordered_set<const clang::VarDecl *> &out) {
             if (!cs)
                 return;
-            for (Stmt *child : cs->body()) {
-                if (auto *ds = dyn_cast<DeclStmt>(child)) {
+            for (clang::Stmt *child : cs->body()) {
+                if (auto *ds = dyn_cast<clang::DeclStmt>(child)) {
                     collectFromDeclStmt(ds, out);
                 }
             }
         }
 
-        void collectFromFor(const ForStmt *fs, unordered_set<const VarDecl *> &out) {
+        void collectFromFor(const clang::ForStmt *fs,
+                            std::unordered_set<const clang::VarDecl *> &out) {
             if (!fs)
                 return;
-            if (auto *ds = dyn_cast_or_null<DeclStmt>(fs->getInit())) {
+            if (auto *ds = dyn_cast_or_null<clang::DeclStmt>(fs->getInit())) {
                 collectFromDeclStmt(ds, out);
             }
         }
 
-        void collectFromCall(const CallExpr *call, unordered_set<const VarDecl *> &out) {
+        void collectFromCall(const clang::CallExpr *call,
+                             std::unordered_set<const clang::VarDecl *> &out) {
             if (!call)
                 return;
 
-            if (const FunctionDecl *FD = call->getDirectCallee()) {
-                for (const ParmVarDecl *P : FD->parameters()) {
+            if (const clang::FunctionDecl *FD = call->getDirectCallee()) {
+                for (const clang::ParmVarDecl *P : FD->parameters()) {
                     out.insert(P);
                 }
                 return;
             }
-            if (const Expr *Callee = call->getCallee()->IgnoreParenImpCasts()) {
-                if (const auto *DRE = dyn_cast<DeclRefExpr>(Callee)) {
-                    if (const auto *FD2 = dyn_cast<FunctionDecl>(DRE->getDecl())) {
-                        for (const ParmVarDecl *P : FD2->parameters()) {
+            if (const clang::Expr *Callee = call->getCallee()->IgnoreParenImpCasts()) {
+                if (const auto *DRE = dyn_cast<clang::DeclRefExpr>(Callee)) {
+                    if (const auto *FD2 = dyn_cast<clang::FunctionDecl>(DRE->getDecl())) {
+                        for (const clang::ParmVarDecl *P : FD2->parameters()) {
                             out.insert(P);
                         }
                     }
@@ -111,22 +112,22 @@ namespace acslg::utils {
         }
     } // namespace
 
-    unordered_set<const VarDecl *> collectLocalVars(const Stmt *stmt) {
-        unordered_set<const VarDecl *> vars;
+    std::unordered_set<const clang::VarDecl *> collectLocalVars(const clang::Stmt *stmt) {
+        std::unordered_set<const clang::VarDecl *> vars;
         if (!stmt)
             return vars;
 
-        if (auto *cs = dyn_cast<CompoundStmt>(stmt)) {
+        if (auto *cs = dyn_cast<clang::CompoundStmt>(stmt)) {
             collectFromCompound(cs, vars);
             return vars;
         }
 
-        if (auto *fs = dyn_cast<ForStmt>(stmt)) {
+        if (auto *fs = dyn_cast<clang::ForStmt>(stmt)) {
             collectFromFor(fs, vars);
             return vars;
         }
 
-        if (auto *call = dyn_cast<CallExpr>(stmt)) {
+        if (auto *call = dyn_cast<clang::CallExpr>(stmt)) {
             collectFromCall(call, vars);
             return vars;
         }
