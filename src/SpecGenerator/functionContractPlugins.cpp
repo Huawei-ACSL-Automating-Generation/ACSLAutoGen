@@ -114,8 +114,7 @@ namespace acslg::spec_generator {
 
                 // Memory equations
                 for (auto &&[addr, value] : path.getMemoryState().flat()) {
-                    if (is_symbol_addr(addr) &&
-                        value->getType() == symb::SymbolicExpr::ExprType::Structure)
+                    if (is_symbol_addr(addr) && llvm::isa<symb::Structure>(value.get()))
                         continue;
 
                     auto lhsOpt = addr.get().regularFormOfValue();

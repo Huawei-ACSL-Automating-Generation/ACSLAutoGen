@@ -228,10 +228,11 @@ namespace acslg::spec_generator {
 
             auto tryGetAsRange =
                 [&](const symb::Address &addr) -> std::optional<symb::SymbolAddress> {
-                if (addr.getAddressType() != symb::Address::AddressType::SymbolAddr)
+                auto symbolAddr = llvm::dyn_cast<const symb::SymbolAddress>(&addr);
+                if (symbolAddr == nullptr)
                     return std::nullopt;
-                auto symbolAddr = dynamic_cast<const symb::SymbolAddress &>(addr);
-                auto from       = symbolAddr.getFromAddr();
+
+                auto from = symbolAddr->getFromAddr();
                 // If the base address itself is x-step, then there is no need to check the
                 // offset (or to check it for reliability).
                 if (auto range = std::visit(
@@ -246,7 +247,7 @@ namespace acslg::spec_generator {
                                     auto &pattern = it->second;
                                     if (pattern == std::nullopt)
                                         TODO();
-                                    auto result = symbolAddr;
+                                    auto result = *symbolAddr;
                                     result.setOffset(std::make_unique<symb::LiteralExpr>(
                                         symb::SymbolAddress::ZERO_OFFSET));
                                     if (!indexInfo.preciseLoopCount_->isUnknown())
@@ -261,9 +262,9 @@ namespace acslg::spec_generator {
                         },
                         from))
                     return range;
-                auto offset = symbolAddr.getOffset();
+                auto offset = symbolAddr->getOffset();
                 // Is offset x-step?
-                if (auto var = dynamic_cast<const symb::Variable *>(offset.get())) {
+                if (auto var = llvm::dyn_cast<const symb::Variable>(offset.get())) {
                     return std::visit(
                         [&](auto &&arg) -> std::optional<symb::SymbolAddress> {
                             using T = std::decay_t<decltype(arg)>;
@@ -276,7 +277,7 @@ namespace acslg::spec_generator {
                                     auto &pattern = it->second;
                                     if (pattern == std::nullopt)
                                         TODO();
-                                    auto result = symbolAddr;
+                                    auto result = *symbolAddr;
                                     result.setOffset(pattern.value().initialValue_->clone());
                                     if (!indexInfo.preciseLoopCount_->isUnknown())
                                         result.setLength(
@@ -451,11 +452,11 @@ namespace acslg::spec_generator {
                     if (solvedAddrsHashs.contains(concreteAddr->hash()))
                         continue;
                     solvedAddrsHashs.insert(concreteAddr->hash());
-                    if (concreteAddr->getAddressType() == symb::Address::AddressType::SymbolAddr) {
-                        auto &symbolAddr = dynamic_cast<symb::SymbolAddress &>(addr.get());
-                        auto &symbolConcreteAddr =
-                            dynamic_cast<symb::SymbolAddress &>(*concreteAddr);
-                        if (symbolConcreteAddr.getOffset()->isUnknown()) {
+
+                    if (auto symbolConcreteAddr =
+                            llvm::dyn_cast<const symb::SymbolAddress>(concreteAddr.get().get())) {
+                        // special case
+                        if (symbolConcreteAddr->getOffset()->isUnknown()) {
                             auto valueForm = addr.get().regularFormOfValue("\\at(", ", LoopEntry)");
                             if (valueForm == std::nullopt) {
                                 WARN("Value of {" + addr.get().dump() + "} has not regular form");
@@ -534,8 +535,6 @@ namespace acslg::spec_generator {
 
                 param_index = indexInfo.indexRealAddr_->regularFormOfValue();
                 param_n     = indexInfo.indexBound_->regularForm();
-
-                using enum symb::SymbolicExpr::ExprType;
 
                 auto getAddress = [&](const clang::Expr *expr)
                     -> std::optional<utils::not_null<std::unique_ptr<symb::Address>>> {
@@ -662,7 +661,7 @@ namespace acslg::spec_generator {
                     switch (bin->getOpcode()) {
                         case BO_LE:
                         case BO_LT:
-                            if (indexInfo.indexBound_->getType() == Variable)
+                            if (llvm::isa<symb::Variable>(*indexInfo.indexBound_))
                                 specTemplate = maxOnLeft ? FIND_MAX_LOOP_WITH_VAR_BOUND
                                                          : FIND_MIN_LOOP_WITH_VAR_BOUND;
                             else
@@ -671,7 +670,7 @@ namespace acslg::spec_generator {
                             break;
                         case BO_GE:
                         case BO_GT:
-                            if (indexInfo.indexBound_->getType() == Variable)
+                            if (llvm::isa<symb::Variable>(*indexInfo.indexBound_))
                                 specTemplate = maxOnLeft ? FIND_MIN_LOOP_WITH_VAR_BOUND
                                                          : FIND_MAX_LOOP_WITH_VAR_BOUND;
                             else
@@ -712,8 +711,8 @@ namespace acslg::spec_generator {
                     for (auto &path : symbolState->getPaths()) {
                         std::unique_ptr<symb::Variable> maxVar{nullptr};
                         if (auto maxValue = path->getVarState(maxDecl);
-                            maxValue->getType() == symb::SymbolicExpr::ExprType::Variable) {
-                            maxVar = std::unique_ptr<symb::Variable>(static_cast<symb::Variable *>(
+                            llvm::isa<symb::Variable>(*maxValue)) {
+                            maxVar = std::unique_ptr<symb::Variable>(llvm::dyn_cast<symb::Variable>(
                                 std::move(maxValue).into_underlying().release()));
                         } else {
                             return;

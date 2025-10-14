@@ -46,8 +46,7 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_EQ(continueFlag, true);
         ASSERT_EQ(postState.size(), 1);
         ASSERT_EQ(postState.at(0).memoryMap_.size(), 1);
-        EXPECT_EQ(postState.at(0).memoryMap_.begin()->second->getType(),
-                  SymbolicExpr::ExprType::Unknown);
+        EXPECT_TRUE(llvm::isa<UnknownExpr>(*postState.at(0).memoryMap_.begin()->second));
     }
 
     TEST(LoopAssignsPluginTest, Simple_1) {

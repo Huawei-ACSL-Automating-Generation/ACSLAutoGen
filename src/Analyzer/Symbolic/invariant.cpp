@@ -236,11 +236,12 @@ namespace acslg::analyzer::symbolic {
         Linear_Expression e(0);
 
         if (auto fromAddr = std::get_if<utils::not_null<unique_ptr<const Address>>>(&from_)) {
-            if ((*fromAddr)->getAddressType() != Address::AddressType::VariableAddr)
+            auto varAddr = llvm::dyn_cast<const VariableAddress>((*fromAddr).get().get());
+            if (varAddr == nullptr)
                 return std::nullopt;
-            auto varAddr = dynamic_cast<const VariableAddress &>(**fromAddr);
+
             if (auto fromDecl =
-                    std::get_if<utils::not_null<const clang::VarDecl *>>(&varAddr.getFrom())) {
+                    std::get_if<utils::not_null<const clang::VarDecl *>>(&varAddr->getFrom())) {
                 auto it = varIndexMap.find((*fromDecl)->getNameAsString());
                 if (it == varIndexMap.end()) {
                     ERROR("Variable '" + (*fromDecl)->getNameAsString() +
@@ -464,7 +465,7 @@ namespace acslg::analyzer {
                 bool expanded = false;
 
                 for (size_t i = startIdx; i < current.size(); ++i) {
-                    auto *bin = dynamic_cast<symbolic::BinaryOpExpr *>(current[i].get().get());
+                    auto *bin = llvm::dyn_cast<symbolic::BinaryOpExpr>(current[i].get().get());
                     if (!bin) {
                         ERROR("negateFormulas: input[" + to_string(i) + "] is not a BinaryOpExpr");
                     }
@@ -549,7 +550,7 @@ namespace acslg::analyzer {
                 bool expanded = false;
 
                 for (size_t i = startIdx; i < current.size(); ++i) {
-                    auto *bin = dynamic_cast<symbolic::BinaryOpExpr *>(current[i].get().get());
+                    auto *bin = llvm::dyn_cast<symbolic::BinaryOpExpr>(current[i].get().get());
                     if (!bin) {
                         ERROR("preprocessLoopCond: loopCond[" + to_string(i) +
                               "] is not a BinaryOpExpr");
@@ -698,11 +699,11 @@ namespace acslg::analyzer {
         std::optional<Parma_Polyhedra_Library::Constraint> toConstraint(
             const symbolic::SymbolicExpr *expr,
             const VarManager &vm) {
-            if (!expr || expr->getType() != symbolic::SymbolicExpr::ExprType::BinaryOp) {
+            auto bin = llvm::dyn_cast_if_present<const symbolic::BinaryOpExpr>(expr);
+            if (bin == nullptr) {
                 ERROR("toConstraint: expression must be a BinaryOpExpr.");
             }
 
-            auto bin       = static_cast<const symbolic::BinaryOpExpr *>(expr);
             const auto &op = bin->getOperator();
 
             auto lhs = bin->getLeft()->toLinearExpr(vm.varIndexMap);

@@ -51,7 +51,7 @@ namespace acslg::analyzer {
 
             bool hasPointer = false, hasLoop = false;
             for (auto &&[_, value] : preState->getPaths()[0]->getMemoryState().flat()) {
-                if (value->getType() == symbolic::SymbolicExpr::ExprType::Address)
+                if (llvm::isa<symbolic::Address>(*value))
                     hasPointer = true;
             }
             for (auto stmt : dyn_cast<clang::CompoundStmt>(Body)->children()) {

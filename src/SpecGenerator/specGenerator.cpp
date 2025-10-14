@@ -1,6 +1,8 @@
 // src/SpecGenerator/specGenerators.cpp
 
 #include <ranges>
+#include <llvm/ADT/TypeSwitch.h>
+
 #include "specGenerator.h"
 #include "utilityTemplates.h"
 #include "macros.h"
@@ -264,15 +266,14 @@ namespace acslg::spec_generator {
                            const analyzer::Path &loopEntryPath,
                            const symb::SourcePoint &fromPoint) {
         auto &mem = loopEntryPath.getMemoryState(); // Memory snapshot at loop entry
-        switch (expr->getType()) {
-            using enum symb::SymbolicExpr::ExprType;
-            case Literal: return; // Literals have no symbolic origin; nothing to substitute.
-            case Variable: {
-                // Try to resolve where this variable comes from and substitute with the value at
-                // that address.
-                auto &var = dynamic_cast<const symb::Variable &>(*expr.get().get());
-                if (var.getFromPoint() && var.getFromPoint().value() != fromPoint)
+        llvm::TypeSwitch<symb::SymbolicExpr *, void>(expr.get().get())
+            .Case<symb::LiteralExpr>([&](auto *) {
+                // Nothing to substitute
+            })
+            .Case<symb::Variable>([&](auto *var) {
+                if (var->getFromPoint() && var->getFromPoint().value() != fromPoint)
                     return;
+
                 std::visit(
                     [&](auto &&arg) -> void {
                         using T = std::decay_t<decltype(arg)>;
@@ -291,50 +292,36 @@ namespace acslg::spec_generator {
                                 // entry but hasn't been accessed -> construct a Variable with
                                 // corrext fromAddr and fromPoint.
                                 expr = std::make_unique<symb::Variable>(
-                                    var.getVarType(), std::move(realFromAddr).into_underlying(),
+                                    var->getVarType(), std::move(realFromAddr).into_underlying(),
                                     loopEntryPath.getStartPoint());
                             }
                         }
                     },
-                    var.getFromAddr());
-                return;
-            }
-            case Address: {
-                // For a SymbolAddress node, try to read its "from" origin and substitute the node
-                // by the value.
-                auto symbolAddr = dynamic_cast<const symb::SymbolAddress *>(expr.get().get());
-                if (symbolAddr == nullptr)
-                    UNREACHABLE();
+                    var->getFromAddr());
+            })
+            .Case<symb::SymbolAddress>([&](auto *symbolAddr) {
                 if (symbolAddr->getFromPoint() && symbolAddr->getFromPoint().value() != fromPoint)
                     return;
                 expr = getSubstitutedAddr(*symbolAddr, loopEntryPath, fromPoint).into_underlying();
-                return;
-            }
-            case BinaryOp: {
-                // Recursively substitute in both children (non-const downcast is intentional).
-                auto &bin = dynamic_cast<symb::BinaryOpExpr &>(*expr.get().get());
-                substituteSymbols(bin.getLeft(), loopEntryPath, fromPoint);
-                substituteSymbols(bin.getRight(), loopEntryPath, fromPoint);
-                return;
-            }
-            case UnaryOp: {
-                // Recursively substitute in sub-expression (non-const downcast is intentional).
-                auto &un = dynamic_cast<symb::UnaryOpExpr &>(*expr.get().get());
-                substituteSymbols(un.getSub(), loopEntryPath, fromPoint);
-                return;
-            }
-            case Structure: {
-                auto &st = dynamic_cast<symb::Structure &>(*expr.get().get());
-                for (auto &field : st.fieldsValues()) {
-                    // Substitute all fields of structure.
+            })
+            .Case<symb::BinaryOpExpr>([&](auto *bin) {
+                substituteSymbols(bin->getLeft(), loopEntryPath, fromPoint);
+                substituteSymbols(bin->getRight(), loopEntryPath, fromPoint);
+            })
+            .Case<symb::UnaryOpExpr>(
+                [&](auto *un) { substituteSymbols(un->getSub(), loopEntryPath, fromPoint); })
+            .Case<symb::Structure>([&](auto *st) {
+                for (auto &field : st->fieldsValues()) {
                     substituteSymbols(field, loopEntryPath, fromPoint);
                 }
-                return;
-            }
-            case Unknown: return; // Unknown nodes are left untouched.
-            default: UNREACHABLE();
-        }
-        UNREACHABLE();
+            })
+            .Case<symb::UnknownExpr>([&](auto *) {
+                // Nothing to substitute
+            })
+            .Default([&](auto *) {
+                // `VariableAddress` and `FieldAddress` should not appear in expressions.
+                UNREACHABLE();
+            });
     };
 
     utils::not_null<std::unique_ptr<symb::Address>> getSubstitutedAddr(
@@ -342,13 +329,12 @@ namespace acslg::spec_generator {
         const analyzer::Path &loopEntryPath,
         const symb::SourcePoint &fromPoint) {
         // If it's not a symbolic address, simply return a clone.
-        if (addr.getAddressType() == symb::Address::AddressType::VariableAddr)
+        if (llvm::isa<symb::VariableAddress>(addr))
             return addr.addressClone();
 
         auto &mem = loopEntryPath.getMemoryState();
 
-        if (addr.getAddressType() == symb::Address::AddressType::FieldAddr) {
-            auto &fieldAddr = dynamic_cast<const symb::FieldAddress &>(addr);
+        if (auto fieldAddr = llvm::dyn_cast<const symb::FieldAddress>(&addr)) {
             return std::visit(
                 [&](auto &&arg) -> utils::not_null<std::unique_ptr<symb::Address>> {
                     using T = std::decay_t<decltype(arg)>;
@@ -362,18 +348,20 @@ namespace acslg::spec_generator {
                         auto &[baseAddr, index] = arg;
                         auto trueBaseAddr = getSubstitutedAddr(*baseAddr, loopEntryPath, fromPoint);
                         return std::make_unique<symb::FieldAddress>(
-                            fieldAddr.getDefinition(),
+                            fieldAddr->getDefinition(),
                             std::pair<utils::not_null<std::unique_ptr<const symb::Address>>,
                                       const size_t>{std::move(trueBaseAddr).into_underlying(),
                                                     index});
                     }
                 },
-                fieldAddr.getFrom());
+                fieldAddr->getFrom());
         }
 
-        auto &symbolAddr = dynamic_cast<const symb::SymbolAddress &>(addr);
+        auto symbolAddr = llvm::dyn_cast<const symb::SymbolAddress>(&addr);
+        assert(symbolAddr != nullptr && "If the addr is not a `VariableAddress` and not a "
+                                        "`FieldAddress`, then it must be a `SymbolAddress`.");
 
-        if (symbolAddr.getFromPoint() != fromPoint)
+        if (symbolAddr->getFromPoint() != fromPoint)
             return addr.addressClone();
         // Try to resolve the "from" origin of the SymbolAddress via loop-entry memory.
         return std::visit(
@@ -387,15 +375,15 @@ namespace acslg::spec_generator {
                     auto realFromAddr = getSubstitutedAddr(*arg, loopEntryPath, fromPoint);
 
                     // Clone and substitute the offset of the original SymbolAddress.
-                    auto offset = symbolAddr.getOffset()->clone();
+                    auto offset = symbolAddr->getOffset()->clone();
                     substituteSymbols(offset, loopEntryPath,
                                       fromPoint); // substitute std::any vars/addresses in offset
                     offset = offset->simplifiedExpr();
 
                     std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> length{};
                     // If original was a range, also substitute and std::set the length.
-                    if (symbolAddr.isRange()) {
-                        length = symbolAddr.getLength()->clone();
+                    if (symbolAddr->isRange()) {
+                        length = symbolAddr->getLength()->clone();
                         substituteSymbols(length.value(), loopEntryPath, fromPoint);
                         length = length.value()->simplifiedExpr();
                     }
@@ -432,6 +420,6 @@ namespace acslg::spec_generator {
                     }
                 }
             },
-            symbolAddr.getFromAddr());
+            symbolAddr->getFromAddr());
     };
 } // namespace acslg::spec_generator

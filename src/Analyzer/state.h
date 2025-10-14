@@ -478,14 +478,15 @@ namespace acslg::analyzer {
             /// Advance iterator, diving into Structure fields if needed
             void advance() {
                 auto &&[addr, value] = (*this).operator*();
-                if (value->getType() != symbolic::SymbolicExpr::ExprType::Structure) {
+                auto st              = llvm::dyn_cast<const symbolic::Structure>(value.get());
+                if (st == nullptr) {
                     advance_without_check();
                     return;
                 }
+
                 // Dive into Structure's fields
-                auto &st = dynamic_cast<const symbolic::Structure &>(*value);
                 auto state =
-                    FieldState{std::move(addr), const_cast<symbolic::Structure *>(&st), 0, phase_};
+                    FieldState{std::move(addr), const_cast<symbolic::Structure *>(st), 0, phase_};
                 state_saver_.push(std::move(state));
                 phase_ = Phase::Field;
             }

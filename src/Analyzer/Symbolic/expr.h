@@ -31,14 +31,24 @@ namespace acslg::analyzer::symbolic {
       public:
         /// @class SymbolicExpr
         /// @brief Base class for all symbolic expressions.
-        enum class ExprType {
+        enum class ExprType : uint16_t {
+            K_FirstAddr,
+            SymbolAddr,
+            VariableAddr,
+            FieldAddr,
+            K_LastAddr,
+
             Literal,
             Variable,
-            Address,
+            Structure,
             BinaryOp,
             UnaryOp,
-            Structure,
+
             Unknown
+        };
+
+        enum Trait : uint32_t {
+            T_Symbol = 1u << 0 /* ... */
         };
 
         /// @enum ScalarKind
@@ -58,18 +68,16 @@ namespace acslg::analyzer::symbolic {
             unsigned bitWidth; ///< Number of bits
         };
 
-        /// @brief Construct a symbolic expression.
-        /// @param type Expression type
-        /// @param valueType Underlying value type
-        SymbolicExpr(ExprType type, Type valueType) : type_(type), valueType_(valueType) {}
-
         virtual ~SymbolicExpr()                       = default;
         SymbolicExpr(const SymbolicExpr &)            = default;
         SymbolicExpr &operator=(const SymbolicExpr &) = default;
         SymbolicExpr(SymbolicExpr &&)                 = default;
         SymbolicExpr &operator=(SymbolicExpr &&)      = default;
 
+        static bool classof(const SymbolicExpr *) { return true; }
+
         ExprType getType() const { return type_; }
+        bool hasTrait(Trait t) const { return (traits_ & t) != 0; }
         Type getValType() const { return valueType_; }
         void setValType(Type newType) { valueType_ = newType; }
 
@@ -234,6 +242,12 @@ namespace acslg::analyzer::symbolic {
         }
 
       protected:
+        /// @brief Construct a symbolic expression.
+        /// @param type Expression type
+        /// @param valueType Underlying value type
+        SymbolicExpr(ExprType type, Type valueType, uint32_t traits = 0)
+            : type_(type), valueType_(valueType), traits_(traits) {}
+
         /// @brief Simplify expression if it's linear, just call clone() otherwise.
         utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExprIfLinear() const;
 
@@ -241,6 +255,8 @@ namespace acslg::analyzer::symbolic {
             const SymbolicExpr &e) {
             return e.doTryEvalAsSymbolAddr();
         }
+
+        void addTrait(Trait t) { traits_ |= t; }
 
       private:
         /// @brief Try to evaluate the expression to an symbol address.
@@ -253,6 +269,7 @@ namespace acslg::analyzer::symbolic {
 
         ExprType type_;  ///< Kind of expression
         Type valueType_; ///< Underlying type
+        uint32_t traits_;
     };
 
     std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType t);
@@ -306,6 +323,10 @@ namespace acslg::analyzer::symbolic {
         LiteralExpr(uint64_t value)
             : SymbolicExpr(ExprType::Literal, {ScalarKind::UInt, 64}), type_(LiteralType::UInt64) {
             data_.uint64Value = value;
+        }
+
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getType() == ExprType::Literal;
         }
 
         LiteralType getLiteralType() const { return type_; }
@@ -389,6 +410,10 @@ namespace acslg::analyzer::symbolic {
               left_(std::unique_ptr<SymbolicExpr>{left}), op_(op),
               right_(std::unique_ptr<SymbolicExpr>{right}) {}
 
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getType() == ExprType::BinaryOp;
+        }
+
         utils::not_null<const SymbolicExpr *> getLeft() const { return left_.get().get(); }
         utils::not_null<const SymbolicExpr *> getRight() const { return right_.get().get(); }
         auto getLeft() -> auto & { return left_; }
@@ -460,6 +485,10 @@ namespace acslg::analyzer::symbolic {
             : SymbolicExpr(ExprType::UnaryOp, expr->getValType()), op_(op), expr_(std::move(expr)) {
         }
 
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getType() == ExprType::UnaryOp;
+        }
+
         utils::not_null<const SymbolicExpr *> getSub() const { return expr_.get().get(); }
         auto getSub() -> auto & { return expr_; }
         Operator getOperator() const { return op_; }
@@ -499,6 +528,10 @@ namespace acslg::analyzer::symbolic {
       public:
         UnknownExpr() : SymbolicExpr(ExprType::Unknown, {ScalarKind::Void, 0}) {}
         ~UnknownExpr() = default;
+
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getType() == ExprType::Unknown;
+        }
 
         /// @brief Create a unknown symbolic expression.
         /// @return Unique pointer to a Unknown expression.
@@ -639,6 +672,13 @@ namespace acslg::analyzer::symbolic {
         Symbol &operator=(const Symbol &) = default;
         Symbol(Symbol &&)                 = default;
         Symbol &operator=(Symbol &&)      = default;
+
+        static bool classof(const SymbolicExpr *e) { return e->hasTrait(SymbolicExpr::T_Symbol); }
+
+        // For LLVM RTTI.
+        static Symbol *toSymbol(SymbolicExpr *e);
+        static const Symbol *toSymbol(const SymbolicExpr *e);
+
         virtual std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> getFromAddr()
             const                                               = 0;
         virtual std::optional<SourcePoint> getFromPoint() const = 0;
@@ -700,6 +740,10 @@ namespace acslg::analyzer::symbolic {
                 [](auto &field) -> utils::not_null<std::unique_ptr<SymbolicExpr>> {
                     return field->clone();
                 });
+        }
+
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getType() == ExprType::Structure;
         }
 
         size_t getNumFields() const { return info_.getNumFields(); }
@@ -771,15 +815,12 @@ namespace acslg::analyzer::symbolic {
         Address &operator=(const Address &) = default;
         Address(Address &&)                 = default;
         Address &operator=(Address &&)      = default;
-        enum class AddressType {
-            SymbolAddr,
-            VariableAddr,
-            FieldAddr
-        };
-        Address(AddressType addrType)
-            : SymbolicExpr(SymbolicExpr::ExprType::Address,
-                           SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64}),
-              addrType_(addrType) {};
+
+        static bool classof(const SymbolicExpr *e) {
+            auto k = e->getType();
+            return (k > ExprType::K_FirstAddr) && (k < ExprType::K_LastAddr);
+        }
+
         virtual std::optional<std::string> regularFormOfValue(
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt,
@@ -789,10 +830,8 @@ namespace acslg::analyzer::symbolic {
         virtual int getDimension() const                                                   = 0;
         virtual utils::not_null<std::unique_ptr<Address>> addressClone() const             = 0;
 
-        auto getAddressType() const -> const auto & { return addrType_; }
-
-      private:
-        AddressType addrType_;
+      protected:
+        using SymbolicExpr::SymbolicExpr;
     };
 
     class AddressBox {
@@ -934,6 +973,10 @@ namespace acslg::analyzer::symbolic {
             std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> length =
                 std::nullopt);
 
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getType() == ExprType::SymbolAddr;
+        }
+
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::optional<std::string> regularForm(
@@ -1039,7 +1082,8 @@ namespace acslg::analyzer::symbolic {
         bool operator==(const VariableAddress &other) const { return equal(other); }
 
         VariableAddress(std::variant<std::monostate, utils::not_null<const clang::VarDecl *>> from)
-            : Address(AddressType::VariableAddr) {
+            : Address(SymbolicExpr::ExprType::VariableAddr,
+                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64}) {
             std::visit(
                 [&](auto &&arg) {
                     using T = std::decay_t<decltype(arg)>;
@@ -1051,6 +1095,10 @@ namespace acslg::analyzer::symbolic {
                 },
                 from);
         };
+
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getType() == ExprType::VariableAddr;
+        }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
@@ -1124,11 +1172,17 @@ namespace acslg::analyzer::symbolic {
             std::variant<std::monostate,
                          std::pair<utils::not_null<std::unique_ptr<const Address>>, const size_t>>
                 from)
-            : Address(AddressType::FieldAddr), definition_(RD), from_(std::move(from)) {
+            : Address(SymbolicExpr::ExprType::FieldAddr,
+                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64}),
+              definition_(RD), from_(std::move(from)) {
             if (!RD->isCompleteDefinition())
                 ERROR("Incomplete struct definition");
             definition_ = RD->getDefinition();
         };
+
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getType() == ExprType::FieldAddr;
+        }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
@@ -1206,10 +1260,16 @@ namespace acslg::analyzer::symbolic {
                  std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
                  SourcePoint fromPoint)
             : SymbolicExpr(ExprType::Variable, varType), varType_(varType), from_(std::move(from)),
-              fromPoint_(std::move(fromPoint)) {}
+              fromPoint_(std::move(fromPoint)) {
+            addTrait(T_Symbol);
+        }
 
         Variable(const Variable &other);
         Variable(Variable &&) = default;
+
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getType() == ExprType::Variable;
+        }
 
         Type getVarType() const { return varType_; }
         void setVarType(Type vt) {
@@ -1298,5 +1358,30 @@ namespace std {
         }
     };
 } // namespace std
+
+namespace llvm {
+    namespace symb = acslg::analyzer::symbolic;
+    template <>
+    struct CastInfo<symb::Symbol, symb::SymbolicExpr *>
+        : NullableValueCastFailed<symb::Symbol *>,
+          DefaultDoCastIfPossible<symb::Symbol *,
+                                  symb::SymbolicExpr *,
+                                  CastInfo<symb::Symbol, symb::SymbolicExpr *>> {
+        static bool isPossible(const symb::SymbolicExpr *e) { return symb::Symbol::classof(e); }
+        static symb::Symbol *doCast(symb::SymbolicExpr *e) { return symb::Symbol::toSymbol(e); }
+    };
+
+    template <>
+    struct CastInfo<const symb::Symbol, const symb::SymbolicExpr *>
+        : NullableValueCastFailed<const symb::Symbol *>,
+          DefaultDoCastIfPossible<const symb::Symbol *,
+                                  const symb::SymbolicExpr *,
+                                  CastInfo<const symb::Symbol, const symb::SymbolicExpr *>> {
+        static bool isPossible(const symb::SymbolicExpr *e) { return symb::Symbol::classof(e); }
+        static const symb::Symbol *doCast(const symb::SymbolicExpr *e) {
+            return symb::Symbol::toSymbol(e);
+        }
+    };
+} // namespace llvm
 
 #endif // SYMBOLIC_H
