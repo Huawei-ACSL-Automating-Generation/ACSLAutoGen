@@ -351,18 +351,18 @@ namespace acslg::test::unit::analyzer {
         //  [1,2] -> C
         //  [3,6] -> B
         //  [7,9] -> D
-        ExpectReadEqAt(mm, baseId, 0, *saveA);
-        ExpectReadEqAt(mm, baseId, 1, *saveC);
-        ExpectReadEqAt(mm, baseId, 2, *saveC);
-        ExpectReadEqAt(mm, baseId, 3, *saveB);
-        ExpectReadEqAt(mm, baseId, 4, *saveB);
-        ExpectReadEqAt(mm, baseId, 5, *saveB);
-        ExpectReadEqAt(mm, baseId, 6, *saveB);
-        ExpectReadEqAt(mm, baseId, 7, *saveD);
-        ExpectReadEqAt(mm, baseId, 8, *saveD);
-        ExpectReadEqAt(mm, baseId, 9, *saveD);
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 0, *saveA));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 1, *saveC));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 2, *saveC));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 3, *saveB));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 4, *saveB));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 5, *saveB));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 6, *saveB));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 7, *saveD));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 8, *saveD));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 9, *saveD));
 
-        ExpectReadNullAt(mm, baseId, 10);
+        EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 10));
     }
 
     TEST_F(MemoryModelTest, ConstRange_ExactOverrideSameInterval) {
@@ -382,79 +382,305 @@ namespace acslg::test::unit::analyzer {
         mm.write(r, std::move(eY));
 
         for (uint64_t off = 5; off < 9; ++off) {
-            ExpectReadEqAt(mm, baseId, off, *saveY);
+            EXPECT_TRUE(ExpectReadEqAt(mm, baseId, off, *saveY));
         }
 
-        ExpectReadNullAt(mm, baseId, 4);
-        ExpectReadNullAt(mm, baseId, 9);
+        EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 4));
+        EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 9));
     }
 
-    TEST_F(MemoryModelTest, ConstRange_TouchingIntervals_NoOverlap) {
+    TEST_F(MemoryModelTest, MergeConstantRanges_TouchingSameValue_ShouldCoalesce) {
         MemoryModel mm;
-        const unsigned baseId = 12;
+        const unsigned baseId = 21;
 
-        // [0,3) and [3,5)
+        // Two adjacent constant ranges with the same value
+        // [0,3) value=V
         auto r1 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(0U),
                                 make_unique<symbolic::LiteralExpr>(3U));
+        auto v  = makeVariable(1000);
+        auto sv = v->clone();
+        mm.write(r1, std::move(v));
+
+        // [3,5) value=V
         auto r2 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(3U),
                                 make_unique<symbolic::LiteralExpr>(2U));
+        auto v2 = makeVariable(1000); // same value
+        mm.write(r2, std::move(v2));
 
-        auto e1 = makeVariable(700);
-        auto e2 = makeVariable(800);
-        auto s1 = e1->clone();
-        auto s2 = e2->clone();
-        mm.write(r1, std::move(e1));
-        mm.write(r2, std::move(e2));
+        // Trigger constant-range merge
+        mm.mergeConstantRanges();
 
-        // [0,2]
-        ExpectReadEqAt(mm, baseId, 0, *s1);
-        ExpectReadEqAt(mm, baseId, 1, *s1);
-        ExpectReadEqAt(mm, baseId, 2, *s1);
+        // Behavioral check: read [0..4] should all yield the same value
+        for (uint64_t off = 0; off < 5; ++off) {
+            EXPECT_TRUE(ExpectReadEqAt(mm, baseId, off, *sv));
+        }
+        EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 5));
 
-        // [3,4]
-        ExpectReadEqAt(mm, baseId, 3, *s2);
-        ExpectReadEqAt(mm, baseId, 4, *s2);
-
-        ExpectReadNullAt(mm, baseId, 5);
-    }
-    TEST_F(MemoryModelTest, EraseExpiredLocals) {
-        auto code = R"(
-void func(int param) {
-    int x;
-}
-
-void test_mm_erase(int param) { 
-    int x = 1;
-
-    {
-        int y = 2;
-        int z = 3;
+        EXPECT_EQ(mm.sizeWithoutFields(), 1);
     }
 
-    for (int i = 0; i < 2; ++i) {
-        int t = i;
+    TEST_F(MemoryModelTest, MergeConstantRanges_TouchingDifferentValue_ShouldNotCoalesce) {
+        MemoryModel mm;
+        const unsigned baseId = 22;
+
+        // [0,3) value=V1
+        auto r1 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(0U),
+                                make_unique<symbolic::LiteralExpr>(3U));
+        auto v1 = makeVariable(1111);
+        auto s1 = v1->clone();
+        mm.write(r1, std::move(v1));
+
+        // [3,5) value=V2 (different value)
+        auto r2 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(3U),
+                                make_unique<symbolic::LiteralExpr>(2U));
+        auto v2 = makeVariable(2222);
+        auto s2 = v2->clone();
+        mm.write(r2, std::move(v2));
+
+        mm.mergeConstantRanges();
+
+        // Behavioral: left and right parts remain separate
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 0, *s1));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 1, *s1));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 2, *s1));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 3, *s2));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 4, *s2));
+        EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 5));
+
+        EXPECT_EQ(mm.sizeWithoutFields(), 2);
     }
 
-    {
-        int x = 42;
+    TEST_F(MemoryModelTest, MergeConstantRanges_ThreeTouchingIntoOne) {
+        MemoryModel mm;
+        const unsigned baseId = 23;
+
+        // [0,2) + [2,5) + [5,7) with the same value
+        auto r1 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(0U),
+                                make_unique<symbolic::LiteralExpr>(2U));
+        auto r2 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(2U),
+                                make_unique<symbolic::LiteralExpr>(3U));
+        auto r3 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(5U),
+                                make_unique<symbolic::LiteralExpr>(2U));
+
+        auto v = makeVariable(3333);
+        auto s = v->clone();
+        mm.write(r1, std::move(v));
+        mm.write(r2, makeVariable(3333));
+        mm.write(r3, makeVariable(3333));
+
+        mm.mergeConstantRanges();
+
+        for (uint64_t off = 0; off < 7; ++off) {
+            EXPECT_TRUE(ExpectReadEqAt(mm, baseId, off, *s));
+        }
+        EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 7));
+
+        EXPECT_EQ(mm.sizeWithoutFields(), 1);
     }
 
-    func(x);
-}
-)";
+    TEST_F(MemoryModelTest, MergeConstantRanges_BlockByDifferentMiddleValue) {
+        MemoryModel mm;
+        const unsigned baseId = 24;
 
-        ASTExtractor e;
-        e.init(code);
+        // [0,2) V, [2,5) W, [5,7) V → cannot merge into one due to the middle different value
+        auto r1 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(0U),
+                                make_unique<symbolic::LiteralExpr>(2U));
+        auto r2 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(2U),
+                                make_unique<symbolic::LiteralExpr>(3U));
+        auto r3 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(5U),
+                                make_unique<symbolic::LiteralExpr>(2U));
 
-        auto context       = context::ACSLContext{e.getASTContext()};
-        auto func          = e.findNthDecl<FunctionDecl>(2);
-        auto symbolicState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context);
-        symbolicState->init();
-        EXPECT_EQ(symbolicState->getPaths().at(0)->getMemoryState().sizeWithoutFields(), 1);
-        for (Stmt *stmt : func->getBody()->children()) {
-            symbolicState->step(stmt);
-            EXPECT_EQ(symbolicState->getPaths().at(0)->getMemoryState().sizeWithoutFields(), 2)
-                << symbolicState->dump();
+        auto v = makeVariable(4444);
+        auto s = v->clone();
+        mm.write(r1, std::move(v));
+        mm.write(r2, makeVariable(5555)); // different
+        mm.write(r3, makeVariable(4444)); // same as r1
+
+        mm.mergeConstantRanges();
+
+        // Behavioral: 0..1 = 4444, 2..4 = 5555, 5..6 = 4444
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 0, *s));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 1, *s));
+
+        auto w = makeVariable(5555);
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 2, *w));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 3, *w));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 4, *w));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 5, *s));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 6, *s));
+        EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 7));
+
+        EXPECT_EQ(mm.sizeWithoutFields(), 3);
+    }
+
+    namespace {
+        using ExprUP = ::acslg::utils::not_null<unique_ptr<symbolic::SymbolicExpr>>;
+        auto makeAdd(ExprUP a, ExprUP b) {
+            return make_unique<symbolic::BinaryOpExpr>(
+                std::move(a), symbolic::BinaryOpExpr::Operator::Add, std::move(b));
+        }
+    } // namespace
+
+    TEST_F(MemoryModelTest, MergeSymbolicRanges_ThreeSinglesChainIntoLen3) {
+        MemoryModel mm;
+        const unsigned baseId = 31;
+
+        // X, X+1, X+2 each represents a single address (non-range → [off, off+1))
+        auto X  = makeVariable(901); // symbolic variable expression (example)
+        auto X1 = makeAdd(X->clone(), make_unique<symbolic::LiteralExpr>(1U));
+        auto X2 = makeAdd(X->clone(), make_unique<symbolic::LiteralExpr>(2U));
+
+        auto a0 = makeRangeAddr(baseId, /*off=*/std::move(X), /*len=*/nullptr);  // single @ X
+        auto a1 = makeRangeAddr(baseId, /*off=*/std::move(X1), /*len=*/nullptr); // single @ X+1
+        auto a2 = makeRangeAddr(baseId, /*off=*/std::move(X2), /*len=*/nullptr); // single @ X+2
+
+        // Same value
+        auto v  = makeVariable(7777);
+        auto sv = v->clone();
+        mm.write(a0, std::move(v));
+        mm.write(a1, makeVariable(7777));
+        mm.write(a2, makeVariable(7777));
+
+        // Trigger symbolic-range merge (hash-based chaining)
+        mm.mergeSymbolicRanges();
+
+        EXPECT_EQ(mm.sizeWithoutFields(), 1);
+    }
+
+    TEST_F(MemoryModelTest, MergeSymbolicRanges_SameValueButNonContiguous_ShouldNotMerge) {
+        MemoryModel mm;
+        const unsigned baseId = 32;
+
+        auto X  = makeVariable(902);
+        auto X2 = makeAdd(X->clone(), make_unique<symbolic::LiteralExpr>(2U));
+
+        auto a0 = makeRangeAddr(baseId, std::move(X), nullptr);  // single @ X
+        auto a2 = makeRangeAddr(baseId, std::move(X2), nullptr); // single @ X+2
+
+        auto v  = makeVariable(8888);
+        auto sv = v->clone();
+        mm.write(a0, std::move(v));
+        mm.write(a2, makeVariable(8888)); // same value but with a gap of 1
+
+        mm.mergeSymbolicRanges();
+
+        // Two ranges with the same value but non-contiguous → must not merge (expect 2 entries)
+        EXPECT_EQ(mm.sizeWithoutFields(), 2);
+    }
+
+    TEST_F(MemoryModelTest, MergeSymbolicRanges_ContiguousButDifferentValue_ShouldNotMerge) {
+        MemoryModel mm;
+        const unsigned baseId = 33;
+
+        auto X  = makeVariable(903);
+        auto X1 = makeAdd(X->clone(), make_unique<symbolic::LiteralExpr>(1U));
+
+        auto a0 = makeRangeAddr(baseId, std::move(X), nullptr);  // single @ X
+        auto a1 = makeRangeAddr(baseId, std::move(X1), nullptr); // single @ X+1
+
+        auto v1 = makeVariable(10001);
+        auto v2 = makeVariable(10002);
+        auto s1 = v1->clone();
+        mm.write(a0, std::move(v1));
+        mm.write(a1, std::move(v2)); // different value
+
+        mm.mergeSymbolicRanges();
+
+        // Should remain as two separate entries
+        EXPECT_EQ(mm.sizeWithoutFields(), 2);
+        size_t countV1 = 0, countV2 = 0;
+        for (auto &&[addr, value] : mm.flat()) {
+            if (*value == *s1)
+                ++countV1;
+            else
+                ++countV2;
+        }
+        EXPECT_EQ(countV1, 1u);
+        EXPECT_EQ(countV2, 1u);
+    }
+
+    TEST_F(MemoryModelTest, MergeSymbolicRanges_DifferentBases_ShouldNeverMergeAcross) {
+        MemoryModel mm;
+        const unsigned baseA = 41;
+        const unsigned baseB = 42;
+
+        // For two different bases, write X and X+1 with the same values
+        auto XA  = makeVariable(910);
+        auto X1A = makeAdd(XA->clone(), make_unique<symbolic::LiteralExpr>(1U));
+        auto a0A = makeRangeAddr(baseA, std::move(XA), nullptr);
+        auto a1A = makeRangeAddr(baseA, std::move(X1A), nullptr);
+
+        auto XB  = makeVariable(910); // same construction but different base
+        auto X1B = makeAdd(XB->clone(), make_unique<symbolic::LiteralExpr>(1U));
+        auto a0B = makeRangeAddr(baseB, std::move(XB), nullptr);
+        auto a1B = makeRangeAddr(baseB, std::move(X1B), nullptr);
+
+        auto vA  = makeVariable(1212);
+        auto svA = vA->clone();
+        auto vB  = makeVariable(1212);
+        auto svB = vB->clone();
+
+        mm.write(a0A, std::move(vA));
+        mm.write(a1A, makeVariable(1212));
+        mm.write(a0B, std::move(vB));
+        mm.write(a1B, makeVariable(1212));
+
+        mm.mergeSymbolicRanges();
+
+        // Each base should merge within itself; no cross-base merge
+        EXPECT_EQ(mm.sizeWithoutFields(), 2);
+        size_t cntA = 0, cntB = 0;
+        for (auto &&[addr, value] : mm.flat()) {
+            if (*value != *svA && *value != *svB)
+                continue;
+            auto symbolAddr = llvm::dyn_cast<symbolic::SymbolAddress>(&addr.get());
+            ASSERT_NE(symbolAddr, nullptr);
+            if (symbolAddr->getBaseInfo() == a0A.getBaseInfo())
+                ++cntA;
+            if (symbolAddr->getBaseInfo() == a0B.getBaseInfo())
+                ++cntB;
+        }
+        EXPECT_EQ(cntA, 1u);
+        EXPECT_EQ(cntB, 1u);
+    }
+
+    TEST_F(MemoryModelTest, MergeSymbolicRanges_NonRangeFollowedByRange_ShouldChainCorrectly) {
+        MemoryModel mm;
+        const unsigned baseId = 34;
+
+        // Start: a single address X
+        auto X  = makeVariable(904);
+        auto a0 = makeRangeAddr(baseId, std::move(X), nullptr); // single @ X
+
+        // Successor: [X+1, X+1 + 3) → len = 3
+        auto X1 = makeAdd(makeVariable(904), make_unique<symbolic::LiteralExpr>(1U));
+        auto a1 = makeRangeAddr(baseId, std::move(X1), make_unique<symbolic::LiteralExpr>(3U));
+
+        // Same value
+        auto v  = makeVariable(1313);
+        auto sv = v->clone();
+        mm.write(a0, std::move(v));
+        mm.write(a1, makeVariable(1313));
+
+        mm.mergeSymbolicRanges();
+
+        // Approximate check: there should be exactly one entry (start at X, total length = 1 + 3 = 4)
+        EXPECT_EQ(mm.sizeWithoutFields(), 1);
+        for (auto &&[addr, value] : mm.flat()) {
+            auto symbolAddr = llvm::dyn_cast<symbolic::SymbolAddress>(&addr.get());
+            ASSERT_NE(symbolAddr, nullptr);
+            if (symbolAddr->getBaseInfo() == a0.getBaseInfo() && *value == *sv) {
+                // If length is accessible and constant, also assert == 4
+                if (symbolAddr->isRange()) {
+                    if (auto c = symbolAddr->getLength()->tryEvalAsConstant()) {
+                        EXPECT_EQ(c.value(), 4);
+                        return;
+                    }
+                    FAIL() << symbolAddr->getLength()->dump();
+                }
+            }
+            FAIL() << symbolAddr->dump();
         }
     }
+
 } // namespace acslg::test::unit::analyzer

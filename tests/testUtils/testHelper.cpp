@@ -267,18 +267,31 @@ namespace acslg::test::utils {
                              nullptr);
     }
 
-    void FixtureWithCode::ExpectReadEqAt(MemoryModel &mm,
-                                         unsigned id,
-                                         uint64_t off,
-                                         const symbolic::SymbolicExpr &expected) {
+    ::testing::AssertionResult FixtureWithCode::ExpectReadEqAt(
+        MemoryModel &mm,
+        unsigned id,
+        uint64_t off,
+        const symbolic::SymbolicExpr &expected) {
         auto addr = makePointAddr(id, off);
         auto got  = mm.read(addr);
-        ASSERT_NE(got, nullopt) << "read returned null at off=" << off;
-        EXPECT_EQ(*got.value(), expected) << "mismatch at off=" << off;
+        if (!got) {
+            return ::testing::AssertionFailure() << "read returned null at off=" << off;
+        }
+        if (*got.value() != expected) {
+            return ::testing::AssertionFailure()
+                   << "mismatch at off=" << off << "\n  got:      " << *got
+                   << "\n  expected: " << expected;
+        }
+        return ::testing::AssertionSuccess();
     }
 
-    void FixtureWithCode::ExpectReadNullAt(MemoryModel &mm, unsigned id, uint64_t off) {
+    ::testing::AssertionResult FixtureWithCode::ExpectReadNullAt(MemoryModel &mm,
+                                                                 unsigned id,
+                                                                 uint64_t off) {
         auto addr = makePointAddr(id, off);
-        EXPECT_EQ(mm.read(addr), nullopt) << "expected null at off=" << off;
+        if (mm.read(addr) != std::nullopt) {
+            return ::testing::AssertionFailure() << "expected null at off=" << off;
+        }
+        return ::testing::AssertionSuccess();
     }
 } // namespace acslg::test::utils

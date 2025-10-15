@@ -447,7 +447,7 @@ namespace acslg::analyzer::symbolic {
         if (range_ == std::nullopt)
             oss << "[" << off->dump() << "]";
         else
-            oss << "[" << off->dump() << "..." << range_.value().len_->dump() << "]";
+            oss << "[" << off->dump() << " ... +" << range_.value().len_->dump() << "]";
         oss << "{from=";
         dump_from(oss, from_);
         oss << "}, ";
@@ -1071,7 +1071,7 @@ namespace acslg::analyzer::symbolic {
         return op_ == unary->op_ && *expr_ == *(unary->expr_);
     }
 
-    bool UnknownExpr::equal(const SymbolicExpr &) const { return false; }
+    bool UnknownExpr::equal(const SymbolicExpr &expr) const { return expr.isUnknown(); }
 
     bool Variable::equal(const SymbolicExpr &expr) const {
         const auto var = llvm::dyn_cast<const Variable>(&expr);
@@ -1427,6 +1427,24 @@ namespace acslg::analyzer::symbolic {
             return;
         }
         range_.value().len_ = std::move(len).into_underlying();
+    }
+
+    void SymbolAddress::addLength(utils::not_null<std::unique_ptr<SymbolicExpr>> extra) {
+        if (!isValidOffsetOrLength(*extra))
+            ERROR("Invalid offset.");
+        if (range_ == std::nullopt) {
+            range_.emplace(std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(1),
+                                                          BinaryOpExpr::Operator::Add,
+                                                          std::move(extra))
+                               ->simplifiedExpr()
+                               .into_underlying());
+            return;
+        }
+        range_.value().len_ =
+            std::make_unique<BinaryOpExpr>(range_.value().len_->clone().into_underlying(),
+                                           BinaryOpExpr::Operator::Add, std::move(extra))
+                ->simplifiedExpr()
+                .into_underlying();
     }
 
     size_t SymbolAddress::BaseInfo::hash() const {

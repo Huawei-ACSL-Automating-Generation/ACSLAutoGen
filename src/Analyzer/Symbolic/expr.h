@@ -183,13 +183,8 @@ namespace acslg::analyzer::symbolic {
             // TODO: cache the result.
             if (!isLinear())
                 return std::nullopt;
-            auto hashPtrMap = collectUsedVarsAndAddrs();
-            std::unordered_map<size_t, size_t> hashIdMap;
-            size_t counter = 0;
-            for (auto &[hash, _] : hashPtrMap) {
-                hashIdMap[hash] = counter++;
-            }
-            auto linearExpr = toLinearExpr(hashIdMap);
+            auto [hashPtrMap, hashIdMap] = SymbolicExpr::collectUsedVarsAndAddrs(*this);
+            auto linearExpr              = toLinearExpr(hashIdMap);
             if (linearExpr.all_homogeneous_terms_are_zero())
                 return linearExpr.inhomogeneous_term().get_si();
             return std::nullopt;
@@ -1021,6 +1016,7 @@ namespace acslg::analyzer::symbolic {
         void resetOffset() { offset_ = std::make_unique<LiteralExpr>(ZERO_OFFSET); }
 
         void setLength(utils::not_null<std::unique_ptr<SymbolicExpr>> len);
+        void addLength(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
         auto getLength() const -> const auto & {
             if (range_ == std::nullopt)
                 ERROR("Is not a range! Do isRange first.");

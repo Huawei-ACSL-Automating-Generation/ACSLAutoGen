@@ -88,6 +88,48 @@ namespace acslg::analyzer {
         }
 
         /**
+         * @brief Just call `mergeConstantRanges` and `mergeSymbolicRanges` to merge ranges.
+         */
+        void mergeRanges() {
+            mergeConstantRanges();
+            mergeSymbolicRanges();
+        }
+
+        /**
+         * @brief Merge adjacent constant ranges with identical values per BaseInfo.
+         *
+         * For each BaseInfo bucket inside `memoryMap_constantRange_`, this function:
+         * 1) Moves all entries into a vector and sorts them by offset (ascending).
+         * 2) Performs a single left-to-right pass to merge adjacent ranges
+         *    [pOff, pOff+pLen) and [cOff, cOff+cLen) iff pOff+pLen == cOff AND values are equal.
+         * 3) Writes the merged result back into the original map.
+         *
+         * Complexity: O(n log n) due to sorting, where n is the number of ranges per BaseInfo.
+         */
+        void mergeConstantRanges();
+
+        /**
+         * @brief Merge adjacent symbolic ranges with identical values per BaseInfo.
+         *
+         * This version does NOT impose any total order on symbolic expressions.
+         * Instead, for each BaseInfo bucket inside `memoryMap_symbolicRange_` it:
+         * 1) Precomputes, for each range, the left endpoint hash (Lh := hash(offset.simplified)),
+         *    the right endpoint hash (Rh := hash((offset + length).simplified) for range,
+         *    or Rh := hash((offset + 1).simplified) for single-address semantics),
+         *    and the value hash (for coarse grouping by equal "stored value").
+         * 2) Groups ranges by value-hash to only consider merges among equal-value candidates.
+         * 3) Within each value group, builds adjacency by hashes: Lh → outgoing edges, Rh →
+         * incoming edges, then emits chains by greedily following unique successors where Rh ==
+         * next.Lh.
+         *    - If multiple merge candidates exist at a boundary, it stops conservatively (no
+         * ambiguous merge). 4) Emits the merged key (offset preserved from the first segment;
+         * length is accumulated) and moves the group's value into the result.
+         *
+         * Complexity: Near O(n) per BaseInfo bucket (linear passes + hash maps).
+         */
+        void mergeSymbolicRanges();
+
+        /**
          * @brief Return number of memoryModel's entries without structures' fields.
          * @return Number of memoryModel's entries without structures' fields.
          */

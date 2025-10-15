@@ -591,4 +591,67 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                                              AnyOf(StartsWith("b.y"), HasSubstr("+ b.y")),
                                              AnyOf(StartsWith("142"), HasSubstr("+ 142"))));
     }
+
+    TEST(StateTest, openHiTLS_BinSub_RightMergedAddress) {
+        auto code      = R"(
+    #include <stdint.h>
+    #define BN_UINT uint32_t
+
+    #define SUB_ABC(borrow, r, a, b, c)         \
+    do {                                    \
+        BN_UINT macroTmpS = (a) - (b);            \
+        BN_UINT macroTmpB = ((a) < (b)) ? 1 : 0;  \
+        macroTmpB += (macroTmpS < (c)) ? 1 : 0;         \
+        (r) = macroTmpS - (c);                    \
+        borrow = macroTmpB;                       \
+    } while (0)
+
+BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
+    BN_UINT borrow    = 0;
+    uint32_t nn       = n;
+    const BN_UINT *aa = a;
+    const BN_UINT *bb = b;
+    BN_UINT *rr       = r;
+
+    while (nn >= 4) {
+        SUB_ABC(borrow, rr[0], aa[0], bb[0], borrow);
+        SUB_ABC(borrow, rr[1], aa[1], bb[1], borrow);
+        SUB_ABC(borrow, rr[2], aa[2], bb[2], borrow);
+        SUB_ABC(borrow, rr[3], aa[3], bb[3], borrow);
+
+        rr += 4;
+        aa += 4;
+        bb += 4;
+        nn -= 4;
+    }
+
+    uint32_t i = 0;
+
+    for (; i < nn; i++) {
+        SUB_ABC(borrow, rr[i], aa[i], bb[i], borrow);
+    }
+    return borrow;
+}
+    )";
+        auto postState = execOnFirstFunc(code);
+
+        for (auto &path : postState->getPaths()) {
+            string symbolAddrs;
+            unsigned count{0};
+            for (auto &&[addr, value] : path->getMemoryState().flat()) {
+                auto symbolAddr = llvm::dyn_cast<analyzer::symbolic::SymbolAddress>(&addr.get());
+                if (symbolAddr == nullptr)
+                    continue;
+                if (symbolAddr->regularFormOfValue() == nullopt)
+                    continue;
+                auto rangeStr = symbolAddr->regularFormOfValue().value();
+                if (rangeStr == "r[0..n - 1]")
+                    ++count;
+                symbolAddrs += rangeStr + "\n";
+            }
+            if (count != 1)
+                FAIL() << "Symboladdrs: " << symbolAddrs;
+        }
+    }
+
 } // namespace acslg::test::integration

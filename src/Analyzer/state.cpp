@@ -1059,6 +1059,240 @@ namespace acslg::analyzer {
         });
     }
 
+    void MemoryModel::mergeConstantRanges() {
+        using ExprUP = utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>;
+
+        for (auto &[base, cmap] : memoryMap_constantRange_) {
+            if (cmap.empty())
+                continue;
+
+            // 1) Move to a vector to allow reordering and in-place merging
+            std::vector<std::pair<ConstRange, ExprUP>> v;
+            v.reserve(cmap.size());
+            for (auto &kv : cmap)
+                v.emplace_back(kv.first, std::move(kv.second));
+            cmap.clear();
+
+            // Sort by offset (ascending)
+            auto byOffset = [](auto &a, auto &b) {
+                return a.first.first < b.first.first; // compare offset
+            };
+            std::sort(v.begin(), v.end(), byOffset);
+
+            // 2) Single-pass merge
+            std::vector<std::pair<ConstRange, ExprUP>> merged;
+            merged.reserve(v.size());
+
+            auto pushOrMerge = [&](std::pair<ConstRange, ExprUP> &&cur) {
+                if (merged.empty()) {
+                    merged.push_back(std::move(cur));
+                    return;
+                }
+                auto &[pr, pexpr] = merged.back();
+                auto &[cr, cexpr] = cur;
+
+                uint64_t pRight = pr.second;
+                uint64_t cLeft = cr.first, cRight = cr.second;
+
+                // Adjacent endpoints and equal values → coalesce by extending the length
+                if (pRight == cLeft && *pexpr->simplifiedExpr() == *cexpr->simplifiedExpr()) {
+                    pr.second = cRight;
+                } else {
+                    merged.push_back(std::move(cur));
+                }
+            };
+
+            for (auto &e : v)
+                pushOrMerge(std::move(e));
+
+            // 3) Write back (map keeps ranges sorted by key)
+            for (auto &e : merged) {
+                cmap.emplace(e.first, std::move(e.second));
+            }
+        }
+    }
+
+    void MemoryModel::mergeSymbolicRanges() {
+        using SA     = symbolic::SymbolAddress;
+        using Expr   = symbolic::SymbolicExpr;
+        using ExprUP = utils::not_null<std::unique_ptr<Expr>>;
+
+        auto valueEquivalent = [](const ExprUP &a, const ExprUP &b) -> bool {
+            return *a->simplifiedExpr() == *b->simplifiedExpr();
+        };
+
+        // Compute hash of (a + b) by constructing a BinaryOp(Add), simplifying, then hashing.
+        auto addedHash = [](const Expr &a, const Expr &b) {
+            return std::make_unique<symbolic::BinaryOpExpr>(
+                       a.clone(), symbolic::BinaryOpExpr::Operator::Add, b.clone())
+                ->simplifiedExpr()
+                ->hash();
+        };
+
+        for (auto &[base, umap] : memoryMap_symbolicRange_) {
+            if (umap.empty())
+                continue;
+
+            struct Item {
+                SA key;                             ///< Symbolic address (offset[/length])
+                ExprUP val;                         ///< Stored value expression
+                std::optional<uint64_t> constOff{}; ///< If offset folds to constant
+                std::optional<uint64_t> constLen{}; ///< If length folds to constant
+                size_t offHash{0};                  ///< hash(offset.simplified)
+                size_t lenHash{0}; ///< hash(length.simplified) if range (debug/consistency)
+                size_t rightHash{
+                    0}; ///< hash((offset+length).simplified) or hash(offset+1) for non-range
+                size_t valHash{0}; ///< hash(val.simplified) for coarse grouping
+                bool used{false};  ///< Whether this edge is already merged into a chain
+            };
+
+            std::vector<Item> items;
+            items.reserve(umap.size());
+
+            // (1) Move entries to items and precompute hashes/constants
+            for (auto &[addr, expr] : umap) {
+                Item it{addr, std::move(expr)};
+
+                it.constOff = it.key.getOffset()->tryEvalAsConstant();
+                if (it.key.isRange()) {
+                    it.constLen = it.key.getLength()->tryEvalAsConstant();
+                }
+
+                // Both offset and length constant → should have been inserted into constant map.
+                if (it.constOff && it.constLen)
+                    ERROR("Offset and length are both constant, they should be inserted into "
+                          "memoryMap_constantRange_ instead.");
+
+                // Precompute endpoint/value hashes (using simplified forms)
+                it.offHash = it.key.getOffset()->simplifiedExpr()->hash();
+                it.valHash = it.val->simplifiedExpr()->hash();
+                if (it.key.isRange())
+                    it.lenHash = it.key.getLength()->simplifiedExpr()->hash();
+
+                // Right endpoint hash:
+                // - range: hash(offset + length)
+                // - non-range: hash(offset + 1) → single-address treated as [off, off+1)
+                if (it.key.isRange()) {
+                    it.rightHash = addedHash(*it.key.getOffset(), *it.key.getLength());
+                } else {
+                    it.rightHash = addedHash(*it.key.getOffset(), symbolic::LiteralExpr{1});
+                }
+
+                items.emplace_back(std::move(it));
+            }
+            umap.clear();
+
+            // (2) Group by value-hash (coarse buckets to cut comparisons)
+            std::unordered_map<size_t, std::vector<size_t>> groups;
+            groups.reserve(items.size() * 2); // perf: reduce rehashes; not semantically required
+            for (size_t i = 0; i < items.size(); ++i) {
+                groups[items[i].valHash].push_back(i);
+            }
+
+            // Result map being rebuilt for this BaseInfo
+            std::unordered_map<SA, ExprUP> newMap;
+            newMap.reserve(items.size());
+
+            // (3) For each value group, build adjacency and emit chains
+            for (auto &[vh, idxs] : groups) {
+                // Lh → outgoing edges; Rh → incoming edges
+                std::unordered_map<size_t, std::vector<size_t>> outByLeft, inByRight;
+                outByLeft.reserve(idxs.size() * 2);
+                inByRight.reserve(idxs.size() * 2);
+
+                for (size_t i : idxs) {
+                    outByLeft[items[i].offHash].push_back(i);
+                    inByRight[items[i].rightHash].push_back(i);
+                }
+
+                // Try to emit a maximal chain starting from a given edge
+                auto tryEmitChain = [&](size_t startIdx) {
+                    if (items[startIdx].used)
+                        return;
+
+                    // Seed the merged key from the first segment
+                    SA mergedKey     = items[startIdx].key;
+                    size_t cur       = startIdx;
+                    size_t rightHash = items[cur].rightHash;
+                    items[cur].used  = true;
+
+                    // Greedily follow a UNIQUE successor whose Lh == current Rh and value equivalent
+                    while (true) {
+                        auto it = outByLeft.find(rightHash);
+                        if (it == outByLeft.end())
+                            break;
+
+                        size_t next_idx = SIZE_MAX;
+                        for (size_t j : it->second) {
+                            if (items[j].used)
+                                continue;
+                            if (valueEquivalent(items[cur].val, items[j].val)) {
+                                if (next_idx == SIZE_MAX) {
+                                    next_idx = j;
+                                } else {
+                                    // Ambiguity (multiple candidates): stop conservatively
+                                    UNIMPLEMENT(
+                                        "Multiple `symbolAddresses` with the same offset can "
+                                        "be merged. Process this when encountered.");
+                                }
+                            }
+                        }
+                        if (next_idx == SIZE_MAX)
+                            break;
+
+                        auto &itemToBeMerged = items[next_idx];
+
+                        // Append the successor's length:
+                        // - If successor is range: add its length expression
+                        // - If successor is non-range: add 1
+                        if (itemToBeMerged.key.isRange()) {
+                            mergedKey.addLength(itemToBeMerged.key.getLength()->clone());
+                        } else {
+                            mergedKey.addLength(std::make_unique<symbolic::LiteralExpr>(1));
+                        }
+
+                        // Advance to successor
+                        rightHash           = itemToBeMerged.rightHash;
+                        itemToBeMerged.used = true;
+                        cur                 = next_idx;
+                    }
+
+                    // Emit the merged interval with the value from the starting edge
+                    newMap.emplace(std::move(mergedKey), std::move(items[startIdx].val));
+                };
+
+                // Prefer starting at "obvious starts": Lh with zero in-degree
+                for (auto &[leftHash, outs] : outByLeft) {
+                    size_t indeg = 0;
+                    if (auto it = inByRight.find(leftHash); it != inByRight.end())
+                        indeg = it->second.size();
+                    if (indeg == 0) {
+                        for (size_t e : outs) {
+                            if (!items[e].used)
+                                tryEmitChain(e);
+                        }
+                    } else if (indeg != 1) {
+                        // Not an error per se, but indicates possible forks; we log for visibility.
+                        WARN("Multiple `symbolAddresses` with the same offset are present.");
+                    }
+                }
+
+                // Handle remaining edges (cycles or ambiguous starts) conservatively
+                for (size_t e : idxs) {
+                    if (!items[e].used) {
+                        WARN("If this location is reached, it indicates either a cycle is present "
+                             "or a merge has multiple candidates, and the result may be incorrect "
+                             "or unstable.");
+                        tryEmitChain(e);
+                    }
+                }
+            }
+
+            // (4) Write merged map back for this BaseInfo
+            memoryMap_symbolicRange_[base] = std::move(newMap);
+        }
+    }
+
     ProgramState::ProgramState(std::unique_ptr<Path> initialPath,
                                std::unique_ptr<ACSLFunction> func,
                                context::ACSLContext &context)
@@ -1190,12 +1424,13 @@ namespace acslg::analyzer {
                     if (isa_and_present<clang::CaseStmt>(bodyStmt->body_front())) {
                         stepSimpleSwitch(switchStmt);
                     } else {
-                        UNIMPLEMENT(
-                            "Unsupported Switch type, body's first clang::Stmt is not CaseStmt: "
-                            << switchStmt->getBody());
+                        UNIMPLEMENT("Unsupported Switch type, body's first clang::Stmt is not "
+                                    "CaseStmt: "
+                                    << switchStmt->getBody());
                     }
                 } else {
-                    WARN("A SwtichStmt without clang::CompoundStmt body (why?) has been ignored: "
+                    WARN("A SwtichStmt without clang::CompoundStmt body (why?) has been "
+                         "ignored: "
                          << switchStmt);
                 }
 
@@ -1247,7 +1482,8 @@ namespace acslg::analyzer {
             // EvalResult {
             //     SymbolicExpr::Type resultTy = deriveVarType(u->getType());
             //     clang::QualType argTy =
-            //         u->isArgumentType() ? u->getArgumentType() : u->getArgumentExpr()->getType();
+            //         u->isArgumentType() ? u->getArgumentType() :
+            //         u->getArgumentExpr()->getType();
             //     if (argTy->isVariableArrayType())
             //         UNIMPLEMENT("VLA in sizeof/alignof");
 
@@ -1292,6 +1528,7 @@ namespace acslg::analyzer {
             auto &memoryState = path->getMutMemoryState();
             std::erase_if(path->varAddr_, [&](auto &&kv) { return localVars.contains(kv.first); });
             memoryState.eraseExpiredLocals(localVars);
+            memoryState.mergeRanges();
         }
         return;
     }
@@ -1597,8 +1834,8 @@ namespace acslg::analyzer {
                             RD, RD->getASTContext().getASTRecordLayout(RD),
                             varAddr_->addressClone().into_underlying(), startPoint_);
                         if (initListExpr->getNumInits() != st->getNumFields())
-                            ERROR(
-                                "Initializer std::list size mismatches the struct's field count.");
+                            ERROR("Initializer std::list size mismatches the struct's field "
+                                  "count.");
                         auto slots = st->fieldsValues();
                         for (size_t i = 0; i < slots.size(); ++i) {
                             const clang::Expr *init = initListExpr->getInit(i);
@@ -1615,10 +1852,10 @@ namespace acslg::analyzer {
                         updatedPaths.push_back(std::move(path));
                         continue;
                     } else {
-                        UNIMPLEMENT(
-                            "An initializer std::list was used to initialize an unimplemented or "
-                            "incorrect type "s +
-                            varType->getTypeClassName() + ".");
+                        UNIMPLEMENT("An initializer std::list was used to initialize an "
+                                    "unimplemented or "
+                                    "incorrect type "s +
+                                    varType->getTypeClassName() + ".");
                     }
                 } else {
                     Path::EvalResult eval = path->evalExpr(initExpr);

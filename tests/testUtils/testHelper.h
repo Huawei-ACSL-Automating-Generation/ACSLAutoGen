@@ -100,11 +100,13 @@ namespace acslg::test::utils {
             unsigned int id,
             std::optional<analyzer::symbolic::SourcePoint> fromPoint = std::nullopt);
         analyzer::symbolic::SymbolAddress makePointAddr(unsigned int id, std::uint64_t off);
-        void ExpectReadEqAt(analyzer::MemoryModel &mm,
-                            unsigned id,
-                            std::uint64_t off,
-                            const analyzer::symbolic::SymbolicExpr &expected);
-        void ExpectReadNullAt(analyzer::MemoryModel &mm, unsigned id, std::uint64_t off);
+        ::testing::AssertionResult ExpectReadEqAt(analyzer::MemoryModel &mm,
+                                                  unsigned id,
+                                                  uint64_t off,
+                                                  const analyzer::symbolic::SymbolicExpr &expected);
+        ::testing::AssertionResult ExpectReadNullAt(analyzer::MemoryModel &mm,
+                                                    unsigned id,
+                                                    uint64_t off);
 
         ASTExtractor e;
         analyzer::symbolic::SourcePoint defaultPoint;
