@@ -91,7 +91,7 @@ namespace acslg::analyzer {
                         arr->getType(), resultAddr->addressClone().into_underlying(), startPoint_);
                     memoryState_.write(*resultAddr, std::move(newSymbol));
                 }
-                return std::move(resultAddr);
+                return resultAddr;
             } else {
                 ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither pointer nor "
                       "array?");
@@ -738,6 +738,48 @@ namespace acslg::analyzer {
                     r.second.emplace_back(std::move(lit));
                     return r;
                 })
+                .Case<clang::UnaryExprOrTypeTraitExpr>(
+                    [this](const clang::UnaryExprOrTypeTraitExpr *uett) -> EvalResult {
+                        DEBUG("evaluating UnaryExprOrTypeTraitExpr...");
+
+                        // Obtain the AST context, which encodes target-dependent size/alignment.
+                        auto &ctx = this->context_.getASTContext();
+
+                        // Resolve the operand type for either type- or expression-based arguments.
+                        auto operandQT = [&]() -> clang::QualType {
+                            return uett->isArgumentType() ? uett->getArgumentType()
+                                                          : uett->getArgumentExpr()->getType();
+                        }();
+
+                        uint64_t value = 0;
+                        switch (uett->getKind()) {
+                            using enum clang::UnaryExprOrTypeTrait;
+                            case UETT_SizeOf:
+                                // Size is measured in bytes per the target data layout.
+                                value = static_cast<uint64_t>(
+                                    ctx.getTypeSizeInChars(operandQT).getQuantity());
+                                break;
+                            case UETT_AlignOf:
+                            case UETT_PreferredAlignOf:
+                                // Alignment is reported in bytes as required by the ABI.
+                                value = static_cast<uint64_t>(
+                                    ctx.getTypeAlignInChars(operandQT).getQuantity());
+                                break;
+                            default:
+                                UNIMPLEMENT("Unsupported UnaryExprOrTypeTraitExpr kind: "
+                                            << static_cast<int>(uett->getKind()));
+                        }
+
+                        // Materialize a literal of the expression’s result type (typically size_t).
+                        auto resultTy = symbolic::deriveVarType(uett->getType());
+                        auto lit      = std::make_unique<symbolic::LiteralExpr>(value);
+                        lit->setValType(resultTy);
+
+                        EvalResult r;
+                        r.second.emplace_back(std::move(lit));
+                        return r;
+                    })
+
                 .Default([](const clang::Expr *e) -> EvalResult {
                     UNIMPLEMENT("Unsupported clang::Expr type: " << e->getStmtClassName());
                     return Path::EvalResult{};
@@ -793,7 +835,7 @@ namespace acslg::analyzer {
 
         if (StmtCtx) {
             if (auto opt = context_.getStmtInfo(StmtCtx)) {
-                auto [sourceText, _, _, _] = *opt;
+                const auto &sourceText = std::get<0>(*opt);
                 if (!sourceText.empty()) {
                     oss << "Stmt Context: " << sourceText.str() << "\n";
                 }
@@ -884,7 +926,7 @@ namespace acslg::analyzer {
                         ERROR("Negetive offset.");
                     auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
                     auto &rangeExprMap  = memoryMap_constantRange_.at(baseInfo);
-                    auto range          = std::pair{unsignedOffset, unsignedOffset + 1};
+                    // auto range          = std::pair{unsignedOffset, unsignedOffset + 1};
                     auto rangeForSearch =
                         std::pair{unsignedOffset, std::numeric_limits<uint64_t>::max()};
                     auto upperBoundIt = rangeExprMap.upper_bound(rangeForSearch);
