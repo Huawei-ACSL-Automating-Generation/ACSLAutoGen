@@ -325,25 +325,38 @@ namespace acslg::analyzer::symbolic {
     size_t UnknownExpr::hash() const { return utils::hash_val(getType()); }
 
     std::string LiteralExpr::dump() const {
+        using namespace utils::dump_fmt;
         std::ostringstream oss;
+
         switch (getLiteralType()) {
             case LiteralType::Boolean:
-                oss << "Boolean(" << (data_.boolValue ? "true" : "false") << ")";
+                oss << type("Boolean") << "(" << lit(data_.boolValue ? "true" : "false") << ")";
                 break;
-            case LiteralType::Int: oss << "Int(" << data_.intValue << ")"; break;
-            case LiteralType::UnsignedInt: oss << "UnsignedInt(" << data_.uintValue << ")"; break;
-            case LiteralType::Short: oss << "Short(" << data_.shortValue << ")"; break;
+            case LiteralType::Int:
+                oss << type("Int") << "(" << lit(std::to_string(data_.intValue)) << ")";
+                break;
+            case LiteralType::UnsignedInt:
+                oss << type("UnsignedInt") << "(" << lit(std::to_string(data_.uintValue)) << ")";
+                break;
+            case LiteralType::Short:
+                oss << type("Short") << "(" << lit(std::to_string(data_.shortValue)) << ")";
+                break;
             case LiteralType::UnsignedShort:
-                oss << "UnsignedShort(" << data_.ushortValue << ")";
+                oss << type("UnsignedShort") << "(" << lit(std::to_string(data_.ushortValue))
+                    << ")";
                 break;
-            case LiteralType::Int64: oss << "Int64(" << data_.int64Value << ")"; break;
-            case LiteralType::UInt64: oss << "Uint64(" << data_.uint64Value << ")"; break;
+            case LiteralType::Int64:
+                oss << type("Int64") << "(" << lit(std::to_string(data_.int64Value)) << ")";
+                break;
+            case LiteralType::UInt64:
+                oss << type("UInt64") << "(" << lit(std::to_string(data_.uint64Value)) << ")";
+                break;
         }
-
         return oss.str();
     }
 
     std::string BinaryOpExpr::dump() const {
+        using namespace utils::dump_fmt;
         std::ostringstream oss;
         std::string opStr;
         switch (op_) {
@@ -367,11 +380,12 @@ namespace acslg::analyzer::symbolic {
             case Operator::LogicalOr: opStr = "||"; break;
             default: opStr = "?"; break;
         }
-        oss << "(" << left_->dump() << " " << opStr << " " << right_->dump() << ")";
+        oss << "(" << left_->dump() << " " << op(opStr) << " " << right_->dump() << ")";
         return oss.str();
     }
 
     std::string UnaryOpExpr::dump() const {
+        using namespace utils::dump_fmt;
         std::ostringstream oss;
         std::string opStr;
         switch (op_) {
@@ -387,40 +401,44 @@ namespace acslg::analyzer::symbolic {
             case Operator::Dereference: opStr = "*"; break;
             default: opStr = "?"; break;
         }
-        oss << opStr << "(" << expr_->dump() << ")";
+        oss << op(opStr) << "(" << expr_->dump() << ")";
         return oss.str();
     }
 
-    std::string UnknownExpr::dump() const { return "{unknown}"; }
+    std::string UnknownExpr::dump() const { return utils::dump_fmt::hint("{unknown}"); }
 
     template <class FromVariant>
     static inline void dump_from(std::ostringstream &oss, const FromVariant &from) {
-        std::visit(overloaded{[&](std::monostate) { oss << "none"; },
+        using namespace utils::dump_fmt;
+        std::visit(overloaded{[&](std::monostate) { oss << hint("none"); },
                               [&](utils::not_null<const clang::VarDecl *> d) {
                                   const clang::Decl *decl = d.get();
                                   if (auto *nd = llvm::dyn_cast<clang::NamedDecl>(decl))
-                                      oss << "decl:" << decl->getDeclKindName() << " "
-                                          << nd->getQualifiedNameAsString();
+                                      oss << key("decl") << ":" << nd->getDeclKindName() << " "
+                                          << path(nd->getQualifiedNameAsString());
                                   else
-                                      oss << "decl:" << decl->getDeclKindName();
+                                      oss << key("decl") << ":" << decl->getDeclKindName();
                               },
                               [&](const utils::not_null<std::unique_ptr<const Address>> &p) {
                                   const Address *base = p.get().get();
-                                  oss << "addr:" << (base ? base->dump() : std::string("<null>"));
+                                  oss << key("addr") << ":"
+                                      << (base ? base->dump()
+                                               : std::string(utils::dump_fmt::hint("<null>")));
                               },
                               [&](const std::pair<utils::not_null<std::unique_ptr<const Address>>,
                                                   const size_t> &s) {
-                                  oss << "field of:" << s.first.get()->dump() << "[" << s.second
-                                      << "]";
+                                  oss << key("field of") << ":" << s.first.get()->dump() << "["
+                                      << utils::dump_fmt::lit(std::to_string(s.second)) << "]";
                               }},
                    from);
     }
 
     std::string Variable::dump() const {
+        using namespace utils::dump_fmt;
         std::ostringstream oss;
         const auto &t = getValType();
 
-        oss << "Var(";
+        oss << type("Var") << "(";
         switch (t.kind) {
             case ScalarKind::Int: oss << "int"; break;
             case ScalarKind::UInt: oss << "uint"; break;
@@ -428,77 +446,90 @@ namespace acslg::analyzer::symbolic {
             case ScalarKind::Void: oss << "void"; break;
             case ScalarKind::Structure: ERROR("Variable's ScalarKind should not be Structure");
         }
-        oss << t.bitWidth << ")";
+        oss << lit(std::to_string(t.bitWidth)) << ")";
 
-        oss << "{from=";
+        oss << " {" << key("from") << "=";
         dump_from(oss, from_);
         oss << "}, ";
 
-        oss << "{from point=";
-        oss << fromPoint_.dump();
-        oss << "}";
+        oss << "{" << key("from point") << "=" << path(fromPoint_.dump()) << "}";
         return oss.str();
     }
 
     std::string SymbolAddress::dump() const {
+        using namespace utils::dump_fmt;
         std::ostringstream oss;
-        oss << "SymbolAddress";
+        oss << type("SymbolAddress");
+
         auto off = getOffset();
         if (range_ == std::nullopt)
             oss << "[" << off->dump() << "]";
         else
-            oss << "[" << off->dump() << " ... +" << range_.value().len_->dump() << "]";
-        oss << "{from=";
+            oss << "[" << off->dump() << " " << hint("... +") << range_.value().len_->dump() << "]";
+
+        oss << " {" << key("from") << "=";
         dump_from(oss, from_);
-        oss << "}, ";
-        oss << "{from point=";
-        oss << fromPoint_.dump();
-        oss << "}";
+        oss << "}, "
+            << "{" << key("from point") << "=" << path(fromPoint_.dump()) << "}";
         return oss.str();
     }
 
     std::string VariableAddress::dump() const {
+        using namespace utils::dump_fmt;
         std::ostringstream oss;
-        oss << "VariableAddress";
-        oss << "{from=";
+        oss << type("VariableAddress") << " {" << key("from") << "=";
         dump_from(oss, from_);
         oss << "}";
         return oss.str();
     }
 
     std::string FieldAddress::dump() const {
+        using namespace utils::dump_fmt;
         std::ostringstream oss;
-        oss << "FieldAddress";
-        oss << "{from=";
+        oss << type("FieldAddress") << " {" << key("from") << "=";
         dump_from(oss, from_);
         oss << "}";
         return oss.str();
     }
 
     std::string Structure::Info::dump() const {
+        using namespace utils::dump_fmt;
         std::ostringstream oss;
         std::string structName = definition_->getNameAsString();
         uint64_t sizeBits      = static_cast<uint64_t>(layout_.getSize().getQuantity()) * 8;
 
-        oss << "Struct(" << structName << ", size=" << sizeBits << " bits";
-        oss << ")";
-
+        oss << type("Struct") << "(" << accent(structName) << ", " << key("size") << "="
+            << lit(std::to_string(sizeBits)) << " " << hint("bits") << ")";
         return oss.str();
     }
 
     std::string Structure::dump() const {
+        using namespace utils::dump_fmt;
         std::ostringstream oss;
 
         oss << info_.dump();
-        oss << ", fields=[";
+        oss << ", " << key("fields") << "=[";
         for (size_t i = 0; i < fields_.size(); ++i) {
             oss << fields_[i]->dump();
-            if (i + 1 < fields_.size()) {
+            if (i + 1 < fields_.size())
                 oss << ", ";
-            }
         }
         oss << "]";
+        return oss.str();
+    }
 
+    std::string SourcePoint::dump() const {
+        using namespace utils::dump_fmt;
+        if (loc_.isInvalid())
+            ERROR("Invalid SourcePoint.");
+
+        auto ploc = SM_.getPresumedLoc(loc_);
+        if (ploc.isInvalid())
+            ERROR("Invalid presumed SourcePoint.");
+
+        std::ostringstream oss;
+        oss << path(ploc.getFilename()) << ":" << lit(std::to_string(ploc.getLine())) << ":"
+            << lit(std::to_string(ploc.getColumn()));
         return oss.str();
     }
 
@@ -1869,18 +1900,6 @@ namespace acslg::analyzer::symbolic {
                !SM_.isBeforeInTranslationUnit(other.loc_, loc_);
     }
 
-    std::string SourcePoint::dump() const {
-        if (loc_.isInvalid())
-            ERROR("Invalid SourcePoint.");
-
-        auto ploc = SM_.getPresumedLoc(loc_);
-        if (ploc.isInvalid())
-            ERROR("Invalid presumed SourcePoint.");
-
-        std::ostringstream oss;
-        oss << ploc.getFilename() << ":" << ploc.getLine() << ":" << ploc.getColumn();
-        return oss.str();
-    }
     std::unique_ptr<SymbolicExpr> createLNotExpr(
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
         return std::make_unique<UnaryOpExpr>(UnaryOpExpr::Operator::LogicalNot, std::move(expr));

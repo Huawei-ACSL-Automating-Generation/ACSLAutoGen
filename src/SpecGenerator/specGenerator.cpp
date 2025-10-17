@@ -64,12 +64,23 @@ namespace acslg::spec_generator {
     }
 
     std::string LoopInfo::Pattern::dump() const {
+        using namespace utils::dump_fmt;
+
         std::ostringstream oss;
-        oss << "initialValue_: "
-            << (initialValue_->regularForm() ? initialValue_->regularForm().value()
-                                             : initialValue_->dump())
-            << "\n";
-        oss << "step_: " << std::to_string(step_) << "\n";
+
+        oss << type("LoopPattern") << " {\n";
+
+        oss << "  " << key("initialValue") << ": ";
+        if (initialValue_->regularForm()) {
+            oss << lit(initialValue_->regularForm().value()) << "\n";
+        } else {
+            oss << initialValue_->dump() << "\n";
+        }
+
+        oss << "  " << key("step") << ": " << lit(std::to_string(step_)) << "\n";
+
+        oss << "}";
+
         return oss.str();
     }
 

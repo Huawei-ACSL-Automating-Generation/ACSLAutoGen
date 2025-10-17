@@ -788,9 +788,12 @@ namespace acslg::analyzer {
     }
 
     std::string Path::dump() const {
+        using namespace utils::dump_fmt;
+
         std::ostringstream oss;
 
-        oss << "\nPath State: " << [&]() {
+        // ---- Header: Path + State ------------------------------------------------
+        oss << type("Path") << " { " << key("state") << "=" << [&]() {
             switch (currentState_) {
                 case Path::PathState::Step: return "Step";
                 case Path::PathState::Continue: return "Continue";
@@ -798,49 +801,100 @@ namespace acslg::analyzer {
                 case Path::PathState::Return: return "Return";
                 default: return "Unknown";
             }
-        }() << "\n";
+        }() << " }\n";
 
-        oss << "Return Expression: ";
-        if (returnExpr_)
-            oss << returnExpr_.value()->dump();
-        else
-            oss << "null";
-        oss << "\n";
-
-        oss << "Path Conditions:\n";
-        for (size_t i = 0; i < pathConditions_.size(); ++i) {
-            oss << "  [" << i << "]: " << pathConditions_[i]->dump() << "\n";
+        // ---- Return Expression ---------------------------------------------------
+        oss << "  " << key("return") << ": ";
+        if (returnExpr_) {
+            oss << returnExpr_.value()->dump() << "\n";
+        } else {
+            oss << hint("null") << "\n";
         }
 
-        oss << "Variable symbolic::Address Mapping:\n";
+        // ---- Path Conditions -----------------------------------------------------
+        oss << "  " << key("conditions") << ":\n";
+        for (size_t i = 0; i < pathConditions_.size(); ++i) {
+            oss << "    "
+                << "[" << lit(std::to_string(i)) << "] " << pathConditions_[i]->dump() << "\n";
+        }
+        if (pathConditions_.empty()) {
+            oss << "    " << hint("<empty>") << "\n";
+        }
+
+        // ---- Variable -> Address -> Value mapping -------------------------------
+        oss << "  " << key("var→addr→value") << ":\n";
         for (auto &[varDecl, addr] : varAddr_) {
             std::string name;
-            if (auto opt = context_.getDeclInfo(varDecl))
-                tie(name, std::ignore, std::ignore, std::ignore, std::ignore) = *opt;
+            if (auto opt = context_.getDeclInfo(varDecl)) {
+                std::tie(name, std::ignore, std::ignore, std::ignore, std::ignore) = *opt;
+            }
 
-            oss << "  @" << name << " -> " << addr->dump();
+            oss << "    @" << (name.empty() ? hint("<unnamed>") : path(name)) << " " << op("->")
+                << " " << addr->dump();
 
             if (auto value = memoryState_.read(*addr)) {
-                oss << " -> " << value.value()->dump();
+                oss << " " << op("->") << " " << value.value()->dump();
             } else {
-                oss << " -> null";
+                oss << " " << op("->") << " " << hint("null");
             }
             oss << "\n";
         }
-
-        oss << "Memory State:\n";
-        for (auto &&[addr, value] : memoryState_.flat()) {
-            oss << "  " << addr.get().dump() << " -> " << value->dump() << "\n";
+        if (varAddr_.empty()) {
+            oss << "    " << hint("<empty>") << "\n";
         }
 
+        // ---- Memory State flat view ---------------------------------------------
+        oss << "  " << key("memory") << ":\n";
+        {
+            bool any = false;
+            for (auto &&[addr, value] : memoryState_.flat()) {
+                any = true;
+                oss << "    " << addr.get().dump() << " " << op("->") << " " << value->dump()
+                    << "\n";
+            }
+            if (!any) {
+                oss << "    " << hint("<empty>") << "\n";
+            }
+        }
+
+        // ---- Statement Context (source snippet) ---------------------------------
         if (StmtCtx) {
             if (auto opt = context_.getStmtInfo(StmtCtx)) {
                 const auto &sourceText = std::get<0>(*opt);
                 if (!sourceText.empty()) {
-                    oss << "Stmt Context: " << sourceText.str() << "\n";
+                    oss << "  " << key("stmt") << ": " << path(sourceText.str()) << "\n";
                 }
             }
         }
+
+        return oss.str();
+    }
+
+    std::string ProgramState::dump() const {
+        using namespace utils::dump_fmt;
+
+        std::ostringstream oss;
+
+        if (paths_.empty()) {
+            oss << type("ProgramState") << " " << hint("<no paths>") << "\n";
+            return oss.str();
+        }
+
+        oss << type("ProgramState") << " " << key("paths") << "="
+            << lit(std::to_string(paths_.size())) << "\n";
+
+        for (size_t i = 0; i < paths_.size(); ++i) {
+            oss << "  " << key("path") << "[" << lit(std::to_string(i)) << "]\n";
+            std::istringstream is(paths_[i]->dump());
+            std::string line;
+            while (std::getline(is, line)) {
+                if (!line.empty())
+                    oss << "    " << line << "\n";
+                else
+                    oss << "\n";
+            }
+        }
+
         return oss.str();
     }
 
@@ -2187,13 +2241,5 @@ namespace acslg::analyzer {
         std::vector<utils::not_null<std::unique_ptr<Path>>> out;
         out.swap(paths_);
         return out;
-    }
-
-    std::string ProgramState::dump() const {
-        std::ostringstream oss;
-        for (const auto &p : paths_) {
-            oss << p->dump() << "\n";
-        }
-        return oss.str();
     }
 } // namespace acslg::analyzer

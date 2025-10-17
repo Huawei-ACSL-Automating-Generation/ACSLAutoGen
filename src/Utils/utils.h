@@ -10,6 +10,16 @@ namespace acslg::utils {
     bool ignoreTopBinop(const clang::BinaryOperator *binOp);
     std::unordered_set<const clang::VarDecl *> collectLocalVars(const clang::Stmt *stmt);
 
+    namespace dump_fmt {
+        std::string type(std::string_view s);
+        std::string key(std::string_view s);
+        std::string op(std::string_view s);
+        std::string lit(std::string_view s);
+        std::string path(std::string_view s);
+        std::string accent(std::string_view s);
+        std::string hint(std::string_view s);
+    } // namespace dump_fmt
+
     // handy hash
     // from boost (functional/hash):
     // see http://www.boost.org/doc/libs/1_35_0/doc/html/hash/combine.html template

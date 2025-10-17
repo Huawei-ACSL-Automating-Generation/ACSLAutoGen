@@ -134,4 +134,67 @@ namespace acslg::utils {
 
         return vars;
     }
+
+    namespace {
+        inline bool enabled() {
+            const char *no = std::getenv("NO_COLOR");
+            return !no || *no == '\0';
+        }
+
+        inline const char *reset() {
+            static const char *s = "\033[0m";
+            return enabled() ? s : "";
+        }
+        inline const char *bold() {
+            static const char *s = "\033[1m";
+            return enabled() ? s : "";
+        }
+        inline const char *dim() {
+            static const char *s = "\033[90m";
+            return enabled() ? s : "";
+        }
+        inline const char *bright_red() {
+            static const char *s = "\033[91m";
+            return enabled() ? s : "";
+        }
+        inline const char *bright_green() {
+            static const char *s = "\033[92m";
+            return enabled() ? s : "";
+        }
+        inline const char *bright_yellow() {
+            static const char *s = "\033[93m";
+            return enabled() ? s : "";
+        }
+        inline const char *bright_blue() {
+            static const char *s = "\033[94m";
+            return enabled() ? s : "";
+        }
+        inline const char *bright_magenta() {
+            static const char *s = "\033[95m";
+            return enabled() ? s : "";
+        }
+        inline const char *bright_cyan() {
+            static const char *s = "\033[96m";
+            return enabled() ? s : "";
+        }
+
+        inline std::string wrap(const char *color, std::string_view s) {
+            if (!enabled())
+                return std::string(s);
+            std::ostringstream oss;
+            oss << color << s << reset();
+            return oss.str();
+        }
+    } // namespace
+
+    namespace dump_fmt {
+        std::string type(std::string_view s) { return wrap(bright_red(), s); }
+        std::string key(std::string_view s) { return wrap(bright_yellow(), s); }
+        std::string op(std::string_view s) { return wrap(bright_magenta(), s); }
+        std::string lit(std::string_view s) { return wrap(bright_green(), s); }
+        std::string path(std::string_view s) { return wrap(bright_blue(), s); }
+        std::string accent(std::string_view s) { return wrap(bright_cyan(), s); }
+        std::string hint(std::string_view s) { return wrap(dim(), s); }
+    } // namespace dump_fmt
+
 } // namespace acslg::utils
