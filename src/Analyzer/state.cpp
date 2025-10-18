@@ -482,6 +482,122 @@ namespace acslg::analyzer {
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
 
+                    // @WindOctober TODO: wrapped in specific function.
+                    if (name == "BSL_SAL_Calloc") {
+                        // Extract element type T from any argument that syntactically contains
+                        // `sizeof(T)`.
+                        std::optional<clang::QualType> elemTyOpt;
+                        for (unsigned i = 0; i < call->getNumArgs(); ++i) {
+                            if (auto qt = acslg::utils::findSizeofQualType(call->getArg(i))) {
+                                elemTyOpt = qt;
+                                break;
+                            }
+                        }
+                        if (!elemTyOpt) {
+                            UNIMPLEMENT("BSL_SAL_Calloc expects a sizeof(T) in its arguments.");
+                        }
+                        clang::QualType elemTy = *elemTyOpt;
+
+                        // Handle builtin scalar pointees (e.g., uint64_t, int64_t, bool, char).
+                        if (acslg::utils::isBuiltinScalar(elemTy)) {
+                            // Sanity check: exactly one syntactic occurrence of sizeof(T) is
+                            // expected.
+                            const size_t nSizeofs = acslg::utils::countSizeofInCall(call);
+                            if (nSizeofs != 1)
+                                UNIMPLEMENT(
+                                    "BSL_SAL_Calloc expects exactly one sizeof(T) for builtin T.");
+
+                            // Compute sizeof(T) in bytes according to the target data layout.
+                            auto &Ctx = this->context_.getASTContext();
+                            const uint64_t sz =
+                                static_cast<uint64_t>(Ctx.getTypeSizeInChars(elemTy).getQuantity());
+
+                            // @WindOctober: TODO consider make this lambda function external.
+                            // Evaluate both call arguments under the assumption of purity and
+                            // single-result semantics.
+                            auto evalNoBranch = [this](const clang::Expr *e)
+                                -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                                auto ER = this->evalExpr(e);
+                                if (ER.second.size() != 1 || !ER.first.empty())
+                                    ERROR("BSL_SAL_Calloc arguments must not branch or fork.");
+                                return ER.second[0]->clone();
+                            };
+                            auto a0 = evalNoBranch(call->getArg(0));
+                            auto a1 = evalNoBranch(call->getArg(1));
+
+                            // Form the total-size expression by multiplying the two arguments.
+                            using Op = symbolic::BinaryOpExpr::Operator;
+                            auto totalSizeBytes =
+                                utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>{
+                                    std::make_unique<symbolic::BinaryOpExpr>(
+                                        a0->clone(), Op::Multiply, a1->clone())};
+
+                            // Remove exactly one multiplicative factor equal to sizeof(T) to obtain
+                            // the element count. This corresponds to interpreting the product as
+                            // "bytes = elems * sizeof(T)".
+                            auto lengthInElems = acslg::analyzer::symbolic::strip_sizeof_factor(
+                                std::move(totalSizeBytes), sz);
+
+                            // Allocate a fresh symbolic address anchored at the current allocation
+                            // site.
+                            using FromVar = std::variant<
+                                std::monostate,
+                                utils::not_null<std::unique_ptr<const symbolic::Address>>>;
+                            symbolic::SymbolAddress::BaseInfo baseInfo{
+                                FromVar{std::in_place_index<0>}, startPoint_};
+                            auto addr = std::make_unique<symbolic::SymbolAddress>(
+                                std::move(baseInfo.from_), baseInfo.fromPoint_,
+                                std::make_unique<symbolic::LiteralExpr>(0) // offset := 0
+                            );
+
+                            // Attach the element-wise legal bound to the symbolic address.
+                            addr->setLength(std::move(lengthInElems));
+
+                            // Materialize the first element symbol at the allocated base address.
+                            auto elemSym = getSymbol(elemTy, addr->addressClone().into_underlying(),
+                                                     startPoint_);
+                            memoryState_.write(*addr, elemSym->clone());
+
+                            Formulas exprs;
+                            exprs.emplace_back(std::move(addr));
+                            std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                            return Path::EvalResult(std::move(empty), std::move(exprs));
+                        }
+
+                        // Handle structure pointees consistent with the existing symbolic memory
+                        // layout.
+                        if (elemTy->isStructureType()) {
+                            const auto *RT = elemTy->getAs<clang::RecordType>();
+                            if (!RT || !RT->getDecl())
+                                UNIMPLEMENT("Invalid structure type returned by BSL_SAL_Calloc.");
+                            const clang::RecordDecl *RD = RT->getDecl();
+                            const auto &layout = RD->getASTContext().getASTRecordLayout(RD);
+
+                            using FromVar = std::variant<
+                                std::monostate,
+                                utils::not_null<std::unique_ptr<const symbolic::Address>>>;
+                            symbolic::SymbolAddress::BaseInfo baseInfo{
+                                FromVar{std::in_place_index<0>}, startPoint_};
+                            auto addr = std::make_unique<symbolic::SymbolAddress>(
+                                std::move(baseInfo.from_), baseInfo.fromPoint_,
+                                std::make_unique<symbolic::LiteralExpr>(0));
+
+                            // Materialize a symbolic structure value at the allocated base address.
+                            auto value = std::make_unique<symbolic::Structure>(
+                                RD, layout, addr->addressClone().into_underlying(), startPoint_);
+                            memoryState_.write(*addr, value->clone());
+
+                            Formulas exprs;
+                            exprs.emplace_back(std::move(addr));
+                            std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                            return Path::EvalResult(std::move(empty), std::move(exprs));
+                        }
+
+                        // Reject unsupported pointee categories to preserve soundness.
+                        UNIMPLEMENT(
+                            "BSL_SAL_Calloc supports pointer-to-structure or builtin scalar only.");
+                    }
+
                     auto callArgs = evalCallArgs(this, call);
 
                     std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
@@ -1137,20 +1253,22 @@ namespace acslg::analyzer {
         const std::unordered_set<const clang::VarDecl *> &localVars) {
         std::erase_if(memoryMap_variableAddr_, [&](auto const &kv) {
             auto fromRoot = kv.first.getFromRoot();
+            // @SgtPepper114: check that if fromRoot is empty, then the address is allocated by
+            // `malloc` function, thus should not be deleted from the memory model;
             if (fromRoot == std::nullopt)
-                TODO();
+                return false;
             return localVars.contains(fromRoot.value());
         });
         std::erase_if(memoryMap_constantRange_, [&](auto const &kv) {
             auto fromRoot = kv.first.getFromRoot();
             if (fromRoot == std::nullopt)
-                TODO();
+                return false;
             return localVars.contains(fromRoot.value());
         });
         std::erase_if(memoryMap_symbolicRange_, [&](auto const &kv) {
             auto fromRoot = kv.first.getFromRoot();
             if (fromRoot == std::nullopt)
-                TODO();
+                return false;
             return localVars.contains(fromRoot.value());
         });
     }

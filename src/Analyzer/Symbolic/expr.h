@@ -936,7 +936,8 @@ namespace acslg::analyzer::symbolic {
                     [&](auto &&arg) -> bool {
                         using T = std::decay_t<decltype(arg)>;
                         if constexpr (std::is_same_v<T, std::monostate>) {
-                            TODO();
+                            // @SgtPepper114: check the monostate case.
+                            return std::holds_alternative<std::monostate>(other.from_);
                         } else if constexpr (std::is_same_v<
                                                  T,
                                                  utils::not_null<std::unique_ptr<const Address>>>) {
@@ -1380,4 +1381,55 @@ namespace llvm {
     };
 } // namespace llvm
 
+namespace acslg::analyzer::symbolic {
+    // @WindOctober: TODO Split define and declaration.
+    // @WindOctober: TODO process more complicate expr case.
+    // Strip one exact factor `sizeofBytes` if it appears as a literal factor.
+    //
+    // Handles:
+    //   - sizeofBytes * X  -> X
+    //   - X * sizeofBytes  -> X
+    //   - sizeofBytes      -> 1
+    // Otherwise returns the input unchanged.
+    inline ::acslg::utils::not_null<std::unique_ptr<::acslg::analyzer::symbolic::SymbolicExpr>> strip_sizeof_factor(
+        ::acslg::utils::not_null<std::unique_ptr<::acslg::analyzer::symbolic::SymbolicExpr>> in,
+        std::uint64_t sizeofBytes) {
+        using ::acslg::analyzer::symbolic::BinaryOpExpr;
+        using ::acslg::analyzer::symbolic::LiteralExpr;
+        using ::acslg::analyzer::symbolic::SymbolicExpr;
+
+        // Literal equals sizeofBytes -> return 1
+        if (auto *lit = llvm::dyn_cast<LiteralExpr>(in.get().get())) {
+            const auto v = static_cast<std::uint64_t>(lit->getLiteralValue());
+            if (v == sizeofBytes) {
+                return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{
+                    std::make_unique<LiteralExpr>(std::uint64_t{1})};
+            }
+            return in;
+        }
+
+        // Multiply(sizeofBytes, X) or Multiply(X, sizeofBytes) -> return X
+        if (auto *bin = llvm::dyn_cast<BinaryOpExpr>(in.get().get())) {
+            using Op = BinaryOpExpr::Operator;
+            if (bin->getOperator() == Op::Multiply) {
+                auto &L = bin->getLeft();
+                auto &R = bin->getRight();
+
+                if (auto *lLit = llvm::dyn_cast<LiteralExpr>(L.get().get())) {
+                    if (static_cast<std::uint64_t>(lLit->getLiteralValue()) == sizeofBytes) {
+                        return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{R->clone()};
+                    }
+                }
+                if (auto *rLit = llvm::dyn_cast<LiteralExpr>(R.get().get())) {
+                    if (static_cast<std::uint64_t>(rLit->getLiteralValue()) == sizeofBytes) {
+                        return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{L->clone()};
+                    }
+                }
+            }
+        }
+
+        return in;
+    }
+
+} // namespace acslg::analyzer::symbolic
 #endif // SYMBOLIC_H

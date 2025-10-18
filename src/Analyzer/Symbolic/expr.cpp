@@ -653,7 +653,9 @@ namespace acslg::analyzer::symbolic {
             [&, this](auto &&arg) -> std::optional<std::string> {
                 using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_same_v<T, std::monostate>) {
-                    ERROR("Trying to get regular form of address without from_.");
+                    // ERROR("Trying to get regular form of address without from_.");
+                    // @SgtPepper114: here too.
+                    return std::nullopt;
                 } else if constexpr (std::is_same_v<
                                          T, utils::not_null<std::unique_ptr<const Address>>>) {
                     auto nameStr = arg->regularFormOfValue(prefix, suffix);
@@ -760,7 +762,8 @@ namespace acslg::analyzer::symbolic {
                 [&, this](auto &&arg) -> std::optional<std::string> {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, std::monostate>) {
-                        ERROR("Trying to get regular form of address range without from_.");
+                        // @SgtPepper114: here also.
+                        return std::nullopt;
                     } else if constexpr (std::is_same_v<
                                              T, utils::not_null<std::unique_ptr<const Address>>>) {
                         auto nameStr = arg->regularFormOfValue(prefix, suffix);
@@ -1140,7 +1143,8 @@ namespace acslg::analyzer::symbolic {
             [&](auto &&arg) {
                 using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_same_v<T, std::monostate>) {
-                    TODO();
+                    // @SgtPepper114: check here too.
+                    flag = std::holds_alternative<std::monostate>(other->from_);
                 } else if constexpr (std::is_same_v<
                                          T, utils::not_null<std::unique_ptr<const Address>>>) {
                     if (auto ptrAddr = std::get_if<utils::not_null<std::unique_ptr<const Address>>>(
@@ -2007,8 +2011,6 @@ namespace acslg::analyzer::symbolic {
     bool isValidOffsetOrLength(const SymbolicExpr &expr) {
         if (expr.isUnknown())
             return true;
-        if (!expr.isLinear())
-            return false;
         if (expr.tryEvalAsSymbolAddr())
             return false;
         return true;
@@ -2059,7 +2061,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     Symbol *Symbol::toSymbol(SymbolicExpr *e) {
-        DEBUG("");
+        // DEBUG("");
         if (!Symbol::classof(e))
             return nullptr;
         switch (e->getType()) {

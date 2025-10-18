@@ -197,4 +197,73 @@ namespace acslg::utils {
         std::string hint(std::string_view s) { return wrap(dim(), s); }
     } // namespace dump_fmt
 
+    std::optional<clang::QualType> findSizeofQualType(const clang::Expr *E) {
+        using namespace clang;
+        if (!E)
+            return std::nullopt;
+
+        // Normalize trivial wrappers to reduce noise.
+        const Expr *Cur = E->IgnoreParenImpCasts();
+
+        // Check the current node.
+        if (const auto *U = llvm::dyn_cast<UnaryExprOrTypeTraitExpr>(Cur)) {
+            if (U->getKind() == UETT_SizeOf) {
+                if (U->isArgumentType())
+                    return U->getArgumentType();
+                if (const Expr *Arg = U->getArgumentExpr())
+                    return Arg->getType();
+            }
+        }
+
+        // Recurse into children; Stmt::children() covers all sub-expressions.
+        for (const Stmt *S : Cur->children()) {
+            if (!S)
+                continue;
+            if (const auto *CE = llvm::dyn_cast<Expr>(S)) {
+                if (auto QT = findSizeofQualType(CE))
+                    return QT;
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Count how many `sizeof(...)` occurrences exist within an expression tree.
+    size_t countSizeofInExpr(const clang::Expr *E) {
+        using namespace clang;
+        if (!E)
+            return 0;
+        const Expr *Cur = E->IgnoreParenImpCasts();
+        size_t cnt      = 0;
+
+        if (const auto *U = llvm::dyn_cast<UnaryExprOrTypeTraitExpr>(Cur)) {
+            if (U->getKind() == UETT_SizeOf)
+                ++cnt;
+        }
+        for (const Stmt *S : Cur->children()) {
+            if (!S)
+                continue;
+            if (const auto *CE = llvm::dyn_cast<Expr>(S))
+                cnt += countSizeofInExpr(CE);
+        }
+        return cnt;
+    }
+
+    // Count `sizeof(...)` occurrences over all call arguments.
+    size_t countSizeofInCall(const clang::CallExpr *call) {
+        size_t total = 0;
+        for (unsigned i = 0; i < call->getNumArgs(); ++i)
+            total += countSizeofInExpr(call->getArg(i));
+        return total;
+    }
+
+    // Decide whether a QualType denotes a builtin scalar (e.g., uint64_t via typedef).
+    bool isBuiltinScalar(const clang::QualType QT) {
+        auto CT              = QT.getCanonicalType();
+        const clang::Type *T = CT.getTypePtrOrNull();
+        if (!T)
+            return false;
+        // Accept integers, bool, and character types; extend as needed.
+        return T->isIntegerType() || T->isBooleanType() || T->isAnyCharacterType();
+    }
+
 } // namespace acslg::utils

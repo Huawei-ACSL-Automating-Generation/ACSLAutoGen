@@ -20,6 +20,17 @@ namespace acslg::utils {
         std::string hint(std::string_view s);
     } // namespace dump_fmt
 
+    std::optional<clang::QualType> findSizeofQualType(const clang::Expr *E);
+
+    /// Count occurrences of `sizeof(...)` within an expression subtree.
+    std::size_t countSizeofInExpr(const clang::Expr *E);
+
+    /// Count total `sizeof(...)` occurrences across all arguments of a call.
+    std::size_t countSizeofInCall(const clang::CallExpr *call);
+
+    /// Return true iff the (canonical) type is a builtin scalar (e.g., integer/bool/char).
+    bool isBuiltinScalar(clang::QualType QT);
+
     // handy hash
     // from boost (functional/hash):
     // see http://www.boost.org/doc/libs/1_35_0/doc/html/hash/combine.html template

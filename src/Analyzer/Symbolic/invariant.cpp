@@ -134,28 +134,60 @@ namespace acslg::analyzer::symbolic {
     }
 
     bool BinaryOpExpr::isLinear() const {
-        // Only allow Add, Subtract, and Multiply with constant
-        if (op_ == Operator::Add || op_ == Operator::Subtract) {
-            return left_->isLinear() && right_->isLinear();
-        }
-        if (op_ == Operator::Multiply) {
-            // Check one side is constant (degree 0), and the other is linear
-            int ldeg = left_->getMaxDegree();
-            int rdeg = right_->getMaxDegree();
-            return (ldeg == 0 && right_->isLinear()) || (rdeg == 0 && left_->isLinear());
-        }
-        return false; // All other ops are non-linear
-    }
+        // Algebraic summaries of both sides.
+        const int ldeg  = left_->getMaxDegree();
+        const int rdeg  = right_->getMaxDegree();
+        const bool linL = left_->isLinear();
+        const bool linR = right_->isLinear();
 
-    int BinaryOpExpr::getMaxDegree() const {
-        int ldeg = left_->getMaxDegree();
-        int rdeg = right_->getMaxDegree();
+        // A “constant” is defined as degree-0 and linear in this abstraction.
+        const bool isConstL = (ldeg == 0) && linL;
+        const bool isConstR = (rdeg == 0) && linR;
 
         switch (op_) {
             case Operator::Add:
-            case Operator::Subtract: return max(ldeg, rdeg);
-            case Operator::Multiply: return ldeg + rdeg;
-            default: return -1; // invalid in linear context
+            case Operator::Subtract:
+                // Affine expressions are closed under addition/subtraction.
+                return linL && linR;
+
+            case Operator::Multiply:
+                // Linear iff exactly one side is a constant (scalar multiplication).
+                return (isConstL && linR) || (isConstR && linL);
+
+            case Operator::ShiftLeft:
+                // x << k == x * 2^k; linear if the shift amount is a compile-time constant.
+                return isConstR && linL;
+
+            default:
+                // All other operators are considered non-linear in this abstraction.
+                return false;
+        }
+    }
+
+    int BinaryOpExpr::getMaxDegree() const {
+        const int ldeg = left_->getMaxDegree();
+        const int rdeg = right_->getMaxDegree();
+
+        switch (op_) {
+            case Operator::Add:
+            case Operator::Subtract:
+                // Degree is the maximum of operand degrees; invalid if any side is invalid.
+                if (ldeg < 0 || rdeg < 0)
+                    return -1;
+                return std::max(ldeg, rdeg);
+
+            case Operator::Multiply: return (ldeg >= 0 && rdeg >= 0) ? (ldeg + rdeg) : -1;
+
+            case Operator::ShiftLeft:
+                // For x << k with constant k (enforced in isLinear), degree equals degree(x).
+                // Otherwise invalid.
+                if (rdeg == 0 && ldeg >= 0)
+                    return ldeg;
+                return -1;
+
+            default:
+                // Non-linear or unsupported operators yield an invalid degree.
+                return -1;
         }
     }
 
@@ -308,6 +340,15 @@ namespace acslg::analyzer::symbolic {
                         }
                         result += L.inhomogeneous_term() / denom;
                         return result;
+                    }
+                }
+                break;
+            case Operator::ShiftLeft:
+                if (right_->getMaxDegree() == 0) {
+                    if (auto k = right_->tryEvalAsConstant(); k && *k >= 0) {
+                        Parma_Polyhedra_Library::Coefficient factor(1);
+                        factor <<= static_cast<unsigned>(*k);
+                        return L * factor;
                     }
                 }
                 break;
