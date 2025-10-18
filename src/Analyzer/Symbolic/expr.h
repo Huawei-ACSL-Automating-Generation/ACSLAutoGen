@@ -8,6 +8,7 @@
 #include <span>
 #include <ranges>
 #include <algorithm>
+#include <type_traits>
 #include <ppl.hh>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
@@ -250,8 +251,6 @@ namespace acslg::analyzer::symbolic {
             const SymbolicExpr &e) {
             return e.doTryEvalAsSymbolAddr();
         }
-
-        void addTrait(Trait t) { traits_ |= t; }
 
       private:
         /// @brief Try to evaluate the expression to an symbol address.
@@ -669,10 +668,11 @@ namespace acslg::analyzer::symbolic {
         Symbol &operator=(Symbol &&)      = default;
 
         static bool classof(const SymbolicExpr *e) { return e->hasTrait(SymbolicExpr::T_Symbol); }
+        static bool classof(const Symbol *) { return true; }
 
         // For LLVM RTTI.
-        static Symbol *toSymbol(SymbolicExpr *e);
-        static const Symbol *toSymbol(const SymbolicExpr *e);
+        static Symbol *toThis(SymbolicExpr *e);
+        static const Symbol *toThis(const SymbolicExpr *e);
 
         virtual std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> getFromAddr()
             const                                               = 0;
@@ -1256,10 +1256,8 @@ namespace acslg::analyzer::symbolic {
         Variable(Type varType,
                  std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
                  SourcePoint fromPoint)
-            : SymbolicExpr(ExprType::Variable, varType), varType_(varType), from_(std::move(from)),
-              fromPoint_(std::move(fromPoint)) {
-            addTrait(T_Symbol);
-        }
+            : SymbolicExpr(ExprType::Variable, varType, T_Symbol), varType_(varType),
+              from_(std::move(from)), fromPoint_(std::move(fromPoint)) {}
 
         Variable(const Variable &other);
         Variable(Variable &&) = default;
@@ -1358,26 +1356,26 @@ namespace std {
 
 namespace llvm {
     namespace symb = acslg::analyzer::symbolic;
-    template <>
-    struct CastInfo<symb::Symbol, symb::SymbolicExpr *>
-        : NullableValueCastFailed<symb::Symbol *>,
-          DefaultDoCastIfPossible<symb::Symbol *,
-                                  symb::SymbolicExpr *,
-                                  CastInfo<symb::Symbol, symb::SymbolicExpr *>> {
-        static bool isPossible(const symb::SymbolicExpr *e) { return symb::Symbol::classof(e); }
-        static symb::Symbol *doCast(symb::SymbolicExpr *e) { return symb::Symbol::toSymbol(e); }
+
+    template <typename T>
+    concept NotDerivedFromSymbolicExpr = !std::is_base_of_v<symb::SymbolicExpr, T>;
+
+    template <NotDerivedFromSymbolicExpr To>
+    struct CastInfo<To, symb::SymbolicExpr *>
+        : CastIsPossible<To, symb::SymbolicExpr *>,
+          NullableValueCastFailed<To *>,
+          DefaultDoCastIfPossible<To *, symb::SymbolicExpr *, CastInfo<To, symb::SymbolicExpr *>> {
+        static To *doCast(symb::SymbolicExpr *e) { return To::toThis(e); }
     };
 
-    template <>
-    struct CastInfo<const symb::Symbol, const symb::SymbolicExpr *>
-        : NullableValueCastFailed<const symb::Symbol *>,
-          DefaultDoCastIfPossible<const symb::Symbol *,
+    template <NotDerivedFromSymbolicExpr To>
+    struct CastInfo<const To, const symb::SymbolicExpr *>
+        : CastIsPossible<const To, const symb::SymbolicExpr *>,
+          NullableValueCastFailed<const To *>,
+          DefaultDoCastIfPossible<const To *,
                                   const symb::SymbolicExpr *,
-                                  CastInfo<const symb::Symbol, const symb::SymbolicExpr *>> {
-        static bool isPossible(const symb::SymbolicExpr *e) { return symb::Symbol::classof(e); }
-        static const symb::Symbol *doCast(const symb::SymbolicExpr *e) {
-            return symb::Symbol::toSymbol(e);
-        }
+                                  CastInfo<const To, const symb::SymbolicExpr *>> {
+        static const To *doCast(const symb::SymbolicExpr *e) { return To::toThis(e); }
     };
 } // namespace llvm
 

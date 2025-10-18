@@ -1417,11 +1417,10 @@ namespace acslg::analyzer::symbolic {
         std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> offset,
         std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> length)
         : Address(SymbolicExpr::ExprType::SymbolAddr,
-                  SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64}),
+                  SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
+                  T_Symbol),
           offset_(std::make_unique<LiteralExpr>(ZERO_OFFSET)), from_(std::move(from)),
           fromPoint_(fromPoint) {
-        addTrait(T_Symbol);
-
         if (offset != std::nullopt)
             offset_ = std::move(offset.value());
         if (length) {
@@ -1654,10 +1653,9 @@ namespace acslg::analyzer::symbolic {
         : SymbolicExpr(
               ExprType::Structure,
               Type{ScalarKind::Structure, static_cast<unsigned>(layout.getSize().getQuantity()) *
-                                              8 /*By default, char is 8-bit.*/}),
+                                              8 /*By default, char is 8-bit.*/},
+              T_Symbol),
           info_(Info{RD, layout}) {
-        addTrait(T_Symbol);
-
         fields_.reserve(info_.layout_.getFieldCount());
         for (auto field : info_.definition_->fields()) {
             auto index    = field->getFieldIndex();
@@ -2060,8 +2058,7 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    Symbol *Symbol::toSymbol(SymbolicExpr *e) {
-        // DEBUG("");
+    Symbol *Symbol::toThis(SymbolicExpr *e) {
         if (!Symbol::classof(e))
             return nullptr;
         switch (e->getType()) {
@@ -2072,8 +2069,8 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    const Symbol *Symbol::toSymbol(const SymbolicExpr *e) {
-        return toSymbol(const_cast<SymbolicExpr *>(e));
+    const Symbol *Symbol::toThis(const SymbolicExpr *e) {
+        return toThis(const_cast<SymbolicExpr *>(e));
     }
 
 } // namespace acslg::analyzer::symbolic
