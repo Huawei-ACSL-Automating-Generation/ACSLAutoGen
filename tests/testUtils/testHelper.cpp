@@ -245,7 +245,7 @@ namespace acslg::test::utils {
                                        nullopt};
     }
 
-    unique_ptr<symbolic::SymbolValue> FixtureWithCode::makeVariable(
+    unique_ptr<symbolic::SymbolValue> FixtureWithCode::makeSymbolValue(
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
         return make_unique<symbolic::SymbolValue>(

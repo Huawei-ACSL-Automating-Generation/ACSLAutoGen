@@ -63,7 +63,7 @@ namespace acslg::spec_generator {
                 for (auto &&[addr, currentExpr] : currentEntry.getMemoryState().flat()) {
                     if (auto rootDecl = addr.get().getFromRoot();
                         rootDecl == std::nullopt || !preVA.contains(rootDecl.value()))
-                        continue; // local variable
+                        continue; // from local variable
                     if (auto preValue = preMS.read(addr)) {
                         if (*preValue.value() == *currentExpr)
                             continue; // unchanged

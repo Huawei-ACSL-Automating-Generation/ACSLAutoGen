@@ -61,7 +61,7 @@ namespace acslg::test::unit::spec_generator {
         mm.write(var0Addr, makeConstU64(42));
 
         auto point   = getSourcePoint(0);
-        auto varNode = makeVariable(0, point);
+        auto varNode = makeSymbolValue(0, point);
         auto expr    = makeNotNull(unique_ptr<SymbolicExpr>(varNode.release()));
 
         substituteSymbols(expr, *path, point);
@@ -74,7 +74,7 @@ namespace acslg::test::unit::spec_generator {
         mm.write(var0Addr, makeConstU64(7));
 
         auto point   = getSourcePoint(0);
-        auto varNode = makeVariable(0, point);
+        auto varNode = makeSymbolValue(0, point);
 
         auto exprBefore = varNode->clone();
         auto expr       = makeNotNull(unique_ptr<SymbolicExpr>(varNode.release()));
@@ -92,8 +92,8 @@ namespace acslg::test::unit::spec_generator {
         auto point = getSourcePoint(0);
 
         // expr = Var(g1, point) + Var(g2, point)
-        auto aVar = makeVariable(1, point);
-        auto bVar = makeVariable(2, point);
+        auto aVar = makeSymbolValue(1, point);
+        auto bVar = makeSymbolValue(2, point);
         auto expr = makeNotNull(makeAdd(std::move(aVar), std::move(bVar)));
 
         substituteSymbols(expr, *path, point);
@@ -113,7 +113,7 @@ namespace acslg::test::unit::spec_generator {
         auto point = getSourcePoint(0);
 
         // symAddr: base=origin(g3), offset=(Var(g5,point) + 4), from=point
-        auto vVar   = makeVariable(5, point);
+        auto vVar   = makeSymbolValue(5, point);
         auto offset = makeAdd(unique_ptr<SymbolicExpr>(vVar.release()), makeConstU64(4));
         auto sym    = makeRangeAddr(/*origin id*/ 3, std::move(offset), nullptr, point);
 

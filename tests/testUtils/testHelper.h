@@ -93,7 +93,7 @@ namespace acslg::test::utils {
             std::unique_ptr<const analyzer::symbolic::SymbolicExpr> offset,
             std::unique_ptr<const analyzer::symbolic::SymbolicExpr> len,
             std::optional<analyzer::symbolic::SourcePoint> fromPoint = std::nullopt);
-        std::unique_ptr<analyzer::symbolic::SymbolValue> makeVariable(
+        std::unique_ptr<analyzer::symbolic::SymbolValue> makeSymbolValue(
             unsigned int id,
             std::optional<analyzer::symbolic::SourcePoint> fromPoint = std::nullopt);
         analyzer::symbolic::SymbolAddress makeSimpleSymbolAddr(

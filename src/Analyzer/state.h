@@ -295,7 +295,7 @@ namespace acslg::analyzer {
              * @brief Dereference operator
              * @return A pair of (AddressBox, SymbolicExpr reference)
              *
-             * Depending on phase, extracts variable, constant range, symbolic range,
+             * Depending on phase, extracts variable's address, constant range, symbolic range,
              * or Structure field as address and associated value.
              */
             R operator*() const {

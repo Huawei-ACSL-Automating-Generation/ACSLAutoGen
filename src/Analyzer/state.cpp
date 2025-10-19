@@ -65,7 +65,7 @@ namespace acslg::analyzer {
                 if (auto it = varAddr_.find(varDecl->getCanonicalDecl()); it != varAddr_.end()) {
                     return std::make_unique<symbolic::VariableAddress>(*it->second);
                 } else {
-                    ERROR("varState has no ArraySubscriptExpr's base, undefined variable?");
+                    ERROR("varState has no `VarDecl*` of `DeclRefExpr`, undefined variable?");
                 }
             }
             ERROR("Not a varDecl Ref.");
@@ -1122,27 +1122,14 @@ namespace acslg::analyzer {
                 return std::nullopt;
             return it->second.get().get();
         } else if (auto fieldAddr = llvm::dyn_cast<const symbolic::FieldAddress>(&addr)) {
-            return std::visit(
-                [this](
-                    auto &&arg) -> std::optional<utils::not_null<const symbolic::SymbolicExpr *>> {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, std::monostate>) {
-                        TODO();
-                    } else if constexpr (std::is_same_v<T, std::pair<utils::not_null<std::unique_ptr<
-                                                                         const symbolic::Address>>,
-                                                                     const size_t>>) {
-                        auto &[baseAddr, index] = arg;
-                        auto baseValue          = read(*baseAddr);
-                        if (baseValue == std::nullopt)
-                            return std::nullopt;
-                        auto baseSt =
-                            llvm::dyn_cast<const symbolic::Structure>(baseValue.value().get());
-                        if (baseSt == nullptr)
-                            ERROR("Value of address from a `fieldAddress` is not a structure.");
-                        return baseSt->getFieldValue(index);
-                    }
-                },
-                fieldAddr->getFrom());
+            auto &[baseAddr, index] = fieldAddr->getFrom();
+            auto baseValue          = read(*baseAddr);
+            if (baseValue == std::nullopt)
+                return std::nullopt;
+            auto baseSt = llvm::dyn_cast<const symbolic::Structure>(baseValue.value().get());
+            if (baseSt == nullptr)
+                ERROR("Value of address from a `fieldAddress` is not a structure.");
+            return baseSt->getFieldValue(index);
         }
         UNREACHABLE();
     }
@@ -1216,25 +1203,14 @@ namespace acslg::analyzer {
             addrValueMap.insert_or_assign(*symbolAddr, std::move(value));
             return;
         } else if (auto fieldAddr = llvm::dyn_cast<const symbolic::FieldAddress>(&addr)) {
-            std::visit(
-                [&, this](auto &&arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, std::monostate>) {
-                        TODO();
-                    } else if constexpr (std::is_same_v<T, std::pair<utils::not_null<std::unique_ptr<
-                                                                         const symbolic::Address>>,
-                                                                     const size_t>>) {
-                        auto &[baseAddr, index] = arg;
-                        auto baseValue          = read(*baseAddr);
-                        if (baseValue == std::nullopt)
-                            ERROR("Structure isn't existed in MemoryModel, insert it first.");
-                        auto baseSt = llvm::dyn_cast<symbolic::Structure>(baseValue.value().get());
-                        if (baseSt == nullptr)
-                            ERROR("Value of address from a `fieldAddress` is not a structure.");
-                        baseSt->setFieldValue(index, std::move(value));
-                    }
-                },
-                fieldAddr->getFrom());
+            auto &[baseAddr, index] = fieldAddr->getFrom();
+            auto baseValue          = read(*baseAddr);
+            if (baseValue == std::nullopt)
+                ERROR("Structure isn't existed in MemoryModel, insert it first.");
+            auto baseSt = llvm::dyn_cast<symbolic::Structure>(baseValue.value().get());
+            if (baseSt == nullptr)
+                ERROR("Value of address from a `fieldAddress` is not a structure.");
+            baseSt->setFieldValue(index, std::move(value));
             return;
         }
         UNREACHABLE();
@@ -1253,20 +1229,22 @@ namespace acslg::analyzer {
         const std::unordered_set<const clang::VarDecl *> &localVars) {
         std::erase_if(memoryMap_variableAddr_, [&](auto const &kv) {
             auto fromRoot = kv.first.getFromRoot();
-            // @SgtPepper114: check that if fromRoot is empty, then the address is allocated by
-            // `malloc` function, thus should not be deleted from the memory model;
             if (fromRoot == std::nullopt)
-                return false;
+                UNREACHABLE(); // VarriableAddress should have a *from*.
             return localVars.contains(fromRoot.value());
         });
         std::erase_if(memoryMap_constantRange_, [&](auto const &kv) {
             auto fromRoot = kv.first.getFromRoot();
+            // check that if fromRoot is empty, then the address is allocated by
+            // `malloc` function, thus should not be deleted from the memory model;
             if (fromRoot == std::nullopt)
                 return false;
             return localVars.contains(fromRoot.value());
         });
         std::erase_if(memoryMap_symbolicRange_, [&](auto const &kv) {
             auto fromRoot = kv.first.getFromRoot();
+            // check that if fromRoot is empty, then the address is allocated by
+            // `malloc` function, thus should not be deleted from the memory model;
             if (fromRoot == std::nullopt)
                 return false;
             return localVars.contains(fromRoot.value());

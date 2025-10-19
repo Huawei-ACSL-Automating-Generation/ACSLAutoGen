@@ -267,23 +267,17 @@ namespace acslg::analyzer::symbolic {
         using namespace Parma_Polyhedra_Library;
         Linear_Expression e(0);
 
-        if (auto fromAddr = std::get_if<utils::not_null<unique_ptr<const Address>>>(&from_)) {
-            auto varAddr = llvm::dyn_cast<const VariableAddress>((*fromAddr).get().get());
-            if (varAddr == nullptr)
-                return std::nullopt;
+        auto varAddr = llvm::dyn_cast<const VariableAddress>(fromAddr_.get().get());
+        if (varAddr == nullptr)
+            return std::nullopt;
 
-            if (auto fromDecl =
-                    std::get_if<utils::not_null<const clang::VarDecl *>>(&varAddr->getFrom())) {
-                auto it = varIndexMap.find((*fromDecl)->getNameAsString());
-                if (it == varIndexMap.end()) {
-                    ERROR("Variable '" + (*fromDecl)->getNameAsString() +
-                          "' not found in index std::map.");
-                }
-                e += Parma_Polyhedra_Library::Variable(it->second);
-                return e;
-            }
+        auto it = varIndexMap.find(varAddr->getFrom()->getNameAsString());
+        if (it == varIndexMap.end()) {
+            ERROR("Variable '" + varAddr->getFrom()->getNameAsString() +
+                  "' not found in index std::map.");
         }
-        return std::nullopt;
+        e += Parma_Polyhedra_Library::Variable(it->second);
+        return e;
     }
 
     Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr(

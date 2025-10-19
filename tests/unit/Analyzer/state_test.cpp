@@ -268,7 +268,7 @@ namespace acslg::test::unit::analyzer {
         MemoryModel mm;
 
         auto addr     = makeVariableAddr(1);
-        auto expr     = makeVariable(42);
+        auto expr     = makeSymbolValue(42);
         auto saveExpr = expr->clone();
         mm.write(addr, std::move(expr));
 
@@ -283,20 +283,20 @@ namespace acslg::test::unit::analyzer {
 
         // noOffset
         auto baseA  = makeVariableAddr(1);
-        auto eA     = makeVariable(1);
+        auto eA     = makeSymbolValue(1);
         auto saveEA = eA->clone();
         mm.write(baseA, std::move(eA));
 
         // constantRange
         auto rangeB = makeRangeAddr(2, /*off=*/make_unique<symbolic::LiteralExpr>(4),
                                     /*len=*/make_unique<symbolic::LiteralExpr>(2));
-        auto eB     = makeVariable(2);
+        auto eB     = makeSymbolValue(2);
         auto saveEB = eB->clone();
         mm.write(rangeB, std::move(eB));
 
         // symbolicRange
-        auto rangeC = makeRangeAddr(3, /*off=*/makeVariable(3), nullptr);
-        auto eC     = makeVariable(3);
+        auto rangeC = makeRangeAddr(3, /*off=*/makeSymbolValue(3), nullptr);
+        auto eC     = makeSymbolValue(3);
         auto saveEC = eC.get();
         mm.write(rangeC, std::move(eC));
 
@@ -322,28 +322,28 @@ namespace acslg::test::unit::analyzer {
         // A: [0,10)
         auto aRange = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(0U),
                                     make_unique<symbolic::LiteralExpr>(10U));
-        auto eA     = makeVariable(100);
+        auto eA     = makeSymbolValue(100);
         auto saveA  = eA->clone();
         mm.write(aRange, std::move(eA));
 
         // B: [3,8)
         auto bRange = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(3U),
                                     make_unique<symbolic::LiteralExpr>(5U));
-        auto eB     = makeVariable(200);
+        auto eB     = makeSymbolValue(200);
         auto saveB  = eB->clone();
         mm.write(bRange, std::move(eB));
 
         // C: [1,3)
         auto cRange = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(1U),
                                     make_unique<symbolic::LiteralExpr>(2U));
-        auto eC     = makeVariable(300);
+        auto eC     = makeSymbolValue(300);
         auto saveC  = eC->clone();
         mm.write(cRange, std::move(eC));
 
         // D: [7,10)
         auto dRange = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(7U),
                                     make_unique<symbolic::LiteralExpr>(3U));
-        auto eD     = makeVariable(400);
+        auto eD     = makeSymbolValue(400);
         auto saveD  = eD->clone();
         mm.write(dRange, std::move(eD));
 
@@ -372,12 +372,12 @@ namespace acslg::test::unit::analyzer {
         // X: [5,9)
         auto r     = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(5U),
                                    make_unique<symbolic::LiteralExpr>(4U));
-        auto eX    = makeVariable(500);
+        auto eX    = makeSymbolValue(500);
         auto saveX = eX->clone();
         mm.write(r, std::move(eX));
 
         // Y: [5,9)
-        auto eY    = makeVariable(600);
+        auto eY    = makeSymbolValue(600);
         auto saveY = eY->clone();
         mm.write(r, std::move(eY));
 
@@ -397,14 +397,14 @@ namespace acslg::test::unit::analyzer {
         // [0,3) value=V
         auto r1 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(0U),
                                 make_unique<symbolic::LiteralExpr>(3U));
-        auto v  = makeVariable(1000);
+        auto v  = makeSymbolValue(1000);
         auto sv = v->clone();
         mm.write(r1, std::move(v));
 
         // [3,5) value=V
         auto r2 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(3U),
                                 make_unique<symbolic::LiteralExpr>(2U));
-        auto v2 = makeVariable(1000); // same value
+        auto v2 = makeSymbolValue(1000); // same value
         mm.write(r2, std::move(v2));
 
         // Trigger constant-range merge
@@ -426,14 +426,14 @@ namespace acslg::test::unit::analyzer {
         // [0,3) value=V1
         auto r1 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(0U),
                                 make_unique<symbolic::LiteralExpr>(3U));
-        auto v1 = makeVariable(1111);
+        auto v1 = makeSymbolValue(1111);
         auto s1 = v1->clone();
         mm.write(r1, std::move(v1));
 
         // [3,5) value=V2 (different value)
         auto r2 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(3U),
                                 make_unique<symbolic::LiteralExpr>(2U));
-        auto v2 = makeVariable(2222);
+        auto v2 = makeSymbolValue(2222);
         auto s2 = v2->clone();
         mm.write(r2, std::move(v2));
 
@@ -462,11 +462,11 @@ namespace acslg::test::unit::analyzer {
         auto r3 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(5U),
                                 make_unique<symbolic::LiteralExpr>(2U));
 
-        auto v = makeVariable(3333);
+        auto v = makeSymbolValue(3333);
         auto s = v->clone();
         mm.write(r1, std::move(v));
-        mm.write(r2, makeVariable(3333));
-        mm.write(r3, makeVariable(3333));
+        mm.write(r2, makeSymbolValue(3333));
+        mm.write(r3, makeSymbolValue(3333));
 
         mm.mergeConstantRanges();
 
@@ -490,11 +490,11 @@ namespace acslg::test::unit::analyzer {
         auto r3 = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(5U),
                                 make_unique<symbolic::LiteralExpr>(2U));
 
-        auto v = makeVariable(4444);
+        auto v = makeSymbolValue(4444);
         auto s = v->clone();
         mm.write(r1, std::move(v));
-        mm.write(r2, makeVariable(5555)); // different
-        mm.write(r3, makeVariable(4444)); // same as r1
+        mm.write(r2, makeSymbolValue(5555)); // different
+        mm.write(r3, makeSymbolValue(4444)); // same as r1
 
         mm.mergeConstantRanges();
 
@@ -502,7 +502,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 0, *s));
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 1, *s));
 
-        auto w = makeVariable(5555);
+        auto w = makeSymbolValue(5555);
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 2, *w));
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 3, *w));
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 4, *w));
@@ -526,7 +526,7 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 31;
 
         // X, X+1, X+2 each represents a single address (non-range → [off, off+1))
-        auto X  = makeVariable(901); // symbolic variable expression (example)
+        auto X  = makeSymbolValue(901); // symbolic SymbolValue expression (example)
         auto X1 = makeAdd(X->clone(), make_unique<symbolic::LiteralExpr>(1U));
         auto X2 = makeAdd(X->clone(), make_unique<symbolic::LiteralExpr>(2U));
 
@@ -535,11 +535,11 @@ namespace acslg::test::unit::analyzer {
         auto a2 = makeRangeAddr(baseId, /*off=*/std::move(X2), /*len=*/nullptr); // single @ X+2
 
         // Same value
-        auto v  = makeVariable(7777);
+        auto v  = makeSymbolValue(7777);
         auto sv = v->clone();
         mm.write(a0, std::move(v));
-        mm.write(a1, makeVariable(7777));
-        mm.write(a2, makeVariable(7777));
+        mm.write(a1, makeSymbolValue(7777));
+        mm.write(a2, makeSymbolValue(7777));
 
         // Trigger symbolic-range merge (hash-based chaining)
         mm.mergeSymbolicRanges();
@@ -551,16 +551,16 @@ namespace acslg::test::unit::analyzer {
         MemoryModel mm;
         const unsigned baseId = 32;
 
-        auto X  = makeVariable(902);
+        auto X  = makeSymbolValue(902);
         auto X2 = makeAdd(X->clone(), make_unique<symbolic::LiteralExpr>(2U));
 
         auto a0 = makeRangeAddr(baseId, std::move(X), nullptr);  // single @ X
         auto a2 = makeRangeAddr(baseId, std::move(X2), nullptr); // single @ X+2
 
-        auto v  = makeVariable(8888);
+        auto v  = makeSymbolValue(8888);
         auto sv = v->clone();
         mm.write(a0, std::move(v));
-        mm.write(a2, makeVariable(8888)); // same value but with a gap of 1
+        mm.write(a2, makeSymbolValue(8888)); // same value but with a gap of 1
 
         mm.mergeSymbolicRanges();
 
@@ -572,14 +572,14 @@ namespace acslg::test::unit::analyzer {
         MemoryModel mm;
         const unsigned baseId = 33;
 
-        auto X  = makeVariable(903);
+        auto X  = makeSymbolValue(903);
         auto X1 = makeAdd(X->clone(), make_unique<symbolic::LiteralExpr>(1U));
 
         auto a0 = makeRangeAddr(baseId, std::move(X), nullptr);  // single @ X
         auto a1 = makeRangeAddr(baseId, std::move(X1), nullptr); // single @ X+1
 
-        auto v1 = makeVariable(10001);
-        auto v2 = makeVariable(10002);
+        auto v1 = makeSymbolValue(10001);
+        auto v2 = makeSymbolValue(10002);
         auto s1 = v1->clone();
         mm.write(a0, std::move(v1));
         mm.write(a1, std::move(v2)); // different value
@@ -605,25 +605,25 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseB = 42;
 
         // For two different bases, write X and X+1 with the same values
-        auto XA  = makeVariable(910);
+        auto XA  = makeSymbolValue(910);
         auto X1A = makeAdd(XA->clone(), make_unique<symbolic::LiteralExpr>(1U));
         auto a0A = makeRangeAddr(baseA, std::move(XA), nullptr);
         auto a1A = makeRangeAddr(baseA, std::move(X1A), nullptr);
 
-        auto XB  = makeVariable(910); // same construction but different base
+        auto XB  = makeSymbolValue(910); // same construction but different base
         auto X1B = makeAdd(XB->clone(), make_unique<symbolic::LiteralExpr>(1U));
         auto a0B = makeRangeAddr(baseB, std::move(XB), nullptr);
         auto a1B = makeRangeAddr(baseB, std::move(X1B), nullptr);
 
-        auto vA  = makeVariable(1212);
+        auto vA  = makeSymbolValue(1212);
         auto svA = vA->clone();
-        auto vB  = makeVariable(1212);
+        auto vB  = makeSymbolValue(1212);
         auto svB = vB->clone();
 
         mm.write(a0A, std::move(vA));
-        mm.write(a1A, makeVariable(1212));
+        mm.write(a1A, makeSymbolValue(1212));
         mm.write(a0B, std::move(vB));
-        mm.write(a1B, makeVariable(1212));
+        mm.write(a1B, makeSymbolValue(1212));
 
         mm.mergeSymbolicRanges();
 
@@ -649,18 +649,18 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 34;
 
         // Start: a single address X
-        auto X  = makeVariable(904);
+        auto X  = makeSymbolValue(904);
         auto a0 = makeRangeAddr(baseId, std::move(X), nullptr); // single @ X
 
         // Successor: [X+1, X+1 + 3) → len = 3
-        auto X1 = makeAdd(makeVariable(904), make_unique<symbolic::LiteralExpr>(1U));
+        auto X1 = makeAdd(makeSymbolValue(904), make_unique<symbolic::LiteralExpr>(1U));
         auto a1 = makeRangeAddr(baseId, std::move(X1), make_unique<symbolic::LiteralExpr>(3U));
 
         // Same value
-        auto v  = makeVariable(1313);
+        auto v  = makeSymbolValue(1313);
         auto sv = v->clone();
         mm.write(a0, std::move(v));
-        mm.write(a1, makeVariable(1313));
+        mm.write(a1, makeSymbolValue(1313));
 
         mm.mergeSymbolicRanges();
 

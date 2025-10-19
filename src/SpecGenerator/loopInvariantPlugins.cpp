@@ -264,7 +264,7 @@ namespace acslg::spec_generator {
                     return range;
                 auto offset = symbolAddr->getOffset();
                 // Is offset x-step?
-                if (auto var = llvm::dyn_cast<const symb::SymbolValue>(offset.get())) {
+                if (auto symbolValue = llvm::dyn_cast<const symb::SymbolValue>(offset.get())) {
                     return std::visit(
                         [&](auto &&arg) -> std::optional<symb::SymbolAddress> {
                             using T = std::decay_t<decltype(arg)>;
@@ -290,7 +290,7 @@ namespace acslg::spec_generator {
                                 }
                             }
                         },
-                        var->getFromAddr());
+                        symbolValue->getFromAddr());
                 }
                 return std::nullopt;
             }; // tryGetAsRange end

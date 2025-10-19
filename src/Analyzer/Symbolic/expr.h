@@ -3,7 +3,6 @@
 #ifndef __ACSLG_SRC_ANALYZER_SYMBOLIC_EXPR_H__
 #define __ACSLG_SRC_ANALYZER_SYMBOLIC_EXPR_H__
 
-
 #include <string>
 #include <memory>
 #include <span>
@@ -228,7 +227,7 @@ namespace acslg::analyzer::symbolic {
 
         /// @brief Convert to PPL linear expression without custom mapping.
         /// Use SymbolValue's id_ as its index of the Cartesian axis.
-        /// @param hashIdMap Mapping from hash of variable/symbolAddress to the index of the
+        /// @param hashIdMap Mapping from hash of SymbolValue/symbolAddress to the index of the
         /// Cartesian axis.  Will throw an error if a non-existent hash is encountered. The ID
         /// represents the dimension of variables in the PPL library, so hashIdMap should be a
         /// sequentially numbered mapping of hash values, such as {{hash_1: 0}, {hash_2: 1}, ...}.
@@ -725,7 +724,7 @@ namespace acslg::analyzer::symbolic {
 
         Structure(const clang::RecordDecl *RD,
                   const clang::ASTRecordLayout &layout,
-                  std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
+                  utils::not_null<std::unique_ptr<const Address>> from,
                   SourcePoint fromPoint);
 
         Structure(const Structure &other) : SymbolicExpr(other), info_(other.info_) {
@@ -884,8 +883,8 @@ namespace acslg::analyzer::symbolic {
     using AddressBoxMap = std::unordered_map<AddressBox, T, AddressBoxHash, AddressBoxEq>;
 
     /// @class SymbolAddress
-    /// @brief Symbolic address with unique ID, optional from, offset and length.
-    /// From can't be nullptr, use monostate or nullopt.
+    /// @brief Symbolic address with fromAddr, fromPoint, offset and length. Maybe a symbol value
+    /// of pointer variable or an address of heap.
     class SymbolAddress : public Address, public Symbol {
       private:
         struct Range {
@@ -937,7 +936,7 @@ namespace acslg::analyzer::symbolic {
                     [&](auto &&arg) -> bool {
                         using T = std::decay_t<decltype(arg)>;
                         if constexpr (std::is_same_v<T, std::monostate>) {
-                            // @SgtPepper114: check the monostate case.
+                            // check the monostate case.
                             return std::holds_alternative<std::monostate>(other.from_);
                         } else if constexpr (std::is_same_v<
                                                  T,
@@ -1004,7 +1003,7 @@ namespace acslg::analyzer::symbolic {
                         return arg->addressClone().into_underlying();
                     }
                 },
-                from_);
+                fromAddr_);
         }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
@@ -1060,9 +1059,10 @@ namespace acslg::analyzer::symbolic {
             offset_; ///< Offset relative to an address.
         std::variant<std::monostate,
                      utils::not_null<std::unique_ptr<const Address>>>
-            from_; ///< From another Address p means this is a value(may with offset) of a
-                   ///< pointer variable whose address is p, from {Structure::Info, size_t} means
-                   ///< this is a field(a pointer)'s value.
+            fromAddr_; ///< From another Address p means this is a value(may with offset) of a
+                       ///< pointer variable whose address is p; From std::monostate means this a
+                       ///< address of heap, in which case `fromPoint_` is the source point after
+                       ///< the *alloc*.
 
         SourcePoint fromPoint_;
         std::optional<Range> range_;
@@ -1079,20 +1079,10 @@ namespace acslg::analyzer::symbolic {
 
         bool operator==(const VariableAddress &other) const { return equal(other); }
 
-        VariableAddress(std::variant<std::monostate, utils::not_null<const clang::VarDecl *>> from)
+        VariableAddress(utils::not_null<const clang::VarDecl *> from)
             : Address(SymbolicExpr::ExprType::VariableAddr,
-                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64}) {
-            std::visit(
-                [&](auto &&arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, std::monostate>) {
-                        from_ = std::monostate{};
-                    } else if constexpr (std::is_same_v<T, utils::not_null<const clang::VarDecl *>>) {
-                        from_ = arg->getCanonicalDecl();
-                    }
-                },
-                from);
-        };
+                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64}),
+              from_(std::move(from)) {};
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getType() == ExprType::VariableAddr;
@@ -1154,7 +1144,7 @@ namespace acslg::analyzer::symbolic {
                   "should not be called.");
         };
 
-        std::variant<std::monostate, utils::not_null<const clang::VarDecl *>> from_;
+        utils::not_null<const clang::VarDecl *> from_;
     };
 
     /// @class FieldAddress
@@ -1165,11 +1155,8 @@ namespace acslg::analyzer::symbolic {
         FieldAddress &operator=(const FieldAddress &other);
         FieldAddress(FieldAddress &&) = default;
 
-        FieldAddress(
-            const clang::RecordDecl *RD,
-            std::variant<std::monostate,
-                         std::pair<utils::not_null<std::unique_ptr<const Address>>, const size_t>>
-                from)
+        FieldAddress(const clang::RecordDecl *RD,
+                     std::pair<utils::not_null<std::unique_ptr<const Address>>, size_t> from)
             : Address(SymbolicExpr::ExprType::FieldAddr,
                       SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64}),
               definition_(RD), from_(std::move(from)) {
@@ -1240,9 +1227,7 @@ namespace acslg::analyzer::symbolic {
         };
 
         utils::not_null<const clang::RecordDecl *> definition_;
-        std::variant<std::monostate,
-                     std::pair<utils::not_null<std::unique_ptr<const Address>>, const size_t>>
-            from_;
+        std::pair<utils::not_null<std::unique_ptr<const Address>>, size_t> from_;
     };
 
     struct AddressHash {
@@ -1254,24 +1239,17 @@ namespace acslg::analyzer::symbolic {
     /// Origin can't be nullptr, use nullopt.
     class SymbolValue : public SymbolicExpr, public Symbol {
       public:
-        SymbolValue(
-            Type varType,
-            std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
-            SourcePoint fromPoint)
-            : SymbolicExpr(ExprType::SymbolValue, varType, T_Symbol), varType_(varType),
-              from_(std::move(from)), fromPoint_(std::move(fromPoint)) {}
+        SymbolValue(Type varType,
+                    utils::not_null<std::unique_ptr<const Address>> from,
+                    SourcePoint fromPoint)
+            : SymbolicExpr(ExprType::SymbolValue, varType, T_Symbol), fromAddr_(std::move(from)),
+              fromPoint_(std::move(fromPoint)) {}
 
         SymbolValue(const SymbolValue &other);
         SymbolValue(SymbolValue &&) = default;
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getType() == ExprType::SymbolValue;
-        }
-
-        Type getVarType() const { return varType_; }
-        void setVarType(Type vt) {
-            varType_ = vt;
-            setValType(vt);
         }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
@@ -1286,18 +1264,7 @@ namespace acslg::analyzer::symbolic {
         virtual bool equal(const SymbolicExpr &expr) const override;
         std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> getFromAddr()
             const override {
-            return std::visit(
-                [&](auto &&arg) -> std::variant<std::monostate,
-                                                utils::not_null<std::unique_ptr<const Address>>> {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, std::monostate>) {
-                        return std::monostate();
-                    } else if constexpr (std::is_same_v<
-                                             T, utils::not_null<std::unique_ptr<const Address>>>) {
-                        return arg->addressClone().into_underlying();
-                    }
-                },
-                from_);
+            return fromAddr_->addressClone().into_underlying();
         }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const;
@@ -1312,10 +1279,8 @@ namespace acslg::analyzer::symbolic {
             const std::unordered_map<size_t, size_t> &) const override;
 
       private:
-        Type varType_; ///< Symbol value's type.
-        std::variant<std::monostate,
-                     utils::not_null<std::unique_ptr<const Address>>>
-            from_; ///< The original Address of the value or the Structure it belongs.
+        utils::not_null<std::unique_ptr<const Address>>
+            fromAddr_; ///< The original Address of the value or the Structure it belongs.
 
         SourcePoint fromPoint_;
     };
@@ -1333,7 +1298,7 @@ namespace acslg::analyzer::symbolic {
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> getSymbol(
         clang::QualType type,
-        std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
+        std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
         SourcePoint fromPoint);
 } // namespace acslg::analyzer::symbolic
 
