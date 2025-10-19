@@ -174,8 +174,8 @@ namespace acslg::analyzer::symbolic {
         return std::make_unique<UnknownExpr>();
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> Variable::clone() const {
-        return std::make_unique<Variable>(*this);
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::clone() const {
+        return std::make_unique<SymbolValue>(*this);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::clone() const {
@@ -237,7 +237,7 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    size_t Variable::hash() const {
+    size_t SymbolValue::hash() const {
         size_t seed = utils::hash_val(getType(), fromPoint_.hash());
         std::visit(
             [&](auto &&arg) {
@@ -433,7 +433,7 @@ namespace acslg::analyzer::symbolic {
                    from);
     }
 
-    std::string Variable::dump() const {
+    std::string SymbolValue::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         const auto &t = getValType();
@@ -444,7 +444,7 @@ namespace acslg::analyzer::symbolic {
             case ScalarKind::UInt: oss << "uint"; break;
             case ScalarKind::Bool: oss << "bool"; break;
             case ScalarKind::Void: oss << "void"; break;
-            case ScalarKind::Structure: ERROR("Variable's ScalarKind should not be Structure");
+            case ScalarKind::Structure: ERROR("SymbolValue's ScalarKind should not be Structure");
         }
         oss << lit(std::to_string(t.bitWidth)) << ")";
 
@@ -616,15 +616,15 @@ namespace acslg::analyzer::symbolic {
         return "{unknown}";
     }
 
-    std::optional<std::string> Variable::regularForm(std::optional<std::string_view> prefix,
-                                                     std::optional<std::string_view> suffix,
-                                                     int,
-                                                     bool) const {
+    std::optional<std::string> SymbolValue::regularForm(std::optional<std::string_view> prefix,
+                                                        std::optional<std::string_view> suffix,
+                                                        int,
+                                                        bool) const {
         return std::visit(
             [&](auto &&arg) -> std::optional<std::string> {
                 using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_same_v<T, std::monostate>) {
-                    ERROR("Trying to get regular form of Variable with nullptr from_.");
+                    ERROR("Trying to get regular form of SymbolValue with nullptr from_.");
                 } else if constexpr (std::is_same_v<
                                          T, utils::not_null<std::unique_ptr<const Address>>>) {
                     auto addr = arg->regularForm();
@@ -892,7 +892,7 @@ namespace acslg::analyzer::symbolic {
         return makeUnknown().into_underlying();
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> Variable::simplifiedExpr() const {
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::simplifiedExpr() const {
         return simplifiedExprIfLinear();
     }
 
@@ -1107,8 +1107,8 @@ namespace acslg::analyzer::symbolic {
 
     bool UnknownExpr::equal(const SymbolicExpr &expr) const { return expr.isUnknown(); }
 
-    bool Variable::equal(const SymbolicExpr &expr) const {
-        const auto var = llvm::dyn_cast<const Variable>(&expr);
+    bool SymbolValue::equal(const SymbolicExpr &expr) const {
+        const auto var = llvm::dyn_cast<const SymbolValue>(&expr);
         if (!var)
             return false;
 
@@ -1286,7 +1286,7 @@ namespace acslg::analyzer::symbolic {
             from_);
     }
 
-    std::optional<utils::not_null<const clang::VarDecl *>> Variable::getFromRoot() const {
+    std::optional<utils::not_null<const clang::VarDecl *>> SymbolValue::getFromRoot() const {
         return std::visit(
             [&](auto &&arg) -> std::optional<utils::not_null<const clang::VarDecl *>> {
                 using T = std::decay_t<decltype(arg)>;
@@ -1360,7 +1360,7 @@ namespace acslg::analyzer::symbolic {
         return result;
     }
 
-    SymbolicExpr::UsedMap Variable::collectUsedVarsAndAddrs() const { return {{hash(), this}}; }
+    SymbolicExpr::UsedMap SymbolValue::collectUsedVarsAndAddrs() const { return {{hash(), this}}; }
 
     SymbolicExpr::UsedMap BinaryOpExpr::collectUsedVarsAndAddrs() const {
         auto lmap = left_->collectUsedVarsAndAddrs();
@@ -1693,7 +1693,7 @@ namespace acslg::analyzer::symbolic {
                 TODO();
             } else {
                 auto vty = deriveVarType(fty);
-                auto var = std::make_unique<Variable>(vty, std::move(fieldAddr), fromPoint);
+                auto var = std::make_unique<SymbolValue>(vty, std::move(fieldAddr), fromPoint);
                 fields_.emplace_back(std::move(var));
             }
         }
@@ -1701,7 +1701,7 @@ namespace acslg::analyzer::symbolic {
             UNREACHABLE();
     }
 
-    Variable::Variable(const Variable &other)
+    SymbolValue::SymbolValue(const SymbolValue &other)
         : SymbolicExpr(other), varType_(other.varType_), fromPoint_(other.fromPoint_) {
         std::visit(
             [this](auto &&arg) {
@@ -1720,7 +1720,7 @@ namespace acslg::analyzer::symbolic {
         switch (t) {
             using enum SymbolicExpr::ExprType;
             case Literal: os << "Literal"; break;
-            case Variable: os << "Variable"; break;
+            case SymbolValue: os << "SymbolValue"; break;
             case SymbolAddr: os << "SymbolAddr"; break;
             case VariableAddr: os << "VariableAddr"; break;
             case FieldAddr: os << "FieldAddr"; break;
@@ -2054,7 +2054,7 @@ namespace acslg::analyzer::symbolic {
 
         } else {
             SymbolicExpr::Type vty = deriveVarType(type);
-            return std::make_unique<Variable>(vty, std::move(from), std::move(fromPoint));
+            return std::make_unique<SymbolValue>(vty, std::move(from), std::move(fromPoint));
         }
     }
 
@@ -2062,7 +2062,7 @@ namespace acslg::analyzer::symbolic {
         if (!Symbol::classof(e))
             return nullptr;
         switch (e->getType()) {
-            case SymbolicExpr::ExprType::Variable: return static_cast<Variable *>(e);
+            case SymbolicExpr::ExprType::SymbolValue: return static_cast<SymbolValue *>(e);
             case SymbolicExpr::ExprType::Structure: return static_cast<Structure *>(e);
             case SymbolicExpr::ExprType::SymbolAddr: return static_cast<SymbolAddress *>(e);
             default: UNREACHABLE();

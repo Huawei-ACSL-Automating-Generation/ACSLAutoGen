@@ -245,10 +245,10 @@ namespace acslg::test::utils {
                                        nullopt};
     }
 
-    unique_ptr<symbolic::Variable> FixtureWithCode::makeVariable(
+    unique_ptr<symbolic::SymbolValue> FixtureWithCode::makeVariable(
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
-        return make_unique<symbolic::Variable>(
+        return make_unique<symbolic::SymbolValue>(
             symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::UInt, id},
             make_unique<symbolic::VariableAddress>(getVarDecl(id)),
             fromPoint.value_or(defaultPoint));

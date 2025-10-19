@@ -3,7 +3,6 @@
 #ifndef __ACSLG_SRC_SPECGENERATOR_SPECGENERATOR_H__
 #define __ACSLG_SRC_SPECGENERATOR_SPECGENERATOR_H__
 
-
 #include <string>
 #include <optional>
 #include <vector>
@@ -130,7 +129,7 @@ namespace acslg::spec_generator {
      * @brief Substitute symbolic variables/addresses in an expression using the memory state
      *        captured at the loop-entry path.
      *
-     * This routine walks the symbolic expression tree and, when a Variable or SymbolAddress
+     * This routine walks the symbolic expression tree and, when a SymbolValue or SymbolAddress
      * carries a resolvable "from" origin (i.e., an address), it queries the loop-entry
      * memory model to obtain the concrete symbolic value stored at that origin and
      * replaces the current node with that value (cloned). If the origin cannot be
@@ -144,9 +143,9 @@ namespace acslg::spec_generator {
      * @param fromPoint      The expected fromPoint of symbols. Met unexpected fromPoint will
      *                       just ignore it.
      *
-     * @note Only Variable and Address (SymbolAddress) and Structure nodes are substituted directly.
-     *       Composite nodes (BinaryOp/UnaryOp) are traversed recursively.
-     *       Unknown nodes are ignored.
+     * @note Only SymbolValue and Address (SymbolAddress) and Structure nodes are substituted
+     * directly. Composite nodes (BinaryOp/UnaryOp) are traversed recursively. Unknown nodes are
+     * ignored.
      * @warning When the "from" variant is std::monostate, behavior is marked as TODO().
      * @see getSubstitutedAddr()
      */

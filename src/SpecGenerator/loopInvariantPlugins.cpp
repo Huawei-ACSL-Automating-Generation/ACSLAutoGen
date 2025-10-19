@@ -264,7 +264,7 @@ namespace acslg::spec_generator {
                     return range;
                 auto offset = symbolAddr->getOffset();
                 // Is offset x-step?
-                if (auto var = llvm::dyn_cast<const symb::Variable>(offset.get())) {
+                if (auto var = llvm::dyn_cast<const symb::SymbolValue>(offset.get())) {
                     return std::visit(
                         [&](auto &&arg) -> std::optional<symb::SymbolAddress> {
                             using T = std::decay_t<decltype(arg)>;
@@ -661,7 +661,7 @@ namespace acslg::spec_generator {
                     switch (bin->getOpcode()) {
                         case BO_LE:
                         case BO_LT:
-                            if (llvm::isa<symb::Variable>(*indexInfo.indexBound_))
+                            if (llvm::isa<symb::SymbolValue>(*indexInfo.indexBound_))
                                 specTemplate = maxOnLeft ? FIND_MAX_LOOP_WITH_VAR_BOUND
                                                          : FIND_MIN_LOOP_WITH_VAR_BOUND;
                             else
@@ -670,7 +670,7 @@ namespace acslg::spec_generator {
                             break;
                         case BO_GE:
                         case BO_GT:
-                            if (llvm::isa<symb::Variable>(*indexInfo.indexBound_))
+                            if (llvm::isa<symb::SymbolValue>(*indexInfo.indexBound_))
                                 specTemplate = maxOnLeft ? FIND_MIN_LOOP_WITH_VAR_BOUND
                                                          : FIND_MAX_LOOP_WITH_VAR_BOUND;
                             else
@@ -709,11 +709,12 @@ namespace acslg::spec_generator {
                     auto symbolState = loopEntryInfo.symbolicLoopEntry_->clone();
                     symbolState->step(thenStmt);
                     for (auto &path : symbolState->getPaths()) {
-                        std::unique_ptr<symb::Variable> maxVar{nullptr};
+                        std::unique_ptr<symb::SymbolValue> maxVar{nullptr};
                         if (auto maxValue = path->getVarState(maxDecl);
-                            llvm::isa<symb::Variable>(*maxValue)) {
-                            maxVar = std::unique_ptr<symb::Variable>(llvm::dyn_cast<symb::Variable>(
-                                std::move(maxValue).into_underlying().release()));
+                            llvm::isa<symb::SymbolValue>(*maxValue)) {
+                            maxVar = std::unique_ptr<symb::SymbolValue>(
+                                llvm::dyn_cast<symb::SymbolValue>(
+                                    std::move(maxValue).into_underlying().release()));
                         } else {
                             return;
                         }

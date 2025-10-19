@@ -24,7 +24,7 @@
 namespace acslg::analyzer::symbolic {
     class Address;
     class SymbolAddress;
-    class Variable;
+    class SymbolValue;
     class LiteralExpr;
 
     /// @class SymbolicExpr
@@ -41,7 +41,7 @@ namespace acslg::analyzer::symbolic {
             K_LastAddr,
 
             Literal,
-            Variable,
+            SymbolValue,
             Structure,
             BinaryOp,
             UnaryOp,
@@ -92,8 +92,8 @@ namespace acslg::analyzer::symbolic {
         virtual std::string dump() const = 0;
 
         /// @brief Emit expression in ACSL-compliant regular form.
-        /// @param prefix Optional prefix of symbols(Variable, Structure, SymbolAddress).
-        /// @param suffix Optional suffix of symbols(Variable, Structure, SymbolAddress).
+        /// @param prefix Optional prefix of symbols(SymbolValue, Structure, SymbolAddress).
+        /// @param suffix Optional suffix of symbols(SymbolValue, Structure, SymbolAddress).
         /// @param parentPrec Precedence of parent operator.
         /// @param isRightChild Whether this is right operand.
         /// @return String in ACSL syntax.
@@ -127,12 +127,12 @@ namespace acslg::analyzer::symbolic {
         /// @return Simplified expression.
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const = 0;
 
-        using UsedMap = std::unordered_map<
-            size_t,
-            std::variant<utils::not_null<const Variable *>, utils::not_null<const SymbolAddress *>>>;
+        using UsedMap   = std::unordered_map<size_t,
+                                             std::variant<utils::not_null<const SymbolValue *>,
+                                                          utils::not_null<const SymbolAddress *>>>;
         using HashIdMap = std::unordered_map<size_t, size_t>;
         /// @brief Collect Variables and Addresses used in the expression.
-        /// @return Map from hash to Variable and Address pointer.
+        /// @return Map from hash to SymbolValue and Address pointer.
         virtual UsedMap collectUsedVarsAndAddrs() const { return {}; };
 
         template <typename... Exprs>
@@ -216,8 +216,8 @@ namespace acslg::analyzer::symbolic {
         /// @brief Convert to PPL linear expression with custom mapping.
         /// Only valid for expressions that are affine (i.e., linear w.r.t. variables).
         /// Throws or fails if the expression is not representable in linear form.
-        /// Only support varDecl's value(`Address` and `Variable`, see their `toLinearExpr` for more
-        /// details), return nullopt otherwise.
+        /// Only support varDecl's value(`Address` and `SymbolValue`, see their `toLinearExpr` for
+        /// more details), return nullopt otherwise.
         /// @param varMap Mapping from names to the index of the Cartesian axis.
         /// @return PPL linear expression or nullopt if contains symbolic value from pointer, array,
         /// etc.
@@ -227,7 +227,7 @@ namespace acslg::analyzer::symbolic {
         }
 
         /// @brief Convert to PPL linear expression without custom mapping.
-        /// Use Variable's id_ as its index of the Cartesian axis.
+        /// Use SymbolValue's id_ as its index of the Cartesian axis.
         /// @param hashIdMap Mapping from hash of variable/symbolAddress to the index of the
         /// Cartesian axis.  Will throw an error if a non-existent hash is encountered. The ID
         /// represents the dimension of variables in the PPL library, so hashIdMap should be a
@@ -892,22 +892,22 @@ namespace acslg::analyzer::symbolic {
             utils::not_null<std::unique_ptr<const SymbolicExpr>>
                 len_; ///< The length of an address. The Address type does not store pointer types
                       ///< currently, thus it does not support C-style pointer conversion.
-            // utils::not_null<std::unique_ptr<const Variable>>
+            // utils::not_null<std::unique_ptr<const SymbolValue>>
             //     index_; ///< Vaule of this AddressRange may rely on this ghost variable.
 
             Range(utils::not_null<std::unique_ptr<const SymbolicExpr>> len)
                 : len_(std::move(len)) /*,
-                   index_(make_unique<Variable>(SymbolicExpr::Type{ScalarKind::UInt, 32},
+                   index_(make_unique<SymbolValue>(SymbolicExpr::Type{ScalarKind::UInt, 32},
                                                 std::monostate{}))*/
             {}
 
             Range(const Range &other)
                 : len_(other.len_->clone().into_underlying()) /*,
-                   index_(std::make_unique<Variable>(*other.index_))*/
+                   index_(std::make_unique<SymbolValue>(*other.index_))*/
             {}
             Range &operator=(const Range &other) {
                 len_ = other.len_->clone().into_underlying();
-                // index_ = std::make_unique<Variable>(*other.index_);
+                // index_ = std::make_unique<SymbolValue>(*other.index_);
                 return *this;
             }
             Range(Range &&other)       = default;
@@ -1252,19 +1252,20 @@ namespace acslg::analyzer::symbolic {
     /// @class Symbol value
     /// @brief Symbolic value with unique ID and optional origin.
     /// Origin can't be nullptr, use nullopt.
-    class Variable : public SymbolicExpr, public Symbol {
+    class SymbolValue : public SymbolicExpr, public Symbol {
       public:
-        Variable(Type varType,
-                 std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
-                 SourcePoint fromPoint)
-            : SymbolicExpr(ExprType::Variable, varType, T_Symbol), varType_(varType),
+        SymbolValue(
+            Type varType,
+            std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
+            SourcePoint fromPoint)
+            : SymbolicExpr(ExprType::SymbolValue, varType, T_Symbol), varType_(varType),
               from_(std::move(from)), fromPoint_(std::move(fromPoint)) {}
 
-        Variable(const Variable &other);
-        Variable(Variable &&) = default;
+        SymbolValue(const SymbolValue &other);
+        SymbolValue(SymbolValue &&) = default;
 
         static bool classof(const SymbolicExpr *expr) {
-            return expr->getType() == ExprType::Variable;
+            return expr->getType() == ExprType::SymbolValue;
         }
 
         Type getVarType() const { return varType_; }

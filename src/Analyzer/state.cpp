@@ -168,11 +168,11 @@ namespace acslg::analyzer {
         auto canonicalVar = var->getCanonicalDecl();
         auto varIt        = varAddr_.find(canonicalVar);
         if (varIt == varAddr_.end())
-            ERROR("Variable '" + canonicalVar->getNameAsString() + "' has no allocated address");
+            ERROR("SymbolValue '" + canonicalVar->getNameAsString() + "' has no allocated address");
         auto addr  = varIt->second.get().get();
         auto value = memoryState_.read(*addr);
         if (value == std::nullopt)
-            ERROR("Variable '" + canonicalVar->getNameAsString() +
+            ERROR("SymbolValue '" + canonicalVar->getNameAsString() +
                   "' has no memory state entry for allocated address");
         return value.value()->clone();
     }
@@ -204,7 +204,7 @@ namespace acslg::analyzer {
         auto canonicalVar = var->getCanonicalDecl();
         auto addrIt       = varAddr_.find(canonicalVar);
         if (addrIt == varAddr_.end())
-            ERROR("Variable has no allocated address");
+            ERROR("SymbolValue has no allocated address");
 
         auto &addr = addrIt->second;
         memoryState_.write(*addr, std::move(expr).into_underlying());
@@ -937,7 +937,7 @@ namespace acslg::analyzer {
             oss << "    " << hint("<empty>") << "\n";
         }
 
-        // ---- Variable -> Address -> Value mapping -------------------------------
+        // ---- SymbolValue -> Address -> Value mapping -------------------------------
         oss << "  " << key("var→addr→value") << ":\n";
         for (auto &[varDecl, addr] : varAddr_) {
             std::string name;

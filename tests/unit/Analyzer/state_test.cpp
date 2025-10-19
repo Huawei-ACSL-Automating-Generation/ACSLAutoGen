@@ -35,7 +35,7 @@ namespace acslg::test::unit::analyzer {
     //     using enum SymbolicExpr::ScalarKind;
     //     TestPath dummyPath;
     //     auto addr = dummyPath.allocMemory();
-    //     dummyPath.updateMemory(addr, make_unique<Variable>("test", SymbolicExpr::Type{Int, 4}));
+    //     dummyPath.updateMemory(addr, make_unique<SymbolValue>("test", SymbolicExpr::Type{Int, 4}));
 
     //     ASSERT_DEATH(dummyPath.isUnchangedState(*addr), "");
     // }

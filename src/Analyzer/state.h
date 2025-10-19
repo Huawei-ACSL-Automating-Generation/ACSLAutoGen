@@ -1,7 +1,6 @@
 #ifndef __ACSLG_SRC_ANALYZER_STATE_H__
 #define __ACSLG_SRC_ANALYZER_STATE_H__
 
-
 #include <unordered_map>
 #include <map>
 #include <stack>
@@ -171,7 +170,7 @@ namespace acslg::analyzer {
         /// Constant range [offset, offset+length)
         using ConstRange = std::pair<uint64_t, uint64_t>;
 
-        /// Variable address to symbolic expression mapping
+        /// SymbolValue address to symbolic expression mapping
         std::unordered_map<symbolic::VariableAddress,
                            utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>
             memoryMap_variableAddr_;

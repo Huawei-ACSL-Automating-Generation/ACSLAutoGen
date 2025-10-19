@@ -281,7 +281,7 @@ namespace acslg::spec_generator {
             .Case<symb::LiteralExpr>([&](auto *) {
                 // Nothing to substitute
             })
-            .Case<symb::Variable>([&](auto *var) {
+            .Case<symb::SymbolValue>([&](auto *var) {
                 if (var->getFromPoint() && var->getFromPoint().value() != fromPoint)
                     return;
 
@@ -300,9 +300,9 @@ namespace acslg::spec_generator {
                                 expr = value.value()->clone();
                             } else {
                                 // Address originates from an address present on this path at loop
-                                // entry but hasn't been accessed -> construct a Variable with
+                                // entry but hasn't been accessed -> construct a SymbolValue with
                                 // corrext fromAddr and fromPoint.
-                                expr = std::make_unique<symb::Variable>(
+                                expr = std::make_unique<symb::SymbolValue>(
                                     var->getVarType(), std::move(realFromAddr).into_underlying(),
                                     loopEntryPath.getStartPoint());
                             }

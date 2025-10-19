@@ -219,7 +219,7 @@ namespace acslg::test::unit::spec_generator {
         auto &indexInfo = loopInfo.indexInfo_.value();
         ASSERT_NE(indexInfo.indexRealAddr_->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr_->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<Variable>(*indexInfo.indexSymbolicValue_));
+        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue_));
         EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm().value_or(""), "i");
         EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
         EXPECT_EQ(indexInfo.indexBound_->regularForm().value_or(""), "n");
@@ -243,7 +243,7 @@ namespace acslg::test::unit::spec_generator {
         auto &indexInfo = loopInfo.indexInfo_.value();
         ASSERT_NE(indexInfo.indexRealAddr_->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr_->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<Variable>(*indexInfo.indexSymbolicValue_));
+        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue_));
         EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm().value_or(""), "i");
         EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_NE);
         EXPECT_EQ(indexInfo.indexBound_->regularForm().value_or(""), "0");
@@ -268,7 +268,7 @@ namespace acslg::test::unit::spec_generator {
         auto &indexInfo = loopInfo.indexInfo_.value();
         ASSERT_NE(indexInfo.indexRealAddr_->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr_->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<Variable>(*indexInfo.indexSymbolicValue_));
+        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue_));
         EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm().value_or(""), "i");
         EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_GE);
         EXPECT_EQ(indexInfo.indexBound_->regularForm().value_or(""), "0");
@@ -353,7 +353,7 @@ namespace acslg::test::unit::spec_generator {
         auto &indexInfo = loopInfo.indexInfo_.value();
         ASSERT_NE(indexInfo.indexRealAddr_->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr_->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<Variable>(*indexInfo.indexSymbolicValue_));
+        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue_));
         EXPECT_EQ(indexInfo.indexSymbolicValue_->regularForm().value_or(""), "i");
         EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
         EXPECT_EQ(indexInfo.indexBound_->regularForm().value_or(""), "size");

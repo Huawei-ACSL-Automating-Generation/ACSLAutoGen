@@ -3,7 +3,6 @@
 #ifndef __ACSLG_TESTS_TESTUTILS_TESTHELPER_H__
 #define __ACSLG_TESTS_TESTUTILS_TESTHELPER_H__
 
-
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
@@ -94,7 +93,7 @@ namespace acslg::test::utils {
             std::unique_ptr<const analyzer::symbolic::SymbolicExpr> offset,
             std::unique_ptr<const analyzer::symbolic::SymbolicExpr> len,
             std::optional<analyzer::symbolic::SourcePoint> fromPoint = std::nullopt);
-        std::unique_ptr<analyzer::symbolic::Variable> makeVariable(
+        std::unique_ptr<analyzer::symbolic::SymbolValue> makeVariable(
             unsigned int id,
             std::optional<analyzer::symbolic::SourcePoint> fromPoint = std::nullopt);
         analyzer::symbolic::SymbolAddress makeSimpleSymbolAddr(
