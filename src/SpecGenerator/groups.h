@@ -1,7 +1,8 @@
 // src/SpecGenerator/groups.h
 
-#ifndef GROUPS_H
-#define GROUPS_H
+#ifndef __ACSLG_SRC_SPECGENERATOR_GROUPS_H__
+#define __ACSLG_SRC_SPECGENERATOR_GROUPS_H__
+
 
 namespace acslg::spec_generator {
     inline constexpr auto DEFAULT_FUNC_CONTRACT_PLUGINS  = "DefaultFunctionContract";

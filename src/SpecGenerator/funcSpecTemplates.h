@@ -1,7 +1,8 @@
 // src/SpecGenerator/funcSpecTemplates.h
 
-#ifndef FUNC_SPEC_TEMPLATES_H
-#define FUNC_SPEC_TEMPLATES_H
+#ifndef __ACSLG_SRC_SPECGENERATOR_FUNCSPECTEMPLATES_H__
+#define __ACSLG_SRC_SPECGENERATOR_FUNCSPECTEMPLATES_H__
+
 
 #include "stringTemplate.h"
 

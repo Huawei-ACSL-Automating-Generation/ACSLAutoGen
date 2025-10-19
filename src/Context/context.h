@@ -1,5 +1,6 @@
-#ifndef CONTEXT_H
-#define CONTEXT_H
+#ifndef __ACSLG_SRC_CONTEXT_CONTEXT_H__
+#define __ACSLG_SRC_CONTEXT_CONTEXT_H__
+
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"

@@ -1,5 +1,6 @@
-#ifndef ANALYSIS_H
-#define ANALYSIS_H
+#ifndef __ACSLG_SRC_ANALYZER_ANALYSIS_H__
+#define __ACSLG_SRC_ANALYZER_ANALYSIS_H__
+
 
 #include "Context/context.h"
 #include "function.h"

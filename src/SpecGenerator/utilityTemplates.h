@@ -1,7 +1,8 @@
 // src/SpecGenerator/utilityTemplates.h
 
-#ifndef UTILITY_TEMPLATES_H
-#define UTILITY_TEMPLATES_H
+#ifndef __ACSLG_SRC_SPECGENERATOR_UTILITYTEMPLATES_H__
+#define __ACSLG_SRC_SPECGENERATOR_UTILITYTEMPLATES_H__
+
 
 #include "stringTemplate.h"
 

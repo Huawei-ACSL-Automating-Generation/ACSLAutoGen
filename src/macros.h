@@ -1,5 +1,6 @@
-#ifndef ACSLAUTOGEN_MACROS_H
-#define ACSLAUTOGEN_MACROS_H
+#ifndef __ACSLG_SRC_MACROS_H__
+#define __ACSLG_SRC_MACROS_H__
+
 
 #include <sstream>
 #include <iostream>

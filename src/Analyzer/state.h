@@ -1,5 +1,6 @@
-#ifndef STATE_H
-#define STATE_H
+#ifndef __ACSLG_SRC_ANALYZER_STATE_H__
+#define __ACSLG_SRC_ANALYZER_STATE_H__
+
 
 #include <unordered_map>
 #include <map>

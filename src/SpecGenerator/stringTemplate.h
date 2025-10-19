@@ -1,7 +1,8 @@
 // src/SpecGenerator/stringTemplate.h
 
-#ifndef STRING_TEMPLATE_H
-#define STRING_TEMPLATE_H
+#ifndef __ACSLG_SRC_SPECGENERATOR_STRINGTEMPLATE_H__
+#define __ACSLG_SRC_SPECGENERATOR_STRINGTEMPLATE_H__
+
 
 #include <string>
 #include <vector>

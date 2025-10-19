@@ -1,7 +1,8 @@
 // src/SpecGenerator/loopInvTemplates.h
 
-#ifndef LOOP_INV_TEMPLATES_H
-#define LOOP_INV_TEMPLATES_H
+#ifndef __ACSLG_SRC_SPECGENERATOR_LOOPINVTEMPLATES_H__
+#define __ACSLG_SRC_SPECGENERATOR_LOOPINVTEMPLATES_H__
+
 
 #include "stringTemplate.h"
 

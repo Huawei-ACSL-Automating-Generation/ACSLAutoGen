@@ -1,5 +1,6 @@
-#ifndef ACSLG_UTILS_H
-#define ACSLG_UTILS_H
+#ifndef __ACSLG_SRC_UTILS_UTILS_H__
+#define __ACSLG_SRC_UTILS_UTILS_H__
+
 
 #include <utility>
 #include "clang/AST/RecursiveASTVisitor.h"
@@ -416,4 +417,4 @@ namespace acslg::utils {
                        CallbackT>;
 } // namespace acslg::utils
 
-#endif // ACSLG_UTILS_H
+#endif // __ACSLG_SRC_UTILS_UTILS_H__

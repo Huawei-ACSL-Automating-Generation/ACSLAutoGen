@@ -1,5 +1,6 @@
-#ifndef FUNCTION_H
-#define FUNCTION_H
+#ifndef __ACSLG_SRC_ANALYZER_FUNCTION_H__
+#define __ACSLG_SRC_ANALYZER_FUNCTION_H__
+
 
 #include <unordered_set>
 #include <unordered_map>

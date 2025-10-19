@@ -1,7 +1,8 @@
 // tests/testUtils/ASTExtractor.
 
-#ifndef AST_EXTRACTOR_H
-#define AST_EXTRACTOR_H
+#ifndef __ACSLG_TESTS_TESTUTILS_ASTEXTRACTOR_H__
+#define __ACSLG_TESTS_TESTUTILS_ASTEXTRACTOR_H__
+
 
 #include <memory>
 #include <string>
@@ -130,4 +131,4 @@ namespace acslg::test::utils {
     };
 } // namespace acslg::test::utils
 
-#endif // AST_EXTRACTOR_H
+#endif // __ACSLG_TESTS_TESTUTILS_ASTEXTRACTOR_H__

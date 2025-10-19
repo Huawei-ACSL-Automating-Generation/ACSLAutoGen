@@ -1,7 +1,8 @@
 // src/SpecGenerator/specGenerators.h
 
-#ifndef SPEC_GENERATOR_H
-#define SPEC_GENERATOR_H
+#ifndef __ACSLG_SRC_SPECGENERATOR_SPECGENERATOR_H__
+#define __ACSLG_SRC_SPECGENERATOR_SPECGENERATOR_H__
+
 
 #include <string>
 #include <optional>

@@ -1,7 +1,8 @@
 // tests/testUtils/testHelper.h
 
-#ifndef TEST_HELPER_H
-#define TEST_HELPER_H
+#ifndef __ACSLG_TESTS_TESTUTILS_TESTHELPER_H__
+#define __ACSLG_TESTS_TESTUTILS_TESTHELPER_H__
+
 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>

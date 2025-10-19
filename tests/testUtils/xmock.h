@@ -5,8 +5,9 @@
 // to their mock implementations, allowing the use of EXPECT_CALL and related GMock features.
 // Note: Linux x86_64 only.
 
-#ifndef XMOCK_H
-#define XMOCK_H
+#ifndef __ACSLG_TESTS_TESTUTILS_XMOCK_H__
+#define __ACSLG_TESTS_TESTUTILS_XMOCK_H__
+
 #include <gmock/gmock.h>
 #include <sys/mman.h>
 #include <unistd.h>

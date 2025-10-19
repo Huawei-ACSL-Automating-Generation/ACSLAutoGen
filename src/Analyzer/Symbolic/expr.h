@@ -1,7 +1,8 @@
 /// \file symbolic.h
 /// @brief Declarations for symbolic expression hierarchy and utilities.
-#ifndef SYMBOLIC_H
-#define SYMBOLIC_H
+#ifndef __ACSLG_SRC_ANALYZER_SYMBOLIC_EXPR_H__
+#define __ACSLG_SRC_ANALYZER_SYMBOLIC_EXPR_H__
+
 
 #include <string>
 #include <memory>
@@ -1430,4 +1431,4 @@ namespace acslg::analyzer::symbolic {
     }
 
 } // namespace acslg::analyzer::symbolic
-#endif // SYMBOLIC_H
+#endif // __ACSLG_SRC_ANALYZER_SYMBOLIC_EXPR_H__
