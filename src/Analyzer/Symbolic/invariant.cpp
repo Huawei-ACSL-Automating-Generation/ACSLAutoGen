@@ -353,7 +353,7 @@ namespace acslg::analyzer::symbolic {
 
     std::optional<Parma_Polyhedra_Library::Linear_Expression> SymbolAddress::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
-        if (range_ != std::nullopt)
+        if (length_ != std::nullopt)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
         using namespace Parma_Polyhedra_Library;
@@ -402,7 +402,7 @@ namespace acslg::analyzer::symbolic {
 
     Parma_Polyhedra_Library::Linear_Expression SymbolAddress::toLinearExpr(
         const std::unordered_map<size_t, size_t> &hashIdMap) const {
-        if (range_ != std::nullopt)
+        if (length_ != std::nullopt)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
         Parma_Polyhedra_Library::Linear_Expression e(0);

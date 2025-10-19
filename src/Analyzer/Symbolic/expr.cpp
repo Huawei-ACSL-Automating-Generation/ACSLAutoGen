@@ -252,7 +252,7 @@ namespace acslg::analyzer::symbolic {
 
     size_t SymbolAddress::hash() const {
         size_t seed = utils::hash_val(getType(), fromPoint_.hash(), offset_->hash(),
-                                      range_ ? range_.value().len_->hash() : 0);
+                                      length_ ? length_.value()->hash() : 0);
 
         std::visit(
             [&](auto &&arg) {
@@ -418,10 +418,10 @@ namespace acslg::analyzer::symbolic {
         oss << type("SymbolAddress");
 
         auto off = getOffset();
-        if (range_ == std::nullopt)
+        if (length_ == std::nullopt)
             oss << "[" << off->dump() << "]";
         else
-            oss << "[" << off->dump() << " " << hint("... +") << range_.value().len_->dump() << "]";
+            oss << "[" << off->dump() << " " << hint("... +") << length_.value()->dump() << "]";
 
         oss << " {" << key("from") << "=";
         dump_from(oss, fromAddr_);
@@ -598,7 +598,7 @@ namespace acslg::analyzer::symbolic {
                                                           std::optional<std::string_view> suffix,
                                                           int,
                                                           bool) const {
-        if (isRange())
+        if (length_)
             ERROR("Address range has no regularForm but regularFormOfValue.");
         return std::visit(
             [&, this](auto &&arg) -> std::optional<std::string> {
@@ -668,7 +668,7 @@ namespace acslg::analyzer::symbolic {
         std::optional<std::string_view> suffix,
         int,
         bool) const {
-        if (!isRange()) {
+        if (length_ == std::nullopt) {
             return std::visit(
                 [&, this](auto &&arg) -> std::optional<std::string> {
                     using T = std::decay_t<decltype(arg)>;
@@ -707,7 +707,7 @@ namespace acslg::analyzer::symbolic {
                             std::make_unique<BinaryOpExpr>(
                                 std::make_unique<BinaryOpExpr>(getOffset()->clone(),
                                                                BinaryOpExpr::Operator::Add,
-                                                               range_.value().len_->clone()),
+                                                               length_.value()->clone()),
                                 BinaryOpExpr::Operator::Subtract, std::make_unique<LiteralExpr>(1))
                                 ->simplifiedExpr()
                                 ->regularForm(prefix, suffix);
@@ -806,7 +806,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::simplifiedExpr() const {
-        if (isRange())
+        if (length_)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
         return clone();
@@ -1064,10 +1064,10 @@ namespace acslg::analyzer::symbolic {
         }
 
         // compare range
-        if (range_ != std::nullopt && other->range_ != std::nullopt) {
-            if (*range_.value().len_ != *(other->range_.value().len_))
+        if (length_ != std::nullopt && other->length_ != std::nullopt) {
+            if (*length_.value() != *(other->length_.value()))
                 return false;
-        } else if ((range_ == std::nullopt) ^ (other->range_ == std::nullopt)) {
+        } else if ((length_ == std::nullopt) ^ (other->length_ == std::nullopt)) {
             return false;
         }
         return true;
@@ -1206,7 +1206,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     SymbolicExpr::UsedMap SymbolAddress::collectUsedVarsAndAddrs() const {
-        if (isRange())
+        if (length_)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
         return {{hash(), this}};
@@ -1214,7 +1214,9 @@ namespace acslg::analyzer::symbolic {
 
     SymbolAddress::SymbolAddress(const SymbolAddress &other)
         : Address(other), Symbol(other), offset_(other.offset_->clone().into_underlying()),
-          fromPoint_(other.fromPoint_), range_(other.range_) {
+          fromPoint_(other.fromPoint_), length_(std::nullopt) {
+        if (other.length_)
+            length_ = other.length_.value()->clone().into_underlying();
         std::visit(
             [this](auto &&arg) {
                 using T = std::decay_t<decltype(arg)>;
@@ -1252,13 +1254,9 @@ namespace acslg::analyzer::symbolic {
                   SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                   T_Symbol),
           offset_(std::make_unique<LiteralExpr>(ZERO_OFFSET)), fromAddr_(std::move(from)),
-          fromPoint_(fromPoint) {
+          fromPoint_(fromPoint), length_(std::move(length)) {
         if (offset != std::nullopt)
             offset_ = std::move(offset.value());
-        if (length) {
-            // Address Range.
-            range_ = Range{std::move(length.value())};
-        }
     }
 
     void SymbolAddress::setOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> offset) {
@@ -1288,29 +1286,24 @@ namespace acslg::analyzer::symbolic {
     void SymbolAddress::setLength(utils::not_null<std::unique_ptr<SymbolicExpr>> len) {
         if (!isValidOffsetOrLength(*len))
             ERROR("Invalid Length.");
-        if (range_ == std::nullopt) {
-            range_.emplace(std::move(len).into_underlying());
-            return;
-        }
-        range_.value().len_ = std::move(len).into_underlying();
+        length_.emplace(std::move(len).into_underlying());
     }
 
     void SymbolAddress::addLength(utils::not_null<std::unique_ptr<SymbolicExpr>> extra) {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
-        if (range_ == std::nullopt) {
-            range_.emplace(std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(1),
-                                                          BinaryOpExpr::Operator::Add,
-                                                          std::move(extra))
-                               ->simplifiedExpr()
-                               .into_underlying());
+        if (length_ == std::nullopt) {
+            length_.emplace(std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(1),
+                                                           BinaryOpExpr::Operator::Add,
+                                                           std::move(extra))
+                                ->simplifiedExpr()
+                                .into_underlying());
             return;
         }
-        range_.value().len_ =
-            std::make_unique<BinaryOpExpr>(range_.value().len_->clone().into_underlying(),
-                                           BinaryOpExpr::Operator::Add, std::move(extra))
-                ->simplifiedExpr()
-                .into_underlying();
+        length_ = std::make_unique<BinaryOpExpr>(length_.value()->clone().into_underlying(),
+                                                 BinaryOpExpr::Operator::Add, std::move(extra))
+                      ->simplifiedExpr()
+                      .into_underlying();
     }
 
     size_t SymbolAddress::BaseInfo::hash() const {

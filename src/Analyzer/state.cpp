@@ -1091,7 +1091,7 @@ namespace acslg::analyzer {
             if (memoryMap_constantRange_.contains(baseInfo)) {
                 auto offset = symbolAddr->getOffset();
                 if (auto constOffset = offset->tryEvalAsConstant();
-                    constOffset && !symbolAddr->isRange()) {
+                    constOffset && !symbolAddr->getLength()) {
                     if (constOffset.value() < 0)
                         ERROR("Negetive offset.");
                     auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
@@ -1106,8 +1106,8 @@ namespace acslg::analyzer {
                         firstLEIt->first.second <= unsignedOffset)
                         return std::nullopt;
                     return firstLEIt->second.get().get();
-                } else if (constOffset && symbolAddr->isRange() &&
-                           symbolAddr->getLength()->tryEvalAsConstant()) {
+                } else if (auto &len = symbolAddr->getLength();
+                           constOffset && len && len.value()->tryEvalAsConstant()) {
                     UNIMPLEMENT(
                         "There doesn't appear to be a need for constant-range range queries at "
                         "this time.");
@@ -1151,10 +1151,10 @@ namespace acslg::analyzer {
             auto baseInfo = symbolAddr->getBaseInfo();
 
             auto constOffset = symbolAddr->getOffset()->tryEvalAsConstant();
-            auto constLen =
-                symbolAddr->isRange() ? symbolAddr->getLength()->tryEvalAsConstant() : std::nullopt;
+            auto &len        = symbolAddr->getLength();
+            auto constLen    = len ? len.value()->tryEvalAsConstant() : std::nullopt;
 
-            if (constOffset && (!symbolAddr->isRange() || constLen)) {
+            if (constOffset && (!len || constLen)) {
                 if (constOffset.value() < 0 || (constLen && constLen.value() <= 0))
                     ERROR("Constant offset must be greater or equal to zero and length must be "
                           "greater than zero.");
@@ -1346,8 +1346,8 @@ namespace acslg::analyzer {
                 Item it{addr, std::move(expr)};
 
                 it.constOff = it.key.getOffset()->tryEvalAsConstant();
-                if (it.key.isRange()) {
-                    it.constLen = it.key.getLength()->tryEvalAsConstant();
+                if (auto &len = it.key.getLength()) {
+                    it.constLen = len.value()->tryEvalAsConstant();
                 }
 
                 // Both offset and length constant → should have been inserted into constant map.
@@ -1358,14 +1358,14 @@ namespace acslg::analyzer {
                 // Precompute endpoint/value hashes (using simplified forms)
                 it.offHash = it.key.getOffset()->simplifiedExpr()->hash();
                 it.valHash = it.val->simplifiedExpr()->hash();
-                if (it.key.isRange())
-                    it.lenHash = it.key.getLength()->simplifiedExpr()->hash();
+                if (auto &len = it.key.getLength())
+                    it.lenHash = len.value()->simplifiedExpr()->hash();
 
                 // Right endpoint hash:
                 // - range: hash(offset + length)
                 // - non-range: hash(offset + 1) → single-address treated as [off, off+1)
-                if (it.key.isRange()) {
-                    it.rightHash = addedHash(*it.key.getOffset(), *it.key.getLength());
+                if (auto &len = it.key.getLength()) {
+                    it.rightHash = addedHash(*it.key.getOffset(), *len.value());
                 } else {
                     it.rightHash = addedHash(*it.key.getOffset(), symbolic::LiteralExpr{1});
                 }
@@ -1437,8 +1437,8 @@ namespace acslg::analyzer {
                         // Append the successor's length:
                         // - If successor is range: add its length expression
                         // - If successor is non-range: add 1
-                        if (itemToBeMerged.key.isRange()) {
-                            mergedKey.addLength(itemToBeMerged.key.getLength()->clone());
+                        if (auto &len = itemToBeMerged.key.getLength()) {
+                            mergedKey.addLength(len.value()->clone());
                         } else {
                             mergedKey.addLength(std::make_unique<symbolic::LiteralExpr>(1));
                         }

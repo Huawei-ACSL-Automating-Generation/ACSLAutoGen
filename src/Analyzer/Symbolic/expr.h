@@ -886,33 +886,6 @@ namespace acslg::analyzer::symbolic {
     /// @brief Symbolic address with fromAddr, fromPoint, offset and length. Maybe a symbol value
     /// of pointer variable or an address of heap.
     class SymbolAddress : public Address, public Symbol {
-      private:
-        struct Range {
-            utils::not_null<std::unique_ptr<const SymbolicExpr>>
-                len_; ///< The length of an address. The Address type does not store pointer types
-                      ///< currently, thus it does not support C-style pointer conversion.
-            // utils::not_null<std::unique_ptr<const SymbolValue>>
-            //     index_; ///< Vaule of this AddressRange may rely on this ghost variable.
-
-            Range(utils::not_null<std::unique_ptr<const SymbolicExpr>> len)
-                : len_(std::move(len)) /*,
-                   index_(make_unique<SymbolValue>(SymbolicExpr::Type{ScalarKind::UInt, 32},
-                                                std::monostate{}))*/
-            {}
-
-            Range(const Range &other)
-                : len_(other.len_->clone().into_underlying()) /*,
-                   index_(std::make_unique<SymbolValue>(*other.index_))*/
-            {}
-            Range &operator=(const Range &other) {
-                len_ = other.len_->clone().into_underlying();
-                // index_ = std::make_unique<SymbolValue>(*other.index_);
-                return *this;
-            }
-            Range(Range &&other)       = default;
-            Range &operator=(Range &&) = default;
-        };
-
       public:
         inline static constexpr signed long ZERO_OFFSET =
             0; ///< Unify the type of zero under zero offset. This type should be the same as the
@@ -1018,30 +991,20 @@ namespace acslg::analyzer::symbolic {
 
         void setLength(utils::not_null<std::unique_ptr<SymbolicExpr>> len);
         void addLength(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
-        auto getLength() const -> const auto & {
-            if (range_ == std::nullopt)
-                ERROR("Is not a range! Do isRange first.");
-            return range_.value().len_;
-        }
-        // auto getIndex() const -> const auto & {
-        //     if (range_ == std::nullopt)
-        //         ERROR("Is not a range! Do isRange first.");
-        //     return range_.value().index_;
-        // }
-        bool isRange() const { return range_ != std::nullopt; }
-        void resetRange() { range_ = std::nullopt; }
+        auto getLength() const -> const auto & { return length_; }
+        void resetLength() { length_ = std::nullopt; }
         BaseInfo getBaseInfo() const;
 
         // StInG: Support functions for affine invariant analysis
         UsedMap collectUsedVarsAndAddrs() const override;
         bool isLinear() const override {
-            if (isRange())
+            if (length_)
                 ERROR("Address range is solely for address representation and should not be "
                       "used as an expression.");
             return true;
         }
         int getMaxDegree() const override {
-            if (isRange())
+            if (length_)
                 ERROR("Address range is solely for address representation and should not be "
                       "used as an expression.");
             return 1;
@@ -1065,7 +1028,7 @@ namespace acslg::analyzer::symbolic {
                        ///< the *alloc*.
 
         SourcePoint fromPoint_;
-        std::optional<Range> range_;
+        std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> length_;
     };
 
     /// @class VariableAddress

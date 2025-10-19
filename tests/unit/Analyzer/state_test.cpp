@@ -671,12 +671,12 @@ namespace acslg::test::unit::analyzer {
             ASSERT_NE(symbolAddr, nullptr);
             if (symbolAddr->getBaseInfo() == a0.getBaseInfo() && *value == *sv) {
                 // If length is accessible and constant, also assert == 4
-                if (symbolAddr->isRange()) {
-                    if (auto c = symbolAddr->getLength()->tryEvalAsConstant()) {
+                if (auto &len = symbolAddr->getLength()) {
+                    if (auto c = len.value()->tryEvalAsConstant()) {
                         EXPECT_EQ(c.value(), 4);
                         return;
                     }
-                    FAIL() << symbolAddr->getLength()->dump();
+                    FAIL() << len.value()->dump();
                 }
             }
             FAIL() << symbolAddr->dump();

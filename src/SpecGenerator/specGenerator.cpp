@@ -381,8 +381,8 @@ namespace acslg::spec_generator {
 
                     std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> length{};
                     // If original was a range, also substitute and std::set the length.
-                    if (symbolAddr->isRange()) {
-                        length = symbolAddr->getLength()->clone();
+                    if (auto &len = symbolAddr->getLength()) {
+                        length = len.value()->clone();
                         substituteSymbols(length.value(), loopEntryPath, fromPoint);
                         length = length.value()->simplifiedExpr();
                     }
