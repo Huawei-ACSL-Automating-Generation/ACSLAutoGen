@@ -235,62 +235,44 @@ namespace acslg::spec_generator {
                 auto from = symbolAddr->getFromAddr();
                 // If the base address itself is x-step, then there is no need to check the
                 // offset (or to check it for reliability).
-                if (auto range = std::visit(
-                        [&](auto &&arg) -> std::optional<symb::SymbolAddress> {
-                            using T = std::decay_t<decltype(arg)>;
-                            if constexpr (std::is_same_v<T, std::monostate>) {
-                                ERROR("Invalid state");
-                            } else if constexpr (std::is_same_v<T, utils::not_null<std::unique_ptr<
-                                                                       const symb::Address>>>) {
-                                if (auto it = patternInfo.patternsMap_.find(*arg);
-                                    it != patternInfo.patternsMap_.end()) {
-                                    auto &pattern = it->second;
-                                    if (pattern == std::nullopt)
-                                        TODO();
-                                    auto result = *symbolAddr;
-                                    result.setOffset(std::make_unique<symb::LiteralExpr>(
-                                        symb::SymbolAddress::ZERO_OFFSET));
-                                    if (!indexInfo.preciseLoopCount_->isUnknown())
-                                        result.setLength(
-                                            indexInfo.preciseLoopCount_->simplifiedExpr());
-                                    else
-                                        result.setLength(indexInfo.maxLoopCount_->simplifiedExpr());
-                                    return result;
-                                }
-                            }
-                            return std::nullopt;
-                        },
-                        from))
-                    return range;
+                if (from == std::nullopt)
+                    ERROR("Invalid state");
+                if (auto it = patternInfo.patternsMap_.find(*from.value());
+                    it != patternInfo.patternsMap_.end()) {
+                    auto &pattern = it->second;
+                    if (pattern == std::nullopt)
+                        TODO();
+                    auto result = *symbolAddr;
+                    result.setOffset(
+                        std::make_unique<symb::LiteralExpr>(symb::SymbolAddress::ZERO_OFFSET));
+                    if (!indexInfo.preciseLoopCount_->isUnknown())
+                        result.setLength(indexInfo.preciseLoopCount_->simplifiedExpr());
+                    else
+                        result.setLength(indexInfo.maxLoopCount_->simplifiedExpr());
+                    return result;
+                }
+
                 auto offset = symbolAddr->getOffset();
                 // Is offset x-step?
                 if (auto symbolValue = llvm::dyn_cast<const symb::SymbolValue>(offset.get())) {
-                    return std::visit(
-                        [&](auto &&arg) -> std::optional<symb::SymbolAddress> {
-                            using T = std::decay_t<decltype(arg)>;
-                            if constexpr (std::is_same_v<T, std::monostate>) {
-                                TODO();
-                            } else if constexpr (std::is_same_v<T, utils::not_null<std::unique_ptr<
-                                                                       const symb::Address>>>) {
-                                if (auto it = patternInfo.patternsMap_.find(*arg);
-                                    it != patternInfo.patternsMap_.end()) {
-                                    auto &pattern = it->second;
-                                    if (pattern == std::nullopt)
-                                        TODO();
-                                    auto result = *symbolAddr;
-                                    result.setOffset(pattern.value().initialValue_->clone());
-                                    if (!indexInfo.preciseLoopCount_->isUnknown())
-                                        result.setLength(
-                                            indexInfo.preciseLoopCount_->simplifiedExpr());
-                                    else
-                                        result.setLength(indexInfo.maxLoopCount_->simplifiedExpr());
-                                    return result;
-                                } else {
-                                    TODO();
-                                }
-                            }
-                        },
-                        symbolValue->getFromAddr());
+                    auto symbolValueFrom = symbolValue->getFromAddr();
+                    if (symbolValueFrom == std::nullopt)
+                        TODO();
+                    if (auto it = patternInfo.patternsMap_.find(*symbolValueFrom.value());
+                        it != patternInfo.patternsMap_.end()) {
+                        auto &pattern = it->second;
+                        if (pattern == std::nullopt)
+                            TODO();
+                        auto result = *symbolAddr;
+                        result.setOffset(pattern.value().initialValue_->clone());
+                        if (!indexInfo.preciseLoopCount_->isUnknown())
+                            result.setLength(indexInfo.preciseLoopCount_->simplifiedExpr());
+                        else
+                            result.setLength(indexInfo.maxLoopCount_->simplifiedExpr());
+                        return result;
+                    } else {
+                        TODO();
+                    }
                 }
                 return std::nullopt;
             }; // tryGetAsRange end
@@ -719,24 +701,12 @@ namespace acslg::spec_generator {
                             return;
                         }
 
-                        if (auto elementAddr = getAddress(elementExpr)) {
-                            if (!std::visit(
-                                    [&](auto &&arg) -> bool {
-                                        using T = std::decay_t<decltype(arg)>;
-                                        if constexpr (std::is_same_v<T, std::monostate>) {
-                                            TODO();
-                                        } else if constexpr (std::is_same_v<
-                                                                 T, utils::not_null<std::unique_ptr<
-                                                                        const symb::Address>>>) {
-                                            return *arg == *elementAddr.value();
-                                        }
-                                    },
-                                    maxVar->getFromAddr())) {
-                                return;
-                            }
-                        } else {
+                        auto evalResult = path->evalExpr(elementExpr);
+                        if (evalResult.second.size() != 1)
+                            ERROR("Branch isn't permitted here.");
+                        auto &elementValue = evalResult.second.front();
+                        if (*maxVar != *elementValue)
                             return;
-                        }
                     }
                 } else {
                     return;

@@ -4,7 +4,6 @@
 #include <unordered_map>
 #include <map>
 #include <stack>
-#include <variant>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/Expr.h>
@@ -217,11 +216,11 @@ namespace acslg::analyzer {
                 ERROR("Length should not be 0, something goes wrong.");
             else if (len == 1)
                 return std::make_unique<symbolic::SymbolAddress>(
-                    std::move(base.from_), base.fromPoint_,
+                    std::move(base.fromAddr_), base.fromPoint_,
                     std::make_unique<symbolic::LiteralExpr>(off));
             else
                 return make_unique<symbolic::SymbolAddress>(
-                    std::move(base.from_), base.fromPoint_,
+                    std::move(base.fromAddr_), base.fromPoint_,
                     std::make_unique<symbolic::LiteralExpr>(off),
                     std::make_unique<symbolic::LiteralExpr>(len));
         }

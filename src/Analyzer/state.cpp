@@ -2,7 +2,6 @@
 #include <unordered_map>
 #include <memory>
 #include <set>
-#include <variant>
 #include <ranges>
 #include <llvm/ADT/TypeSwitch.h>
 #include <llvm/ADT/APSInt.h>
@@ -540,13 +539,8 @@ namespace acslg::analyzer {
 
                             // Allocate a fresh symbolic address anchored at the current allocation
                             // site.
-                            using FromVar = std::variant<
-                                std::monostate,
-                                utils::not_null<std::unique_ptr<const symbolic::Address>>>;
-                            symbolic::SymbolAddress::BaseInfo baseInfo{
-                                FromVar{std::in_place_index<0>}, startPoint_};
                             auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                std::move(baseInfo.from_), baseInfo.fromPoint_,
+                                std::nullopt, startPoint_,
                                 std::make_unique<symbolic::LiteralExpr>(0) // offset := 0
                             );
 
@@ -573,13 +567,8 @@ namespace acslg::analyzer {
                             const clang::RecordDecl *RD = RT->getDecl();
                             const auto &layout = RD->getASTContext().getASTRecordLayout(RD);
 
-                            using FromVar = std::variant<
-                                std::monostate,
-                                utils::not_null<std::unique_ptr<const symbolic::Address>>>;
-                            symbolic::SymbolAddress::BaseInfo baseInfo{
-                                FromVar{std::in_place_index<0>}, startPoint_};
                             auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                std::move(baseInfo.from_), baseInfo.fromPoint_,
+                                std::nullopt, startPoint_,
                                 std::make_unique<symbolic::LiteralExpr>(0));
 
                             // Materialize a symbolic structure value at the allocated base address.

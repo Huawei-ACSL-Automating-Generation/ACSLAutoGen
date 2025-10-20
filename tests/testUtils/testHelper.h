@@ -8,9 +8,7 @@
 
 #include "ASTExtractor.h"
 #include "SpecGenerator/specGenerator.h"
-#include "Analyzer/function.h"
 #include "Analyzer/state.h"
-#include "Analyzer/analysis.h"
 
 namespace acslg::test::utils {
     // These codes performs minimal safety checks, so please ensure the validity of the input.

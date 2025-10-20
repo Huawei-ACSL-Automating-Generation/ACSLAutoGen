@@ -1,6 +1,7 @@
 // src/SpecGenerator/stringTemplate.cpp
 
 #include "stringTemplate.h"
+#include <string_view>
 
 namespace acslg::spec_generator {
     StringTemplate::StringTemplate(const char *str) {
@@ -53,9 +54,9 @@ namespace acslg::spec_generator {
 
     size_t StringTemplate::remap(const NameMap &nameMap) {
         size_t count = 0;
-        std::unordered_map<std::string, std::unordered_set<size_t>> temp;
+        std::unordered_map<std::string_view, std::unordered_set<size_t>> temp;
         for (auto &nameMap_it : nameMap) {
-            if (auto nameToPh_it = nameToPh_.find(nameMap_it.first);
+            if (auto nameToPh_it = nameToPh_.find(std::string{nameMap_it.first});
                 nameToPh_it != nameToPh_.end()) {
                 auto &phSet = nameToPh_it->second;
                 for (auto &id : phSet) {
@@ -67,7 +68,7 @@ namespace acslg::spec_generator {
             }
         }
         for (auto &kv : temp) {
-            nameToPh_[kv.first].merge(std::move(kv.second));
+            nameToPh_[std::string{kv.first}].merge(std::move(kv.second));
         }
 
         if (next_)

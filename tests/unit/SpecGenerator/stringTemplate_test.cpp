@@ -3,7 +3,6 @@
 #include <gtest/gtest.h>
 #include "stringTemplate.h"
 #include <unordered_map>
-#include <string>
 
 using namespace std;
 

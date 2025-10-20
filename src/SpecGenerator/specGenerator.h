@@ -8,7 +8,6 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
-#include <variant>
 #include <clang/AST/Expr.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/StmtCXX.h>

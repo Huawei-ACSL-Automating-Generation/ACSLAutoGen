@@ -2,17 +2,12 @@
 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include <unordered_map>
-#include <string>
 #include "xmock.h"
 #include "state.h"
-#include "ASTExtractor.h"
-#include "clang/AST/AST.h"
 #include "clang/AST/Decl.h"
 #include "expr.h"
 #include "testHelper.h"
 
-using ::testing::Return;
 using namespace std;
 using namespace clang;
 

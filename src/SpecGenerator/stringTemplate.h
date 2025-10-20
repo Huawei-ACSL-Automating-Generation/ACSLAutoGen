@@ -3,20 +3,16 @@
 #ifndef __ACSLG_SRC_SPECGENERATOR_STRINGTEMPLATE_H__
 #define __ACSLG_SRC_SPECGENERATOR_STRINGTEMPLATE_H__
 
-
 #include <string>
+#include <string_view>
 #include <vector>
-#include <iostream>
-#include <map>
 #include <unordered_map>
 #include <unordered_set>
-#include <functional>
-#include <type_traits>
 #include <utility>
 #include <memory>
 
 namespace acslg::spec_generator {
-    using NameMap = std::unordered_map<std::string, std::string>;
+    using NameMap = std::unordered_map<std::string_view, std::string_view>;
 
     /// Parse a std::string containing placeholders in the form of ${name} as a template, supporting
     /// placeholder substitution and templates concatenation.

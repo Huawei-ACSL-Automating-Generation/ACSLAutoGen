@@ -1,11 +1,7 @@
 #ifndef __ACSLG_SRC_ANALYZER_FUNCTION_H__
 #define __ACSLG_SRC_ANALYZER_FUNCTION_H__
 
-
-#include <unordered_set>
-#include <unordered_map>
 #include <clang/AST/Decl.h>
-#include "Utils/utils.h"
 
 namespace acslg::analyzer {
     class ACSLFunction {

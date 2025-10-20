@@ -1,10 +1,14 @@
+#include "expr.h"
+
 #include <memory>
 #include <sstream>
 #include <cstring>
 #include <variant>
 #include <ranges>
 #include <llvm/ADT/TypeSwitch.h>
-#include "expr.h"
+#include <llvm/Support/Casting.h>
+
+#include "aggregateExpr.h" // IWYU pragma: keep
 #include "macros.h"
 
 namespace acslg::analyzer::symbolic {
@@ -222,7 +226,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     size_t LiteralExpr::hash() const {
-        size_t seed = utils::hash_val(getType(), type_);
+        size_t seed = utils::hash_val(getKind(), type_);
 
         switch (type_) {
             using enum LiteralType;
@@ -238,50 +242,40 @@ namespace acslg::analyzer::symbolic {
     }
 
     size_t SymbolValue::hash() const {
-        size_t seed = utils::hash_val(getType(), fromAddr_->hash(), fromPoint_.hash());
+        size_t seed = utils::hash_val(getKind(), fromAddr_->hash(), fromPoint_.hash());
         return seed;
     }
 
     size_t UnaryOpExpr::hash() const {
-        return utils::hash_val(getType(), static_cast<size_t>(op_), expr_->hash());
+        return utils::hash_val(getKind(), static_cast<size_t>(op_), expr_->hash());
     }
 
     size_t BinaryOpExpr::hash() const {
-        return utils::hash_val(getType(), static_cast<size_t>(op_), left_->hash(), right_->hash());
+        return utils::hash_val(getKind(), static_cast<size_t>(op_), left_->hash(), right_->hash());
     }
 
     size_t SymbolAddress::hash() const {
-        size_t seed = utils::hash_val(getType(), fromPoint_.hash(), offset_->hash(),
+        size_t seed = utils::hash_val(getKind(), fromPoint_.hash(), offset_->hash(),
                                       length_ ? length_.value()->hash() : 0);
 
-        std::visit(
-            [&](auto &&arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    return;
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    seed = utils::hash_val(seed, arg->hash());
-                }
-            },
-            fromAddr_);
+        seed = utils::hash_val(seed, fromAddr_ ? fromAddr_.value()->hash() : 0);
         return seed;
     }
 
-    size_t VariableAddress::hash() const { return utils::hash_val(getType(), from_.get()); }
+    size_t VariableAddress::hash() const { return utils::hash_val(getKind(), from_.get()); }
 
     size_t FieldAddress::hash() const {
-        return utils::hash_val(getType(), from_.first->hash(), from_.second);
+        return utils::hash_val(getKind(), from_.first->hash(), from_.second);
     }
 
     size_t Structure::hash() const {
-        auto seed = utils::hash_val(getType(), info_.definition_.get());
+        auto seed = utils::hash_val(getKind(), info_.definition_.get());
         for (auto &field : fields_)
             seed = utils::hash_val(seed, field->hash());
         return seed;
     }
 
-    size_t UnknownExpr::hash() const { return utils::hash_val(getType()); }
+    size_t UnknownExpr::hash() const { return utils::hash_val(getKind()); }
 
     std::string LiteralExpr::dump() const {
         using namespace utils::dump_fmt;
@@ -366,35 +360,12 @@ namespace acslg::analyzer::symbolic {
 
     std::string UnknownExpr::dump() const { return utils::dump_fmt::hint("{unknown}"); }
 
-    template <class FromVariant>
-    static inline void dump_from(std::ostringstream &oss, const FromVariant &from) {
-        using namespace utils::dump_fmt;
-        std::visit(overloaded{[&](std::monostate) { oss << hint("none"); },
-                              [&](utils::not_null<const clang::VarDecl *> d) {
-                                  const clang::Decl *decl = d.get();
-                                  if (auto *nd = llvm::dyn_cast<clang::NamedDecl>(decl))
-                                      oss << key("decl") << ":" << nd->getDeclKindName() << " "
-                                          << path(nd->getQualifiedNameAsString());
-                                  else
-                                      oss << key("decl") << ":" << decl->getDeclKindName();
-                              },
-                              [&](const utils::not_null<std::unique_ptr<const Address>> &p) {
-                                  oss << key("addr") << ":" << p->dump();
-                              },
-                              [&](const std::pair<utils::not_null<std::unique_ptr<const Address>>,
-                                                  const size_t> &s) {
-                                  oss << key("field of") << ":" << s.first.get()->dump() << "["
-                                      << utils::dump_fmt::lit(std::to_string(s.second)) << "]";
-                              }},
-                   from);
-    }
-
     std::string SymbolValue::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         const auto &t = getValType();
 
-        oss << type("Var") << "(";
+        oss << type("SymbolValue") << "(";
         switch (t.kind) {
             case ScalarKind::Int: oss << "int"; break;
             case ScalarKind::UInt: oss << "uint"; break;
@@ -424,7 +395,10 @@ namespace acslg::analyzer::symbolic {
             oss << "[" << off->dump() << " " << hint("... +") << length_.value()->dump() << "]";
 
         oss << " {" << key("from") << "=";
-        dump_from(oss, fromAddr_);
+        if (fromAddr_)
+            oss << key("addr") << ":" << fromAddr_.value()->dump();
+        else
+            oss << hint("none");
         oss << "}, "
             << "{" << key("from point") << "=" << path(fromPoint_.dump()) << "}";
         return oss.str();
@@ -600,33 +574,25 @@ namespace acslg::analyzer::symbolic {
                                                           bool) const {
         if (length_)
             ERROR("Address range has no regularForm but regularFormOfValue.");
-        return std::visit(
-            [&, this](auto &&arg) -> std::optional<std::string> {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    // ERROR("Trying to get regular form of address without from_.");
-                    // here too.
-                    return std::nullopt;
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    auto nameStr = arg->regularFormOfValue(prefix, suffix);
-                    if (nameStr == std::nullopt)
-                        return std::nullopt;
-                    auto offsetStr = offset_->regularForm(prefix, suffix);
-                    if (offsetStr == std::nullopt)
-                        return std::nullopt;
+        if (fromAddr_ == std::nullopt) {
+            // here too.
+            return std::nullopt;
+        }
+        auto nameStr = regularFormOfBase(prefix, suffix);
+        if (nameStr == std::nullopt)
+            return std::nullopt;
+        auto offsetStr = offset_->regularForm(prefix, suffix);
+        if (offsetStr == std::nullopt)
+            return std::nullopt;
 
-                    if (offsetStr.value() == "0")
-                        offsetStr.value() = "";
+        if (offsetStr.value() == "0")
+            offsetStr.value() = "";
 
-                    if (!offsetStr.value().empty())
-                        return "(" + std::string{prefix.value_or("")} + nameStr.value() +
-                               std::string{suffix.value_or("")} + "+" + offsetStr.value() + ")";
-                    else
-                        return nameStr;
-                }
-            },
-            fromAddr_);
+        if (!offsetStr.value().empty())
+            return "(" + std::string{prefix.value_or("")} + nameStr.value() +
+                   std::string{suffix.value_or("")} + "+" + offsetStr.value() + ")";
+        else
+            return nameStr;
     }
 
     std::optional<std::string> VariableAddress::regularForm(std::optional<std::string_view> prefix,
@@ -665,77 +631,54 @@ namespace acslg::analyzer::symbolic {
 
     std::optional<std::string> SymbolAddress::regularFormOfValue(
         std::optional<std::string_view> prefix,
-        std::optional<std::string_view> suffix,
-        int,
-        bool) const {
+        std::optional<std::string_view> suffix) const {
         if (length_ == std::nullopt) {
-            return std::visit(
-                [&, this](auto &&arg) -> std::optional<std::string> {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, std::monostate>) {
-                        ERROR("Trying to get regular form of address without from_.");
-                    } else if constexpr (std::is_same_v<
-                                             T, utils::not_null<std::unique_ptr<const Address>>>) {
-                        auto nameStr = arg->regularFormOfValue(prefix, suffix);
-                        if (nameStr == std::nullopt)
-                            return std::nullopt;
-                        auto offsetStr = offset_->regularForm(prefix, suffix);
-                        if (offsetStr == std::nullopt)
-                            return std::nullopt;
+            if (fromAddr_ == std::nullopt)
+                ERROR("Trying to get regular form of address without from_.");
+            auto nameStr = regularFormOfBase(prefix, suffix);
+            if (nameStr == std::nullopt)
+                return std::nullopt;
+            auto offsetStr = offset_->regularForm(prefix, suffix);
+            if (offsetStr == std::nullopt)
+                return std::nullopt;
 
-                        return nameStr.value() + "[" + offsetStr.value() + "]";
-                    }
-                },
-                fromAddr_);
+            return nameStr.value() + "[" + offsetStr.value() + "]";
         } else {
-            return std::visit(
-                [&, this](auto &&arg) -> std::optional<std::string> {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, std::monostate>) {
-                        // here also.
-                        return std::nullopt;
-                    } else if constexpr (std::is_same_v<
-                                             T, utils::not_null<std::unique_ptr<const Address>>>) {
-                        auto nameStr = arg->regularFormOfValue(prefix, suffix);
-                        if (nameStr == std::nullopt)
-                            return std::nullopt;
-                        auto offsetStr = getOffset()->regularForm(prefix, suffix);
-                        if (offsetStr == std::nullopt)
-                            return std::nullopt;
+            if (fromAddr_ == std::nullopt) {
+                // here also.
+                return std::nullopt;
+            }
+            auto nameStr = fromAddr_.value()->regularFormOfValue(prefix, suffix);
+            if (nameStr == std::nullopt)
+                return std::nullopt;
+            auto offsetStr = getOffset()->regularForm(prefix, suffix);
+            if (offsetStr == std::nullopt)
+                return std::nullopt;
 
-                        auto rangeStr =
-                            std::make_unique<BinaryOpExpr>(
+            auto rangeStr = std::make_unique<BinaryOpExpr>(
                                 std::make_unique<BinaryOpExpr>(getOffset()->clone(),
                                                                BinaryOpExpr::Operator::Add,
                                                                length_.value()->clone()),
                                 BinaryOpExpr::Operator::Subtract, std::make_unique<LiteralExpr>(1))
                                 ->simplifiedExpr()
                                 ->regularForm(prefix, suffix);
-                        if (rangeStr == std::nullopt)
-                            return std::nullopt;
+            if (rangeStr == std::nullopt)
+                return std::nullopt;
 
-                        return nameStr.value() + "[" + offsetStr.value() + ".." + rangeStr.value() +
-                               "]";
-                    }
-                },
-                getFromAddr());
+            return nameStr.value() + "[" + offsetStr.value() + ".." + rangeStr.value() + "]";
         }
     }
 
     std::optional<std::string> VariableAddress::regularFormOfValue(
         std::optional<std::string_view> prefix,
-        std::optional<std::string_view> suffix,
-        int,
-        bool) const {
+        std::optional<std::string_view> suffix) const {
         return (prefix ? (std::string)*prefix : "") + from_->getNameAsString() +
                (suffix ? (std::string)*suffix : "");
     }
 
     std::optional<std::string> FieldAddress::regularFormOfValue(
         std::optional<std::string_view> prefix,
-        std::optional<std::string_view> suffix,
-        int,
-        bool) const {
+        std::optional<std::string_view> suffix) const {
         auto addrStr = regularForm(prefix, suffix);
         if (addrStr == std::nullopt)
             return std::nullopt;
@@ -751,31 +694,26 @@ namespace acslg::analyzer::symbolic {
                                                       std::optional<std::string_view> suffix,
                                                       int,
                                                       bool) const {
-        return std::visit(
-            [&](auto &&arg) -> std::optional<std::string> {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    return std::nullopt;
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    auto addr = arg->regularForm();
-                    if (addr == std::nullopt)
-                        return std::nullopt;
-                    if (addr.value().length() == 0) {
-                        ERROR("Empty regular from.");
-                    }
-                    if (addr.value()[0] == '&')
-                        return std::string{prefix.value_or("")} + addr.value().substr(1) +
-                               std::string{suffix.value_or("")};
-                    return std::string{prefix.value_or("(")} + "*" + addr.value() +
-                           std::string{suffix.value_or(")")};
-                }
-            },
-            getFromAddr());
+        auto from = getFromAddr();
+        if (from == std::nullopt)
+            return std::nullopt;
+        auto addr = from.value()->regularForm();
+        if (addr == std::nullopt)
+            return std::nullopt;
+        if (addr.value().length() == 0) {
+            ERROR("Empty regular from.");
+        }
+        if (addr.value()[0] == '&')
+            return std::string{prefix.value_or("")} + addr.value().substr(1) +
+                   std::string{suffix.value_or("")};
+        return std::string{prefix.value_or("(")} + "*" + addr.value() +
+               std::string{suffix.value_or(")")};
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> LiteralExpr::simplifiedExpr() const {
-        return simplifiedExprIfLinear();
+        return simplifiedExprIfLinear(); // Here, unlike a direct `clone`, after
+                                         // `simplifiedExprIfLinear`, all constants will have the
+                                         // same type.
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> BinaryOpExpr::simplifiedExpr() const {
@@ -797,21 +735,10 @@ namespace acslg::analyzer::symbolic {
         return std::make_unique<UnaryOpExpr>(op_, std::move(subExpr));
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::simplifiedExpr() const {
-        return makeUnknown().into_underlying();
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::simplifiedExpr() const {
-        return simplifiedExprIfLinear();
-    }
-
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::simplifiedExpr() const {
         if (length_)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
-        return clone();
-    }
-    utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::simplifiedExpr() const {
         return clone();
     }
 
@@ -1032,27 +959,13 @@ namespace acslg::analyzer::symbolic {
         if (!other)
             return false;
 
-        bool flag = false;
-        // compare base
-        std::visit(
-            [&](auto &&arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    // check here too.
-                    flag = std::holds_alternative<std::monostate>(other->fromAddr_);
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    if (auto ptrAddr = std::get_if<utils::not_null<std::unique_ptr<const Address>>>(
-                            &other->fromAddr_);
-                        ptrAddr != nullptr && *arg == **ptrAddr) {
-                        flag = true;
-                    }
-                }
-            },
-            fromAddr_);
-        if (!flag) {
+        // compare from
+        if (fromAddr_ && other->fromAddr_ && *fromAddr_.value() != *other->fromAddr_.value()) {
             return false;
-        };
+        }
+
+        if ((other->fromAddr_ == std::nullopt) ^ (fromAddr_ == std::nullopt))
+            return false;
 
         if (fromPoint_ != other->fromPoint_)
             return false;
@@ -1092,32 +1005,16 @@ namespace acslg::analyzer::symbolic {
     }
 
     std::optional<utils::not_null<const clang::VarDecl *>> SymbolAddress::getFromRoot() const {
-        return std::visit(
-            [](auto &&arg) -> std::optional<utils::not_null<const clang::VarDecl *>> {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    return std::nullopt;
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    return arg->getFromRoot();
-                }
-            },
-            fromAddr_);
+        if (fromAddr_ == std::nullopt)
+            return std::nullopt;
+        return fromAddr_.value()->getFromRoot();
     }
 
     std::optional<utils::not_null<const clang::VarDecl *>> SymbolAddress::BaseInfo::getFromRoot()
         const {
-        return std::visit(
-            [](auto &&arg) -> std::optional<utils::not_null<const clang::VarDecl *>> {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    return std::nullopt;
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    return arg->getFromRoot();
-                }
-            },
-            from_);
+        if (fromAddr_ == std::nullopt)
+            return std::nullopt;
+        return fromAddr_.value()->getFromRoot();
     }
 
     std::optional<utils::not_null<const clang::VarDecl *>> VariableAddress::getFromRoot() const {
@@ -1217,42 +1114,25 @@ namespace acslg::analyzer::symbolic {
           fromPoint_(other.fromPoint_), length_(std::nullopt) {
         if (other.length_)
             length_ = other.length_.value()->clone().into_underlying();
-        std::visit(
-            [this](auto &&arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    fromAddr_ = std::monostate{};
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    fromAddr_.emplace<1>(arg->addressClone().into_underlying());
-                }
-            },
-            other.fromAddr_);
+        if (other.fromAddr_ == std::nullopt)
+            fromAddr_ = std::nullopt;
+        fromAddr_ = other.fromAddr_.value()->addressClone().into_underlying();
     }
 
     SymbolAddress::BaseInfo::BaseInfo(const SymbolAddress::BaseInfo &other)
         : fromPoint_(other.fromPoint_) {
-        std::visit(
-            [this](auto &&arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    from_ = std::monostate{};
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    from_.emplace<1>(arg->addressClone().into_underlying());
-                }
-            },
-            other.from_);
+        if (other.fromAddr_ == std::nullopt)
+            fromAddr_ = std::nullopt;
+        fromAddr_ = other.fromAddr_.value()->addressClone().into_underlying();
     }
 
     SymbolAddress::SymbolAddress(
-        std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> from,
+        std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
         SourcePoint fromPoint,
         std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> offset,
         std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> length)
-        : Address(SymbolicExpr::ExprType::SymbolAddr,
-                  SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
-                  T_Symbol),
+        : Address(SymbolicExpr::ExprKind::K_SymbolAddress,
+                  SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64}),
           offset_(std::make_unique<LiteralExpr>(ZERO_OFFSET)), fromAddr_(std::move(from)),
           fromPoint_(fromPoint), length_(std::move(length)) {
         if (offset != std::nullopt)
@@ -1307,48 +1187,21 @@ namespace acslg::analyzer::symbolic {
     }
 
     size_t SymbolAddress::BaseInfo::hash() const {
-        auto seed = utils::hash_val(fromPoint_.hash());
-        return std::visit(
-            [&](auto &&arg) -> size_t {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    return seed;
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    return utils::hash_val(seed, arg->hash());
-                }
-            },
-            from_);
+        return utils::hash_val(fromPoint_.hash(), fromAddr_ ? fromAddr_.value()->hash() : 0);
     }
 
     SymbolAddress::BaseInfo SymbolAddress::getBaseInfo() const {
-        return std::visit(
-            [this](auto &&arg) -> BaseInfo {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    return BaseInfo{std::monostate{}, fromPoint_};
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    return BaseInfo{arg->addressClone().into_underlying(), fromPoint_};
-                }
-            },
-            fromAddr_);
+        if (fromAddr_ == std::nullopt)
+            return BaseInfo{std::nullopt, fromPoint_};
+        return BaseInfo{fromAddr_.value()->addressClone().into_underlying(), fromPoint_};
     }
 
     int SymbolAddress::getDimension() const {
-        return std::visit(
-            [](auto &&arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    return -1;
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    if (auto dim = arg->getDimension(); dim >= 0)
-                        return dim + 1;
-                    return -1;
-                }
-            },
-            fromAddr_);
+        if (fromAddr_ == std::nullopt)
+            return -1;
+        if (auto dim = fromAddr_.value()->getDimension(); dim >= 0)
+            return dim + 1;
+        return -1;
     }
 
     int VariableAddress::getDimension() const { return 0; }
@@ -1404,10 +1257,9 @@ namespace acslg::analyzer::symbolic {
                          utils::not_null<std::unique_ptr<const Address>> from,
                          SourcePoint fromPoint)
         : SymbolicExpr(
-              ExprType::Structure,
+              ExprKind::K_Structure,
               Type{ScalarKind::Structure, static_cast<unsigned>(layout.getSize().getQuantity()) *
-                                              8 /*By default, char is 8-bit.*/},
-              T_Symbol),
+                                              8 /*By default, char is 8-bit.*/}),
           info_(Info{RD, layout}) {
         fields_.reserve(info_.layout_.getFieldCount());
         for (auto field : info_.definition_->fields()) {
@@ -1448,18 +1300,18 @@ namespace acslg::analyzer::symbolic {
         : SymbolicExpr(other), fromAddr_(other.fromAddr_->addressClone().into_underlying()),
           fromPoint_(other.fromPoint_) {}
 
-    std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprType t) {
+    std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprKind t) {
         switch (t) {
-            using enum SymbolicExpr::ExprType;
-            case Literal: os << "Literal"; break;
-            case SymbolValue: os << "SymbolValue"; break;
-            case SymbolAddr: os << "SymbolAddr"; break;
-            case VariableAddr: os << "VariableAddr"; break;
-            case FieldAddr: os << "FieldAddr"; break;
-            case BinaryOp: os << "BinaryOp"; break;
-            case UnaryOp: os << "UnaryOp"; break;
-            case Structure: os << "Structure"; break;
-            case Unknown: os << "Unknown"; break;
+            using enum SymbolicExpr::ExprKind;
+            case K_LiteralExpr: os << "Literal"; break;
+            case K_SymbolValue: os << "SymbolValue"; break;
+            case K_SymbolAddress: os << "SymbolAddr"; break;
+            case K_VariableAddress: os << "VariableAddr"; break;
+            case K_FieldAddress: os << "FieldAddr"; break;
+            case K_BinaryOpExpr: os << "BinaryOp"; break;
+            case K_UnaryOpExpr: os << "UnaryOp"; break;
+            case K_Structure: os << "Structure"; break;
+            case K_UnknownExpr: os << "Unknown"; break;
             default: UNREACHABLE();
         }
         return os;
@@ -1474,41 +1326,30 @@ namespace acslg::analyzer::symbolic {
             auto &field = fields_.at(index);
             auto symbol = llvm::dyn_cast<const Symbol>(field.get().get());
             if (symbol == nullptr)
-                return From{std::monostate{}, std::nullopt};
+                return From{std::nullopt, std::nullopt};
             auto fromAddr = symbol->getFromAddr();
-            std::optional<utils::not_null<std::unique_ptr<const Address>>> baseAddr{};
-            std::visit(
-                [&](auto &&arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, std::monostate>) {
-                        return;
-                    } else if constexpr (std::is_same_v<
-                                             T, utils::not_null<std::unique_ptr<const Address>>>) {
-                        auto fieldAddr = llvm::dyn_cast<const FieldAddress>(arg.get().get());
-                        if (fieldAddr == nullptr)
-                            return;
+            if (fromAddr == std::nullopt)
+                return From{std::nullopt, std::nullopt};
+            auto fieldAddr = llvm::dyn_cast<const FieldAddress>(fromAddr.value().get().get());
+            if (fieldAddr == nullptr)
+                return From{std::nullopt, std::nullopt};
 
-                        auto &[base, fieldId] = fieldAddr->getFrom();
-                        if (fieldId != index)
-                            return;
-                        baseAddr.emplace(base->addressClone().into_underlying());
-                    }
-                },
-                fromAddr);
-            if (baseAddr == std::nullopt)
-                return From{std::monostate{}, std::nullopt};
+            auto &[base, fieldId] = fieldAddr->getFrom();
+            if (fieldId != index)
+                return From{std::nullopt, std::nullopt};
+
             if (commonBaseAddr == std::nullopt)
-                commonBaseAddr = std::move(baseAddr);
+                commonBaseAddr = fromAddr.value()->addressClone().into_underlying();
 
             auto fromPoint = symbol->getFromPoint();
             if (fromPoint == std::nullopt)
-                return From{std::monostate{}, std::nullopt};
+                return From{std::nullopt, std::nullopt};
             if (commonBasePoint == std::nullopt)
                 commonBasePoint.emplace(fromPoint.value());
 
-            if (*commonBaseAddr.value() != *baseAddr.value() ||
+            if (*commonBaseAddr.value() != *fromAddr.value() ||
                 commonBasePoint.value() != fromPoint.value())
-                return From{std::monostate{}, std::nullopt};
+                return From{std::nullopt, std::nullopt};
         }
         if (commonBaseAddr == std::nullopt || commonBasePoint == std::nullopt)
             UNREACHABLE();
@@ -1516,8 +1357,7 @@ namespace acslg::analyzer::symbolic {
         return From{std::move(commonBaseAddr).value(), std::move(commonBasePoint).value()};
     }
 
-    std::variant<std::monostate, utils::not_null<std::unique_ptr<const Address>>> Structure::
-        getFromAddr() const {
+    std::optional<utils::not_null<std::unique_ptr<const Address>>> Structure::getFromAddr() const {
         return getFrom().first;
     }
 
@@ -1742,17 +1582,10 @@ namespace acslg::analyzer::symbolic {
 
         if (symbol->getFromPoint() == std::nullopt || symbol->getFromPoint().value() != fromPoint)
             return false;
-        return std::visit(
-            [&](auto &&arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    return false;
-                } else if constexpr (std::is_same_v<
-                                         T, utils::not_null<std::unique_ptr<const Address>>>) {
-                    return fromAddr == *arg;
-                }
-            },
-            symbol->getFromAddr());
+        auto from = symbol->getFromAddr();
+        if (from == std::nullopt)
+            return false;
+        return fromAddr == *from.value();
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> getSymbol(
@@ -1763,7 +1596,7 @@ namespace acslg::analyzer::symbolic {
             if (from)
                 return std::make_unique<SymbolAddress>(std::move(from.value()),
                                                        std::move(fromPoint));
-            return std::make_unique<SymbolAddress>(std::monostate{}, std::move(fromPoint));
+            return std::make_unique<SymbolAddress>(std::nullopt, std::move(fromPoint));
         } else if (type->isArrayType()) {
             TODO();
         } else if (type->isStructureType()) {
@@ -1786,15 +1619,25 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
+    bool Symbol::classof(const SymbolicExpr *e) {
+        return
+#define SUBCLASS(NAME) llvm::isa<NAME>(e) ||
+#include "subclassesOfSymbol.inc"
+#undef SUBCLASS
+            0;
+    }
+
     Symbol *Symbol::toThis(SymbolicExpr *e) {
         if (!Symbol::classof(e))
             return nullptr;
-        switch (e->getType()) {
-            case SymbolicExpr::ExprType::SymbolValue: return static_cast<SymbolValue *>(e);
-            case SymbolicExpr::ExprType::Structure: return static_cast<Structure *>(e);
-            case SymbolicExpr::ExprType::SymbolAddr: return static_cast<SymbolAddress *>(e);
-            default: UNREACHABLE();
-        }
+        return llvm::TypeSwitch<SymbolicExpr *, Symbol *>(e)
+#define SUBCLASS(NAME) .Case<NAME>([](NAME *sub) { return static_cast<NAME *>(sub); })
+#include "subclassesOfSymbol.inc"
+#undef SUBCLASS
+            .Default([](SymbolicExpr *) {
+                UNREACHABLE();
+                return nullptr;
+            });
     }
 
     const Symbol *Symbol::toThis(const SymbolicExpr *e) {

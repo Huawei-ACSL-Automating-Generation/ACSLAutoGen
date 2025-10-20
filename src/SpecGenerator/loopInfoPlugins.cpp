@@ -1,7 +1,6 @@
 // src/SpecGenerator/looopInfoPlugins.cpp
 
 #include "specGenerator.h"
-#include "stringTemplate.h"
 #include "macros.h"
 #include "state.h"
 

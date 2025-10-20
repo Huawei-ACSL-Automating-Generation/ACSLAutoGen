@@ -2,25 +2,17 @@
 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include <unordered_map>
 #include <string>
 #include <llvm/Support/Casting.h>
-#include "ASTExtractor.h"
-#include "SpecGenerator/specGenerator.h"
-#include "Analyzer/function.h"
 #include "Analyzer/state.h"
-#include "Analyzer/analysis.h"
-#include "Context/context.h"
 #include "testHelper.h"
 
 using namespace std;
 
 using ::testing::AllOf;
 using ::testing::AnyOf;
-using ::testing::Eq;
 using ::testing::HasSubstr;
 using ::testing::StartsWith;
-using ::testing::StrEq;
 
 namespace acslg::test::integration {
     using namespace utils;

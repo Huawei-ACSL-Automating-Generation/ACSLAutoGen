@@ -1,7 +1,6 @@
 // src/SpecGenerator/groups.cpp
 
 #include "specGenerator.h"
-#include "macros.h"
 
 namespace acslg::spec_generator {
     REGISTER_ACSL_GROUP(EmptyGroup);

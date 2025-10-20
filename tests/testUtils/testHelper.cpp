@@ -2,6 +2,8 @@
 
 #include "testHelper.h"
 
+#include "Analyzer/analysis.h"
+
 using namespace std;
 using namespace clang;
 using namespace llvm;

@@ -1,7 +1,6 @@
 // tests/unit/SpecGenerator/templates_test.cpp
 
 #include <gtest/gtest.h>
-#include <unordered_map>
 #include <string>
 #include "stringTemplate.h"
 #include "funcSpecTemplates.h"
