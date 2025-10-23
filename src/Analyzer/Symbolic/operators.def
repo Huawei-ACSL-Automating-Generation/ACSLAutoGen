@@ -11,8 +11,8 @@
 #endif
 
 #ifdef BIN_OP
-// Pointer-to-member, "->*", 95, /*left*/ true
-// Pointer-to-member, ".*",  95, /*left*/ true
+// Pointer-to-member, "->*", 95, /*left*/ false
+// Pointer-to-member, ".*",  95, /*left*/ false
 BIN_OP(Multiply, "*", 90, /*left*/ false)
 BIN_OP(Divide, "/", 90, /*left*/ false)
 BIN_OP(Remainder, "%", 90, /*left*/ false)
@@ -31,27 +31,29 @@ BIN_OP(BitXor, "^", 35, /*left*/ false)
 BIN_OP(BitOr, "|", 30, /*left*/ false)
 BIN_OP(LogicalAnd, "&&", 25, /*left*/ false)
 BIN_OP(LogicalOr, "||", 20, /*left*/ false)
-// Conditional, "?:", 15, /*right*/ true
-// Assign, "=",    10, /*right*/ true
-// Assign, "+=",   10, /*right*/ true
-// Assign, "-=",   10, /*right*/ true
-// Assign, "*=",   10, /*right*/ true
-// Assign, "/=",   10, /*right*/ true
-// Assign, "%=",   10, /*right*/ true
-// Assign, "<<=",  10, /*right*/ true
-// Assign, ">>=",  10, /*right*/ true
-// Assign, "&=",   10, /*right*/ true
-// Assign, "^=",   10, /*right*/ true
-// Assign, "|=",   10, /*right*/ true
-// Comma, ",",     5, /*left*/ true
+// Entailment, "==>", 19, /*left*/ false
+// Equivalence, "<==>" 18, /*left/ false
+// Conditional, "?:", 15, /*left*/ false
+// Assign, "=",    10, /*left*/ false
+// Assign, "+=",   10, /*left*/ false
+// Assign, "-=",   10, /*left*/ false
+// Assign, "*=",   10, /*left*/ false
+// Assign, "/=",   10, /*left*/ false
+// Assign, "%=",   10, /*left*/ false
+// Assign, "<<=",  10, /*left*/ false
+// Assign, ">>=",  10, /*left*/ false
+// Assign, "&=",   10, /*left*/ false
+// Assign, "^=",   10, /*left*/ false
+// Assign, "|=",   10, /*left*/ false
+// Comma, ",",     5, /*left*/ false
 #endif
 
 // unary operator
 #ifdef UN_OP
-// Postfix call, "()",   110, /*left*/ true
-// Postfix subscript, "[]", 110, /*left*/ true
-// Member access, ".",   110, /*left*/ true
-// Member access, "->",  110, /*left*/ true
+// Postfix call, "()",   110, /*left*/ false
+// Postfix subscript, "[]", 110, /*left*/ false
+// Member access, ".",   110, /*left*/ false
+// Member access, "->",  110, /*left*/ false
 UN_OP(Plus, "+", 100, /*right*/ true)
 UN_OP(Minus, "-", 100, /*right*/ true)
 UN_OP(LogicalNot, "!", 100, /*right*/ true)

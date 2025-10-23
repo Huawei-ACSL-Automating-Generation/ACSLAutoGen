@@ -1,3 +1,4 @@
+#include <clang/AST/Type.h>
 #include <queue>
 #include <unordered_map>
 #include <memory>
@@ -125,8 +126,10 @@ namespace acslg::analyzer {
                 ERROR("RHS of memberExpr is not a `clang::FieldDecl`?");
             if (FD->getParent() == nullptr)
                 ERROR("No parent!");
-            auto RD      = FD->getParent();
-            auto &layout = RD->getASTContext().getASTRecordLayout(RD);
+
+            auto fieldType = FD->getType();
+            auto RD        = FD->getParent();
+            auto &layout   = RD->getASTContext().getASTRecordLayout(RD);
 
             if (mem->isArrow()) {
                 auto addrEval = evalExpr(base);
@@ -144,8 +147,8 @@ namespace acslg::analyzer {
                     memoryState_.write(*baseAddr.value(), std::move(st));
                 }
                 return std::make_unique<symbolic::FieldAddress>(
-                    RD, std::pair{baseAddr.value()->addressClone().into_underlying(),
-                                  FD->getFieldIndex()});
+                    fieldType, RD, baseAddr.value()->addressClone().into_underlying(),
+                    FD->getFieldIndex());
             } else {
                 auto baseAddr = extractLValue(base);
 
@@ -155,7 +158,7 @@ namespace acslg::analyzer {
                     memoryState_.write(*baseAddr, std::move(st));
                 }
                 return std::make_unique<symbolic::FieldAddress>(
-                    RD, std::pair{baseAddr->addressClone().into_underlying(), FD->getFieldIndex()});
+                    fieldType, RD, baseAddr->addressClone().into_underlying(), FD->getFieldIndex());
             }
         }
 
@@ -540,7 +543,7 @@ namespace acslg::analyzer {
                             // Allocate a fresh symbolic address anchored at the current allocation
                             // site.
                             auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                std::nullopt, startPoint_,
+                                elemTy, std::nullopt, startPoint_,
                                 std::make_unique<symbolic::LiteralExpr>(0) // offset := 0
                             );
 
@@ -568,7 +571,7 @@ namespace acslg::analyzer {
                             const auto &layout = RD->getASTContext().getASTRecordLayout(RD);
 
                             auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                std::nullopt, startPoint_,
+                                elemTy, std::nullopt, startPoint_,
                                 std::make_unique<symbolic::LiteralExpr>(0));
 
                             // Materialize a symbolic structure value at the allocated base address.
@@ -761,7 +764,7 @@ namespace acslg::analyzer {
                     if (castExpr->getType()->isStructureType())
                         return sub;
 
-                    auto targetType = symbolic::deriveVarType(castExpr->getType());
+                    auto targetType = symbolic::deriveType(castExpr->getType());
 
                     for (auto &subExpr : sub.second)
                         subExpr->setValType(targetType);
@@ -830,11 +833,11 @@ namespace acslg::analyzer {
                         EvalResult sub = evalExpr(ce->getSubExpr());
                         if (sub.second.size() != 1)
                             ERROR("ConstantExpr subExpr produced multiple results");
-                        auto resultTy = symbolic::deriveVarType(ce->getType());
+                        auto resultTy = symbolic::deriveType(ce->getType());
                         sub.second[0]->setValType(resultTy);
                         return {std::move(sub.first), std::move(sub.second)};
                     }
-                    auto resultTy = symbolic::deriveVarType(ce->getType());
+                    auto resultTy = symbolic::deriveType(ce->getType());
                     auto lit      = std::make_unique<symbolic::LiteralExpr>(
                         v.isSigned() ? static_cast<int64_t>(v.getSExtValue())
                                      : static_cast<uint64_t>(v.getZExtValue()));
@@ -876,7 +879,7 @@ namespace acslg::analyzer {
                         }
 
                         // Materialize a literal of the expression’s result type (typically size_t).
-                        auto resultTy = symbolic::deriveVarType(uett->getType());
+                        auto resultTy = symbolic::deriveType(uett->getType());
                         auto lit      = std::make_unique<symbolic::LiteralExpr>(value);
                         lit->setValType(resultTy);
 
@@ -1111,8 +1114,9 @@ namespace acslg::analyzer {
                 return std::nullopt;
             return it->second.get().get();
         } else if (auto fieldAddr = llvm::dyn_cast<const symbolic::FieldAddress>(&addr)) {
-            auto &[baseAddr, index] = fieldAddr->getFrom();
-            auto baseValue          = read(*baseAddr);
+            auto &baseAddr = fieldAddr->getBaseAddr();
+            auto &index    = fieldAddr->getFieldIndex();
+            auto baseValue = read(*baseAddr);
             if (baseValue == std::nullopt)
                 return std::nullopt;
             auto baseSt = llvm::dyn_cast<const symbolic::Structure>(baseValue.value().get());
@@ -1192,8 +1196,9 @@ namespace acslg::analyzer {
             addrValueMap.insert_or_assign(*symbolAddr, std::move(value));
             return;
         } else if (auto fieldAddr = llvm::dyn_cast<const symbolic::FieldAddress>(&addr)) {
-            auto &[baseAddr, index] = fieldAddr->getFrom();
-            auto baseValue          = read(*baseAddr);
+            auto &baseAddr = fieldAddr->getBaseAddr();
+            auto &index    = fieldAddr->getFieldIndex();
+            auto baseValue = read(*baseAddr);
             if (baseValue == std::nullopt)
                 ERROR("Structure isn't existed in MemoryModel, insert it first.");
             auto baseSt = llvm::dyn_cast<symbolic::Structure>(baseValue.value().get());

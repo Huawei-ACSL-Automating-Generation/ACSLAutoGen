@@ -2,6 +2,7 @@
 
 #include "macros.h"
 #include "specGenerator.h"
+#include <llvm-19/llvm/Support/Casting.h>
 #include <memory>
 #include "state.h"
 #include "loopInvTemplates.h"
@@ -430,13 +431,17 @@ namespace acslg::spec_generator {
             std::unordered_set<size_t> solvedAddrsHashs{};
             for (auto &addr : assignedAddrs) {
                 for (auto &path : loopEntry.getPaths()) {
-                    auto concreteAddr = getSubstitutedAddr(addr, *path, loopEntryPoint);
+                    auto concreteAddrExpr = addr.get().getSubstitutedExpr(*path, loopEntryPoint);
+                    auto concreteAddr =
+                        llvm::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
+                    if (concreteAddr == nullptr)
+                        UNREACHABLE();
                     if (solvedAddrsHashs.contains(concreteAddr->hash()))
                         continue;
                     solvedAddrsHashs.insert(concreteAddr->hash());
 
                     if (auto symbolConcreteAddr =
-                            llvm::dyn_cast<const symb::SymbolAddress>(concreteAddr.get().get())) {
+                            llvm::dyn_cast<const symb::SymbolAddress>(concreteAddr)) {
                         // special case
                         if (symbolConcreteAddr->getOffset()->isUnknown()) {
                             auto valueForm = addr.get().regularFormOfValue("\\at(", ", LoopEntry)");

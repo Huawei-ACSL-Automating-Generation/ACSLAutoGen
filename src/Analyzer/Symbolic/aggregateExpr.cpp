@@ -2,10 +2,13 @@
 
 #include <llvm-19/llvm/Support/Casting.h>
 #include <memory>
+#include <optional>
 
 #include "expr.h"
+#include "macros.h"
 #include "utils.h"
 #include "stringTemplate.h"
+#include "Analyzer/state.h"
 
 namespace acslg::analyzer::symbolic {
     OverRangeExpr::OverRangeExpr(const OverRangeExpr &other)
@@ -47,35 +50,64 @@ namespace acslg::analyzer::symbolic {
         return utils::hash_val(range_->hash(), fromPoint_.hash());
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> OverRangeExpr::RangeIndex::clone() const {
-        return std::make_unique<RangeIndex>(*this);
+    OverRangeExpr::RangeElement &OverRangeExpr::RangeElement::operator=(
+        const OverRangeExpr::RangeElement &other) {
+        if (&other == this)
+            return *this;
+        SymbolicExpr::operator=(other);
+        indexName_ = other.indexName_;
+        range_     = std::make_unique<SymbolAddress>(*other.range_);
+        return *this;
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> OverRangeExpr::RangeElement::clone() const {
+        return std::make_unique<RangeElement>(*this);
     };
 
-    std::string OverRangeExpr::RangeIndex::dump() const {
+    std::string OverRangeExpr::RangeElement::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
-        oss << type("RangeIndex") << " {" << name_ << "}";
+        oss << type("RangeElement ");
+        oss << "{" << key("index name: ") << indexName_ << "}, ";
+        oss << "{" << key("range info: ") << range_->dump() << "}";
         return oss.str();
     }
 
-    std::optional<std::string> OverRangeExpr::RangeIndex::regularForm(
-        std::optional<std::string_view>,
-        std::optional<std::string_view>,
+    std::optional<std::string> OverRangeExpr::RangeElement::regularForm(
+        std::optional<std::string_view> prefix,
+        std::optional<std::string_view> suffix,
         int,
         bool) const {
-        return name_;
+        auto baseStr = range_->regularFormOfBase(prefix, suffix);
+        if (baseStr == std::nullopt)
+            return std::nullopt;
+        return baseStr.value() + "[" + indexName_ + "]";
     }
 
-    bool OverRangeExpr::RangeIndex::equal(const SymbolicExpr &other) const {
-        auto index = llvm::dyn_cast<const OverRangeExpr::RangeIndex>(&other);
+    bool OverRangeExpr::RangeElement::equal(const SymbolicExpr &other) const {
+        auto index = llvm::dyn_cast<const OverRangeExpr::RangeElement>(&other);
         if (!index)
             return false;
 
-        // `RangeIndex` is just a placeholder and does not determine equality.
+        // `RangeElement` is just a placeholder and does not determine equality.
         return true;
     }
 
-    std::size_t OverRangeExpr::RangeIndex::hash() const { return utils::hash_val(getKind()); }
+    std::size_t OverRangeExpr::RangeElement::hash() const {
+        // `RangeElement` is just a placeholder.
+        return utils::hash_val(getKind());
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> OverRangeExpr::RangeElement::getSubstitutedExpr(
+        const Path &pathSubTo,
+        const SourcePoint &pointToSub) const {
+        auto subedExpr  = range_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
+        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
+            ERROR("Substituted expression should be a *range*");
+        return std::make_unique<RangeElement>(indexName_,
+                                              std::make_unique<const SymbolAddress>(*subedRange));
+    }
 
     std::string SumOverRange::dump() const {
         using namespace utils::dump_fmt;
@@ -91,21 +123,118 @@ namespace acslg::analyzer::symbolic {
                                                          bool) const {
         auto st =
             spec_generator::StringTemplate{"\\sum(integer {i} = {0}; {i} < {n}; {i}++, {a}[{i}])"};
+
         auto zeroStr =
             range_->getOffset()->regularForm(prefix, suffix, /*assign's prec:*/ 10, true);
         if (zeroStr == std::nullopt)
             return std::nullopt;
-        auto &len = range_->getLength();
-        if (len == std::nullopt)
+
+        auto rightBound = range_->getRightBound();
+        if (rightBound == std::nullopt)
             UNREACHABLE();
-        auto nStr = len.value()->regularForm(prefix, suffix, /*less's prec:*/ 60, true);
+        auto nStr = rightBound.value()->regularForm(prefix, suffix, /*less's prec:*/ 60, true);
         if (nStr == std::nullopt)
             return std::nullopt;
+
         auto aStr = range_->regularFormOfBase(prefix, suffix);
         if (aStr == std::nullopt)
             return std::nullopt;
+
         return st.to_string(
             {{"i", indexName_}, {"n", nStr.value()}, {"a", aStr.value()}, {"0", zeroStr.value()}});
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getSubstitutedExpr(
+        const Path &pathSubTo,
+        const SourcePoint &pointToSub) const {
+        if (fromPoint_ != pointToSub)
+            return clone();
+        auto subedExpr  = range_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
+        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
+            ERROR("Substituted expression should be a *range*");
+        return std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
+                                              indexName_, pathSubTo.getStartPoint());
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getSubstitutedExpr(
+        const Path &pathSubTo,
+        const SourcePoint &pointToSub) const {
+        if (fromPoint_ != pointToSub)
+            return clone();
+        auto subedExpr  = range_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
+        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
+            ERROR("Substituted expression should be a *range*");
+
+        auto subedPred = pred_->getSubstitutedExpr(pathSubTo, pointToSub);
+
+        auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
+        newQOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
+        newQOR->pred_  = std::move(subedPred).into_underlying();
+        return newQOR;
+    }
+
+    QuantifierOverRange &QuantifierOverRange::operator=(const QuantifierOverRange &other) {
+        if (&other == this)
+            return *this;
+        OverRangeExpr::operator=(other);
+        pred_ = other.pred_->clone().into_underlying();
+        return *this;
+    }
+
+    std::string QuantifierOverRange::dump() const {
+        using namespace utils::dump_fmt;
+        std::ostringstream oss;
+        oss << type("QuantifierOverRange ");
+        oss << OverRangeExpr::dump() << ", ";
+        oss << "{" << key("predicate: ") << pred_->dump() << "}";
+        return oss.str();
+    }
+
+    std::optional<std::string> QuantifierOverRange::regularForm(
+        std::optional<std::string_view> prefix,
+        std::optional<std::string_view> suffix,
+        int,
+        bool) const {
+        auto st =
+            spec_generator::StringTemplate{"\\{quant} integer {i}; {0} <= {i} < {n} ==> {pred};"};
+
+        std::string quantStr;
+        switch (quant_) {
+            using enum Quantifier;
+            case ForAll: quantStr = "forall"; break;
+            case Exist: quantStr = "exist"; break;
+        }
+
+        auto zeroStr =
+            range_->getOffset()->regularForm(prefix, suffix, /*less equal's prec:*/ 60, false);
+        if (zeroStr == std::nullopt)
+            return std::nullopt;
+
+        auto rightBound = range_->getRightBound();
+        if (rightBound == std::nullopt)
+            UNREACHABLE();
+        auto nStr = rightBound.value()->regularForm(prefix, suffix, /*less's prec:*/ 60, true);
+        if (nStr == std::nullopt)
+            return std::nullopt;
+
+        auto predStr = pred_->regularForm(prefix, suffix, /*entailment's prec:*/ 19, true);
+        if (predStr == std::nullopt)
+            return std::nullopt;
+
+        return st.to_string({{"quant", quantStr},
+                             {"i", indexName_},
+                             {"0", zeroStr.value()},
+                             {"n", nStr.value()},
+                             {"pred", predStr.value()}});
+    }
+
+    bool QuantifierOverRange::equal(const SymbolicExpr &other) const {
+        auto QOV = llvm::dyn_cast<const QuantifierOverRange>(&other);
+        if (QOV == nullptr)
+            return false;
+        return OverRangeExpr::equal(*QOV) && quant_ == QOV->quant_ && *pred_ == *QOV->pred_;
     }
 
 } // namespace acslg::analyzer::symbolic

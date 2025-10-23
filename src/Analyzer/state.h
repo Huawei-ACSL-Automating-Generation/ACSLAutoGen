@@ -216,11 +216,11 @@ namespace acslg::analyzer {
                 ERROR("Length should not be 0, something goes wrong.");
             else if (len == 1)
                 return std::make_unique<symbolic::SymbolAddress>(
-                    std::move(base.fromAddr_), base.fromPoint_,
+                    base.pointeeType_, std::move(base.fromAddr_), base.fromPoint_,
                     std::make_unique<symbolic::LiteralExpr>(off));
             else
                 return make_unique<symbolic::SymbolAddress>(
-                    std::move(base.fromAddr_), base.fromPoint_,
+                    base.pointeeType_, std::move(base.fromAddr_), base.fromPoint_,
                     std::make_unique<symbolic::LiteralExpr>(off),
                     std::make_unique<symbolic::LiteralExpr>(len));
         }
@@ -330,11 +330,12 @@ namespace acslg::analyzer {
                         auto &baseAddr = current_state.base_addr_;
                         auto &st       = *current_state.st_;
                         auto &index    = current_state.index_;
-                        auto addr      = make_unique<symbolic::FieldAddress>(
-                            st.getInfo().definition_,
-                            std::pair<utils::not_null<std::unique_ptr<const symbolic::Address>>,
-                                           const size_t>{baseAddr.get().addressClone().into_underlying(),
-                                                         index});
+                        auto fieldType =
+                            std::ranges::next(st.getInfo().definition_->field_begin(), index)
+                                ->getType();
+                        auto addr = make_unique<symbolic::FieldAddress>(
+                            fieldType, st.getInfo().definition_,
+                            baseAddr.get().addressClone().into_underlying(), index);
                         auto &fieldValue = st.getFieldValue(index);
                         if constexpr (IsConst)
                             return R{std::move(addr), fieldValue.get().get()};

@@ -1,5 +1,6 @@
 // src/SpecGenerator/specGenerators.cpp
 
+#include <llvm-19/llvm/Support/Casting.h>
 #include <ranges>
 #include <llvm/ADT/TypeSwitch.h>
 
@@ -199,21 +200,24 @@ namespace acslg::spec_generator {
                 auto &postBranchInfo = postBranchesInfos.at(0);
 
                 for (auto &[addr, value] : info.memoryMap_) {
-                    auto subedAddr = getSubstitutedAddr(addr, entryPath, loopEntryPoint);
-                    substituteSymbols(value, entryPath, loopEntryPoint);
+                    auto subedAddrExpr = addr.get().getSubstitutedExpr(entryPath, loopEntryPoint);
+                    auto subedAddr = llvm::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
+                    if (subedAddr == nullptr)
+                        UNREACHABLE();
+                    auto subedValue = value->getSubstitutedExpr(entryPath, loopEntryPoint);
                     if (auto it = postBranchInfo.memoryMap_.find(*subedAddr);
                         it != postBranchInfo.memoryMap_.end() && !it->second->isUnknown()) {
-                        auto regForm = value->simplifiedExpr()->regularForm();
+                        auto regForm = subedValue->simplifiedExpr()->regularForm();
                         WARN("Another plugin has already updated this address. The new value: {" +
-                             (regForm ? regForm.value() : value->dump()) + "} is discarded.");
+                             (regForm ? regForm.value() : subedValue->dump()) + "} is discarded.");
                         continue;
                     }
-                    postBranchInfo.memoryMap_.insert_or_assign(*subedAddr, std::move(value));
+                    postBranchInfo.memoryMap_.insert_or_assign(*subedAddr, std::move(subedValue));
                 }
 
                 for (auto &cond : info.pathConds_) {
-                    substituteSymbols(cond, entryPath, loopEntryPoint);
-                    postBranchInfo.pathConds_.push_back(std::move(cond));
+                    auto subedConds = cond->getSubstitutedExpr(entryPath, loopEntryPoint);
+                    postBranchInfo.pathConds_.push_back(std::move(subedConds));
                 }
             }
         }; // updatePostState
@@ -271,140 +275,5 @@ namespace acslg::spec_generator {
         }
 
         return std::pair{spec, std::move(postState)};
-    }
-
-    void substituteSymbols(utils::not_null<std::unique_ptr<symb::SymbolicExpr>> &expr,
-                           const analyzer::Path &loopEntryPath,
-                           const symb::SourcePoint &fromPoint) {
-        auto &mem = loopEntryPath.getMemoryState(); // Memory snapshot at loop entry
-        llvm::TypeSwitch<symb::SymbolicExpr *, void>(expr.get().get())
-            .Case<symb::LiteralExpr>([&](auto *) {
-                // Nothing to substitute
-            })
-            .Case<symb::SymbolValue>([&](auto *symbolValue) {
-                if (symbolValue->getFromPoint() && symbolValue->getFromPoint().value() != fromPoint)
-                    return;
-
-                auto from = symbolValue->getFromAddr();
-                if (from == std::nullopt) {
-                    // No origin info; not substitutable at the moment.
-                    TODO();
-                }
-
-                auto realFromAddr = getSubstitutedAddr(*from.value(), loopEntryPath, fromPoint);
-                // Origin is an address-like handle; try reading from loop-entry memory.
-                if (auto value = mem.read(*realFromAddr)) {
-                    // Replace current SymbolValue with the cloned value read from memory.
-                    expr = value.value()->clone();
-                } else {
-                    // Address originates from an address present on this path at loop
-                    // entry but hasn't been accessed -> construct a SymbolValue with
-                    // corrext fromAddr and fromPoint.
-                    expr = std::make_unique<symb::SymbolValue>(
-                        symbolValue->getValType(), std::move(realFromAddr).into_underlying(),
-                        loopEntryPath.getStartPoint());
-                }
-            })
-            .Case<symb::SymbolAddress>([&](auto *symbolAddr) {
-                if (symbolAddr->getFromPoint() && symbolAddr->getFromPoint().value() != fromPoint)
-                    return;
-                expr = getSubstitutedAddr(*symbolAddr, loopEntryPath, fromPoint).into_underlying();
-            })
-            .Case<symb::BinaryOpExpr>([&](auto *bin) {
-                substituteSymbols(bin->getLeft(), loopEntryPath, fromPoint);
-                substituteSymbols(bin->getRight(), loopEntryPath, fromPoint);
-            })
-            .Case<symb::UnaryOpExpr>(
-                [&](auto *un) { substituteSymbols(un->getSub(), loopEntryPath, fromPoint); })
-            .Case<symb::Structure>([&](auto *st) {
-                for (auto &field : st->fieldsValues()) {
-                    substituteSymbols(field, loopEntryPath, fromPoint);
-                }
-            })
-            .Case<symb::UnknownExpr>([&](auto *) {
-                // Nothing to substitute
-            })
-            .Default([&](auto *) {
-                // `VariableAddress` and `FieldAddress` should not appear in expressions.
-                UNREACHABLE();
-            });
-    };
-
-    utils::not_null<std::unique_ptr<symb::Address>> getSubstitutedAddr(
-        const symb::Address &addr,
-        const analyzer::Path &loopEntryPath,
-        const symb::SourcePoint &fromPoint) {
-        // If it's not a symbolic address, simply return a clone.
-        if (llvm::isa<symb::VariableAddress>(addr))
-            return addr.addressClone();
-
-        auto &mem = loopEntryPath.getMemoryState();
-
-        if (auto fieldAddr = llvm::dyn_cast<const symb::FieldAddress>(&addr)) {
-            // Substitute the base address.
-            auto &[baseAddr, index] = fieldAddr->getFrom();
-            auto trueBaseAddr       = getSubstitutedAddr(*baseAddr, loopEntryPath, fromPoint);
-            return std::make_unique<symb::FieldAddress>(
-                fieldAddr->getDefinition(),
-                std::pair<utils::not_null<std::unique_ptr<const symb::Address>>, const size_t>{
-                    std::move(trueBaseAddr).into_underlying(), index});
-        }
-
-        auto symbolAddr = llvm::dyn_cast<const symb::SymbolAddress>(&addr);
-        assert(symbolAddr != nullptr && "If the addr is not a `VariableAddress` and not a "
-                                        "`FieldAddress`, then it must be a `SymbolAddress`.");
-
-        if (symbolAddr->getFromPoint() != fromPoint)
-            return addr.addressClone();
-        // Try to resolve the "from" origin of the SymbolAddress via loop-entry memory.
-        // No origin info — unresolved substitution.
-        auto formAddr = symbolAddr->getFromAddr();
-        if (formAddr == std::nullopt)
-            TODO();
-
-        auto realFromAddr = getSubstitutedAddr(*formAddr.value(), loopEntryPath, fromPoint);
-
-        // Clone and substitute the offset of the original SymbolAddress.
-        auto offset = symbolAddr->getOffset()->clone();
-        substituteSymbols(offset, loopEntryPath,
-                          fromPoint); // substitute std::any vars/addresses in offset
-        offset = offset->simplifiedExpr();
-
-        std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> length{};
-        // If original was a range, also substitute and std::set the length.
-        if (auto &len = symbolAddr->getLength()) {
-            length = len.value()->clone();
-            substituteSymbols(length.value(), loopEntryPath, fromPoint);
-            length = length.value()->simplifiedExpr();
-        }
-
-        // Origin is an address; attempt to read the value at that origin.
-        if (auto value = mem.read(*realFromAddr)) {
-            // The origin resolves to a value; it must be convertible to an "offseted
-            // address".
-            auto realAddr = value.value()->tryEvalAsSymbolAddr();
-            if (realAddr == std::nullopt)
-                ERROR("This expr should be a address");
-
-            // Apply substituted offset to the concrete address.
-            realAddr.value()->addOffset(std::move(offset));
-
-            if (length) {
-                realAddr.value()->setLength(std::move(length).value());
-            }
-            // Return the underlying concrete address (std::unique_ptr<Address>).
-            return std::move(realAddr).value().into_underlying();
-        } else {
-            // The origin hasn't been accessed at loop entry -> construct a
-            // SymbolAddress with corrext fromAddr and fromPoint.
-            if (length == std::nullopt) {
-                return std::make_unique<symb::SymbolAddress>(
-                    std::move(realFromAddr).into_underlying(), loopEntryPath.getStartPoint(),
-                    std::move(offset).into_underlying(), std::nullopt);
-            }
-            return std::make_unique<symb::SymbolAddress>(
-                std::move(realFromAddr).into_underlying(), loopEntryPath.getStartPoint(),
-                std::move(offset).into_underlying(), std::move(length).value().into_underlying());
-        };
     }
 } // namespace acslg::spec_generator

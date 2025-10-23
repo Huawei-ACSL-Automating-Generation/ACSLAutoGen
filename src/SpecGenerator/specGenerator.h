@@ -124,63 +124,6 @@ namespace acslg::spec_generator {
                                    std::string_view groupName,
                                    const std::vector<std::string> &extraPluginIds);
 
-    /**
-     * @brief Substitute symbolic variables/addresses in an expression using the memory state
-     *        captured at the loop-entry path.
-     *
-     * This routine walks the symbolic expression tree and, when a SymbolValue or SymbolAddress
-     * carries a resolvable "from" origin (i.e., an address), it queries the loop-entry
-     * memory model to obtain the concrete symbolic value stored at that origin and
-     * replaces the current node with that value (cloned). If the origin cannot be
-     * resolved/read at loop-entry, the node is kept as-is.
-     *
-     * @param expr           (in/out) The symbolic expression to be substituted in-place.
-     *                       The unique_ptr reference may be reassigned to a cloned node
-     *                       when substitution succeeds.
-     * @param loopEntryPath  The path that provides the memory state at loop entry.
-     *
-     * @param fromPoint      The expected fromPoint of symbols. Met unexpected fromPoint will
-     *                       just ignore it.
-     *
-     * @note Only SymbolValue and Address (SymbolAddress) and Structure nodes are substituted
-     * directly. Composite nodes (BinaryOp/UnaryOp) are traversed recursively. Unknown nodes are
-     * ignored.
-     * @warning When the "from" variant is std::monostate, behavior is marked as TODO().
-     * @see getSubstitutedAddr()
-     */
-    void substituteSymbols(utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>> &expr,
-                           const analyzer::Path &loopEntryPath,
-                           const analyzer::symbolic::SourcePoint &fromPoint);
-
-    /**
-     * @brief Compute the address obtained by substituting the symbolic origin of @p addr
-     *        using the loop-entry memory, and re-applying the original offset/length.
-     *
-     * If @p addr is a SymbolAddress whose "from" origin resolves (via loop-entry memory)
-     * to a concrete address expression, this function:
-     *   1) extracts the real base address via tryEvalAsSymbolAddr();
-     *   2) substitutes the SymbolAddress's offset (and length if range) via substituteSymbols();
-     *   3) applies the substituted offset/length to the real address;
-     *   4) returns the resulting concrete address clone.
-     *
-     * If the origin cannot be resolved/read, it returns a clone of the original @p addr.
-     * Non-SymbolAddr inputs are cloned and returned unchanged.
-     *
-     * @param addr           The input address expression to substitute.
-     * @param loopEntryPath  The path that provides the memory state at loop entry.
-     * @param fromPoint      The expected fromPoint of `SymbolAddress`. Met unexpected fromPoint
-     * will just return unchanged `SymbolAddress`.
-     * @return utils::not_null<unique_ptr<Address>>  The substituted (or cloned) address.
-     *
-     * @note When the "from" variant is std::monostate, behavior is marked as TODO().
-     * @warning If the resolved value is not an address-like expression, the function errors out.
-     * @see substituteSymbols()
-     */
-    utils::not_null<std::unique_ptr<analyzer::symbolic::Address>> getSubstitutedAddr(
-        const analyzer::symbolic::Address &addr,
-        const analyzer::Path &loopEntryPath,
-        const analyzer::symbolic::SourcePoint &fromPoint);
-
     /*---------------------------------------*/
     /*-------Framework for ACSLPlugin--------*/
     /*---------------------------------------*/

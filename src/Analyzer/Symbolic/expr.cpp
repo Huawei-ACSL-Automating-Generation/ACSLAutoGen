@@ -10,6 +10,7 @@
 
 #include "aggregateExpr.h" // IWYU pragma: keep
 #include "macros.h"
+#include "Analyzer/state.h"
 
 namespace acslg::analyzer::symbolic {
     namespace {
@@ -265,7 +266,7 @@ namespace acslg::analyzer::symbolic {
     size_t VariableAddress::hash() const { return utils::hash_val(getKind(), from_.get()); }
 
     size_t FieldAddress::hash() const {
-        return utils::hash_val(getKind(), from_.first->hash(), from_.second);
+        return utils::hash_val(getKind(), baseAddr_->hash(), fieldIndex_);
     }
 
     size_t Structure::hash() const {
@@ -421,8 +422,8 @@ namespace acslg::analyzer::symbolic {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("FieldAddress") << " {" << key("from") << "=";
-        oss << key("field of") << ":" << from_.first.get()->dump() << "["
-            << utils::dump_fmt::lit(std::to_string(from_.second)) << "]";
+        oss << key("field of") << ":" << baseAddr_.get()->dump() << "["
+            << utils::dump_fmt::lit(std::to_string(fieldIndex_)) << "]";
         oss << "}";
         return oss.str();
     }
@@ -607,14 +608,13 @@ namespace acslg::analyzer::symbolic {
                                                          std::optional<std::string_view> suffix,
                                                          int,
                                                          bool) const {
-        auto &[fromAddr, index] = from_;
-        auto baseStr            = fromAddr->regularForm();
+        auto baseStr = baseAddr_->regularForm();
         if (baseStr == std::nullopt)
             return std::nullopt;
         if (baseStr.value().empty())
             ERROR("Empty base std::string");
         auto fields = definition_->fields();
-        auto it     = std::ranges::next(fields.begin(), index, fields.end());
+        auto it     = std::ranges::next(fields.begin(), fieldIndex_, fields.end());
         if (it == fields.end())
             ERROR("Out-of-bounds access");
         auto fieldStr = it->getNameAsString();
@@ -999,9 +999,7 @@ namespace acslg::analyzer::symbolic {
         if (!other)
             return false;
 
-        auto &[addrStr, index]           = from_;
-        auto &[otherAddrStr, otherIndex] = other->from_;
-        return *addrStr == *otherAddrStr && index == otherIndex;
+        return *baseAddr_ == *other->baseAddr_ && fieldIndex_ == other->fieldIndex_;
     }
 
     std::optional<utils::not_null<const clang::VarDecl *>> SymbolAddress::getFromRoot() const {
@@ -1022,7 +1020,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     std::optional<utils::not_null<const clang::VarDecl *>> FieldAddress::getFromRoot() const {
-        return from_.first->getFromRoot();
+        return baseAddr_->getFromRoot();
     }
 
     std::optional<utils::not_null<const clang::VarDecl *>> SymbolValue::getFromRoot() const {
@@ -1045,6 +1043,146 @@ namespace acslg::analyzer::symbolic {
             return false;
         return std::ranges::equal(fields_, st->fields_,
                                   [](auto &lhs, auto &rhs) { return *lhs == *rhs; });
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> LiteralExpr::getSubstitutedExpr(
+        const Path &,
+        const SourcePoint &) const {
+        // Nothing to substitute
+        return clone();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::getSubstitutedExpr(
+        const Path &,
+        const SourcePoint &) const {
+        // Nothing to substitute
+        return clone();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> VariableAddress::getSubstitutedExpr(
+        const Path &,
+        const SourcePoint &) const {
+        // Nothing to substitute
+        return clone();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::getSubstitutedExpr(
+        const Path &pathSubTo,
+        const SourcePoint &pointToSub) const {
+        auto &mem = pathSubTo.getMemoryState();
+        if (getFromPoint() && getFromPoint().value() != pointToSub)
+            return clone();
+
+        auto subedExpr    = fromAddr_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto realFromAddr = llvm::dyn_cast<const Address>(subedExpr.get().get());
+        if (realFromAddr == nullptr)
+            UNREACHABLE();
+
+        // Origin is an address-like handle; try reading from loop-entry memory.
+        if (auto value = mem.read(*realFromAddr)) {
+            // Replace current SymbolValue with the cloned value read from memory.
+            return value.value()->clone();
+        } else {
+            // Address originates from an address present on this path at loop
+            // entry but hasn't been accessed -> construct a SymbolValue with
+            // corrext fromAddr and pointToSub.
+            return std::make_unique<SymbolValue>(getValType(),
+                                                 realFromAddr->addressClone().into_underlying(),
+                                                 pathSubTo.getStartPoint());
+        }
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getSubstitutedExpr(
+        const Path &pathSubTo,
+        const SourcePoint &pointToSub) const {
+        auto &mem = pathSubTo.getMemoryState();
+        if (getFromPoint() && getFromPoint().value() != pointToSub)
+            return clone();
+
+        if (fromAddr_ == std::nullopt) {
+            auto newAddr        = std::make_unique<SymbolAddress>(*this);
+            newAddr->fromPoint_ = pointToSub;
+            return newAddr;
+        }
+
+        auto subedExpr    = fromAddr_.value()->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto realFromAddr = llvm::dyn_cast<const Address>(subedExpr.get().get());
+        if (realFromAddr == nullptr)
+            UNREACHABLE();
+
+        // Clone and substitute the offset of the original SymbolAddress.
+        auto offset = offset_->getSubstitutedExpr(pathSubTo,
+                                                  pointToSub)
+                          ->simplifiedExpr(); // substitute std::any symbol in offset
+
+        std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> length{};
+        // If original was a range, also substitute and std::set the length.
+        if (length_)
+            length = length_.value()->getSubstitutedExpr(pathSubTo, pointToSub)->simplifiedExpr();
+
+        // Origin is an address; attempt to read the value at that origin.
+        if (auto value = mem.read(*realFromAddr)) {
+            // The origin resolves to a value; it must be convertible to an `SymbolAddress`.
+
+            auto realAddr = value.value()->tryEvalAsSymbolAddr();
+            if (realAddr == std::nullopt)
+                ERROR("This expr should be a `SymbolAddress");
+
+            // Apply substituted offset to the concrete address.
+            realAddr.value()->addOffset(std::move(offset));
+
+            if (length) {
+                realAddr.value()->setLength(std::move(length).value());
+            }
+            // Return the underlying concrete address (std::unique_ptr<Address>).
+            return std::move(realAddr).value().into_underlying();
+        } else {
+            // The origin hasn't been accessed at loop entry -> construct a
+            // SymbolAddress with corrext fromAddr and fromPoint.
+            if (length == std::nullopt) {
+                return std::make_unique<SymbolAddress>(
+                    pointeeType_, realFromAddr->addressClone().into_underlying(),
+                    pathSubTo.getStartPoint(), std::move(offset).into_underlying(), std::nullopt);
+            }
+            return std::make_unique<SymbolAddress>(
+                pointeeType_, realFromAddr->addressClone().into_underlying(),
+                pathSubTo.getStartPoint(), std::move(offset).into_underlying(),
+                std::move(length).value().into_underlying());
+        };
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> FieldAddress::getSubstitutedExpr(
+        const Path &pathSubTo,
+        const SourcePoint &pointToSub) const {
+        auto subedExpr    = baseAddr_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto realBaseAddr = llvm::dyn_cast<const Address>(subedExpr.get().get());
+        if (realBaseAddr == nullptr)
+            UNREACHABLE();
+        return std::make_unique<FieldAddress>(
+            pointeeType_, definition_, realBaseAddr->addressClone().into_underlying(), fieldIndex_);
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> BinaryOpExpr::getSubstitutedExpr(
+        const Path &pathSubTo,
+        const SourcePoint &pointToSub) const {
+        return std::make_unique<BinaryOpExpr>(left_->getSubstitutedExpr(pathSubTo, pointToSub), op_,
+                                              right_->getSubstitutedExpr(pathSubTo, pointToSub));
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> UnaryOpExpr::getSubstitutedExpr(
+        const Path &pathSubTo,
+        const SourcePoint &pointToSub) const {
+        return std::make_unique<UnaryOpExpr>(op_, expr_->getSubstitutedExpr(pathSubTo, pointToSub));
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedExpr(
+        const Path &pathSubTo,
+        const SourcePoint &pointToSub) const {
+        auto newSt = std::make_unique<Structure>(*this);
+        for (auto &field : newSt->fieldsValues()) {
+            field = field->getSubstitutedExpr(pathSubTo, pointToSub);
+        }
+        return newSt;
     }
 
     std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> BinaryOpExpr::
@@ -1127,12 +1265,14 @@ namespace acslg::analyzer::symbolic {
     }
 
     SymbolAddress::SymbolAddress(
+        const clang::QualType pointeeType,
         std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
         SourcePoint fromPoint,
         std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> offset,
         std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> length)
         : Address(SymbolicExpr::ExprKind::K_SymbolAddress,
-                  SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64}),
+                  SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
+                  pointeeType),
           offset_(std::make_unique<LiteralExpr>(ZERO_OFFSET)), fromAddr_(std::move(from)),
           fromPoint_(fromPoint), length_(std::move(length)) {
         if (offset != std::nullopt)
@@ -1190,10 +1330,20 @@ namespace acslg::analyzer::symbolic {
         return utils::hash_val(fromPoint_.hash(), fromAddr_ ? fromAddr_.value()->hash() : 0);
     }
 
+    std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> SymbolAddress::getRightBound()
+        const {
+        // Not sure return which one is better, offset_+1 or nullopt.
+        if (length_ == std::nullopt)
+            return std::nullopt;
+        return std::make_unique<BinaryOpExpr>(offset_->clone(), BinaryOpExpr::Operator::Add,
+                                              length_.value()->clone());
+    }
+
     SymbolAddress::BaseInfo SymbolAddress::getBaseInfo() const {
         if (fromAddr_ == std::nullopt)
-            return BaseInfo{std::nullopt, fromPoint_};
-        return BaseInfo{fromAddr_.value()->addressClone().into_underlying(), fromPoint_};
+            return BaseInfo{std::nullopt, fromPoint_, pointeeType_};
+        return BaseInfo{fromAddr_.value()->addressClone().into_underlying(), fromPoint_,
+                        pointeeType_};
     }
 
     int SymbolAddress::getDimension() const {
@@ -1206,7 +1356,7 @@ namespace acslg::analyzer::symbolic {
 
     int VariableAddress::getDimension() const { return 0; }
 
-    int FieldAddress::getDimension() const { return from_.first->getDimension(); }
+    int FieldAddress::getDimension() const { return baseAddr_->getDimension(); }
 
     VariableAddress::VariableAddress(const VariableAddress &other)
         : Address(other), from_(other.from_) {}
@@ -1221,16 +1371,16 @@ namespace acslg::analyzer::symbolic {
 
     FieldAddress::FieldAddress(const FieldAddress &other)
         : Address(other), definition_(other.definition_),
-          from_(std::pair<utils::not_null<std::unique_ptr<const Address>>, size_t>{
-              other.from_.first->addressClone().into_underlying(), other.from_.second}) {}
+          baseAddr_(other.baseAddr_->addressClone().into_underlying()),
+          fieldIndex_(other.fieldIndex_) {}
 
     FieldAddress &FieldAddress::operator=(const FieldAddress &other) {
         if (this == &other)
             return *this;
         Address::operator=(other);
         definition_ = other.definition_;
-        from_       = std::pair<utils::not_null<std::unique_ptr<const Address>>, size_t>{
-            other.from_.first->addressClone().into_underlying(), other.from_.second};
+        baseAddr_   = other.baseAddr_->addressClone().into_underlying();
+        fieldIndex_ = other.fieldIndex_;
         return *this;
     }
 
@@ -1263,13 +1413,11 @@ namespace acslg::analyzer::symbolic {
           info_(Info{RD, layout}) {
         fields_.reserve(info_.layout_.getFieldCount());
         for (auto field : info_.definition_->fields()) {
-            auto index     = field->getFieldIndex();
-            auto fieldAddr = std::make_unique<FieldAddress>(
-                info_.definition_,
-                std::pair<utils::not_null<std::unique_ptr<const Address>>, size_t>{
-                    from->addressClone().into_underlying(), index});
-
+            auto index          = field->getFieldIndex();
             clang::QualType fty = field->getType();
+
+            auto fieldAddr = std::make_unique<FieldAddress>(
+                fty, info_.definition_, from->addressClone().into_underlying(), index);
 
             if (fty->isStructureType()) {
                 auto nestedRD = fty->getAsRecordDecl();
@@ -1281,12 +1429,12 @@ namespace acslg::analyzer::symbolic {
                                                                  std::move(fieldAddr), fromPoint);
                 fields_.emplace_back(std::move(nested));
             } else if (fty->isPointerType()) {
-                auto addr = std::make_unique<SymbolAddress>(std::move(fieldAddr), fromPoint);
+                auto addr = std::make_unique<SymbolAddress>(fty, std::move(fieldAddr), fromPoint);
                 fields_.emplace_back(std::move(addr));
             } else if (fty->isArrayType()) {
                 TODO();
             } else {
-                auto vty = deriveVarType(fty);
+                auto vty = deriveType(fty);
                 auto symbolValue =
                     std::make_unique<SymbolValue>(vty, std::move(fieldAddr), fromPoint);
                 fields_.emplace_back(std::move(symbolValue));
@@ -1321,7 +1469,7 @@ namespace acslg::analyzer::symbolic {
         // This structure has a fixed 'from' only if every member is from the same `FieldAddress`
         // **and** same `SourcePoint`.
         std::optional<utils::not_null<std::unique_ptr<const Address>>> commonBaseAddr{};
-        std::optional<SourcePoint> commonBasePoint{};
+        std::optional<SourcePoint> commonFromPoint{};
         for (size_t index = 0; index < fields_.size(); ++index) {
             auto &field = fields_.at(index);
             auto symbol = llvm::dyn_cast<const Symbol>(field.get().get());
@@ -1334,27 +1482,27 @@ namespace acslg::analyzer::symbolic {
             if (fieldAddr == nullptr)
                 return From{std::nullopt, std::nullopt};
 
-            auto &[base, fieldId] = fieldAddr->getFrom();
+            auto &base    = fieldAddr->getBaseAddr();
+            auto &fieldId = fieldAddr->getFieldIndex();
             if (fieldId != index)
                 return From{std::nullopt, std::nullopt};
 
             if (commonBaseAddr == std::nullopt)
-                commonBaseAddr = fromAddr.value()->addressClone().into_underlying();
+                commonBaseAddr = base->addressClone().into_underlying();
 
             auto fromPoint = symbol->getFromPoint();
             if (fromPoint == std::nullopt)
                 return From{std::nullopt, std::nullopt};
-            if (commonBasePoint == std::nullopt)
-                commonBasePoint.emplace(fromPoint.value());
+            if (commonFromPoint == std::nullopt)
+                commonFromPoint.emplace(fromPoint.value());
 
-            if (*commonBaseAddr.value() != *fromAddr.value() ||
-                commonBasePoint.value() != fromPoint.value())
+            if (*commonBaseAddr.value() != *base || commonFromPoint.value() != fromPoint.value())
                 return From{std::nullopt, std::nullopt};
         }
-        if (commonBaseAddr == std::nullopt || commonBasePoint == std::nullopt)
+        if (commonBaseAddr == std::nullopt || commonFromPoint == std::nullopt)
             UNREACHABLE();
 
-        return From{std::move(commonBaseAddr).value(), std::move(commonBasePoint).value()};
+        return From{std::move(commonBaseAddr).value(), std::move(commonFromPoint).value()};
     }
 
     std::optional<utils::not_null<std::unique_ptr<const Address>>> Structure::getFromAddr() const {
@@ -1523,9 +1671,9 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    SymbolicExpr::Type deriveVarType(clang::QualType type) {
+    SymbolicExpr::Type deriveType(clang::QualType type) {
         if (auto ptr = type->getAs<clang::PointerType>())
-            return deriveVarType(ptr->getPointeeType());
+            return deriveType(ptr->getPointeeType());
         return llvm::TypeSwitch<clang::QualType, SymbolicExpr::Type>(type.getCanonicalType())
             .Case([](const clang::BuiltinType *BT) -> SymbolicExpr::Type {
                 using Kind = SymbolicExpr::ScalarKind;
@@ -1594,9 +1742,9 @@ namespace acslg::analyzer::symbolic {
         SourcePoint fromPoint) {
         if (type->isPointerType()) {
             if (from)
-                return std::make_unique<SymbolAddress>(std::move(from.value()),
+                return std::make_unique<SymbolAddress>(type, std::move(from.value()),
                                                        std::move(fromPoint));
-            return std::make_unique<SymbolAddress>(std::nullopt, std::move(fromPoint));
+            return std::make_unique<SymbolAddress>(type, std::nullopt, std::move(fromPoint));
         } else if (type->isArrayType()) {
             TODO();
         } else if (type->isStructureType()) {
@@ -1613,7 +1761,7 @@ namespace acslg::analyzer::symbolic {
         } else {
             if (from == std::nullopt)
                 ERROR("SymbolValue should *from* an `Address`.");
-            SymbolicExpr::Type vty = deriveVarType(type);
+            SymbolicExpr::Type vty = deriveType(type);
             return std::make_unique<SymbolValue>(vty, std::move(from.value()),
                                                  std::move(fromPoint));
         }

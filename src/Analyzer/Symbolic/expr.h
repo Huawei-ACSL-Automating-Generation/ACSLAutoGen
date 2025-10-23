@@ -3,6 +3,7 @@
 #ifndef __ACSLG_SRC_ANALYZER_SYMBOLIC_EXPR_H__
 #define __ACSLG_SRC_ANALYZER_SYMBOLIC_EXPR_H__
 
+#include <clang/AST/Type.h>
 #include <string>
 #include <memory>
 #include <span>
@@ -17,14 +18,20 @@
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Lexer.h>
 #include <variant>
+
 #include "macros.h"
 #include "Utils/utils.h"
+
+namespace acslg::analyzer {
+    class Path;
+}
 
 namespace acslg::analyzer::symbolic {
     class Address;
     class SymbolAddress;
     class SymbolValue;
     class LiteralExpr;
+    class SourcePoint;
 
     /// @class SymbolicExpr
     /// @brief Base class for all symbolic expressions.
@@ -46,9 +53,10 @@ namespace acslg::analyzer::symbolic {
             K_UnaryOpExpr,
             K_UnknownExpr,
 
-            K_RangeIndex,
+            K_RangeElement,
             K_FirstOverRange,
             K_SumOverRange,
+            K_QuantifierOverRange,
             K_LastOverRange
         };
 
@@ -201,6 +209,20 @@ namespace acslg::analyzer::symbolic {
         /// @return
         virtual bool isUnknown() const { return false; };
 
+        /**
+         * @brief Substitute symbols with fromPoint same as `pointToSub` in an expression to the
+         * given program point (pathSubTo). A substitution typically means locating the expression
+         * at the address at the program point through fromAddr_ (or a similar member).
+         *
+         * @param pathSubTo      The path that symbols should be substituted to.
+         *
+         * @param pointToSub     Symbols with fromPoint same as pointToSub should be subtituted.
+
+         */
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &pathSubTo,
+            const SourcePoint &pointToSub) const = 0;
+
         //===----------------------------------------------------------------------===//
         // StInG Interface Utilities - Symbolic Expression Adapter
         //
@@ -345,6 +367,9 @@ namespace acslg::analyzer::symbolic {
         std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
 
         virtual bool equal(const SymbolicExpr &expr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &pathSubTo,
+            const SourcePoint &pointToSub) const override;
 
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return true; }
@@ -437,6 +462,9 @@ namespace acslg::analyzer::symbolic {
         virtual bool isUnknown() const override {
             return left_->isUnknown() || right_->isUnknown();
         };
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &pathSubTo,
+            const SourcePoint &pointToSub) const override;
 
         // StInG: Support functions for affine invariant analysis
         UsedMap collectUsedVarsAndAddrs() const override;
@@ -505,6 +533,9 @@ namespace acslg::analyzer::symbolic {
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &pathSubTo,
+            const SourcePoint &pointToSub) const override;
 
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return expr_->isUnknown(); };
@@ -549,6 +580,9 @@ namespace acslg::analyzer::symbolic {
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return true; };
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &pathSubTo,
+            const SourcePoint &pointToSub) const override;
 
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return false; }
@@ -786,6 +820,9 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild                      = false) const;
         virtual std::size_t hash() const override;
         bool equal(const SymbolicExpr &expr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &pathSubTo,
+            const SourcePoint &pointToSub) const override;
 
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override {
@@ -827,8 +864,13 @@ namespace acslg::analyzer::symbolic {
         virtual int getDimension() const                                                   = 0;
         virtual utils::not_null<std::unique_ptr<Address>> addressClone() const             = 0;
 
+        auto getPointeeType() const -> const auto & { return pointeeType_; }
+
       protected:
-        using SymbolicExpr::SymbolicExpr;
+        Address(ExprKind kind, Type valueType, const clang::QualType &pointeeType)
+            : SymbolicExpr(kind, valueType), pointeeType_(pointeeType) {};
+
+        clang::QualType pointeeType_;
     };
 
     class AddressBox {
@@ -897,9 +939,13 @@ namespace acslg::analyzer::symbolic {
         struct BaseInfo {
             std::optional<utils::not_null<std::unique_ptr<const Address>>> fromAddr_;
             SourcePoint fromPoint_;
+            clang::QualType pointeeType_;
+
             BaseInfo(std::optional<utils::not_null<std::unique_ptr<const Address>>> fromAddr,
-                     SourcePoint fromPoint)
-                : fromAddr_(std::move(fromAddr)), fromPoint_(std::move(fromPoint)) {}
+                     SourcePoint fromPoint,
+                     clang::QualType pointeeType)
+                : fromAddr_(std::move(fromAddr)), fromPoint_(std::move(fromPoint)),
+                  pointeeType_(pointeeType) {}
             BaseInfo(const BaseInfo &);
             BaseInfo(BaseInfo &&) = default;
             size_t hash() const;
@@ -921,7 +967,8 @@ namespace acslg::analyzer::symbolic {
 
         bool operator==(const SymbolAddress &other) const { return equal(other); }
 
-        SymbolAddress(std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
+        SymbolAddress(const clang::QualType pointeeType,
+                      std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
                       SourcePoint fromPoint,
                       std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> offset =
                           std::nullopt,
@@ -942,6 +989,9 @@ namespace acslg::analyzer::symbolic {
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::size_t hash() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &pathSubTo,
+            const SourcePoint &pointToSub) const override;
 
         /// @brief Get the value's regular form on this address.
         std::optional<std::string> regularFormOfValue(
@@ -972,6 +1022,9 @@ namespace acslg::analyzer::symbolic {
         void addLength(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
         auto getLength() const -> const auto & { return length_; }
         void resetLength() { length_ = std::nullopt; }
+
+        std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> getRightBound() const;
+
         BaseInfo getBaseInfo() const;
 
         // StInG: Support functions for affine invariant analysis
@@ -1022,7 +1075,8 @@ namespace acslg::analyzer::symbolic {
 
         VariableAddress(utils::not_null<const clang::VarDecl *> from)
             : Address(SymbolicExpr::ExprKind::K_VariableAddress,
-                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64}),
+                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
+                      from->getType()),
               from_(std::move(from)) {};
 
         static bool classof(const SymbolicExpr *expr) {
@@ -1042,6 +1096,9 @@ namespace acslg::analyzer::symbolic {
         };
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::size_t hash() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &pathSubTo,
+            const SourcePoint &pointToSub) const override;
 
         /// @brief Get the value's regular form on this address.
         std::optional<std::string> regularFormOfValue(
@@ -1094,11 +1151,14 @@ namespace acslg::analyzer::symbolic {
         FieldAddress &operator=(const FieldAddress &other);
         FieldAddress(FieldAddress &&) = default;
 
-        FieldAddress(const clang::RecordDecl *RD,
-                     std::pair<utils::not_null<std::unique_ptr<const Address>>, size_t> from)
+        FieldAddress(const clang::QualType pointeeType,
+                     const clang::RecordDecl *RD,
+                     utils::not_null<std::unique_ptr<const Address>> baseAddr,
+                     size_t fieldIndex_)
             : Address(SymbolicExpr::ExprKind::K_FieldAddress,
-                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64}),
-              definition_(RD), from_(std::move(from)) {
+                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
+                      pointeeType),
+              definition_(RD), baseAddr_(std::move(baseAddr)), fieldIndex_(fieldIndex_) {
             if (!RD->isCompleteDefinition())
                 ERROR("Incomplete struct definition");
             definition_ = RD->getDefinition();
@@ -1121,13 +1181,17 @@ namespace acslg::analyzer::symbolic {
         };
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::size_t hash() const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &pathSubTo,
+            const SourcePoint &pointToSub) const override;
 
         /// @brief Get the value's regular form on this address.
         std::optional<std::string> regularFormOfValue(
             std::optional<std::string_view> prefix = std::nullopt,
             std::optional<std::string_view> suffix = std::nullopt) const override;
         auto getDefinition() const -> const auto & { return definition_; }
-        auto getFrom() const -> const auto & { return from_; }
+        auto getBaseAddr() const -> const auto & { return baseAddr_; }
+        auto getFieldIndex() const -> const auto & { return fieldIndex_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;
         virtual utils::not_null<std::unique_ptr<Address>> addressClone() const override;
@@ -1164,7 +1228,8 @@ namespace acslg::analyzer::symbolic {
         };
 
         utils::not_null<const clang::RecordDecl *> definition_;
-        std::pair<utils::not_null<std::unique_ptr<const Address>>, size_t> from_;
+        utils::not_null<std::unique_ptr<const Address>> baseAddr_;
+        size_t fieldIndex_;
     };
 
     struct AddressHash {
@@ -1198,6 +1263,9 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild                      = false) const override;
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &pathSubTo,
+            const SourcePoint &pointToSub) const override;
         std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
             return fromAddr_->addressClone().into_underlying();
         }
@@ -1224,7 +1292,7 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr);
     BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
     BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
-    SymbolicExpr::Type deriveVarType(clang::QualType type);
+    SymbolicExpr::Type deriveType(clang::QualType type);
     bool isValidOffsetOrLength(const SymbolicExpr &expr);
 
     bool is_symbol_addr(const Address &a) noexcept;

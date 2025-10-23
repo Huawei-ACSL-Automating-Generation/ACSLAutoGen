@@ -3,6 +3,7 @@
 #include "testHelper.h"
 
 #include "Analyzer/analysis.h"
+#include <clang/AST/Type.h>
 
 using namespace std;
 using namespace clang;
@@ -239,10 +240,10 @@ namespace acslg::test::utils {
         optional<symbolic::SourcePoint> fromPoint) {
         auto baseAddr = makeVariableAddr(id);
         if (len != nullptr)
-            return symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(),
+            return symbolic::SymbolAddress{QualType{}, baseAddr.addressClone().into_underlying(),
                                            fromPoint.value_or(defaultPoint), std::move(offset),
                                            std::move(len)};
-        return symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(),
+        return symbolic::SymbolAddress{QualType{}, baseAddr.addressClone().into_underlying(),
                                        fromPoint.value_or(defaultPoint), std::move(offset),
                                        nullopt};
     }
@@ -260,7 +261,7 @@ namespace acslg::test::utils {
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
         auto baseAddr = makeVariableAddr(id);
-        return symbolic::SymbolAddress{baseAddr.addressClone().into_underlying(),
+        return symbolic::SymbolAddress{QualType{}, baseAddr.addressClone().into_underlying(),
                                        fromPoint.value_or(defaultPoint), nullopt, nullopt};
     }
 
