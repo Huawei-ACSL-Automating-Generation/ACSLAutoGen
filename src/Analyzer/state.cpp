@@ -12,6 +12,7 @@
 #include <clang/AST/StmtCXX.h>
 #include <clang/AST/ParentMapContext.h>
 #include "state.h"
+#include "expr.h"
 #include "macros.h"
 #include "Utils/utils.h"
 #include "SpecGenerator/specGenerator.h"
@@ -499,6 +500,8 @@ namespace acslg::analyzer {
                             UNIMPLEMENT("BSL_SAL_Calloc expects a sizeof(T) in its arguments.");
                         }
                         clang::QualType elemTy = *elemTyOpt;
+                        auto pointAfterCall    = symbolic::SourcePoint::fromStmtAfter(
+                            call, context_.getSourceManager(), context_.getLangOptions());
 
                         // Handle builtin scalar pointees (e.g., uint64_t, int64_t, bool, char).
                         if (acslg::utils::isBuiltinScalar(elemTy)) {
@@ -543,16 +546,17 @@ namespace acslg::analyzer {
                             // Allocate a fresh symbolic address anchored at the current allocation
                             // site.
                             auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                elemTy, std::nullopt, startPoint_,
-                                std::make_unique<symbolic::LiteralExpr>(0) // offset := 0
-                            );
+                                elemTy, std::nullopt, pointAfterCall);
 
                             // Attach the element-wise legal bound to the symbolic address.
                             addr->setLength(std::move(lengthInElems));
 
                             // Materialize the first element symbol at the allocated base address.
-                            auto elemSym = getSymbol(elemTy, addr->addressClone().into_underlying(),
-                                                     startPoint_);
+                            auto elemSym =
+                                getSymbol(elemTy, addr->addressClone().into_underlying(),
+                                          pointAfterCall); // Use startPoint_ or pointAfterCall is
+                                                           // functionally same, pointerAfterCall
+                                                           // semantically more accurate.
                             memoryState_.write(*addr, elemSym->clone());
 
                             Formulas exprs;
@@ -571,12 +575,15 @@ namespace acslg::analyzer {
                             const auto &layout = RD->getASTContext().getASTRecordLayout(RD);
 
                             auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                elemTy, std::nullopt, startPoint_,
+                                elemTy, std::nullopt, pointAfterCall,
                                 std::make_unique<symbolic::LiteralExpr>(0));
 
                             // Materialize a symbolic structure value at the allocated base address.
                             auto value = std::make_unique<symbolic::Structure>(
-                                RD, layout, addr->addressClone().into_underlying(), startPoint_);
+                                RD, layout, addr->addressClone().into_underlying(),
+                                pointAfterCall); // // Use startPoint_ or pointAfterCall is
+                                                 // functionally same, pointerAfterCall
+                                                 // semantically more accurate.
                             memoryState_.write(*addr, value->clone());
 
                             Formulas exprs;
