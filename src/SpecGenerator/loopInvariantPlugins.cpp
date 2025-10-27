@@ -1,9 +1,11 @@
 // src/SpecGenerator/loopInvariantPlugins.cpp
 
+#include "expr.h"
 #include "macros.h"
 #include "specGenerator.h"
 #include <llvm-19/llvm/Support/Casting.h>
 #include <memory>
+#include <unordered_set>
 #include "state.h"
 #include "loopInvTemplates.h"
 #include "utils.h"
@@ -15,10 +17,9 @@ namespace acslg::spec_generator {
       public:
         CheckAndDumpLoopInfoPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
-        std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
-            const analyzer::ProgramState &,
-            const analyzer::ProgramState &,
-            const LoopInfo &loopInfo) const override {
+        GenResultType generate(const analyzer::ProgramState &,
+                               const analyzer::ProgramState &,
+                               const LoopInfo &loopInfo) const override {
             if (loopInfo.loopEntryInfo_) {
                 auto &loopEntryInfo = loopInfo.loopEntryInfo_.value();
                 if (loopEntryInfo.symbolicLoopEntry_->getPaths().size() != 1) {
@@ -65,7 +66,10 @@ namespace acslg::spec_generator {
                 INFO("patternInfo_ isn't std::set.");
             }
 
-            return make_tuple(std::nullopt, true, std::vector<PostInfo>{});
+            return GenResultType{.acsl            = std::nullopt,
+                                 .acslUsedPoints  = {},
+                                 .isContinue      = true,
+                                 .perPathPostInfo = {}};
         }
 
       private:
@@ -77,10 +81,9 @@ namespace acslg::spec_generator {
       public:
         LinearInvariantPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
-        std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
-            const analyzer::ProgramState &,
-            const analyzer::ProgramState &,
-            const LoopInfo &loopInfo) const override {
+        GenResultType generate(const analyzer::ProgramState &,
+                               const analyzer::ProgramState &,
+                               const LoopInfo &loopInfo) const override {
             if (loopInfo.loopEntryInfo_ == std::nullopt || loopInfo.indexInfo_ == std::nullopt)
                 ERROR("Dependencies are not met.");
 
@@ -176,8 +179,14 @@ namespace acslg::spec_generator {
             }
 
             if (spec.empty())
-                return make_tuple(std::nullopt, true, std::move(postStates));
-            return make_tuple(std::move(spec), true, std::move(postStates));
+                return GenResultType{.acsl            = std::nullopt,
+                                     .acslUsedPoints  = {},
+                                     .isContinue      = true,
+                                     .perPathPostInfo = std::move(postStates)};
+            return GenResultType{.acsl            = std::move(spec),
+                                 .acslUsedPoints  = {},
+                                 .isContinue      = true,
+                                 .perPathPostInfo = std::move(postStates)};
         }
 
       private:
@@ -190,10 +199,9 @@ namespace acslg::spec_generator {
       public:
         LoopAssignsPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
-        std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
-            const analyzer::ProgramState &preState,
-            const analyzer::ProgramState &loopEntry,
-            const LoopInfo &loopInfo) const override {
+        GenResultType generate(const analyzer::ProgramState &preState,
+                               const analyzer::ProgramState &loopEntry,
+                               const LoopInfo &loopInfo) const override {
             if (loopInfo.loopEntryInfo_ == std::nullopt || loopInfo.indexInfo_ == std::nullopt ||
                 loopInfo.patternInfo_ == std::nullopt)
                 ERROR("Dependencies are not met.");
@@ -208,7 +216,6 @@ namespace acslg::spec_generator {
 
             auto &entryMS = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->getMemoryState();
 
-            std::string spec;
             std::vector<symb::AddressBox> assignedAddrs;
             std::vector<PostInfo> postInfo;
 
@@ -349,7 +356,7 @@ namespace acslg::spec_generator {
                                 std::abs(indexInfo.indexPattern_.step_))
                                 return;
 
-                            auto pointAfterLoop = symb::SourcePoint::fromStmtBefore(
+                            auto pointAfterLoop = symb::SourcePoint::fromStmtAfter(
                                 loopInfo.bodyStmt_,
                                 loopEntryInfo.symbolicLoopEntry_->getContext().getSourceManager(),
                                 loopEntryInfo.symbolicLoopEntry_->getContext().getLangOptions());
@@ -424,11 +431,10 @@ namespace acslg::spec_generator {
                 pathConds.push_back(std::move(cond));
             }
 
-            auto loopEntryPoint = symb::SourcePoint::fromStmtBefore(
-                loopInfo.loopStmt_,
-                loopEntryInfo.symbolicLoopEntry_->getContext().getSourceManager(),
-                loopEntryInfo.symbolicLoopEntry_->getContext().getLangOptions());
-            std::unordered_set<size_t> solvedAddrsHashs{};
+            std::string specs;
+            std::unordered_set<symb::SourcePoint> allUsedPoints;
+            auto loopEntryPoint = loopEntryInfo.symbolicLoopEntry_->getStartPoint();
+            std::unordered_set<size_t> insertedACSL{};
             for (auto &addr : assignedAddrs) {
                 for (auto &path : loopEntry.getPaths()) {
                     auto concreteAddrExpr = addr.get().getSubstitutedExpr(*path, loopEntryPoint);
@@ -436,37 +442,37 @@ namespace acslg::spec_generator {
                         llvm::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
                     if (concreteAddr == nullptr)
                         UNREACHABLE();
-                    if (solvedAddrsHashs.contains(concreteAddr->hash()))
-                        continue;
-                    solvedAddrsHashs.insert(concreteAddr->hash());
 
-                    if (auto symbolConcreteAddr =
-                            llvm::dyn_cast<const symb::SymbolAddress>(concreteAddr)) {
-                        // special case
-                        if (symbolConcreteAddr->getOffset()->isUnknown()) {
-                            auto valueForm = addr.get().regularFormOfValue("\\at(", ", LoopEntry)");
-                            if (valueForm == std::nullopt) {
-                                WARN("Value of {" + addr.get().dump() + "} has not regular form");
-                                continue;
-                            }
-                            spec += valueForm.value() + ", ";
-                            continue;
-                        }
-                    }
-                    auto valueForm = concreteAddr->regularFormOfValue();
-                    if (valueForm == std::nullopt) {
-                        WARN("Value of {" + concreteAddr->dump() + "} has not regular form");
+                    auto acslExpected = concreteAddr->getACSLOfValue({});
+                    if (!acslExpected &&
+                        acslExpected.error() == symb::SymbolicExpr::GetACSLError::UnknownExpr)
+                        acslExpected = addr.get().getACSLOfValue(
+                            {.predefinedLabels = {{loopEntryPoint, "LoopEntry"}}}, loopEntryPoint);
+                    if (!acslExpected) {
+                        WARN("Value of {" + concreteAddr->dump() + "} getACSL failed.");
                         continue;
                     }
-                    spec += valueForm.value() + ", ";
+                    auto &[spec, usedPoints] = acslExpected.value();
+                    auto specHash            = utils::hash_val(spec);
+                    if (insertedACSL.contains(specHash))
+                        continue;
+                    insertedACSL.insert(specHash);
+                    specs += spec + ", ";
+                    allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
+                                         std::make_move_iterator(usedPoints.end()));
                 }
             }
 
-            if (spec.empty())
-                return make_tuple(R"(loop assigns \nothing;)", true, std::vector<PostInfo>{});
-            else
-                return make_tuple("loop assigns " + spec.substr(0, spec.length() - 2) + ";", true,
-                                  std::move(postInfo));
+            if (specs.empty())
+                return GenResultType{.acsl            = R"(loop assigns \nothing;)",
+                                     .acslUsedPoints  = {},
+                                     .isContinue      = true,
+                                     .perPathPostInfo = {}};
+            return GenResultType{.acsl =
+                                     "loop assigns " + specs.substr(0, specs.length() - 2) + ";",
+                                 .acslUsedPoints  = std::move(allUsedPoints),
+                                 .isContinue      = true,
+                                 .perPathPostInfo = std::move(postInfo)};
         }
 
       private:
@@ -478,10 +484,9 @@ namespace acslg::spec_generator {
       public:
         ParadigmMaxMinPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
-        std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
-            const analyzer::ProgramState &,
-            const analyzer::ProgramState &,
-            const LoopInfo &loopInfo) const override {
+        GenResultType generate(const analyzer::ProgramState &,
+                               const analyzer::ProgramState &,
+                               const LoopInfo &loopInfo) const override {
             if (loopInfo.loopEntryInfo_ == std::nullopt || loopInfo.indexInfo_ == std::nullopt ||
                 loopInfo.patternInfo_ == std::nullopt)
                 ERROR("Dependencies are not met.");
@@ -501,7 +506,10 @@ namespace acslg::spec_generator {
                 if (it->second == std::nullopt)
                     ERROR("PatternsMap_ is in an invalid state");
                 if ((*it->second).step_ != 1 && (*it->second).step_ != -1)
-                    return make_tuple(std::nullopt, true, std::vector<PostInfo>{});
+                    return GenResultType{.acsl            = std::nullopt,
+                                         .acslUsedPoints  = {},
+                                         .isContinue      = true,
+                                         .perPathPostInfo = {}};
                 else
                     indexStep = (*it->second).step_;
             } else {
@@ -519,9 +527,19 @@ namespace acslg::spec_generator {
                 // Parameters for template filling, see StringTemplate for more information.
                 std::optional<std::string> param_n{std::nullopt}, param_array{std::nullopt},
                     param_index{std::nullopt}, param_m{std::nullopt};
+                // @SgtPepper114 2025/10/26: I'm in the middle of rewriting `regularForm` as
+                // `getACSL`. This plugin is a beast and barely anyone uses it, so I'm not gonna
+                // worry about the correct way to do it for now. If it breaks, just band-aid it by
+                // fixing all the config and return value stuff of `getACSL`.
 
-                param_index = indexInfo.indexRealAddr_->regularFormOfValue();
-                param_n     = indexInfo.indexBound_->regularForm();
+                if (auto acslExpected = indexInfo.indexRealAddr_->getACSLOfValue(
+                        {.noStateLabelFunctionAt = true})) {
+                    param_index = acslExpected.value().first;
+                }
+                if (auto acslExpected =
+                        indexInfo.indexBound_->getACSL({.noStateLabelFunctionAt = true})) {
+                    param_n = acslExpected.value().first;
+                }
 
                 auto getAddress = [&](const clang::Expr *expr)
                     -> std::optional<utils::not_null<std::unique_ptr<symb::Address>>> {
@@ -548,16 +566,13 @@ namespace acslg::spec_generator {
                             *idxAddr.value() != *indexInfo.indexRealAddr_)
                             return false;
 
-                        if (auto addr = getAddress(arraySub->getBase())) {
-                            auto baseStr = addr.value()->regularFormOfValue();
-                            if (baseStr == std::nullopt) {
-                                WARN("Value of {" + addr.value()->dump() + "} has no regular form");
-                                return false;
+                        if (auto addr = getAddress(arraySub->getBase()))
+                            if (auto acslExpected = addr.value()->getACSLOfValue(
+                                    {.noStateLabelFunctionAt = true})) {
+                                param_array = acslExpected.value().first;
+                                return true;
                             }
-                            param_array = baseStr.value();
-                            return true;
-                        } else
-                            return false;
+                        return false;
                     } else if (auto unary = dyn_cast_if_present<clang::UnaryOperator>(
                                    expr->IgnoreParenImpCasts());
                                unary && unary->getOpcode() == clang::UnaryOperatorKind::UO_Deref) {
@@ -571,19 +586,13 @@ namespace acslg::spec_generator {
                                 rhsAddr == std::nullopt ||
                                 *rhsAddr.value() != *indexInfo.indexRealAddr_)
                                 return false;
-                            if (auto addr = getAddress(bin->getLHS())) {
-                                auto baseStr = addr.value()->regularFormOfValue();
-                                if (baseStr == std::nullopt) {
-                                    WARN("Value of {" + addr.value()->dump() +
-                                         "} has no regular form");
-                                    return false;
+                            if (auto addr = getAddress(bin->getLHS()))
+                                if (auto acslExpected = addr.value()->getACSLOfValue(
+                                        {.noStateLabelFunctionAt = true})) {
+                                    param_array = acslExpected.value().first;
+                                    return true;
                                 }
-                                param_array = baseStr.value();
-                                return true;
-                            } else {
-                                return false;
-                            }
-
+                            return false;
                         } else if (auto declRef = dyn_cast_if_present<clang::DeclRefExpr>(
                                        unary->getSubExpr()->IgnoreParenImpCasts())) {
                             // *it
@@ -596,13 +605,12 @@ namespace acslg::spec_generator {
                                 it == patternInfo.patternsMap_.end() ||
                                 it->second == std::nullopt || (*it->second).step_ != indexStep)
                                 return false;
-                            auto baseStr = addr.value()->regularFormOfValue();
-                            if (baseStr == std::nullopt) {
-                                WARN("Value of {" + addr.value()->dump() + "} has no regular form");
-                                return false;
+                            if (auto acslExpected = addr.value()->getACSLOfValue(
+                                    {.noStateLabelFunctionAt = true})) {
+                                param_array = acslExpected.value().first;
+                                return true;
                             }
-                            param_array = baseStr.value();
-                            return true;
+                            return false;
                         }
                     } else {
                         return false;
@@ -746,11 +754,14 @@ namespace acslg::spec_generator {
             ifVisitor.runOn(loopInfo.bodyStmt_);
 
             if (spec.empty())
-                return make_tuple(std::nullopt, true, std::vector<PostInfo>{});
-            else {
-                spec.pop_back(); // earse \n
-                return make_tuple(spec, true, std::vector<PostInfo>{});
-            }
+                return GenResultType{.acsl            = std::nullopt,
+                                     .acslUsedPoints  = {},
+                                     .isContinue      = true,
+                                     .perPathPostInfo = {}};
+
+            spec.pop_back(); // earse \n
+            return GenResultType{
+                .acsl = spec, .acslUsedPoints = {}, .isContinue = true, .perPathPostInfo = {}};
         }
 
       private:
@@ -762,24 +773,30 @@ namespace acslg::spec_generator {
       public:
         LoopVariantPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
-        std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
-            const analyzer::ProgramState &,
-            const analyzer::ProgramState &,
-            const LoopInfo &loopInfo) const override {
+        GenResultType generate(const analyzer::ProgramState &,
+                               const analyzer::ProgramState &,
+                               const LoopInfo &loopInfo) const override {
             if (loopInfo.indexInfo_ == std::nullopt)
                 ERROR("Dependencies are not met.");
 
             auto &indexInfo = loopInfo.indexInfo_.value();
 
-            // Yes, the expression of the loop std::variant is maxLoopCount. :)
-            auto regForm = indexInfo.maxLoopCount_->simplifiedExpr()->regularForm();
-            if (regForm == std::nullopt) {
+            // Yes, the expression of the loop variant is maxLoopCount. :)
+            auto acslExpected = indexInfo.maxLoopCount_->simplifiedExpr()->getACSL(
+                {.noStateLabelFunctionAt = true});
+            if (!acslExpected) {
                 WARN("Variant {" + indexInfo.maxLoopCount_->simplifiedExpr()->dump() +
-                     "} has no regular form.");
-                return make_tuple(std::nullopt, true, std::vector<PostInfo>{});
+                     "} getACSL failed.");
+                return GenResultType{.acsl            = std::nullopt,
+                                     .acslUsedPoints  = {},
+                                     .isContinue      = true,
+                                     .perPathPostInfo = {}};
             }
-            auto spec = "loop std::variant " + regForm.value() + ";";
-            return make_tuple(std::move(spec), true, std::vector<PostInfo>{});
+            auto spec = "loop variant " + acslExpected.value().first + ";";
+            return GenResultType{.acsl            = std::move(spec),
+                                 .acslUsedPoints  = {},
+                                 .isContinue      = true,
+                                 .perPathPostInfo = std::vector<PostInfo>{}};
         }
 
       private:

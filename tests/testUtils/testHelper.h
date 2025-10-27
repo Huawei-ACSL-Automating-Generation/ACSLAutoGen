@@ -14,7 +14,7 @@ namespace acslg::test::utils {
     // These codes performs minimal safety checks, so please ensure the validity of the input.
 
     std::optional<std::string> doPluginOnFirstFunc(const std::string &code, const std::string &pid);
-    void doAll(const std::string_view code);
+    std::string doAll(const std::string_view code);
     std::unique_ptr<analyzer::ProgramState> execOnFirstFunc(const std::string &code);
     ::acslg::utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>> getReturnExprOfFirstPath(
         const analyzer::ProgramState &state);
@@ -23,9 +23,8 @@ namespace acslg::test::utils {
     std::pair<spec_generator::LoopInfo, bool> doPluginsOnFirstLoop(
         std::string_view code,
         const std::vector<std::string> pids);
-    std::tuple<std::optional<std::string>, bool, std::vector<spec_generator::PostInfo>> doPluginOnFirstLoop(
-        const std::string &code,
-        const std::string &pid);
+    spec_generator::LoopInvariantPlugin::GenResultType doPluginOnFirstLoop(const std::string &code,
+                                                                           const std::string &pid);
 
     namespace details {
         consteval unsigned digitCount(unsigned x) {
@@ -118,6 +117,26 @@ namespace acslg::test::utils {
         size_t func_count{0};
         std::unordered_map<unsigned int, size_t> funcIdCountMap{};
     };
+
+#define EXPECT_OK_AND_FIRST_EQ(expr, expected_first)                                               \
+    do {                                                                                           \
+        auto _res = (expr);                                                                        \
+        ASSERT_TRUE(_res) << "Expected success but got error";                                     \
+        EXPECT_EQ(_res.value().first, expected_first);                                             \
+    } while (0)
+
+#define EXPECT_OK_AND_FIRST_THAT(expr, expected_first)                                             \
+    do {                                                                                           \
+        auto _res = (expr);                                                                        \
+        ASSERT_TRUE(_res) << "Expected success but got error";                                     \
+        EXPECT_THAT(_res.value().first, expected_first);                                           \
+    } while (0)
+
+#define ASSERT_OK_AND_GET_FIRST_TO_VAR(expr, var)                                                  \
+    auto _res##var = (expr);                                                                       \
+    ASSERT_TRUE(_res##var) << "Expected success but got error";                                    \
+    auto var = _res##var.value().first;
+
 } // namespace acslg::test::utils
 
 #endif

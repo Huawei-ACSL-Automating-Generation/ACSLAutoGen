@@ -63,12 +63,13 @@ namespace acslg::analyzer {
             if (hasPointer && hasLoop)
                 return;
 
-            auto spec = spec_generator::emitFunctionContract(*preState, *state);
+            auto [spec, usedPoints] = spec_generator::emitFunctionContract(*preState, *state);
             INFO(spec);
 
             auto &SM       = context_.getSourceManager();
             auto fileBegin = SM.getFileLoc(FD->getSourceRange().getBegin());
             context_.insertText(fileBegin, spec, /*after*/ false, /*indentNewLines*/ true);
+            context_.insertUsedPoints(std::move(usedPoints));
         } else {
             INFO("No function body found for: " + FD->getNameAsString());
         }

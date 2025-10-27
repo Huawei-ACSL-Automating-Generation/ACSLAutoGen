@@ -290,6 +290,8 @@ int main(int argc, const char **argv) {
         OS << "SUBCLASS(" << Q << ")\n";
     }
 
+    OS << "#undef SUBCLASS" << "\n";
+
     if (Verbose) {
         llvm::errs() << "[OK] Wrote " << C.DirectDerived.size() << " entries to " << OutPath
                      << "\n";

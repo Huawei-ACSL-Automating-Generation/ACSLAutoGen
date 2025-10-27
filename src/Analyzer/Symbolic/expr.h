@@ -17,10 +17,12 @@
 #include <clang/AST/RecordLayout.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Lexer.h>
+#include <unordered_set>
 #include <variant>
 
 #include "macros.h"
 #include "Utils/utils.h"
+#include "config.h"
 
 namespace acslg::analyzer {
     class Path;
@@ -31,8 +33,140 @@ namespace acslg::analyzer::symbolic {
     class SymbolAddress;
     class SymbolValue;
     class LiteralExpr;
-    class SourcePoint;
 
+    /**
+     * @class SourcePoint
+     * @brief Represents a unique source position in the source code.
+     *
+     * This class encapsulates a `clang::SourceLocation` together with its associated
+     * `SourceManager`, and provides utilities for constructing points relative to statements,
+     * comparing positions, generating hash values, and dumping human-readable information.
+     *
+     * This class is designed to express a program location in the source text, not a control flow
+     * node.
+     */
+    class SourcePoint {
+      public:
+        SourcePoint(const SourcePoint &) = default;
+        SourcePoint &operator=(const SourcePoint &);
+        SourcePoint(SourcePoint &&) = default;
+        SourcePoint &operator=(SourcePoint &&);
+
+        /**
+         * @brief Construct a SourcePoint at the start of a given FunctionDecl's body.
+         *
+         * @param FD  The FunctionDecl to reference.
+         * @param SM The SourceManager providing context for the source file.
+         * @param LO The language options used for retrieving locations.
+         * @return A SourcePoint located at the start of the function body.
+         */
+        static SourcePoint fromFuncDecl(const clang::FunctionDecl *FD,
+                                        const clang::SourceManager &SM,
+                                        const clang::LangOptions &LO);
+
+        /**
+         * @brief Construct a SourcePoint at the position just before a given statement.
+         *
+         * @param S  The statement to reference.
+         * @param SM The SourceManager providing context for the source file.
+         * @param LO The language options used for retrieving locations.
+         * @return A SourcePoint located before the given statement.
+         */
+        static SourcePoint fromStmtBefore(const clang::Stmt *S,
+                                          const clang::SourceManager &SM,
+                                          const clang::LangOptions &LO);
+
+        /**
+         * @brief Construct a SourcePoint at the position just after a given statement.
+         *
+         * @param S  The statement to reference.
+         * @param SM The SourceManager providing context for the source file.
+         * @param LO The language options used for retrieving locations.
+         * @return A SourcePoint located after the given statement.
+         */
+        static SourcePoint fromStmtAfter(const clang::Stmt *S,
+                                         const clang::SourceManager &SM,
+                                         const clang::LangOptions &LO);
+
+        /**
+         * @brief Compare this SourcePoint with another.
+         *
+         * @param other The SourcePoint to compare against.
+         * @return True if this point is strictly before the other, false otherwise.
+         */
+        bool operator<(const SourcePoint &other) const;
+
+        /**
+         * @brief Test equality between two SourcePoints.
+         *
+         * Two points are equal if their underlying `SourceLocation`s compare equal
+         * under the same SourceManager.
+         *
+         * @param other The SourcePoint to compare against.
+         * @return True if both points represent the same location, false otherwise.
+         */
+        bool operator==(const SourcePoint &other) const;
+
+        /**
+         * @brief Get the underlying `clang::SourceLocation` represented by this point.
+         *
+         * @return An `clang::SourceLocation`.
+         */
+        clang::SourceLocation asSourceLocation() const { return loc_; }
+
+        /**
+         * @brief Generate a hash value for this SourcePoint.
+         *
+         * Computed from the underlying `SourceLocation`'s hash value.
+         *
+         * @return Hash value suitable for use in unordered containers.
+         */
+        size_t hash() const { return utils::hash_val(loc_.getHashValue()); }
+
+        /**
+         * @brief Dump a human-readable string representation of the SourcePoint.
+         *
+         * @return A string representation of this SourcePoint.
+         */
+        std::string dump() const;
+
+        std::string getLabel() const {
+            auto &config = GlobalConfig::instance();
+            auto suffix =
+                config.acslLabelSuffixLength
+                    ? "_" + utils::hash_prefix_hex_chars(hash(), config.acslLabelSuffixLength)
+                    : "";
+            return labelPrefix_ + suffix;
+        }
+
+      private:
+        /**
+         * @brief Private constructor to initialize a SourcePoint from a SourceManager.
+         *
+         * Only accessible to the static factory functions.
+         *
+         * @param SM The SourceManager to associate with this SourcePoint.
+         */
+        SourcePoint(const clang::SourceManager &SM, std::string labelPrefix)
+            : SM_(SM), labelPrefix_(labelPrefix) {};
+
+        clang::SourceLocation loc_;      ///< Clang source location.
+        const clang::SourceManager &SM_; ///< Reference to the source manager for resolution.
+
+        // helper member
+        std::string labelPrefix_;
+    };
+} // namespace acslg::analyzer::symbolic
+
+namespace std {
+    template <> struct hash<acslg::analyzer::symbolic::SourcePoint> {
+        size_t operator()(const acslg::analyzer::symbolic::SourcePoint &sp) const noexcept {
+            return sp.hash();
+        }
+    };
+} // namespace std
+
+namespace acslg::analyzer::symbolic {
     /// @class SymbolicExpr
     /// @brief Base class for all symbolic expressions.
     class SymbolicExpr {
@@ -101,17 +235,28 @@ namespace acslg::analyzer::symbolic {
         /// @return Human-readable representation.
         virtual std::string dump() const = 0;
 
-        /// @brief Emit expression in ACSL-compliant regular form.
-        /// @param prefix Optional prefix of symbols(SymbolValue, Structure, SymbolAddress).
-        /// @param suffix Optional suffix of symbols(SymbolValue, Structure, SymbolAddress).
-        /// @param parentPrec Precedence of parent operator.
-        /// @param isRightChild Whether this is right operand.
-        /// @return String in ACSL syntax.
-        virtual std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const = 0;
+        struct GetACSLConfig {
+            bool noStateLabelFunctionAt{false};
+            std::unordered_map<SourcePoint, std::string> predefinedLabels{};
+            bool useDerefWithZeroOffset{true};
+            bool UnknownExprAsError{true};
+        };
+
+        enum class GetACSLError {
+            HeapAddress,
+            PartiallyModifiedStruct,
+            UnknownExpr,
+        };
+
+        utils::expected<std::pair<std::string, std::unordered_set<SourcePoint>>, GetACSLError> getACSL(
+            const GetACSLConfig &config,
+            std::optional<SourcePoint> currentPoint = std::nullopt) const {
+            std::unordered_set<SourcePoint> usedPoints;
+            auto res = callGetACSL(*this, config, usedPoints, currentPoint);
+            if (res)
+                return std::pair{std::move(res.value()), std::move(usedPoints)};
+            return res.error();
+        }
 
         /// @brief Compare with another expression for structural equality.
         /// @param other Expression to compare.
@@ -144,7 +289,7 @@ namespace acslg::analyzer::symbolic {
                                                           utils::not_null<const SymbolAddress *>>>;
         using HashIdMap = std::unordered_map<size_t, size_t>;
         /// @brief Collect Variables and Addresses used in the expression.
-        /// @return Map from hash to SymbolValue and Address pointer.
+        /// @return usedPoints from hash to SymbolValue and Address pointer.
         virtual UsedMap collectUsedVarsAndAddrs() const { return {}; };
 
         template <typename... Exprs>
@@ -273,6 +418,17 @@ namespace acslg::analyzer::symbolic {
         /// @brief Simplify expression if it's linear, just call clone() otherwise.
         utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExprIfLinear() const;
 
+        /*-------------- Bridge ----------------- */
+        static utils::expected<std::string, GetACSLError> callGetACSL(
+            const SymbolicExpr &e,
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec = 0,
+            bool isRightChild   = false) {
+            return e.doGetACSL(config, usedPoints, currentPoint, parentPrec, isRightChild);
+        }
+
         static std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> callTryEvalAsAddr(
             const SymbolicExpr &e) {
             return e.doTryEvalAsSymbolAddr();
@@ -286,6 +442,13 @@ namespace acslg::analyzer::symbolic {
             // TODO: cache the result.
             return std::nullopt;
         };
+
+        virtual utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const = 0;
 
         ExprKind kind_;  ///< Kind of expression
         Type valueType_; ///< Underlying type
@@ -357,11 +520,6 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
@@ -379,6 +537,14 @@ namespace acslg::analyzer::symbolic {
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
             const std::unordered_map<size_t, size_t> &) const override;
         int64_t getLiteralValue() const;
+
+      private:
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
 
       private:
         LiteralType type_;
@@ -400,14 +566,14 @@ namespace acslg::analyzer::symbolic {
     /// @brief Represents a binary operation expression.
     class BinaryOpExpr : public SymbolicExpr {
       public:
-        enum class Operator {
-#define BIN_OP(name, tok, prec, isRight) name,
+        enum class Operator : unsigned {
+#define BIN_OP(name, tok, prec, isRightAssoc) name,
 #include "operators.def"
         };
 
-        inline static int getPrecedence(BinaryOpExpr::Operator op) {
+        inline static unsigned getPrecedence(BinaryOpExpr::Operator op) {
             switch (op) {
-#define BIN_OP(name, tok, prec, right)                                                             \
+#define BIN_OP(name, tok, prec, isRightAssoc)                                                      \
     case BinaryOpExpr::Operator::name: return prec;
 #include "operators.def"
                 default: ERROR("Unknown Operator");
@@ -416,8 +582,8 @@ namespace acslg::analyzer::symbolic {
 
         inline static bool isRightAssociative(BinaryOpExpr::Operator op) {
             switch (op) {
-#define BIN_OP(name, tok, prec, right)                                                             \
-    case BinaryOpExpr::Operator::name: return right;
+#define BIN_OP(name, tok, prec, isRightAssoc)                                                      \
+    case BinaryOpExpr::Operator::name: return isRightAssoc;
 #include "operators.def"
                 default: ERROR("Unknown operator");
             }
@@ -449,11 +615,6 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
@@ -476,9 +637,17 @@ namespace acslg::analyzer::symbolic {
             const std::unordered_map<size_t, size_t> &) const override;
 
       private:
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
         virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
             const override;
 
+      private:
         utils::not_null<std::unique_ptr<SymbolicExpr>> left_;
         Operator op_;
         utils::not_null<std::unique_ptr<SymbolicExpr>> right_;
@@ -488,14 +657,14 @@ namespace acslg::analyzer::symbolic {
     /// @brief Represents a unary operation expression.
     class UnaryOpExpr : public SymbolicExpr {
       public:
-        enum class Operator {
-#define UN_OP(name, tok, prec, isRight) name,
+        enum class Operator : unsigned {
+#define UN_OP(name, tok, prec, isRightAssoc) name,
 #include "operators.def"
         };
 
-        inline static int getPrecedence(UnaryOpExpr::Operator op) {
+        inline static unsigned getPrecedence(UnaryOpExpr::Operator op) {
             switch (op) {
-#define UN_OP(name, tok, prec, right)                                                              \
+#define UN_OP(name, tok, prec, isRightAssoc)                                                       \
     case UnaryOpExpr::Operator::name: return prec;
 #include "operators.def"
                 default: ERROR("Unknown Operator");
@@ -504,8 +673,8 @@ namespace acslg::analyzer::symbolic {
 
         inline static bool isRightAssociative(UnaryOpExpr::Operator op) {
             switch (op) {
-#define UN_OP(name, tok, prec, right)                                                              \
-    case UnaryOpExpr::Operator::name: return right;
+#define UN_OP(name, tok, prec, isRightAssoc)                                                       \
+    case UnaryOpExpr::Operator::name: return isRightAssoc;
 #include "operators.def"
                 default: ERROR("Unknown operator");
             }
@@ -525,11 +694,6 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
@@ -548,6 +712,14 @@ namespace acslg::analyzer::symbolic {
             const std::unordered_map<std::string, size_t> &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
             const std::unordered_map<size_t, size_t> &) const override;
+
+      private:
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
 
       private:
         Operator op_;
@@ -572,11 +744,6 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return true; };
@@ -587,116 +754,14 @@ namespace acslg::analyzer::symbolic {
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return false; }
         int getMaxDegree() const override { return 0; }
-    };
-
-    /**
-     * @class SourcePoint
-     * @brief Represents a unique source position in the source code.
-     *
-     * This class encapsulates a `clang::SourceLocation` together with its associated
-     * `SourceManager`, and provides utilities for constructing points relative to statements,
-     * comparing positions, generating hash values, and dumping human-readable information.
-     *
-     * This class is designed to express a program location in the source text, not a control flow
-     * node.
-     */
-    class SourcePoint {
-      public:
-        SourcePoint(const SourcePoint &) = default;
-        SourcePoint &operator=(const SourcePoint &);
-        SourcePoint(SourcePoint &&) = default;
-        SourcePoint &operator=(SourcePoint &&);
-
-        /**
-         * @brief Construct a SourcePoint at the position just before a given FunctionDecl.
-         *
-         * @param FD  The FunctionDecl to reference.
-         * @param SM The SourceManager providing context for the source file.
-         * @param LO The language options used for retrieving locations.
-         * @return A SourcePoint located before the given statement.
-         */
-        static SourcePoint fromFuncDeclBefore(const clang::FunctionDecl *FD,
-                                              const clang::SourceManager &SM,
-                                              const clang::LangOptions &LO);
-
-        /**
-         * @brief Construct a SourcePoint at the position just before a given statement.
-         *
-         * @param S  The statement to reference.
-         * @param SM The SourceManager providing context for the source file.
-         * @param LO The language options used for retrieving locations.
-         * @return A SourcePoint located before the given statement.
-         */
-        static SourcePoint fromStmtBefore(const clang::Stmt *S,
-                                          const clang::SourceManager &SM,
-                                          const clang::LangOptions &LO);
-
-        /**
-         * @brief Construct a SourcePoint at the position just after a given statement.
-         *
-         * @param S  The statement to reference.
-         * @param SM The SourceManager providing context for the source file.
-         * @param LO The language options used for retrieving locations.
-         * @return A SourcePoint located after the given statement.
-         */
-        static SourcePoint fromStmtAfter(const clang::Stmt *S,
-                                         const clang::SourceManager &SM,
-                                         const clang::LangOptions &LO);
-
-        /**
-         * @brief Compare this SourcePoint with another.
-         *
-         * @param other The SourcePoint to compare against.
-         * @return True if this point is strictly before the other, false otherwise.
-         */
-        bool operator<(const SourcePoint &other) const;
-
-        /**
-         * @brief Test equality between two SourcePoints.
-         *
-         * Two points are equal if their underlying `SourceLocation`s compare equal
-         * under the same SourceManager.
-         *
-         * @param other The SourcePoint to compare against.
-         * @return True if both points represent the same location, false otherwise.
-         */
-        bool operator==(const SourcePoint &other) const;
-
-        /**
-         * @brief Get the underlying `clang::SourceLocation` represented by this point.
-         *
-         * @return An `clang::SourceLocation`.
-         */
-        clang::SourceLocation asSourceLocation() const { return loc_; }
-
-        /**
-         * @brief Generate a hash value for this SourcePoint.
-         *
-         * Computed from the underlying `SourceLocation`'s hash value.
-         *
-         * @return Hash value suitable for use in unordered containers.
-         */
-        size_t hash() const { return utils::hash_val(loc_.getHashValue()); }
-
-        /**
-         * @brief Dump a human-readable string representation of the SourcePoint.
-         *
-         * @return A string representation of this SourcePoint.
-         */
-        std::string dump() const;
 
       private:
-        /**
-         * @brief Private constructor to initialize a SourcePoint from a SourceManager.
-         *
-         * Only accessible to the static factory functions.
-         *
-         * @param SM The SourceManager to associate with this SourcePoint.
-         */
-        SourcePoint(const clang::SourceManager &SM) : SM_(SM) {};
-
-        clang::SourceLocation loc_;      ///< Clang source location.
-        const clang::SourceManager &SM_; ///< Reference to the source manager for resolution.
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
     };
 
     class Symbol {
@@ -718,6 +783,15 @@ namespace acslg::analyzer::symbolic {
         virtual std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr()
             const                                               = 0;
         virtual std::optional<SourcePoint> getFromPoint() const = 0;
+
+      protected:
+        static utils::expected<std::string, SymbolicExpr::GetACSLError> callGetACSLOfValueProxy(
+            const Address &addr,
+            const SymbolicExpr::GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec = 0,
+            bool isRightChild   = false);
     };
 
     /**
@@ -807,17 +881,6 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override;
         std::optional<SourcePoint> getFromPoint() const override;
-        std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
-        std::optional<std::string> regularFormOfField(
-            size_t index,
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const;
         virtual std::size_t hash() const override;
         bool equal(const SymbolicExpr &expr) const override;
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
@@ -835,9 +898,17 @@ namespace acslg::analyzer::symbolic {
         }
 
       protected:
-        using From = std::pair<std::optional<utils::not_null<std::unique_ptr<const Address>>>,
-                               std::optional<SourcePoint>>;
+        using From =
+            std::optional<std::pair<utils::not_null<std::unique_ptr<const Address>>, SourcePoint>>;
         From getFrom() const;
+
+      private:
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
 
       private:
         Info info_;
@@ -857,9 +928,15 @@ namespace acslg::analyzer::symbolic {
             return (k > ExprKind::K_FirstAddr) && (k < ExprKind::K_LastAddr);
         }
 
-        virtual std::optional<std::string> regularFormOfValue(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const                   = 0;
+        utils::expected<std::pair<std::string, std::unordered_set<SourcePoint>>, GetACSLError> getACSLOfValue(
+            const GetACSLConfig &config,
+            std::optional<SourcePoint> currentPoint = std::nullopt) const {
+            std::unordered_set<SourcePoint> usedPoints;
+            auto res = callGetACSLOfValue(*this, config, usedPoints, currentPoint);
+            if (res)
+                return std::pair{std::move(res.value()), std::move(usedPoints)};
+            return res.error();
+        }
         virtual std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const = 0;
         virtual int getDimension() const                                                   = 0;
         virtual utils::not_null<std::unique_ptr<Address>> addressClone() const             = 0;
@@ -870,7 +947,31 @@ namespace acslg::analyzer::symbolic {
         Address(ExprKind kind, Type valueType, const clang::QualType &pointeeType)
             : SymbolicExpr(kind, valueType), pointeeType_(pointeeType) {};
 
+        /*---------------- Bridge -----------------*/
+        static utils::expected<std::string, GetACSLError> callGetACSLOfValue(
+            const Address &addr,
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec = 0,
+            bool isRightChild   = false) {
+            return addr.doGetACSLOfValue(config, usedPoints, currentPoint, parentPrec,
+                                         isRightChild);
+        }
+
+      private:
+        virtual utils::expected<std::string, GetACSLError> doGetACSLOfValue(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const = 0;
+
+      protected:
         clang::QualType pointeeType_;
+
+      private:
+        friend Symbol;
     };
 
     class AddressBox {
@@ -981,11 +1082,7 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
+
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::size_t hash() const override;
@@ -993,10 +1090,6 @@ namespace acslg::analyzer::symbolic {
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
 
-        /// @brief Get the value's regular form on this address.
-        std::optional<std::string> regularFormOfValue(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const override;
         std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
             if (fromAddr_ == std::nullopt)
                 return std::nullopt;
@@ -1007,11 +1100,6 @@ namespace acslg::analyzer::symbolic {
         int getDimension() const override;
         virtual utils::not_null<std::unique_ptr<Address>> addressClone() const override;
 
-        std::optional<std::string> regularFormOfBase(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const {
-            return fromAddr_.value()->regularFormOfValue(prefix, suffix);
-        }
         utils::not_null<const SymbolicExpr *> getOffset() const { return offset_.get().get(); }
         void setOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> offset);
         void addOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
@@ -1047,9 +1135,23 @@ namespace acslg::analyzer::symbolic {
             const std::unordered_map<size_t, size_t> &) const override;
 
       private:
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChilds) const override;
+        utils::expected<std::string, GetACSLError> doGetACSLOfValue(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
         virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
             const override;
 
+      private:
         utils::not_null<std::unique_ptr<const SymbolicExpr>>
             offset_; ///< Offset relative to an address.
         std::optional<utils::not_null<std::unique_ptr<const Address>>>
@@ -1085,11 +1187,7 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
+
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override {
             ERROR("VariableAddress should not appear in expressions, and therefore, this function "
                   "should not be called.");
@@ -1100,10 +1198,6 @@ namespace acslg::analyzer::symbolic {
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
 
-        /// @brief Get the value's regular form on this address.
-        std::optional<std::string> regularFormOfValue(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const override;
         auto getFrom() const -> const auto & { return from_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;
@@ -1140,6 +1234,20 @@ namespace acslg::analyzer::symbolic {
                   "should not be called.");
         };
 
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+        utils::expected<std::string, GetACSLError> doGetACSLOfValue(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
+      private:
         utils::not_null<const clang::VarDecl *> from_;
     };
 
@@ -1170,11 +1278,7 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
+
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override {
             ERROR("FieldAddress should not appear in expressions, and therefore, this function "
                   "should not be called.");
@@ -1185,10 +1289,6 @@ namespace acslg::analyzer::symbolic {
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
 
-        /// @brief Get the value's regular form on this address.
-        std::optional<std::string> regularFormOfValue(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt) const override;
         auto getDefinition() const -> const auto & { return definition_; }
         auto getBaseAddr() const -> const auto & { return baseAddr_; }
         auto getFieldIndex() const -> const auto & { return fieldIndex_; }
@@ -1227,6 +1327,20 @@ namespace acslg::analyzer::symbolic {
                   "should not be called.");
         };
 
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+        utils::expected<std::string, GetACSLError> doGetACSLOfValue(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
+      private:
         utils::not_null<const clang::RecordDecl *> definition_;
         utils::not_null<std::unique_ptr<const Address>> baseAddr_;
         size_t fieldIndex_;
@@ -1256,11 +1370,7 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
+
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
@@ -1280,6 +1390,14 @@ namespace acslg::analyzer::symbolic {
             const std::unordered_map<std::string, size_t> &) const override;
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
             const std::unordered_map<size_t, size_t> &) const override;
+
+      private:
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
 
       private:
         utils::not_null<std::unique_ptr<const Address>>
@@ -1303,6 +1421,29 @@ namespace acslg::analyzer::symbolic {
         clang::QualType type,
         std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
         SourcePoint fromPoint);
+
+    enum class Operator : unsigned {
+#define ALL_OP(name, tok, prec, isRightAssoc) name,
+#include "operators.def"
+    };
+
+    inline unsigned getPrecedence(Operator op) {
+        switch (op) {
+#define ALL_OP(name, tok, prec, isRightAssoc)                                                      \
+    case Operator::name: return prec;
+#include "operators.def"
+            default: ERROR("Unknown Operator");
+        }
+    }
+
+    inline bool isRightAssociative(Operator op) {
+        switch (op) {
+#define ALL_OP(name, tok, prec, isRightAssoc)                                                      \
+    case Operator::name: return isRightAssoc;
+#include "operators.def"
+            default: ERROR("Unknown operator");
+        }
+    }
 } // namespace acslg::analyzer::symbolic
 
 namespace std {

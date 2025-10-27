@@ -82,11 +82,6 @@ namespace acslg::analyzer::symbolic {
         // SymbolicExpr
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override;
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
@@ -94,6 +89,13 @@ namespace acslg::analyzer::symbolic {
             const SourcePoint &pointToSub) const override;
         bool isLinear() const override { return true; };
         int getMaxDegree() const override { return 0; };
+
+      private:
+        utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &config,
+                                                             std::unordered_set<SourcePoint> &map,
+                                                             std::optional<SourcePoint> currentPoint,
+                                                             unsigned parentPrec,
+                                                             bool isRightChild) const override;
 
       private:
         friend class OverRangeExpr;
@@ -126,11 +128,6 @@ namespace acslg::analyzer::symbolic {
             return std::make_unique<SumOverRange>(*this);
         };
         std::string dump() const override;
-        std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
         bool equal(const SymbolicExpr &) const override { return OverRangeExpr::equal(*this); };
         std::size_t hash() const override {
             return utils::hash_val(getKind(), OverRangeExpr::hash());
@@ -138,6 +135,13 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
+
+      private:
+        utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &config,
+                                                             std::unordered_set<SourcePoint> &map,
+                                                             std::optional<SourcePoint> currentPoint,
+                                                             unsigned parentPrec,
+                                                             bool isRightChild) const override;
     };
 
     template <class F>
@@ -183,11 +187,6 @@ namespace acslg::analyzer::symbolic {
             return std::make_unique<QuantifierOverRange>(*this);
         };
         std::string dump() const override;
-        std::optional<std::string> regularForm(
-            std::optional<std::string_view> prefix = std::nullopt,
-            std::optional<std::string_view> suffix = std::nullopt,
-            int parentPrec                         = 0,
-            bool isRightChild                      = false) const override;
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override {
             return utils::hash_val(getKind(), OverRangeExpr::hash(), quant_, pred_->hash());
@@ -195,6 +194,13 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
+
+      private:
+        utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &config,
+                                                             std::unordered_set<SourcePoint> &map,
+                                                             std::optional<SourcePoint> currentPoint,
+                                                             unsigned parentPrec,
+                                                             bool isRightChild) const override;
 
       private:
         Quantifier quant_;

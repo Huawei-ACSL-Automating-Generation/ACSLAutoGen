@@ -10,6 +10,7 @@
 
 #include "aggregateExpr.h" // IWYU pragma: keep
 #include "macros.h"
+#include "utils.h"
 #include "Analyzer/state.h"
 
 namespace acslg::analyzer::symbolic {
@@ -469,10 +470,12 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    std::optional<std::string> LiteralExpr::regularForm(std::optional<std::string_view>,
-                                                        std::optional<std::string_view>,
-                                                        int,
-                                                        bool) const {
+    utils::expected<std::string, SymbolicExpr::GetACSLError> LiteralExpr::doGetACSL(
+        const SymbolicExpr::GetACSLConfig &,
+        std::unordered_set<SourcePoint> &,
+        std::optional<SourcePoint>,
+        unsigned,
+        bool) const {
         std::ostringstream oss;
         switch (getLiteralType()) {
             case LiteralType::Boolean: oss << (data_.boolValue ? "true" : "false"); break;
@@ -486,131 +489,295 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    std::optional<std::string> BinaryOpExpr::regularForm(std::optional<std::string_view> prefix,
-                                                         std::optional<std::string_view> suffix,
-                                                         int parentPrec,
-                                                         bool isRightChild) const {
+    utils::expected<std::string, SymbolicExpr::GetACSLError> BinaryOpExpr::doGetACSL(
+        const SymbolicExpr::GetACSLConfig &config,
+        std::unordered_set<SourcePoint> &usedPoints,
+        std::optional<SourcePoint> currentPoint,
+        unsigned parentPrec,
+        bool isRightChild) const {
         std::ostringstream oss;
         std::string opStr;
         switch (op_) {
 #define BIN_OP(name, tok, prec, isRight)                                                           \
     case Operator::name: opStr = tok; break;
 #include "operators.def"
-            default: opStr = "?"; break;
+            default: UNREACHABLE();
         }
 
-        int myPrec      = getPrecedence(op_);
+        auto myPrec     = getPrecedence(op_);
         bool needParens = (myPrec < parentPrec) ||
                           (myPrec == parentPrec && isRightChild && !isRightAssociative(op_));
 
-        auto leftStr = left_->regularForm(prefix, suffix, myPrec, false);
-        if (leftStr == std::nullopt)
-            return std::nullopt;
-        auto rightStr = right_->regularForm(prefix, suffix, myPrec, true);
-        if (rightStr == std::nullopt)
-            return std::nullopt;
+        auto leftStr = callGetACSL(*left_, config, usedPoints, currentPoint, myPrec, false);
+        if (!leftStr)
+            return leftStr.error();
+        auto rightStr = callGetACSL(*right_, config, usedPoints, currentPoint, myPrec, true);
+        if (!rightStr)
+            return rightStr.error();
         oss << (needParens ? "(" : "") << leftStr.value() << " " << opStr << " " << rightStr.value()
             << (needParens ? ")" : "");
         return oss.str();
     }
 
-    std::optional<std::string> UnaryOpExpr::regularForm(std::optional<std::string_view> prefix,
-                                                        std::optional<std::string_view> suffix,
-                                                        int parentPrec,
-                                                        bool) const {
+    utils::expected<std::string, SymbolicExpr::GetACSLError> UnaryOpExpr::doGetACSL(
+        const SymbolicExpr::GetACSLConfig &config,
+        std::unordered_set<SourcePoint> &usedPoints,
+        std::optional<SourcePoint> currentPoint,
+        unsigned parentPrec,
+        bool isRightChild) const {
         std::ostringstream oss;
         std::string opStr;
         switch (op_) {
 #define UN_OP(name, tok, prec, isRight)                                                            \
     case Operator::name: opStr = tok; break;
 #include "operators.def"
-            default: opStr = "?"; break;
+            default: UNREACHABLE();
         }
 
-        int myPrec      = getPrecedence(op_);
-        bool needParens = myPrec < parentPrec;
+        auto myPrec     = getPrecedence(op_);
+        bool needParens = (myPrec < parentPrec) ||
+                          (myPrec == parentPrec && isRightChild && !isRightAssociative(op_));
 
         if (op_ == Operator::PostInc || op_ == Operator::PostDec) {
-            auto subStr = expr_->regularForm(prefix, suffix, myPrec, false);
-            if (subStr == std::nullopt)
-                return std::nullopt;
+            auto subStr = callGetACSL(*expr_, config, usedPoints, currentPoint, myPrec, false);
+            if (!subStr)
+                return subStr.error();
             oss << (needParens ? "(" : "") << subStr.value() << opStr << (needParens ? ")" : "");
         } else {
-            auto subStr = expr_->regularForm(prefix, suffix, myPrec, true);
-            if (subStr == std::nullopt)
-                return std::nullopt;
+            auto subStr = callGetACSL(*expr_, config, usedPoints, currentPoint, myPrec, true);
+            if (!subStr)
+                return subStr.error();
             oss << (needParens ? "(" : "") << opStr << subStr.value() << (needParens ? ")" : "");
         }
         return oss.str();
     }
 
-    std::optional<std::string> UnknownExpr::regularForm(std::optional<std::string_view>,
-                                                        std::optional<std::string_view>,
-                                                        int,
-                                                        bool) const {
-        WARN("Output UnknownExpr's regular form, something may go wrong.");
-        return "{unknown}";
-    }
-
-    std::optional<std::string> SymbolValue::regularForm(std::optional<std::string_view> prefix,
-                                                        std::optional<std::string_view> suffix,
-                                                        int,
-                                                        bool) const {
-        auto addr = fromAddr_->regularForm();
-        if (addr == std::nullopt)
-            return std::nullopt;
-        if (addr.value().length() == 0) {
-            ERROR("Empty regular from.");
+    utils::expected<std::string, SymbolicExpr::GetACSLError> UnknownExpr::doGetACSL(
+        const SymbolicExpr::GetACSLConfig &config,
+        std::unordered_set<SourcePoint> &,
+        std::optional<SourcePoint>,
+        unsigned,
+        bool) const {
+        if (!config.UnknownExprAsError) {
+            WARN("Output UnknownExpr's ACSL, something may go wrong.");
+            return std::string{"{Unknown}"};
         }
-        if (addr.value()[0] == '&')
-            return std::string{prefix.value_or("")} + addr.value().substr(1) +
-                   std::string{suffix.value_or("")};
-        return std::string{prefix.value_or("(")} + "*" + addr.value() +
-               std::string{suffix.value_or(")")};
+        return SymbolicExpr::GetACSLError::UnknownExpr;
     }
 
-    std::optional<std::string> SymbolAddress::regularForm(std::optional<std::string_view> prefix,
-                                                          std::optional<std::string_view> suffix,
-                                                          int,
-                                                          bool) const {
+    namespace {
+        std::pair<std::string, std::string> getPrefixSuffixAndUpdateMap(
+            const SymbolicExpr::GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            const SourcePoint &myPoint) {
+            if (!config.noStateLabelFunctionAt && myPoint != currentPoint) {
+                if (auto it = config.predefinedLabels.find(myPoint);
+                    it != config.predefinedLabels.end()) {
+                    return std::pair{"\\at(", ", " + it->second + ")"};
+                } else {
+                    auto label = myPoint.getLabel();
+                    usedPoints.insert(myPoint);
+                    return std::pair{"\\at(", ", " + label + ")"};
+                }
+            }
+            return {};
+        }
+
+        bool isNeedParens(Operator myOp, unsigned parentPrec, bool isRightChild) {
+            auto myPrec = getPrecedence(myOp);
+            return (myPrec < parentPrec) ||
+                   (myPrec == parentPrec && isRightChild && !isRightAssociative(myOp));
+        }
+    } // namespace
+
+    utils::expected<std::string, SymbolicExpr::GetACSLError> SymbolValue::doGetACSL(
+        const SymbolicExpr::GetACSLConfig &config,
+        std::unordered_set<SourcePoint> &usedPoints,
+        std::optional<SourcePoint> currentPoint,
+        unsigned parentPrec,
+        bool isRightChild) const {
+        auto [prefix, suffix] =
+            getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
+        bool hasAt    = !(prefix.empty() || suffix.empty());
+        auto valueStr = callGetACSLOfValueProxy(*fromAddr_, config, usedPoints, fromPoint_,
+                                                hasAt ? /* enclosed in \\at() */ 0 : parentPrec,
+                                                hasAt ? false : isRightChild);
+        if (!valueStr)
+            return valueStr.error();
+
+        return prefix + std::move(valueStr.value()) + suffix;
+    }
+
+    utils::expected<std::string, SymbolicExpr::GetACSLError> SymbolAddress::doGetACSL(
+        const SymbolicExpr::GetACSLConfig &config,
+        std::unordered_set<SourcePoint> &usedPoints,
+        std::optional<SourcePoint> currentPoint,
+        unsigned parentPrec,
+        bool isRightChild) const {
         if (length_)
             ERROR("Address range has no regularForm but regularFormOfValue.");
-        if (fromAddr_ == std::nullopt) {
-            // here too.
-            return std::nullopt;
-        }
-        auto nameStr = regularFormOfBase(prefix, suffix);
-        if (nameStr == std::nullopt)
-            return std::nullopt;
-        auto offsetStr = offset_->regularForm(prefix, suffix);
-        if (offsetStr == std::nullopt)
-            return std::nullopt;
+        if (fromAddr_ == std::nullopt)
+            return SymbolicExpr::GetACSLError::HeapAddress;
+
+        auto offsetStr = callGetACSL(*offset_, config, usedPoints, fromPoint_,
+                                     getPrecedence(Operator::Add), true);
+        if (!offsetStr)
+            return offsetStr.error();
 
         if (offsetStr.value() == "0")
-            offsetStr.value() = "";
+            offsetStr.value().clear();
 
-        if (!offsetStr.value().empty())
-            return "(" + std::string{prefix.value_or("")} + nameStr.value() +
-                   std::string{suffix.value_or("")} + "+" + offsetStr.value() + ")";
-        else
-            return nameStr;
+        auto [prefix, suffix] =
+            getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
+        bool hasAt     = !(prefix.empty() || suffix.empty());
+        bool hasOffset = !offsetStr.value().empty();
+
+        auto nameStrExpected = [&, this]() {
+            if (hasAt)
+                return callGetACSLOfValue(*fromAddr_.value(), config, usedPoints, fromPoint_,
+                                          /* enclosed in \\at() */ 0, false);
+            if (hasOffset)
+                return callGetACSLOfValue(*fromAddr_.value(), config, usedPoints, fromPoint_,
+                                          getPrecedence(Operator::Add), false);
+            return callGetACSLOfValue(*fromAddr_.value(), config, usedPoints, fromPoint_,
+                                      parentPrec, isRightChild);
+        }();
+        if (!nameStrExpected)
+            return nameStrExpected.error();
+
+        auto nameStr = prefix + std::move(nameStrExpected.value()) + suffix;
+
+        auto offsetedAddrStr = hasOffset ? std::move(nameStr) + " + " + std::move(offsetStr.value())
+                                         : std::move(nameStr);
+
+        if (hasOffset) {
+            auto myPrec     = getPrecedence(Operator::Add);
+            bool needParens = (myPrec < parentPrec) || (myPrec == parentPrec && isRightChild);
+            return (needParens ? "(" : "") + std::move(offsetedAddrStr) + (needParens ? ")" : "");
+        }
+
+        return offsetedAddrStr;
     }
 
-    std::optional<std::string> VariableAddress::regularForm(std::optional<std::string_view> prefix,
-                                                            std::optional<std::string_view> suffix,
-                                                            int,
-                                                            bool) const {
-        return "&" + (prefix ? (std::string)*prefix : "") + from_->getNameAsString() +
-               (suffix ? (std::string)*suffix : "");
+    utils::expected<std::string, SymbolicExpr::GetACSLError> VariableAddress::doGetACSL(
+        const SymbolicExpr::GetACSLConfig &,
+        std::unordered_set<SourcePoint> &,
+        std::optional<SourcePoint>,
+        unsigned parentPrec,
+        bool isRightChild) const {
+        bool needParens = isNeedParens(Operator::AddrOf, parentPrec, isRightChild);
+        return (needParens ? "(" : "") + std::string{"&"} + from_->getNameAsString() +
+               (needParens ? ")" : "");
     }
 
-    std::optional<std::string> FieldAddress::regularForm(std::optional<std::string_view> prefix,
-                                                         std::optional<std::string_view> suffix,
-                                                         int,
-                                                         bool) const {
-        auto baseStr = baseAddr_->regularForm();
-        if (baseStr == std::nullopt)
-            return std::nullopt;
+    utils::expected<std::string, SymbolicExpr::GetACSLError> FieldAddress::doGetACSL(
+        const SymbolicExpr::GetACSLConfig &config,
+        std::unordered_set<SourcePoint> &usedPoints,
+        std::optional<SourcePoint> currentPoint,
+        unsigned parentPrec,
+        bool isRightChild) const {
+        auto valueStr = doGetACSLOfValue(config, usedPoints, currentPoint,
+                                         getPrecedence(Operator::AddrOf), true);
+        if (!valueStr)
+            return valueStr.error();
+
+        bool needParens = isNeedParens(Operator::AddrOf, parentPrec, isRightChild);
+        return (needParens ? "(" : "") + std::string{"&"} + std::move(valueStr.value()) +
+               (needParens ? ")" : "");
+    }
+
+    utils::expected<std::string, SymbolicExpr::GetACSLError> SymbolAddress::doGetACSLOfValue(
+        const SymbolicExpr::GetACSLConfig &config,
+        std::unordered_set<SourcePoint> &usedPoints,
+        std::optional<SourcePoint> currentPoint,
+        unsigned parentPrec,
+        bool isRightChild) const {
+        if (fromAddr_ == std::nullopt)
+            return SymbolicExpr::GetACSLError::HeapAddress;
+
+        auto [prefix, suffix] =
+            getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
+        bool hasAt = !(prefix.empty() || suffix.empty());
+
+        auto nameStrExpected =
+            callGetACSLOfValue(*fromAddr_.value(), config, usedPoints, fromPoint_,
+                               hasAt ? 0 : getPrecedence(Operator::Subscript), false);
+        if (!nameStrExpected)
+            return nameStrExpected.error();
+
+        auto nameStr = prefix + std::move(nameStrExpected.value()) + suffix;
+
+        if (length_ == std::nullopt) {
+            auto offsetStr = callGetACSL(*offset_, config, usedPoints, fromPoint_,
+                                         /* enclosed in [] */ 0, false);
+            if (!offsetStr)
+                return offsetStr.error();
+
+            auto useDeref = offsetStr.value() == "0" && config.useDerefWithZeroOffset;
+            std::string subedAddrStr;
+
+            if (useDeref) {
+                auto recalcNameStrExpected =
+                    callGetACSLOfValue(*fromAddr_.value(), config, usedPoints, fromPoint_,
+                                       hasAt ? 0 : getPrecedence(Operator::Dereference), true);
+                if (!recalcNameStrExpected)
+                    return recalcNameStrExpected.error();
+
+                nameStr      = prefix + recalcNameStrExpected.value() + suffix;
+                subedAddrStr = "*" + std::move(nameStr);
+            } else
+                subedAddrStr = std::move(nameStr) + "[" + std::move(offsetStr.value()) + "]";
+
+            bool needParens = isNeedParens((useDeref ? Operator::Dereference : Operator::Subscript),
+                                           parentPrec, isRightChild);
+            return (needParens ? "(" : "") + std::move(subedAddrStr) + (needParens ? ")" : "");
+        }
+
+        /*---------------- deal with range -----------------*/
+        auto rangePrec = getPrecedence(Operator::Range);
+        auto offsetStr = callGetACSL(*offset_, config, usedPoints, fromPoint_, rangePrec, false);
+        if (!offsetStr)
+            return offsetStr.error();
+
+        // offset + length - 1
+        auto rightBound =
+            std::make_unique<BinaryOpExpr>(
+                std::make_unique<BinaryOpExpr>(getOffset()->clone(), BinaryOpExpr::Operator::Add,
+                                               length_.value()->clone()),
+                BinaryOpExpr::Operator::Subtract, std::make_unique<LiteralExpr>(1))
+                ->simplifiedExpr();
+        auto rightBoundStr =
+            callGetACSL(*rightBound, config, usedPoints, fromPoint_, rangePrec, true);
+        if (!rightBoundStr)
+            return rightBoundStr.error();
+
+        auto subedAddrStr = std::move(nameStr) + "[" + std::move(offsetStr.value()) + " .. " +
+                            std::move(rightBoundStr.value()) + "]";
+
+        bool needParens = isNeedParens(Operator::Subscript, parentPrec, isRightChild);
+        return (needParens ? "(" : "") + std::move(subedAddrStr) + (needParens ? ")" : "");
+    }
+
+    utils::expected<std::string, SymbolicExpr::GetACSLError> VariableAddress::doGetACSLOfValue(
+        const SymbolicExpr::GetACSLConfig &,
+        std::unordered_set<SourcePoint> &,
+        std::optional<SourcePoint>,
+        unsigned,
+        bool) const {
+        return from_->getNameAsString();
+    }
+
+    utils::expected<std::string, SymbolicExpr::GetACSLError> FieldAddress::doGetACSLOfValue(
+        const SymbolicExpr::GetACSLConfig &config,
+        std::unordered_set<SourcePoint> &usedPoints,
+        std::optional<SourcePoint> currentPoint,
+        unsigned parentPrec,
+        bool isRightChild) const {
+        auto baseStr = callGetACSLOfValue(*baseAddr_, config, usedPoints, currentPoint,
+                                          getPrecedence(Operator::MemberAccess), false);
+        if (!baseStr)
+            return baseStr.error();
         if (baseStr.value().empty())
             ERROR("Empty base std::string");
         auto fields = definition_->fields();
@@ -620,94 +787,33 @@ namespace acslg::analyzer::symbolic {
         auto fieldStr = it->getNameAsString();
 
         std::string concatenatedStr;
-        if (baseStr.value().at(0) == '&') {
-            concatenatedStr = baseStr.value().substr(1) + "." + fieldStr;
-        } else {
-            concatenatedStr = baseStr.value() + "->" + fieldStr;
-        }
-        return "&" + std::string{prefix.value_or("")} + concatenatedStr +
-               std::string{suffix.value_or("")};
+        concatenatedStr = baseStr.value() + "." + fieldStr;
+
+        bool needParens = isNeedParens(Operator::MemberAccess, parentPrec, isRightChild);
+        return (needParens ? "(" : "") + concatenatedStr + (needParens ? ")" : "");
     }
 
-    std::optional<std::string> SymbolAddress::regularFormOfValue(
-        std::optional<std::string_view> prefix,
-        std::optional<std::string_view> suffix) const {
-        if (length_ == std::nullopt) {
-            if (fromAddr_ == std::nullopt)
-                ERROR("Trying to get regular form of address without from_.");
-            auto nameStr = regularFormOfBase(prefix, suffix);
-            if (nameStr == std::nullopt)
-                return std::nullopt;
-            auto offsetStr = offset_->regularForm(prefix, suffix);
-            if (offsetStr == std::nullopt)
-                return std::nullopt;
-
-            return nameStr.value() + "[" + offsetStr.value() + "]";
-        } else {
-            if (fromAddr_ == std::nullopt) {
-                // here also.
-                return std::nullopt;
-            }
-            auto nameStr = fromAddr_.value()->regularFormOfValue(prefix, suffix);
-            if (nameStr == std::nullopt)
-                return std::nullopt;
-            auto offsetStr = getOffset()->regularForm(prefix, suffix);
-            if (offsetStr == std::nullopt)
-                return std::nullopt;
-
-            auto rangeStr = std::make_unique<BinaryOpExpr>(
-                                std::make_unique<BinaryOpExpr>(getOffset()->clone(),
-                                                               BinaryOpExpr::Operator::Add,
-                                                               length_.value()->clone()),
-                                BinaryOpExpr::Operator::Subtract, std::make_unique<LiteralExpr>(1))
-                                ->simplifiedExpr()
-                                ->regularForm(prefix, suffix);
-            if (rangeStr == std::nullopt)
-                return std::nullopt;
-
-            return nameStr.value() + "[" + offsetStr.value() + ".." + rangeStr.value() + "]";
-        }
-    }
-
-    std::optional<std::string> VariableAddress::regularFormOfValue(
-        std::optional<std::string_view> prefix,
-        std::optional<std::string_view> suffix) const {
-        return (prefix ? (std::string)*prefix : "") + from_->getNameAsString() +
-               (suffix ? (std::string)*suffix : "");
-    }
-
-    std::optional<std::string> FieldAddress::regularFormOfValue(
-        std::optional<std::string_view> prefix,
-        std::optional<std::string_view> suffix) const {
-        auto addrStr = regularForm(prefix, suffix);
-        if (addrStr == std::nullopt)
-            return std::nullopt;
-        if (addrStr.value().empty())
-            ERROR("Empty address std::string");
-        if (addrStr.value().at(0) == '&')
-            return addrStr.value().substr(1);
-        else
-            return "*" + addrStr.value();
-    }
-
-    std::optional<std::string> Structure::regularForm(std::optional<std::string_view> prefix,
-                                                      std::optional<std::string_view> suffix,
-                                                      int,
-                                                      bool) const {
-        auto from = getFromAddr();
+    utils::expected<std::string, SymbolicExpr::GetACSLError> Structure::doGetACSL(
+        const SymbolicExpr::GetACSLConfig &config,
+        std::unordered_set<SourcePoint> &usedPoints,
+        std::optional<SourcePoint> currentPoint,
+        unsigned parentPrec,
+        bool isRightChild) const {
+        auto from = getFrom();
         if (from == std::nullopt)
-            return std::nullopt;
-        auto addr = from.value()->regularForm();
-        if (addr == std::nullopt)
-            return std::nullopt;
-        if (addr.value().length() == 0) {
-            ERROR("Empty regular from.");
-        }
-        if (addr.value()[0] == '&')
-            return std::string{prefix.value_or("")} + addr.value().substr(1) +
-                   std::string{suffix.value_or("")};
-        return std::string{prefix.value_or("(")} + "*" + addr.value() +
-               std::string{suffix.value_or(")")};
+            return SymbolicExpr::GetACSLError::PartiallyModifiedStruct;
+
+        auto &[fromAddr, fromPoint] = from.value();
+        auto [prefix, suffix] =
+            getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint);
+        bool hasAt    = !(prefix.empty() || suffix.empty());
+        auto valueStr = callGetACSLOfValueProxy(*fromAddr, config, usedPoints, fromPoint,
+                                                hasAt ? /* enclosed in \\at() */ 0 : parentPrec,
+                                                hasAt ? false : isRightChild);
+        if (!valueStr)
+            return valueStr.error();
+
+        return prefix + std::move(valueStr.value()) + suffix;
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> LiteralExpr::simplifiedExpr() const {
@@ -1254,14 +1360,16 @@ namespace acslg::analyzer::symbolic {
             length_ = other.length_.value()->clone().into_underlying();
         if (other.fromAddr_ == std::nullopt)
             fromAddr_ = std::nullopt;
-        fromAddr_ = other.fromAddr_.value()->addressClone().into_underlying();
+        else
+            fromAddr_ = other.fromAddr_.value()->addressClone().into_underlying();
     }
 
     SymbolAddress::BaseInfo::BaseInfo(const SymbolAddress::BaseInfo &other)
         : fromPoint_(other.fromPoint_) {
         if (other.fromAddr_ == std::nullopt)
             fromAddr_ = std::nullopt;
-        fromAddr_ = other.fromAddr_.value()->addressClone().into_underlying();
+        else
+            fromAddr_ = other.fromAddr_.value()->addressClone().into_underlying();
     }
 
     SymbolAddress::SymbolAddress(
@@ -1391,17 +1499,6 @@ namespace acslg::analyzer::symbolic {
         fields_[index] = std::move(expr);
     }
 
-    std::optional<std::string> Structure::regularFormOfField(size_t index,
-                                                             std::optional<std::string_view> prefix,
-                                                             std::optional<std::string_view> suffix,
-                                                             int,
-                                                             bool) const {
-        if (index >= fields_.size())
-            ERROR("Out-of-bounds access");
-
-        return fields_[index]->regularForm(prefix, suffix);
-    }
-
     Structure::Structure(const clang::RecordDecl *RD,
                          const clang::ASTRecordLayout &layout,
                          utils::not_null<std::unique_ptr<const Address>> from,
@@ -1474,42 +1571,48 @@ namespace acslg::analyzer::symbolic {
             auto &field = fields_.at(index);
             auto symbol = llvm::dyn_cast<const Symbol>(field.get().get());
             if (symbol == nullptr)
-                return From{std::nullopt, std::nullopt};
+                return std::nullopt;
             auto fromAddr = symbol->getFromAddr();
             if (fromAddr == std::nullopt)
-                return From{std::nullopt, std::nullopt};
+                return std::nullopt;
             auto fieldAddr = llvm::dyn_cast<const FieldAddress>(fromAddr.value().get().get());
             if (fieldAddr == nullptr)
-                return From{std::nullopt, std::nullopt};
+                return std::nullopt;
 
             auto &base    = fieldAddr->getBaseAddr();
             auto &fieldId = fieldAddr->getFieldIndex();
             if (fieldId != index)
-                return From{std::nullopt, std::nullopt};
+                return std::nullopt;
 
             if (commonBaseAddr == std::nullopt)
                 commonBaseAddr = base->addressClone().into_underlying();
 
             auto fromPoint = symbol->getFromPoint();
             if (fromPoint == std::nullopt)
-                return From{std::nullopt, std::nullopt};
+                return std::nullopt;
             if (commonFromPoint == std::nullopt)
                 commonFromPoint.emplace(fromPoint.value());
 
             if (*commonBaseAddr.value() != *base || commonFromPoint.value() != fromPoint.value())
-                return From{std::nullopt, std::nullopt};
+                return std::nullopt;
         }
         if (commonBaseAddr == std::nullopt || commonFromPoint == std::nullopt)
             UNREACHABLE();
 
-        return From{std::move(commonBaseAddr).value(), std::move(commonFromPoint).value()};
+        return std::pair{std::move(commonBaseAddr).value(), std::move(commonFromPoint).value()};
     }
 
     std::optional<utils::not_null<std::unique_ptr<const Address>>> Structure::getFromAddr() const {
-        return getFrom().first;
+        if (auto from = getFrom())
+            return std::move(from.value().first);
+        return std::nullopt;
     }
 
-    std::optional<SourcePoint> Structure::getFromPoint() const { return getFrom().second; }
+    std::optional<SourcePoint> Structure::getFromPoint() const {
+        if (auto from = getFrom())
+            return std::move(from.value().second);
+        return std::nullopt;
+    }
 
     SourcePoint &SourcePoint::operator=(const SourcePoint &other) {
         if (this == &other)
@@ -1529,62 +1632,74 @@ namespace acslg::analyzer::symbolic {
         return *this;
     }
 
-    SourcePoint SourcePoint::fromFuncDeclBefore(const clang::FunctionDecl *FD,
-                                                const clang::SourceManager &SM,
-                                                const clang::LangOptions &LO) {
-        SourcePoint p{SM};
-        if (FD) {
-            auto BL = FD->getBeginLoc();
-            if (BL.isInvalid())
-                ERROR("Location before clang::FunctionDecl: {" +
-                      clang::Lexer::getSourceText(
-                          clang::CharSourceRange::getTokenRange(FD->getSourceRange()), SM, LO)
-                          .str() +
-                      "} is invalid.");
-            p.loc_ = SM.getExpansionLoc(BL);
+    SourcePoint SourcePoint::fromFuncDecl(const clang::FunctionDecl *FD,
+                                          const clang::SourceManager &SM,
+                                          const clang::LangOptions &LO) {
+        if (FD == nullptr)
+            ERROR("FunctionDecl is null.");
+        if (!FD->hasBody())
+            ERROR("FunctionDecl has no body.");
+
+        auto labelPrefix = "BeginOf_" + FD->getNameAsString();
+        SourcePoint p{SM, labelPrefix};
+
+        const clang::Stmt *body = FD->getBody();
+        assert(body != nullptr);
+
+        clang::SourceLocation BL;
+
+        if (const auto *CS = llvm::dyn_cast<clang::CompoundStmt>(body)) {
+            BL = clang::Lexer::getLocForEndOfToken(CS->getLBracLoc(), 0, SM, LO);
         } else {
-            ERROR("S is nullptr.");
+            BL = body->getBeginLoc();
         }
+        if (BL.isInvalid()) {
+            ERROR("Location is invalid: {" +
+                  clang::Lexer::getSourceText(
+                      clang::CharSourceRange::getTokenRange(FD->getSourceRange()), SM, LO)
+                      .str() +
+                  "}");
+        }
+
+        p.loc_ = SM.getExpansionLoc(BL);
         return p;
     }
 
     SourcePoint SourcePoint::fromStmtBefore(const clang::Stmt *S,
                                             const clang::SourceManager &SM,
                                             const clang::LangOptions &LO) {
-        SourcePoint p{SM};
-        if (S) {
-            auto BL = S->getBeginLoc();
-            if (BL.isInvalid())
-                ERROR("Location before clang::Stmt: {" +
-                      clang::Lexer::getSourceText(
-                          clang::CharSourceRange::getTokenRange(S->getSourceRange()), SM, LO)
-                          .str() +
-                      "} is invalid.");
-            p.loc_ = SM.getExpansionLoc(BL);
-        } else {
+        if (S == nullptr)
             ERROR("S is nullptr.");
-        }
+        auto labelPrefix = std::string{"Before_"} + S->getStmtClassName();
+        SourcePoint p{SM, std::move(labelPrefix)};
+        auto BL = S->getBeginLoc();
+        if (BL.isInvalid())
+            ERROR("Location before clang::Stmt: {" +
+                  clang::Lexer::getSourceText(
+                      clang::CharSourceRange::getTokenRange(S->getSourceRange()), SM, LO)
+                      .str() +
+                  "} is invalid.");
+        p.loc_ = SM.getExpansionLoc(BL);
         return p;
     }
 
     SourcePoint SourcePoint::fromStmtAfter(const clang::Stmt *S,
                                            const clang::SourceManager &SM,
                                            const clang::LangOptions &LO) {
-        SourcePoint p{SM};
-        if (S) {
-            auto EL = S->getEndLoc();
-
-            auto AL = clang::Lexer::getLocForEndOfToken(EL, /*Offset*/ 0, SM, LO);
-            if (AL.isInvalid())
-                ERROR("Location after clang::Stmt: {" +
-                      clang::Lexer::getSourceText(
-                          clang::CharSourceRange::getTokenRange(S->getSourceRange()), SM, LO)
-                          .str() +
-                      "} is invalid.");
-            p.loc_ = SM.getExpansionLoc(AL);
-        } else {
+        if (S == nullptr)
             ERROR("S is nullptr.");
-        }
+        auto labelPrefix = std::string{"After_"} + S->getStmtClassName();
+        SourcePoint p{SM, std::move(labelPrefix)};
+        auto EL = S->getEndLoc();
+
+        auto AL = clang::Lexer::getLocForEndOfToken(EL, /*Offset*/ 0, SM, LO);
+        if (AL.isInvalid())
+            ERROR("Location after clang::Stmt: {" +
+                  clang::Lexer::getSourceText(
+                      clang::CharSourceRange::getTokenRange(S->getSourceRange()), SM, LO)
+                      .str() +
+                  "} is invalid.");
+        p.loc_ = SM.getExpansionLoc(AL);
         return p;
     }
 
@@ -1790,6 +1905,17 @@ namespace acslg::analyzer::symbolic {
 
     const Symbol *Symbol::toThis(const SymbolicExpr *e) {
         return toThis(const_cast<SymbolicExpr *>(e));
+    }
+
+    utils::expected<std::string, SymbolicExpr::GetACSLError> Symbol::callGetACSLOfValueProxy(
+        const Address &addr,
+        const SymbolicExpr::GetACSLConfig &config,
+        std::unordered_set<SourcePoint> &usedPoints,
+        std::optional<SourcePoint> currentPoint,
+        unsigned parentPrec,
+        bool isRightChild) {
+        return Address::callGetACSLOfValue(addr, config, usedPoints, currentPoint, parentPrec,
+                                           isRightChild);
     }
 
 } // namespace acslg::analyzer::symbolic

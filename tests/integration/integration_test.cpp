@@ -1,5 +1,6 @@
 // tests/integration/integration_test.cpp
 
+#include "gmock/gmock.h"
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include <string>
@@ -198,21 +199,21 @@ namespace acslg::test::integration {
         auto &paths    = postState->getPaths();
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
-            auto var  = addr.get().regularFormOfValue();
-            auto expr = value->simplifiedExpr()->regularForm();
-            ASSERT_NE(var, nullopt);
-            ASSERT_NE(expr, nullopt);
-            if (var.value() == "x") {
-                EXPECT_EQ(expr.value(), "n");
-            } else if (var.value() == "y") {
-                EXPECT_EQ(expr.value(), "0");
-            } else if (var.value() == "z") {
-                EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("10"), HasSubstr("+ 10")),
-                                                AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
-            } else if (var.value() == "n") {
-                EXPECT_EQ(expr.value(), "n");
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(
+                addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(
+                value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
+            if (addrStr == "x") {
+                EXPECT_EQ(valueStr, "n");
+            } else if (addrStr == "y") {
+                EXPECT_EQ(valueStr, "0");
+            } else if (addrStr == "z") {
+                EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("10"), HasSubstr("+ 10")),
+                                            AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
+            } else if (addrStr == "n") {
+                EXPECT_EQ(valueStr, "n");
             } else {
-                FAIL() << var.value() << ": " << expr.value();
+                FAIL() << addrStr << ": " << valueStr;
             }
         }
     }
@@ -237,21 +238,25 @@ namespace acslg::test::integration {
         auto &paths    = postState->getPaths();
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
-            auto var  = addr.get().regularFormOfValue();
-            auto expr = value->simplifiedExpr()->regularForm();
-            ASSERT_NE(var, nullopt);
-            ASSERT_NE(expr, nullopt);
-            if (var.value() == "p") {
-                EXPECT_EQ(expr.value(), "p");
-            } else if (var.value() == "n") {
-                EXPECT_EQ(expr.value(), "n");
-            } else if (var.value() == "pt") {
-                EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
-                                                AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-            } else if (var.value() == "p[0..n - 1]") {
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(
+                addr.get().getACSLOfValue(
+                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                addrStr);
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(
+                value.get()->simplifiedExpr()->getACSL(
+                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                valueStr);
+            if (addrStr == "p") {
+                EXPECT_EQ(valueStr, "p");
+            } else if (addrStr == "n") {
+                EXPECT_EQ(valueStr, "n");
+            } else if (addrStr == "pt") {
+                EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
+                                            AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+            } else if (addrStr == "p[0 .. n - 1]") {
                 EXPECT_TRUE(value->isUnknown());
             } else {
-                FAIL() << var.value() << ": " << expr.value();
+                FAIL() << addrStr << ": " << valueStr;
             }
         }
     }
@@ -276,21 +281,26 @@ namespace acslg::test::integration {
         auto &paths    = postState->getPaths();
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
-            auto var  = addr.get().regularFormOfValue();
-            auto expr = value->simplifiedExpr()->regularForm();
-            ASSERT_NE(var, nullopt);
-            ASSERT_NE(expr, nullopt);
-            if (var.value() == "p") {
-                EXPECT_EQ(expr.value(), "p");
-            } else if (var.value() == "n") {
-                EXPECT_EQ(expr.value(), "n");
-            } else if (var.value() == "pt") {
-                EXPECT_THAT(expr.value(), AllOf(AnyOf(StartsWith("(p+1)"), HasSubstr("+ (p+1)")),
-                                                AnyOf(StartsWith("n"), HasSubstr("+ n"))));
-            } else if (var.value() == "p[1..n]") {
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(
+                addr.get().getACSLOfValue(
+                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                addrStr);
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(
+                value.get()->simplifiedExpr()->getACSL(
+                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                valueStr);
+            if (addrStr == "p") {
+                EXPECT_EQ(valueStr, "p");
+            } else if (addrStr == "n") {
+                EXPECT_EQ(valueStr, "n");
+            } else if (addrStr == "pt") {
+                EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
+                                            AnyOf(StartsWith("1"), HasSubstr("+ 1")),
+                                            AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+            } else if (addrStr == "p[1 .. n]") {
                 EXPECT_TRUE(value->isUnknown());
             } else {
-                FAIL() << var.value() << ": " << expr.value();
+                FAIL() << addrStr << ": " << valueStr;
             }
         }
     }
@@ -328,7 +338,7 @@ namespace acslg::test::integration {
     )";
         ASSERT_EXIT(
             {
-                doAll(code);
+                DEBUG(doAll(code));
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
@@ -374,7 +384,7 @@ namespace acslg::test::integration {
     )";
         ASSERT_EXIT(
             {
-                doAll(code);
+                DEBUG(doAll(code));
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
@@ -423,7 +433,7 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
     )";
         ASSERT_EXIT(
             {
-                doAll(code);
+                DEBUG(doAll(code));
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
@@ -459,7 +469,7 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
     )";
         ASSERT_EXIT(
             {
-                doAll(code);
+                DEBUG(doAll(code));
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
@@ -481,14 +491,13 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-        auto resultStr = result->regularForm();
-        if (resultStr == nullopt)
-            FAIL() << result->dump();
-        EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
-                                             AnyOf(StartsWith("-1 * x.y"), HasSubstr("- x.y")),
-                                             AnyOf(StartsWith("n"), HasSubstr("+ n")),
-                                             AnyOf(StartsWith("-1 * 100"), HasSubstr("- 100"))));
+        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
+                                       resultStr);
+        EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
+                                     AnyOf(StartsWith("-1 * x.y"), HasSubstr("- x.y")),
+                                     AnyOf(StartsWith("n"), HasSubstr("+ n")),
+                                     AnyOf(StartsWith("-1 * 100"), HasSubstr("- 100"))));
     }
 
     TEST(ResultTest, WithStructure_2) {
@@ -513,13 +522,12 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-        auto resultStr = result->regularForm();
-        if (resultStr == nullopt)
-            FAIL() << result->dump();
-        EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
-                                             AnyOf(StartsWith("-1 * 99"), HasSubstr("- 99")),
-                                             AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
+                                       resultStr);
+        EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
+                                     AnyOf(StartsWith("-1 * 99"), HasSubstr("- 99")),
+                                     AnyOf(StartsWith("n"), HasSubstr("+ n"))));
     }
 
     TEST(ResultTest, WithStructure_3) {
@@ -543,13 +551,12 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-        auto resultStr = result->regularForm();
-        if (resultStr == nullopt)
-            FAIL() << result->dump();
-        EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("(*x.x)"), HasSubstr("+ (*x.x)")),
-                                             AnyOf(StartsWith("-1 * 98"), HasSubstr("- 98")),
-                                             AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
+                                       resultStr);
+        EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("*x.x"), HasSubstr("+ *x.x")),
+                                     AnyOf(StartsWith("-1 * 98"), HasSubstr("- 98")),
+                                     AnyOf(StartsWith("n"), HasSubstr("+ n"))));
     }
 
     TEST(ResultTest, WithStructure_4) {
@@ -574,14 +581,13 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result    = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-        auto resultStr = result->regularForm();
-        if (resultStr == nullopt)
-            FAIL() << result->dump();
-        EXPECT_THAT(resultStr.value(), AllOf(AnyOf(StartsWith("(*a.x)"), HasSubstr("+ (*a.x)")),
-                                             AnyOf(StartsWith("(*b.x)"), HasSubstr("+ (*b.x)")),
-                                             AnyOf(StartsWith("b.y"), HasSubstr("+ b.y")),
-                                             AnyOf(StartsWith("142"), HasSubstr("+ 142"))));
+        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
+                                       resultStr);
+        EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("*a.x"), HasSubstr("+ *a.x")),
+                                     AnyOf(StartsWith("*b.x"), HasSubstr("+ *b.x")),
+                                     AnyOf(StartsWith("b.y"), HasSubstr("+ b.y")),
+                                     AnyOf(StartsWith("142"), HasSubstr("+ 142"))));
     }
 
     TEST(StateTest, openHiTLS_BinSub_RightMergedAddress) {
@@ -634,10 +640,9 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 auto symbolAddr = llvm::dyn_cast<analyzer::symbolic::SymbolAddress>(&addr.get());
                 if (symbolAddr == nullptr)
                     continue;
-                if (symbolAddr->regularFormOfValue() == nullopt)
-                    continue;
-                auto rangeStr = symbolAddr->regularFormOfValue().value();
-                if (rangeStr == "r[0..n - 1]")
+                ASSERT_OK_AND_GET_FIRST_TO_VAR(
+                    symbolAddr->getACSLOfValue({.noStateLabelFunctionAt = true}), rangeStr);
+                if (rangeStr == "r[0 .. n - 1]")
                     ++count;
                 symbolAddrs += rangeStr + "\n";
             }

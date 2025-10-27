@@ -9,12 +9,12 @@
 namespace acslg::analyzer {
     class ACSLAnalyzer {
       public:
-        ACSLAnalyzer(context::ACSLContext &ctx) : context_(ctx) {}
+        ACSLAnalyzer(context::ACSLGContext &ctx) : context_(ctx) {}
 
         void analyzeFunctions();
 
       private:
-        context::ACSLContext &context_;
+        context::ACSLGContext &context_;
         std::vector<std::unique_ptr<ACSLFunction>> functions_;
 
         void generateFunctionSpec(ACSLFunction *func);

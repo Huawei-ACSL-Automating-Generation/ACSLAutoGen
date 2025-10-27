@@ -23,7 +23,7 @@ namespace acslg::test::unit::analyzer {
             if (!FD || !FD->hasBody())
                 return nullptr;
             const Stmt *Body = FD->getBody();
-            if (const auto *CS = llvm::dyn_cast<CompoundStmt>(Body)) {
+            if (auto CS = llvm::dyn_cast<CompoundStmt>(Body)) {
                 if (n < CS->size()) {
                     auto it = CS->body_begin();
                     advance(it, n);
@@ -62,16 +62,14 @@ namespace acslg::test::unit::analyzer {
         ASSERT_NE(F, nullptr);
         ASSERT_NE(G, nullptr);
 
-        auto spF =
-            symbolic::SourcePoint::fromFuncDeclBefore(F, e.getSourceManager(), e.getLangOptions());
-        auto spG =
-            symbolic::SourcePoint::fromFuncDeclBefore(G, e.getSourceManager(), e.getLangOptions());
+        auto spF = symbolic::SourcePoint::fromFuncDecl(F, e.getSourceManager(), e.getLangOptions());
+        auto spG = symbolic::SourcePoint::fromFuncDecl(G, e.getSourceManager(), e.getLangOptions());
 
         EXPECT_TRUE(spF < spG);
         EXPECT_FALSE(spG < spF);
 
         auto spF2 =
-            symbolic::SourcePoint::fromFuncDeclBefore(F, e.getSourceManager(), e.getLangOptions());
+            symbolic::SourcePoint::fromFuncDecl(F, e.getSourceManager(), e.getLangOptions());
         EXPECT_TRUE(spF == spF2);
         EXPECT_FALSE(spF < spF2);
     }
@@ -138,8 +136,7 @@ namespace acslg::test::unit::analyzer {
     TEST_F(SourcePointTest, DumpIsNonEmptyAndLooksLikeLocation) {
         const FunctionDecl *F = e.findFunc("f");
         ASSERT_NE(F, nullptr);
-        auto sp =
-            symbolic::SourcePoint::fromFuncDeclBefore(F, e.getSourceManager(), e.getLangOptions());
+        auto sp  = symbolic::SourcePoint::fromFuncDecl(F, e.getSourceManager(), e.getLangOptions());
         string d = sp.dump();
 
         EXPECT_FALSE(d.empty());
@@ -169,12 +166,12 @@ namespace acslg::test::unit::analyzer {
 
             SourcePoint getSourcePoint(unsigned int id) {
                 auto newFuncDecl = getFuncDecl(id);
-                return SourcePoint::fromFuncDeclBefore(newFuncDecl, e.getSourceManager(),
-                                                       e.getLangOptions());
+                return SourcePoint::fromFuncDecl(newFuncDecl, e.getSourceManager(),
+                                                 e.getLangOptions());
             }
 
           private:
-            context::ACSLContext acslContext;
+            context::ACSLGContext acslContext;
 
           protected:
             unique_ptr<Path> path;
@@ -278,5 +275,190 @@ namespace acslg::test::unit::analyzer {
 
         ASSERT_DEATH(sym.getSubstitutedExpr(*path, point), "");
         SUCCEED();
+    }
+
+    class GetACSLTest : public FixtureWithCode {};
+
+    // Test literal expressions for correct ACSL output.
+    TEST_F(GetACSLTest, Literal_GetACSL) {
+        SymbolicExpr::GetACSLConfig config;
+        config.noStateLabelFunctionAt = true;
+
+        // Boolean literal
+        auto litTrue = std::make_unique<LiteralExpr>(true);
+        auto resTrue = litTrue->getACSL(config);
+        ASSERT_TRUE(resTrue);
+        EXPECT_EQ(resTrue.value().first, "true");
+        EXPECT_TRUE(resTrue.value().second.empty());
+
+        // Integer literal
+        auto litInt = std::make_unique<LiteralExpr>(123);
+        auto resInt = litInt->getACSL(config);
+        ASSERT_TRUE(resInt);
+        EXPECT_EQ(resInt.value().first, "123");
+        EXPECT_TRUE(resInt.value().second.empty());
+    }
+
+    // Test binary addition and operator precedence/parentheses.
+    TEST_F(GetACSLTest, BinaryOp_AdditionAndPrecedence) {
+        SymbolicExpr::GetACSLConfig config;
+        config.noStateLabelFunctionAt = true;
+
+        // Simple addition: 5 + 3
+        auto exprSimple = std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(5),
+                                                         BinaryOpExpr::Operator::Add,
+                                                         std::make_unique<LiteralExpr>(3));
+        auto resSimple  = exprSimple->getACSL(config);
+        ASSERT_TRUE(resSimple);
+        EXPECT_EQ(resSimple.value().first, "5 + 3");
+
+        // Nested addition (left-child nested): (1 + 2) + 3 -> "1 + 2 + 3"
+        auto innerLeft = std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(1),
+                                                        BinaryOpExpr::Operator::Add,
+                                                        std::make_unique<LiteralExpr>(2));
+        auto exprLeft  = std::make_unique<BinaryOpExpr>(
+            std::move(innerLeft), BinaryOpExpr::Operator::Add, std::make_unique<LiteralExpr>(3));
+        auto resLeft = exprLeft->getACSL(config);
+        ASSERT_TRUE(resLeft);
+        EXPECT_EQ(resLeft.value().first, "1 + 2 + 3");
+
+        // Nested addition (right-child nested): 1 + (2 + 3) -> "1 + (2 + 3)"
+        auto innerRight = std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(2),
+                                                         BinaryOpExpr::Operator::Add,
+                                                         std::make_unique<LiteralExpr>(3));
+        auto exprRight  = std::make_unique<BinaryOpExpr>(
+            std::make_unique<LiteralExpr>(1), BinaryOpExpr::Operator::Add, std::move(innerRight));
+        auto resRight = exprRight->getACSL(config);
+        ASSERT_TRUE(resRight);
+        EXPECT_EQ(resRight.value().first, "1 + (2 + 3)");
+    }
+
+    // Test unary operators: prefix and postfix increment.
+    TEST_F(GetACSLTest, UnaryOp_PreAndPostIncrement) {
+        SymbolicExpr::GetACSLConfig config;
+        config.noStateLabelFunctionAt = true;
+
+        // Use variable ID 0 and 1 to get actual names from the AST.
+        auto var0 = getVarDecl(0);
+        ASSERT_NE(var0, nullptr);
+        std::string name0 = var0->getNameAsString();
+        auto symVal0      = makeSymbolValue(0);
+
+        // Prefix increment (e.g., ++x)
+        auto preInc =
+            std::make_unique<UnaryOpExpr>(UnaryOpExpr::Operator::PreInc, std::move(symVal0));
+        auto resPre = preInc->getACSL(config);
+        ASSERT_TRUE(resPre);
+        EXPECT_EQ(resPre.value().first, "++" + name0);
+
+        auto var1 = getVarDecl(1);
+        ASSERT_NE(var1, nullptr);
+        std::string name1 = var1->getNameAsString();
+        auto symVal1      = makeSymbolValue(1);
+
+        // Postfix increment (e.g., x++)
+        auto postInc =
+            std::make_unique<UnaryOpExpr>(UnaryOpExpr::Operator::PostInc, std::move(symVal1));
+        auto resPost = postInc->getACSL(config);
+        ASSERT_TRUE(resPost);
+        EXPECT_EQ(resPost.value().first, name1 + "++");
+    }
+
+    // Test SymbolValue (pointer dereference): should print the variable name.
+    TEST_F(GetACSLTest, SymbolValue_GetACSL) {
+        SymbolicExpr::GetACSLConfig config;
+        config.noStateLabelFunctionAt = true;
+
+        auto var0 = getVarDecl(0);
+        ASSERT_NE(var0, nullptr);
+        std::string name0 = var0->getNameAsString();
+
+        auto symVal = makeSymbolValue(0);
+        auto res    = symVal->getACSL(config);
+        ASSERT_TRUE(res);
+        EXPECT_EQ(res.value().first, name0);
+        EXPECT_TRUE(res.value().second.empty());
+    }
+
+    // Test SymbolAddress (pointer) ACSL and ACSLOfValue.
+    TEST_F(GetACSLTest, SymbolAddress_GetACSL_And_GetACSLOfValue) {
+        SymbolicExpr::GetACSLConfig config;
+        config.noStateLabelFunctionAt = true;
+
+        auto baseVar = getVarDecl(0);
+        ASSERT_NE(baseVar, nullptr);
+        std::string baseName = baseVar->getNameAsString();
+
+        // Case 1: offset = 2
+        auto offset2 = std::make_unique<LiteralExpr>(2);
+        auto addr2   = makeRangeAddr(0, std::move(offset2), nullptr);
+        // ACSL should be "baseName + 2"
+        auto resACSL = addr2.getACSL(config);
+        ASSERT_TRUE(resACSL);
+        EXPECT_EQ(resACSL.value().first, baseName + " + 2");
+        EXPECT_TRUE(resACSL.value().second.empty());
+        // ACSLOfValue should be "baseName[2]"
+        auto resVal = addr2.getACSLOfValue(config);
+        ASSERT_TRUE(resVal);
+        EXPECT_EQ(resVal.value().first, baseName + "[2]");
+        EXPECT_TRUE(resVal.value().second.empty());
+
+        // Case 2: offset = 0 (no offset effectively)
+        auto offset0 = std::make_unique<LiteralExpr>(0);
+        auto addr0   = makeRangeAddr(0, std::move(offset0), nullptr);
+        // ACSL should be just "baseName"
+        auto resACSL0 = addr0.getACSL(config);
+        ASSERT_TRUE(resACSL0);
+        EXPECT_EQ(resACSL0.value().first, baseName);
+        EXPECT_TRUE(resACSL0.value().second.empty());
+        // ACSLOfValue should be "*baseName"
+        auto resVal0 = addr0.getACSLOfValue(config);
+        ASSERT_TRUE(resVal0);
+        EXPECT_EQ(resVal0.value().first, "*" + baseName);
+        EXPECT_TRUE(resVal0.value().second.empty());
+    }
+
+    // Test ACSLOfValue with a range length.
+    TEST_F(GetACSLTest, SymbolAddress_WithRangeLength) {
+        SymbolicExpr::GetACSLConfig config;
+        config.noStateLabelFunctionAt = true;
+
+        auto baseVar = getVarDecl(0);
+        ASSERT_NE(baseVar, nullptr);
+        std::string baseName = baseVar->getNameAsString();
+
+        // offset = 5, length = 3 => [5 .. 7]
+        auto offset5   = std::make_unique<LiteralExpr>(5);
+        auto length3   = std::make_unique<LiteralExpr>(3);
+        auto addrRange = makeRangeAddr(0, std::move(offset5), std::move(length3));
+        auto resRange  = addrRange.getACSLOfValue(config);
+        ASSERT_TRUE(resRange);
+        EXPECT_EQ(resRange.value().first, baseName + "[5 .. 7]");
+        EXPECT_TRUE(resRange.value().second.empty());
+    }
+
+    // Test usage of \\at(...) when predefinedLabels is set.
+    TEST_F(GetACSLTest, SymbolAddress_predefinedLabels) {
+        SymbolicExpr::GetACSLConfig config;
+        // Create a SourcePoint and use it as old label
+        const FunctionDecl *F = getFuncDecl(0);
+        ASSERT_NE(F, nullptr);
+        SourcePoint sp = SourcePoint::fromFuncDecl(F, e.getSourceManager(), e.getLangOptions());
+        config.predefinedLabels = {{sp, "Old"}};
+
+        auto baseVar = getVarDecl(0);
+        ASSERT_NE(baseVar, nullptr);
+        std::string baseName = baseVar->getNameAsString();
+        auto offset1         = std::make_unique<LiteralExpr>(2);
+
+        // Attach the source point to the address
+        auto addr    = makeRangeAddr(0, std::move(offset1), nullptr, sp);
+        auto resACSL = addr.getACSL(config);
+        ASSERT_TRUE(resACSL);
+        EXPECT_EQ(resACSL.value().first, "\\at(" + baseName + ", Old) + 2");
+        EXPECT_TRUE(resACSL.value().second.empty());
+        auto resVal = addr.getACSLOfValue(config);
+        ASSERT_TRUE(resVal);
+        EXPECT_EQ(resVal.value().first, "\\at(" + baseName + ", Old)[2]");
     }
 } // namespace acslg::test::unit::analyzer

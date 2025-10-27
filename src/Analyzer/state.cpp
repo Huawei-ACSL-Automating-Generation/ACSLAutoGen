@@ -1488,19 +1488,19 @@ namespace acslg::analyzer {
 
     ProgramState::ProgramState(std::unique_ptr<Path> initialPath,
                                std::unique_ptr<ACSLFunction> func,
-                               context::ACSLContext &context)
+                               context::ACSLGContext &context)
         : func_(std::move(func)), context_(context),
-          startPoint_(symbolic::SourcePoint::fromFuncDeclBefore(func_->getFunctionDecl(),
-                                                                context_.getSourceManager(),
-                                                                context_.getLangOptions())) {
+          startPoint_(symbolic::SourcePoint::fromFuncDecl(func_->getFunctionDecl(),
+                                                          context_.getSourceManager(),
+                                                          context_.getLangOptions())) {
         paths_.push_back(std::move(initialPath));
     }
 
-    ProgramState::ProgramState(std::unique_ptr<ACSLFunction> func, context::ACSLContext &context)
+    ProgramState::ProgramState(std::unique_ptr<ACSLFunction> func, context::ACSLGContext &context)
         : func_(std::move(func)), context_(context),
-          startPoint_(symbolic::SourcePoint::fromFuncDeclBefore(func_->getFunctionDecl(),
-                                                                context_.getSourceManager(),
-                                                                context_.getLangOptions())) {}
+          startPoint_(symbolic::SourcePoint::fromFuncDecl(func_->getFunctionDecl(),
+                                                          context_.getSourceManager(),
+                                                          context_.getLangOptions())) {}
 
     ProgramState::ProgramState(const ProgramState &other)
         : func_(other.func_->clone()), context_(other.context_), startPoint_(other.startPoint_) {
@@ -1859,24 +1859,23 @@ namespace acslg::analyzer {
 
         auto [loopInfo, ok] = spec_generator::parseLoopInfo(*preState, *loopEntry, loopStmt);
 
-        std::string spec;
-        std::unique_ptr<ProgramState> postState;
+        spec_generator::EmitLoopInvResult res;
         if (ok) {
-            tie(spec, postState) = emitLoopInvariant(*preState, *loopEntry, loopInfo);
+            res = emitLoopInvariant(*preState, *loopEntry, loopInfo);
         } else {
             parseComplexLoopInfo(*preState, *loopEntry, loopInfo);
-            tie(spec, postState) =
-                emitLoopInvariant(*preState, *loopEntry, loopInfo, "ComplexLoopInvariant");
+            res = emitLoopInvariant(*preState, *loopEntry, loopInfo, "ComplexLoopInvariant");
         }
-        INFO(spec);
+        INFO(res.acsl);
 
         auto beginLoc = loopStmt->getSourceRange().getBegin();
-        context_.insertText(beginLoc, spec, /*after*/ false,
+        context_.insertText(beginLoc, res.acsl, /*after*/ false,
                             /*indentNewLines*/ true);
+        context_.insertUsedPoints(std::move(res.usedPoints));
 
-        if (this == postState.get())
+        if (this == res.postState.get())
             UNREACHABLE();
-        *this = std::move(*postState);
+        *this = std::move(*res.postState);
 
         INFO(this->dump());
     }

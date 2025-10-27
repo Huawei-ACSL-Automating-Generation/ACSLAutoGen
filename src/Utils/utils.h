@@ -1,10 +1,12 @@
 #ifndef __ACSLG_SRC_UTILS_UTILS_H__
 #define __ACSLG_SRC_UTILS_UTILS_H__
 
-
+#include <iomanip>
 #include <utility>
+#include <sstream>
 #include "clang/AST/RecursiveASTVisitor.h"
 #include <unordered_set>
+#include <variant>
 
 namespace acslg::utils {
     bool isAssignOp(const clang::BinaryOperator *binOp);
@@ -35,6 +37,7 @@ namespace acslg::utils {
     // handy hash
     // from boost (functional/hash):
     // see http://www.boost.org/doc/libs/1_35_0/doc/html/hash/combine.html template
+    // Note: Added splitmix64 to obtain a more uniform hash.
     namespace details {
 
         template <typename T> inline void hash_combine(std::size_t &seed, const T &val) {
@@ -49,12 +52,38 @@ namespace acslg::utils {
             hash_combine(seed, val);
             hash_val(seed, args...);
         }
+
+        static inline uint64_t splitmix64(uint64_t x) {
+            x += 0x9e3779b97f4a7c15ull;
+            x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
+            x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
+            x = x ^ (x >> 31);
+            return x;
+        }
+
     } // namespace details
 
     template <typename... Types> inline std::size_t hash_val(const Types &...args) {
         std::size_t seed = 0;
         details::hash_val(seed, args...);
-        return seed;
+        return details::splitmix64(seed);
+    }
+
+    inline std::string hash_prefix_hex_chars(uint64_t hashValue, std::size_t xChars) {
+        xChars = std::min<std::size_t>(xChars, 16);
+
+        unsigned bitsNeeded = static_cast<unsigned>(xChars * 4);
+
+        uint64_t shifted = (bitsNeeded == 64) ? hashValue : (hashValue >> (64 - bitsNeeded));
+
+        std::ostringstream oss;
+        oss << std::hex << std::setfill('0') << std::nouppercase;
+
+        oss << std::setw(static_cast<int>(xChars)) << (shifted & ((1ULL << bitsNeeded) - 1));
+
+        std::string s = oss.str();
+        assert(s.size() == xChars && "Unexpected hex string length mismatch");
+        return s;
     }
 
     struct pair_hash {
@@ -367,6 +396,61 @@ namespace acslg::utils {
 
       private:
         T ptr_;
+    };
+
+    // A simple `expected` similar to `std::expected` in C++23.
+    template <typename T, typename E> class expected {
+      public:
+        constexpr expected(const T &value) noexcept(std::is_nothrow_copy_constructible_v<T>)
+            : data_(value) {}
+        constexpr expected(T &&value) noexcept(std::is_nothrow_move_constructible_v<T>)
+            : data_(std::move(value)) {}
+
+        constexpr expected(E error) noexcept(std::is_nothrow_copy_constructible_v<E>)
+            : data_(std::in_place_index<1>, error) {}
+
+        [[nodiscard]] constexpr bool has_value() const noexcept { return data_.index() == 0; }
+        [[nodiscard]] constexpr explicit operator bool() const noexcept { return has_value(); }
+
+        constexpr T &value() & {
+            assert(has_value());
+            return std::get<0>(data_);
+        }
+        constexpr const T &value() const & {
+            assert(has_value());
+            return std::get<0>(data_);
+        }
+        constexpr T &&value() && {
+            assert(has_value());
+            return std::get<0>(std::move(data_));
+        }
+
+        constexpr E error() const noexcept {
+            assert(!has_value());
+            return std::get<1>(data_);
+        }
+
+      private:
+        std::variant<T, E> data_;
+    };
+
+    template <typename E> class expected<void, E> {
+      public:
+        constexpr expected() noexcept : has_(true) {}
+        constexpr expected(E error) noexcept : has_(false), err_(error) {}
+
+        [[nodiscard]] constexpr bool has_value() const noexcept { return has_; }
+        [[nodiscard]] constexpr explicit operator bool() const noexcept { return has_; }
+
+        constexpr void value() const { assert(has_); }
+        constexpr E error() const noexcept {
+            assert(!has_);
+            return err_;
+        }
+
+      private:
+        bool has_;
+        E err_{};
     };
 
     struct TransparentStringHash {

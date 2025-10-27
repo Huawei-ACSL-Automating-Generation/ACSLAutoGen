@@ -28,7 +28,7 @@ namespace acslg {
                 clang::TranslationUnitDecl *TUDecl = context.getTranslationUnitDecl();
                 TUDecl->dump();
             } else {
-                auto acslContext = context::ACSLContext{context};
+                auto acslContext = context::ACSLGContext{context};
                 auto analyzer    = analyzer::ACSLAnalyzer{acslContext};
                 analyzer.analyzeFunctions();
                 auto &SM       = acslContext.getSourceManager();

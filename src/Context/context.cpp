@@ -4,7 +4,7 @@
 #include "clang/Basic/SourceManager.h"
 
 namespace acslg::context {
-    std::vector<const clang::FunctionDecl *> ACSLContext::getFunctions() const {
+    std::vector<const clang::FunctionDecl *> ACSLGContext::getFunctions() const {
         std::vector<const clang::FunctionDecl *> funcs;
         for (const auto *decl : TU_->decls()) {
             if (const auto *funcDecl = dyn_cast<clang::FunctionDecl>(decl))
@@ -13,7 +13,7 @@ namespace acslg::context {
         return funcs;
     }
 
-    std::optional<std::tuple<std::string, llvm::StringRef, llvm::StringRef, unsigned, unsigned>> ACSLContext::
+    std::optional<std::tuple<std::string, llvm::StringRef, llvm::StringRef, unsigned, unsigned>> ACSLGContext::
         getDeclInfo(const clang::Decl *decl) {
         std::tuple<std::string, llvm::StringRef, llvm::StringRef, unsigned, unsigned> result;
         if (!decl)
@@ -32,7 +32,7 @@ namespace acslg::context {
         return result;
     }
 
-    std::optional<std::tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned>> ACSLContext::
+    std::optional<std::tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned>> ACSLGContext::
         getStmtInfo(const clang::Stmt *stmt) {
         std::tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned> result;
         if (!stmt)

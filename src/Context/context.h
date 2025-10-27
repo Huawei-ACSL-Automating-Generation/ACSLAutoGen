@@ -1,24 +1,24 @@
 #ifndef __ACSLG_SRC_CONTEXT_CONTEXT_H__
 #define __ACSLG_SRC_CONTEXT_CONTEXT_H__
 
-
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/Rewrite/Core/Rewriter.h"
+#include "Analyzer/Symbolic/expr.h"
 
 namespace acslg::context {
-    class ACSLContext {
+    class ACSLGContext {
       public:
-        ACSLContext(clang::ASTContext &context)
+        ACSLGContext(clang::ASTContext &context)
             : context_(context), TU_(context.getTranslationUnitDecl()),
               SM_(context_.getSourceManager()), LO_(context_.getLangOpts()) {
             rewriter_.setSourceMgr(SM_, LO_);
         }
 
-        ACSLContext(const ACSLContext &)            = delete;
-        ACSLContext(ACSLContext &&)                 = delete;
-        ACSLContext &operator=(const ACSLContext &) = delete;
-        ACSLContext &operator=(ACSLContext &&)      = delete;
+        ACSLGContext(const ACSLGContext &)            = delete;
+        ACSLGContext(ACSLGContext &&)                 = delete;
+        ACSLGContext &operator=(const ACSLGContext &) = delete;
+        ACSLGContext &operator=(ACSLGContext &&)      = delete;
 
         std::vector<const clang::FunctionDecl *> getFunctions() const;
         auto getSourceManager() -> auto & { return SM_; }
@@ -46,6 +46,23 @@ namespace acslg::context {
         std::optional<std::tuple<llvm::StringRef, llvm::StringRef, unsigned, unsigned>> getStmtInfo(
             const clang::Stmt *stmt);
 
+        void insertUsedPoints(std::unordered_set<analyzer::symbolic::SourcePoint> set) {
+            for (auto &point : set) {
+                if (usedPoints_.contains(point))
+                    continue;
+                usedPoints_.insert(point);
+                rewriter_.InsertText(point.asSourceLocation(),
+                                     "\n//@ ghost " + point.getLabel() + ":\n", false, true);
+            }
+        }
+
+        std::string getModifiedSource() const {
+            auto buf = rewriter_.getRewriteBufferFor(SM_.getMainFileID());
+            if (buf == nullptr)
+                ERROR("Get rewriter buffer failed.");
+            return std::string{buf->begin(), buf->end()};
+        }
+
       private:
         clang::ASTContext &context_;
         const clang::TranslationUnitDecl *TU_;
@@ -53,6 +70,7 @@ namespace acslg::context {
         clang::LangOptions LO_;
         clang::Rewriter rewriter_{};
         std::vector<std::string> insertedStrs_{};
+        std::unordered_set<analyzer::symbolic::SourcePoint> usedPoints_{};
     };
 } // namespace acslg::context
 

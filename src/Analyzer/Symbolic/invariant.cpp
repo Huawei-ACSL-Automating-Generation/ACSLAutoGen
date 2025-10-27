@@ -366,9 +366,7 @@ namespace acslg::analyzer::symbolic {
             ERROR("Failed to retrieve the original varDecl.");
         auto it = varIndexMap.find(varDecl.value()->getNameAsString());
         if (it == varIndexMap.end()) {
-            auto regFrom = regularForm();
-            ERROR("Address '" + (regFrom ? regFrom.value() : dump()) +
-                  "' not found in index std::map.");
+            ERROR("Address '" + dump() + "' not found in index std::map.");
         }
         e += Parma_Polyhedra_Library::Variable(it->second);
         return e;

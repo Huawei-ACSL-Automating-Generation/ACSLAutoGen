@@ -3,6 +3,7 @@
 #include "testHelper.h"
 
 #include "Analyzer/analysis.h"
+#include "SpecGenerator/specGenerator.h"
 #include <clang/AST/Type.h>
 
 using namespace std;
@@ -17,7 +18,7 @@ namespace acslg::test::utils {
 
     optional<string> doPluginOnFirstFunc(const string &code, const string &pid) {
         static ASTExtractor e;
-        static optional<ACSLContext> context{};
+        static optional<ACSLGContext> context{};
 
         e.init(code);
         context.emplace(e.getASTContext());
@@ -36,15 +37,15 @@ namespace acslg::test::utils {
             ERROR("Plugin with id " + pid + " does not exist!");
         auto *fcp = dynamic_cast<const FunctionContractPlugin *>(pl);
 
-        auto spec = fcp->generate(*preState, *postState);
+        auto [spec, _] = fcp->generate(*preState, *postState);
         if (spec)
             DEBUG(*spec);
         return spec;
     }
 
-    void doAll(const string_view code) {
+    std::string doAll(const string_view code) {
         static ASTExtractor e;
-        static optional<ACSLContext> context{};
+        static optional<ACSLGContext> context{};
 
         e.init(code);
         context.emplace(e.getASTContext());
@@ -53,11 +54,12 @@ namespace acslg::test::utils {
         for (auto &str : context.value().getInsertedStrings()) {
             DEBUG(str);
         }
+        return context.value().getModifiedSource();
     }
 
     unique_ptr<ProgramState> execOnFirstFunc(const string &code) {
         static ASTExtractor e;
-        static optional<ACSLContext> context{};
+        static optional<ACSLGContext> context{};
 
         e.init(code);
         context.emplace(e.getASTContext());
@@ -87,7 +89,7 @@ namespace acslg::test::utils {
 
     not_null<unique_ptr<ProgramState>> getPostStateOfFirstLoop(const string_view code) {
         static ASTExtractor e;
-        static optional<ACSLContext> context{};
+        static optional<ACSLGContext> context{};
 
         e.init(code);
         context.emplace(e.getASTContext());
@@ -108,7 +110,7 @@ namespace acslg::test::utils {
 
     pair<LoopInfo, bool> doPluginsOnFirstLoop(string_view code, const vector<string> pids) {
         static ASTExtractor e;
-        static optional<ACSLContext> context{};
+        static optional<ACSLGContext> context{};
 
         e.init(code);
         context.emplace(e.getASTContext());
@@ -154,10 +156,10 @@ namespace acslg::test::utils {
         return pair{std::move(loopInfo), result};
     }
 
-    tuple<optional<string>, bool, vector<PostInfo>> doPluginOnFirstLoop(const string &code,
-                                                                        const string &pid) {
-        ASTExtractor e;
-        static optional<ACSLContext> context{};
+    spec_generator::LoopInvariantPlugin::GenResultType doPluginOnFirstLoop(const string &code,
+                                                                           const string &pid) {
+        static ASTExtractor e;
+        static optional<ACSLGContext> context{};
 
         e.init(code);
         context.emplace(e.getASTContext());
@@ -196,10 +198,9 @@ namespace acslg::test::utils {
     }
 
     FixtureWithCode::FixtureWithCode()
-        : e(code),
-          defaultPoint(symbolic::SourcePoint::fromFuncDeclBefore(e.findFirstDecl<FunctionDecl>(),
-                                                                 e.getSourceManager(),
-                                                                 e.getLangOptions())) {
+        : e(code), defaultPoint(symbolic::SourcePoint::fromFuncDecl(e.findFirstDecl<FunctionDecl>(),
+                                                                    e.getSourceManager(),
+                                                                    e.getLangOptions())) {
         for (auto d : e.getASTContext().getTranslationUnitDecl()->decls()) {
             if (auto vd = dyn_cast<VarDecl>(d))
                 varDecls.push_back(vd);

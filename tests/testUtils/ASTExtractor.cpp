@@ -2,6 +2,8 @@
 
 #include "ASTExtractor.h"
 
+#include "clang/Tooling/Tooling.h"
+
 using namespace clang;
 using namespace clang::tooling;
 

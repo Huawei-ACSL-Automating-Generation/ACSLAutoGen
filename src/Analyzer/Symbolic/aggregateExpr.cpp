@@ -73,17 +73,6 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    std::optional<std::string> OverRangeExpr::RangeElement::regularForm(
-        std::optional<std::string_view> prefix,
-        std::optional<std::string_view> suffix,
-        int,
-        bool) const {
-        auto baseStr = range_->regularFormOfBase(prefix, suffix);
-        if (baseStr == std::nullopt)
-            return std::nullopt;
-        return baseStr.value() + "[" + indexName_ + "]";
-    }
-
     bool OverRangeExpr::RangeElement::equal(const SymbolicExpr &other) const {
         auto index = llvm::dyn_cast<const OverRangeExpr::RangeElement>(&other);
         if (!index)
@@ -115,33 +104,6 @@ namespace acslg::analyzer::symbolic {
         oss << type("SumOverRange ");
         oss << OverRangeExpr::dump();
         return oss.str();
-    }
-
-    std::optional<std::string> SumOverRange::regularForm(std::optional<std::string_view> prefix,
-                                                         std::optional<std::string_view> suffix,
-                                                         int,
-                                                         bool) const {
-        auto st =
-            spec_generator::StringTemplate{"\\sum(integer {i} = {0}; {i} < {n}; {i}++, {a}[{i}])"};
-
-        auto zeroStr =
-            range_->getOffset()->regularForm(prefix, suffix, /*assign's prec:*/ 10, true);
-        if (zeroStr == std::nullopt)
-            return std::nullopt;
-
-        auto rightBound = range_->getRightBound();
-        if (rightBound == std::nullopt)
-            UNREACHABLE();
-        auto nStr = rightBound.value()->regularForm(prefix, suffix, /*less's prec:*/ 60, true);
-        if (nStr == std::nullopt)
-            return std::nullopt;
-
-        auto aStr = range_->regularFormOfBase(prefix, suffix);
-        if (aStr == std::nullopt)
-            return std::nullopt;
-
-        return st.to_string(
-            {{"i", indexName_}, {"n", nStr.value()}, {"a", aStr.value()}, {"0", zeroStr.value()}});
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getSubstitutedExpr(
@@ -190,44 +152,6 @@ namespace acslg::analyzer::symbolic {
         oss << OverRangeExpr::dump() << ", ";
         oss << "{" << key("predicate: ") << pred_->dump() << "}";
         return oss.str();
-    }
-
-    std::optional<std::string> QuantifierOverRange::regularForm(
-        std::optional<std::string_view> prefix,
-        std::optional<std::string_view> suffix,
-        int,
-        bool) const {
-        auto st =
-            spec_generator::StringTemplate{"\\{quant} integer {i}; {0} <= {i} < {n} ==> {pred};"};
-
-        std::string quantStr;
-        switch (quant_) {
-            using enum Quantifier;
-            case ForAll: quantStr = "forall"; break;
-            case Exist: quantStr = "exist"; break;
-        }
-
-        auto zeroStr =
-            range_->getOffset()->regularForm(prefix, suffix, /*less equal's prec:*/ 60, false);
-        if (zeroStr == std::nullopt)
-            return std::nullopt;
-
-        auto rightBound = range_->getRightBound();
-        if (rightBound == std::nullopt)
-            UNREACHABLE();
-        auto nStr = rightBound.value()->regularForm(prefix, suffix, /*less's prec:*/ 60, true);
-        if (nStr == std::nullopt)
-            return std::nullopt;
-
-        auto predStr = pred_->regularForm(prefix, suffix, /*entailment's prec:*/ 19, true);
-        if (predStr == std::nullopt)
-            return std::nullopt;
-
-        return st.to_string({{"quant", quantStr},
-                             {"i", indexName_},
-                             {"0", zeroStr.value()},
-                             {"n", nStr.value()},
-                             {"pred", predStr.value()}});
     }
 
     bool QuantifierOverRange::equal(const SymbolicExpr &other) const {

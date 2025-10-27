@@ -5,6 +5,8 @@
 #include "state.h"
 #include "utils.h"
 #include "expr.h"
+#include <iterator>
+#include <unordered_set>
 
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
@@ -18,8 +20,8 @@ namespace acslg::spec_generator {
       public:
         TopAssignsPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
-        std::optional<std::string> generate(const analyzer::ProgramState &pre,
-                                            const analyzer::ProgramState &post) const override {
+        GenResultType generate(const analyzer::ProgramState &pre,
+                               const analyzer::ProgramState &post) const override {
             std::string spec;
             std::unordered_map<size_t, const symb::AddressBox> assignedAddrs;
 
@@ -47,19 +49,28 @@ namespace acslg::spec_generator {
                 }
             }
 
+            auto oldPoint = pre.getStartPoint();
+            std::unordered_set<symb::SourcePoint> allUsedPoints;
             for (auto &[_, addr] : assignedAddrs) {
-                auto regForm = addr.get().regularFormOfValue();
-                if (regForm == std::nullopt) {
-                    WARN("Value of {" + addr.get().dump() + "} has no regular form.");
+                auto acslExpected =
+                    addr.get().getACSLOfValue({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
+                if (!acslExpected) {
+                    WARN("Value of {" + addr.get().dump() + "} getACSL failed.");
                     continue;
                 }
-                spec += regForm.value() + ", ";
+                auto &[addrStr, usedPoints] = acslExpected.value();
+                spec += addrStr + ", ";
+                allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
+                                     std::make_move_iterator(usedPoints.end()));
             }
 
             if (spec.empty())
-                return IND1 + std::string("assigns \\nothing;\n");
+                return std::pair{IND1 + std::string("assigns \\nothing;\n"),
+                                 std::unordered_set<symb::SourcePoint>{}};
             else
-                return IND1 + std::string("assigns ") + spec.substr(0, spec.length() - 2) + ";\n";
+                return std::pair{IND1 + std::string("assigns ") +
+                                     spec.substr(0, spec.length() - 2) + ";\n",
+                                 std::move(allUsedPoints)};
         }
 
       private:
@@ -72,8 +83,11 @@ namespace acslg::spec_generator {
         DetailBehaviorPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
 
-        std::optional<std::string> generate(const analyzer::ProgramState &,
-                                            const analyzer::ProgramState &post) const override {
+        GenResultType generate(const analyzer::ProgramState &,
+                               const analyzer::ProgramState &post) const override {
+            auto oldPoint = post.getStartPoint();
+            std::unordered_set<symb::SourcePoint> allUsedPoints{};
+
             std::vector<std::string> behaviors;
             int idx = 0;
 
@@ -92,12 +106,16 @@ namespace acslg::spec_generator {
 
                 std::string assignsSpec;
                 for (auto &[_, a] : assignedAddrs) {
-                    auto rf = a.get().regularFormOfValue();
-                    if (!rf) {
-                        WARN("Value of {" + a.get().dump() + "} has no regular form.");
+                    auto acslExpected =
+                        a.get().getACSLOfValue({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
+                    if (!acslExpected) {
+                        WARN("Value of {" + a.get().dump() + "} getACSL failed.");
                         continue;
                     }
-                    assignsSpec += rf.value() + ", ";
+                    auto &[addrStr, usedPoints] = acslExpected.value();
+                    assignsSpec += addrStr + ", ";
+                    allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
+                                         std::make_move_iterator(usedPoints.end()));
                 }
                 if (assignsSpec.empty())
                     assignsSpec = "\\nothing";
@@ -108,8 +126,13 @@ namespace acslg::spec_generator {
 
                 // result
                 if (auto &ret = path.getReturnExpr()) {
-                    if (auto rf = ret.value()->simplifiedExpr()->regularForm("\\old(", ")"))
-                        ensures.push_back("\\result == " + rf.value());
+                    if (auto expected = ret.value()->simplifiedExpr()->getACSL(
+                            {.predefinedLabels = {{oldPoint, "Old"}}})) {
+                        auto &[spec, usedPoints] = expected.value();
+                        ensures.push_back("\\result == " + spec);
+                        allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
+                                             std::make_move_iterator(usedPoints.end()));
+                    }
                 }
 
                 // Memory equations
@@ -117,18 +140,24 @@ namespace acslg::spec_generator {
                     if (is_symbol_addr(addr) && llvm::isa<symb::Structure>(value.get()))
                         continue;
 
-                    auto lhsOpt = addr.get().regularFormOfValue();
+                    auto lhsOpt =
+                        addr.get().getACSLOfValue({.predefinedLabels = {{oldPoint, "Old"}}});
                     if (!lhsOpt)
                         continue;
 
-                    auto rhsOpt = value->simplifiedExpr()->regularForm("\\old(", ")");
+                    auto rhsOpt =
+                        value->simplifiedExpr()->getACSL({.predefinedLabels = {{oldPoint, "Old"}}});
                     if (!rhsOpt)
                         continue;
 
-                    ensures.push_back(lhsOpt.value() + " == " + rhsOpt.value());
+                    ensures.push_back(lhsOpt.value().first + " == " + rhsOpt.value().first);
+                    allUsedPoints.insert(std::make_move_iterator(lhsOpt.value().second.begin()),
+                                         std::make_move_iterator(lhsOpt.value().second.end()));
+                    allUsedPoints.insert(std::make_move_iterator(rhsOpt.value().second.begin()),
+                                         std::make_move_iterator(rhsOpt.value().second.end()));
                 }
 
-                auto req = joinConj(path.getPathConditions());
+                auto req = joinConj(path.getPathConditions(), oldPoint);
                 if (ensures.empty() && req.empty() && assignsSpec == "\\nothing")
                     continue;
 
@@ -145,7 +174,7 @@ namespace acslg::spec_generator {
             }
 
             if (behaviors.empty())
-                return std::nullopt;
+                return std::pair{std::nullopt, std::unordered_set<symb::SourcePoint>{}};
 
             std::string out;
             for (auto &b : behaviors)
@@ -155,24 +184,24 @@ namespace acslg::spec_generator {
             for (int i = 0; i < (int)behaviors.size(); ++i)
                 names.push_back("b" + std::to_string(i));
             out += IND1 + "complete behaviors " + joinCSV(names) + ";\n";
-            return out;
+            return std::pair{out, std::move(allUsedPoints)};
         }
 
       private:
         std::string id_;
 
-        static std::string joinConj(const analyzer::Formulas &conds) {
+        static std::string joinConj(const analyzer::Formulas &conds, symb::SourcePoint oldPoint) {
             std::string s;
             for (size_t i = 0; i < conds.size(); ++i) {
                 const auto &c = conds[i];
                 if (c->isUnknown())
                     continue;
-                auto rf = c->simplifiedExpr()->regularForm();
-                if (!rf || rf->empty())
+                auto rf = c->simplifiedExpr()->getACSL({.predefinedLabels = {{oldPoint, "Old"}}});
+                if (!rf || rf.value().first.empty())
                     continue;
                 if (!s.empty())
                     s += " && ";
-                s += "(" + rf.value() + ")";
+                s += "(" + rf.value().first + ")";
             }
             return s;
         }

@@ -1,10 +1,13 @@
 // src/SpecGenerator/specGenerators.cpp
 
+#include <iterator>
 #include <llvm-19/llvm/Support/Casting.h>
 #include <ranges>
 #include <llvm/ADT/TypeSwitch.h>
+#include <unordered_set>
 
 #include "specGenerator.h"
+#include "expr.h"
 #include "utilityTemplates.h"
 #include "macros.h"
 #include "state.h"
@@ -70,16 +73,9 @@ namespace acslg::spec_generator {
         std::ostringstream oss;
 
         oss << type("LoopPattern") << " {\n";
-
         oss << "  " << key("initialValue") << ": ";
-        if (initialValue_->regularForm()) {
-            oss << lit(initialValue_->regularForm().value()) << "\n";
-        } else {
-            oss << initialValue_->dump() << "\n";
-        }
-
+        oss << initialValue_->dump() << "\n";
         oss << "  " << key("step") << ": " << lit(std::to_string(step_)) << "\n";
-
         oss << "}";
 
         return oss.str();
@@ -104,7 +100,8 @@ namespace acslg::spec_generator {
         }
     }
 
-    std::string emitFunctionContract(
+    [[nodiscard]]
+    std::pair<std::string, std::unordered_set<symb::SourcePoint>> emitFunctionContract(
         const analyzer::ProgramState &pre,
         const analyzer::ProgramState &post,
         std::string_view groupName,
@@ -112,15 +109,19 @@ namespace acslg::spec_generator {
         auto plugins     = getPlugins<FunctionContractPlugin>(groupName, extraPluginIds);
         std::string spec = ACSL_HEAD.to_string();
 
+        std::unordered_set<symb::SourcePoint> allUsedPoints;
         for (auto &plugin : plugins) {
             if (plugin == nullptr)
                 continue;
             DEBUG("Plugin {" + std::string{plugin->id()} + "} is generating...");
-            if (auto s = plugin->generate(pre, post); s)
+            if (auto [s, usedPoints] = plugin->generate(pre, post); s) {
                 spec += *s;
+                allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
+                                     std::make_move_iterator(usedPoints.end()));
+            }
         }
         spec += ACSL_END.to_string();
-        return spec;
+        return std::pair{spec, std::move(allUsedPoints)};
     }
 
     std::pair<LoopInfo, bool> parseLoopInfo(
@@ -160,7 +161,8 @@ namespace acslg::spec_generator {
         }
     }
 
-    std::pair<std::string, std::unique_ptr<analyzer::ProgramState>> emitLoopInvariant(
+    [[nodiscard]]
+    EmitLoopInvResult emitLoopInvariant(
         const analyzer::ProgramState &preState,
         const analyzer::ProgramState &loopEntry,
         const LoopInfo &loopInfo,
@@ -169,6 +171,7 @@ namespace acslg::spec_generator {
         auto plugins = getPlugins<LoopInvariantPlugin>(groupName, extraPluginIds);
         std::vector<std::unique_ptr<analyzer::Path>> invariants;
         std::string spec = ACSL_HEAD.to_string();
+        std::unordered_set<symb::SourcePoint> allUsedPoints;
 
         auto loopEntryPoint = symb::SourcePoint::fromStmtBefore(
             loopInfo.loopStmt_, loopEntry.getContext().getSourceManager(),
@@ -207,9 +210,8 @@ namespace acslg::spec_generator {
                     auto subedValue = value->getSubstitutedExpr(entryPath, loopEntryPoint);
                     if (auto it = postBranchInfo.memoryMap_.find(*subedAddr);
                         it != postBranchInfo.memoryMap_.end() && !it->second->isUnknown()) {
-                        auto regForm = subedValue->simplifiedExpr()->regularForm();
                         WARN("Another plugin has already updated this address. The new value: {" +
-                             (regForm ? regForm.value() : subedValue->dump()) + "} is discarded.");
+                             subedValue->dump() + "} is discarded.");
                         continue;
                     }
                     postBranchInfo.memoryMap_.insert_or_assign(*subedAddr, std::move(subedValue));
@@ -226,11 +228,14 @@ namespace acslg::spec_generator {
             if (plugin == nullptr)
                 UNREACHABLE();
             DEBUG("Plugin {" + std::string{plugin->id()} + "} is generating...");
-            auto [s, continueFlag, postInfos] = plugin->generate(preState, loopEntry, loopInfo);
+            auto [s, usedPoints, continueFlag, postInfos] =
+                plugin->generate(preState, loopEntry, loopInfo);
 
             if (s) {
                 spec += "    " /*4 spaces*/ + *s + "\n";
             }
+            allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
+                                 std::make_move_iterator(usedPoints.end()));
 
             updateResultInfos(postInfos);
 
@@ -274,6 +279,8 @@ namespace acslg::spec_generator {
                 postPath->insertPathCondition(std::move(pathCond));
         }
 
-        return std::pair{spec, std::move(postState)};
+        return EmitLoopInvResult{.acsl       = spec,
+                                 .usedPoints = std::move(allUsedPoints),
+                                 .postState  = std::move(postState)};
     }
 } // namespace acslg::spec_generator

@@ -559,7 +559,7 @@ namespace acslg::analyzer {
       public:
         using EvalResult = std::pair<std::vector<utils::not_null<std::unique_ptr<Path>>>, Formulas>;
 
-        Path(context::ACSLContext &context, symbolic::SourcePoint startPoint)
+        Path(context::ACSLGContext &context, symbolic::SourcePoint startPoint)
             : context_(context), startPoint_(startPoint) {};
         ~Path() = default;
         Path(const Path &other, bool shallowCopy);
@@ -635,7 +635,7 @@ namespace acslg::analyzer {
         std::optional<utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>> returnExpr_ =
             std::nullopt;
 
-        context::ACSLContext &context_;
+        context::ACSLGContext &context_;
 
         symbolic::SourcePoint startPoint_;
     };
@@ -644,8 +644,8 @@ namespace acslg::analyzer {
       public:
         ProgramState(std::unique_ptr<Path> initialPath,
                      std::unique_ptr<ACSLFunction> func,
-                     context::ACSLContext &context);
-        ProgramState(std::unique_ptr<ACSLFunction> func, context::ACSLContext &context);
+                     context::ACSLGContext &context);
+        ProgramState(std::unique_ptr<ACSLFunction> func, context::ACSLGContext &context);
         ~ProgramState() = default;
         ProgramState(const ProgramState &);
         ProgramState(ProgramState &&) = default;
@@ -703,7 +703,7 @@ namespace acslg::analyzer {
 
         std::unique_ptr<ACSLFunction> func_;
 
-        context::ACSLContext &context_;
+        context::ACSLGContext &context_;
 
         symbolic::SourcePoint startPoint_;
     };

@@ -5,6 +5,7 @@
 
 #include <string>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 #include <memory>
 #include <unordered_map>
@@ -21,8 +22,7 @@ namespace aclsg::analyzer {
 }
 
 namespace acslg::spec_generator {
-
-    std::string emitFunctionContract(
+    std::pair<std::string, std::unordered_set<analyzer::symbolic::SourcePoint>> emitFunctionContract(
         const analyzer::ProgramState &pre,
         const analyzer::ProgramState &post,
         std::string_view groupName = DEFAULT_FUNC_CONTRACT_PLUGINS,
@@ -112,7 +112,12 @@ namespace acslg::spec_generator {
                               std::optional<std::reference_wrapper<const std::vector<std::string>>>
                                   extraPluginIds = std::nullopt);
 
-    std::pair<std::string, std::unique_ptr<analyzer::ProgramState>> emitLoopInvariant(
+    struct EmitLoopInvResult {
+        std::string acsl;
+        std::unordered_set<analyzer::symbolic::SourcePoint> usedPoints;
+        std::unique_ptr<analyzer::ProgramState> postState;
+    };
+    EmitLoopInvResult emitLoopInvariant(
         const analyzer::ProgramState &preState,
         const analyzer::ProgramState &loopEntry,
         const LoopInfo &loopInfo,
@@ -144,8 +149,10 @@ namespace acslg::spec_generator {
     class FunctionContractPlugin : public ACSLPlugin {
       public:
         Kind kind() const override { return Kind::FunctionContract; }
-        virtual std::optional<std::string> generate(const analyzer::ProgramState &pre,
-                                                    const analyzer::ProgramState &post) const = 0;
+        using GenResultType = std::pair<std::optional<std::string>,
+                                        std::unordered_set<analyzer::symbolic::SourcePoint>>;
+        virtual GenResultType generate(const analyzer::ProgramState &pre,
+                                       const analyzer::ProgramState &post) const = 0;
     };
 
     class LoopInfoPlugin : public ACSLPlugin {
@@ -173,10 +180,15 @@ namespace acslg::spec_generator {
       public:
         Kind kind() const override { return Kind::LoopInvariant; }
 
-        virtual std::tuple<std::optional<std::string>, bool, std::vector<PostInfo>> generate(
-            const analyzer::ProgramState &preState,
-            const analyzer::ProgramState &loopEntry,
-            const LoopInfo &loopInfo) const = 0;
+        struct GenResultType {
+            std::optional<std::string> acsl;
+            std::unordered_set<analyzer::symbolic::SourcePoint> acslUsedPoints;
+            bool isContinue;
+            std::vector<PostInfo> perPathPostInfo;
+        };
+        virtual GenResultType generate(const analyzer::ProgramState &preState,
+                                       const analyzer::ProgramState &loopEntry,
+                                       const LoopInfo &loopInfo) const = 0;
     };
 
     class InlinePlugin : public ACSLPlugin {

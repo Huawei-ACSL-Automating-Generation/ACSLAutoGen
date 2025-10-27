@@ -3,14 +3,8 @@
 #ifndef __ACSLG_TESTS_TESTUTILS_ASTEXTRACTOR_H__
 #define __ACSLG_TESTS_TESTUTILS_ASTEXTRACTOR_H__
 
-
 #include <memory>
-#include <string>
-#include <sstream>
-#include <type_traits>
-#include "clang/AST/AST.h"
-#include "clang/Tooling/Tooling.h"
-#include "clang/Frontend/FrontendActions.h"
+#include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
@@ -105,7 +99,6 @@ namespace acslg::test::utils {
 
         const clang::FunctionDecl *findFunc(llvm::StringRef name) {
             using namespace clang;
-            using namespace clang::tooling;
             using namespace clang::ast_matchers;
             auto matcher           = functionDecl(hasName(name), isDefinition()).bind("f");
             const FunctionDecl *FD = nullptr;
