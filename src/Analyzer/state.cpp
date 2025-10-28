@@ -552,11 +552,11 @@ namespace acslg::analyzer {
                             addr->setLength(std::move(lengthInElems));
 
                             // Materialize the first element symbol at the allocated base address.
-                            auto elemSym =
-                                getSymbol(elemTy, addr->addressClone().into_underlying(),
-                                          pointAfterCall); // Use startPoint_ or pointAfterCall is
-                                                           // functionally same, pointerAfterCall
-                                                           // semantically more accurate.
+                            // @SgtPepper114: Here it should be set as an `unknownExpr` or simply
+                            // not insert the addr-value pair in `memoryState_`. Why would one want
+                            // to directly access the value at the allocated address rather than
+                            // assigning it first?
+                            auto elemSym = symbolic::UnknownExpr::makeUnknown();
                             memoryState_.write(*addr, elemSym->clone());
 
                             Formulas exprs;
@@ -571,20 +571,18 @@ namespace acslg::analyzer {
                             const auto *RT = elemTy->getAs<clang::RecordType>();
                             if (!RT || !RT->getDecl())
                                 UNIMPLEMENT("Invalid structure type returned by BSL_SAL_Calloc.");
-                            const clang::RecordDecl *RD = RT->getDecl();
-                            const auto &layout = RD->getASTContext().getASTRecordLayout(RD);
 
                             auto addr = std::make_unique<symbolic::SymbolAddress>(
                                 elemTy, std::nullopt, pointAfterCall,
                                 std::make_unique<symbolic::LiteralExpr>(0));
 
                             // Materialize a symbolic structure value at the allocated base address.
-                            auto value = std::make_unique<symbolic::Structure>(
-                                RD, layout, addr->addressClone().into_underlying(),
-                                pointAfterCall); // // Use startPoint_ or pointAfterCall is
-                                                 // functionally same, pointerAfterCall
-                                                 // semantically more accurate.
-                            memoryState_.write(*addr, value->clone());
+                            // @SgtPepper114: Here it should be set as an `unknownExpr` or simply
+                            // not insert the addr-value pair in `memoryState_`. Why would one want
+                            // to directly access the value at the allocated address rather than
+                            // assigning it first?
+                            auto elemSym = symbolic::UnknownExpr::makeUnknown();
+                            memoryState_.write(*addr, elemSym->clone());
 
                             Formulas exprs;
                             exprs.emplace_back(std::move(addr));
