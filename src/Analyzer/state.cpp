@@ -1,3 +1,5 @@
+#include "state.h"
+
 #include <clang/AST/Type.h>
 #include <queue>
 #include <unordered_map>
@@ -11,8 +13,8 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/StmtCXX.h>
 #include <clang/AST/ParentMapContext.h>
-#include "state.h"
-#include "expr.h"
+
+#include "Symbolic/expr.h"
 #include "macros.h"
 #include "Utils/utils.h"
 #include "SpecGenerator/specGenerator.h"
@@ -76,7 +78,7 @@ namespace acslg::analyzer {
             auto baseAddr = extractLValue(arr->getBase());
             if (const auto symbol = memoryState_.read(*baseAddr)) {
                 auto symbolAddr =
-                    llvm::dyn_cast<const symbolic::SymbolAddress>(symbol.value().get());
+                    llvm::dyn_cast<const symbolic::SymbolAddress>(symbol.value().get().get());
                 if (symbolAddr == nullptr)
                     ERROR("Value of ArraySubscriptExpr's base is not 'symbolic::SymbolAddress', "
                           "base is "
@@ -424,7 +426,7 @@ namespace acslg::analyzer {
                         std::unique_ptr<symbolic::SymbolAddress> addr;
                         if (const auto symbol = memoryState_.read(*variableAddr)) {
                             auto ptr =
-                                llvm::dyn_cast<const symbolic::SymbolAddress>(symbol.value().get());
+                                llvm::dyn_cast<const symbolic::SymbolAddress>(symbol.value().get().get());
                             if (ptr == nullptr)
                                 ERROR("Value of ArraySubscriptExpr's base is not "
                                       "'symbolic::SymbolAddress', base "
@@ -804,7 +806,7 @@ namespace acslg::analyzer {
                                 startPoint_);
                             memoryState_.write(*baseAddr.value(), st->clone());
                         } else if (auto stVal = llvm::dyn_cast<const symbolic::Structure>(
-                                       val.value().get())) {
+                                       val.value().get().get())) {
                             st = std::make_unique<symbolic::Structure>(*stVal);
                         } else {
                             ERROR("Dereferenced value is not a structure");
@@ -1027,7 +1029,7 @@ namespace acslg::analyzer {
         if (!opt)
             return false;
 
-        const symbolic::SymbolicExpr *expr = opt.value().get();
+        const symbolic::SymbolicExpr *expr = opt.value().get().get();
         return llvm::isa<symbolic::Structure>(expr);
     }
 
@@ -1076,11 +1078,11 @@ namespace acslg::analyzer {
         return *this;
     }
 
-    std::optional<utils::not_null<const symbolic::SymbolicExpr *>> MemoryModel::read(
+    std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> MemoryModel::read(
         const symbolic::Address &addr) const {
         if (auto varAddr = llvm::dyn_cast<const symbolic::VariableAddress>(&addr)) {
             if (memoryMap_variableAddr_.contains(*varAddr))
-                return memoryMap_variableAddr_.at(*varAddr).get().get();
+                return memoryMap_variableAddr_.at(*varAddr)->clone();
             return std::nullopt;
         } else if (auto symbolAddr = llvm::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
             auto baseInfo = symbolAddr->getBaseInfo();
@@ -1102,7 +1104,7 @@ namespace acslg::analyzer {
                     if (firstLEIt == rangeExprMap.end() ||
                         firstLEIt->first.second <= unsignedOffset)
                         return std::nullopt;
-                    return firstLEIt->second.get().get();
+                    return firstLEIt->second->getRangeIndexSubstituted(baseInfo, *offset);
                 } else if (auto &len = symbolAddr->getLength();
                            constOffset && len && len.value()->tryEvalAsConstant()) {
                     UNIMPLEMENT(
@@ -1117,27 +1119,19 @@ namespace acslg::analyzer {
             auto it            = addrValueMap.find(*symbolAddr);
             if (it == addrValueMap.end())
                 return std::nullopt;
-            return it->second.get().get();
+            return it->second->clone();
         } else if (auto fieldAddr = llvm::dyn_cast<const symbolic::FieldAddress>(&addr)) {
             auto &baseAddr = fieldAddr->getBaseAddr();
             auto &index    = fieldAddr->getFieldIndex();
             auto baseValue = read(*baseAddr);
             if (baseValue == std::nullopt)
                 return std::nullopt;
-            auto baseSt = llvm::dyn_cast<const symbolic::Structure>(baseValue.value().get());
+            auto baseSt = llvm::dyn_cast<const symbolic::Structure>(baseValue.value().get().get());
             if (baseSt == nullptr)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
-            return baseSt->getFieldValue(index);
+            return baseSt->getFieldValue(index)->clone();
         }
         UNREACHABLE();
-    }
-
-    std::optional<utils::not_null<symbolic::SymbolicExpr *>> MemoryModel::read(
-        const symbolic::Address &addr) {
-        auto value = std::as_const(*this).read(addr);
-        if (value == std::nullopt)
-            return std::nullopt;
-        return const_cast<symbolic::SymbolicExpr *>(value.value().get());
     }
 
     void MemoryModel::write(const symbolic::Address &addr,
@@ -1206,10 +1200,11 @@ namespace acslg::analyzer {
             auto baseValue = read(*baseAddr);
             if (baseValue == std::nullopt)
                 ERROR("Structure isn't existed in MemoryModel, insert it first.");
-            auto baseSt = llvm::dyn_cast<symbolic::Structure>(baseValue.value().get());
+            auto baseSt = llvm::dyn_cast<symbolic::Structure>(baseValue.value().get().get());
             if (baseSt == nullptr)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
             baseSt->setFieldValue(index, std::move(value));
+            write(*baseAddr, std::move(baseValue.value()));
             return;
         }
         UNREACHABLE();

@@ -75,20 +75,14 @@ namespace acslg::spec_generator {
                         entryExpr = preValue.value()->clone();
                     } else {
                         auto [hashAddrMap, _] =
-                            symb::SymbolicExpr::collectUsedVarsAndAddrs(*currentExpr);
+                            symb::SymbolicExpr::collectUsedSymbols(*currentExpr);
                         if (hashAddrMap.size() != 1) {
                             patterns.emplace(addr, std::nullopt);
                             continue;
                         }
-                        if (std::visit(
-                                [&](auto &&arg) -> bool {
-                                    return isFrom(
-                                        *arg, addr,
-                                        loopEntryInfo.symbolicLoopEntry_->getStartPoint());
-                                },
-                                hashAddrMap.begin()->second)) {
-                            entryExpr = std::visit([](auto &&arg) { return arg->clone(); },
-                                                   hashAddrMap.begin()->second);
+                        if (isFrom(*hashAddrMap.begin()->second->toSymbolicExpr(), addr,
+                                   loopEntryInfo.symbolicLoopEntry_->getStartPoint())) {
+                            entryExpr = hashAddrMap.begin()->second->toSymbolicExpr()->clone();
                         } else {
                             patterns.emplace(addr, std::nullopt);
                             continue;
@@ -97,8 +91,8 @@ namespace acslg::spec_generator {
 
                     if (entryExpr == std::nullopt)
                         UNREACHABLE();
-                    auto [hashAddrMap, hashIdMap] = symb::SymbolicExpr::collectUsedVarsAndAddrs(
-                        *currentExpr, *entryExpr.value());
+                    auto [_, hashIdMap] =
+                        symb::SymbolicExpr::collectUsedSymbols(*currentExpr, *entryExpr.value());
                     if (auto diff = currentExpr->toLinearExpr(hashIdMap) -
                                     entryExpr.value()->toLinearExpr(hashIdMap);
                         diff.all_homogeneous_terms_are_zero()) {

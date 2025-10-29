@@ -54,15 +54,8 @@ namespace acslg::analyzer {
          * @param addr The symbolic address to read from.
          * @return Optional containing the expression if found, otherwise empty.
          */
-        std::optional<utils::not_null<const symbolic::SymbolicExpr *>> read(
+        std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> read(
             const symbolic::Address &addr) const;
-
-        /**
-         * @brief Reads a symbolic expression at the given address (mutable overload).
-         * @param addr The symbolic address to read from.
-         * @return Optional containing the expression if found, otherwise empty.
-         */
-        std::optional<utils::not_null<symbolic::SymbolicExpr *>> read(const symbolic::Address &addr);
 
         /**
          * @brief Writes a symbolic expression to the given address.
@@ -179,13 +172,13 @@ namespace acslg::analyzer {
          * Maps a base address to non-overlapping constant ranges (non-zero length).
          */
         std::unordered_map<
-            symbolic::SymbolAddress::BaseInfo,
+            symbolic::SymbolAddrBaseInfo,
             std::map<ConstRange, utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>
             memoryMap_constantRange_; ///< ConstRanges must be non-overlapping and non-zero-length.
 
         /// Symbolic range mapping
         std::unordered_map<
-            symbolic::SymbolAddress::BaseInfo,
+            symbolic::SymbolAddrBaseInfo,
             std::unordered_map<symbolic::SymbolAddress,
                                utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>
             memoryMap_symbolicRange_;
@@ -208,10 +201,9 @@ namespace acslg::analyzer {
          * @return A unique_ptr to the composed Address.
          * @note Length must be non-zero.
          */
-        static std::unique_ptr<symbolic::Address> compose_address(
-            symbolic::SymbolAddress::BaseInfo base,
-            uint64_t off,
-            uint64_t len) {
+        static std::unique_ptr<symbolic::Address> compose_address(symbolic::SymbolAddrBaseInfo base,
+                                                                  uint64_t off,
+                                                                  uint64_t len) {
             if (len == 0)
                 ERROR("Length should not be 0, something goes wrong.");
             else if (len == 1)
@@ -307,8 +299,8 @@ namespace acslg::analyzer {
                             return R{addr, var_outer_->second};
                     }
                     case Phase::Const: {
-                        const symbolic::SymbolAddress::BaseInfo &base = c_outer_->first;
-                        const auto [off, offPlusLen]                  = c_inner_->first;
+                        const symbolic::SymbolAddrBaseInfo &base = c_outer_->first;
+                        const auto [off, offPlusLen]             = c_inner_->first;
                         auto addr = compose_address(base, off, offPlusLen - off);
                         if constexpr (IsConst)
                             return R{std::move(addr), c_inner_->second.get().get()};

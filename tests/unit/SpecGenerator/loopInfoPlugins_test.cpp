@@ -5,7 +5,7 @@
 #include <string>
 #include <llvm/Support/Casting.h>
 #include "SpecGenerator/specGenerator.h"
-#include "expr.h"
+#include "Symbolic/expr.h"
 #include "testHelper.h"
 
 using namespace std;

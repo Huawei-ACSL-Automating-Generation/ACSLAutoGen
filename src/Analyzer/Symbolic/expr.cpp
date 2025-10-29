@@ -1,9 +1,10 @@
 #include "expr.h"
 
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <cstring>
-#include <variant>
+#include <string_view>
 #include <ranges>
 #include <llvm/ADT/TypeSwitch.h>
 #include <llvm/Support/Casting.h>
@@ -102,41 +103,36 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolicExpr::simplifiedExprIfLinear() const {
         if (!isLinear())
             return clone();
-        auto [hashPtrMap, hashIdMap] = collectUsedVarsAndAddrs(*this);
+        auto [hashPtrMap, hashIdMap] = collectUsedSymbols(*this);
 
         auto linearExpr = toLinearExpr(hashIdMap);
         std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> result{};
 
         using enum BinaryOpExpr::Operator;
-        for (auto [hash, varOrAddr] : hashPtrMap) {
-            std::visit(
-                [&](auto &&arg) {
-                    auto C = linearExpr
-                                 .coefficient(Parma_Polyhedra_Library::Variable{hashIdMap.at(hash)})
-                                 .get_si();
-                    if (C == 0)
-                        return;
+        for (auto [hash, symbol] : hashPtrMap) {
+            auto expr = llvm::dyn_cast<const SymbolicExpr>(symbol.get());
+            auto C = linearExpr.coefficient(Parma_Polyhedra_Library::Variable{hashIdMap.at(hash)})
+                         .get_si();
+            if (C == 0)
+                continue;
 
-                    if (result == std::nullopt) {
-                        if (C == 1)
-                            result = arg->clone();
-                        else
-                            result = std::make_unique<BinaryOpExpr>(
-                                std::make_unique<LiteralExpr>(C), Multiply, arg->clone());
-                    } else {
-                        unsigned absC = std::abs(C);
-                        std::unique_ptr<SymbolicExpr> varExpr{nullptr};
-                        if (absC != 1)
-                            varExpr = std::make_unique<BinaryOpExpr>(
-                                std::make_unique<LiteralExpr>(absC), Multiply, arg->clone());
-                        else
-                            varExpr = arg->clone().into_underlying();
-                        result = std::make_unique<BinaryOpExpr>(std::move(result.value()),
-                                                                (C > 0 ? Add : Subtract),
-                                                                std::move(varExpr));
-                    }
-                },
-                varOrAddr);
+            if (result == std::nullopt) {
+                if (C == 1)
+                    result = expr->clone();
+                else
+                    result = std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(C),
+                                                            Multiply, expr->clone());
+            } else {
+                unsigned absC = std::abs(C);
+                std::unique_ptr<SymbolicExpr> varExpr{nullptr};
+                if (absC != 1)
+                    varExpr = std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(absC),
+                                                             Multiply, expr->clone());
+                else
+                    varExpr = expr->clone().into_underlying();
+                result = std::make_unique<BinaryOpExpr>(
+                    std::move(result.value()), (C > 0 ? Add : Subtract), std::move(varExpr));
+            }
         }
         if (auto inhomo = linearExpr.inhomogeneous_term().get_si();
             inhomo || result == std::nullopt) {
@@ -244,7 +240,8 @@ namespace acslg::analyzer::symbolic {
     }
 
     size_t SymbolValue::hash() const {
-        size_t seed = utils::hash_val(getKind(), fromAddr_->hash(), fromPoint_.hash());
+        size_t seed =
+            utils::hash_val(SymbolicExpr::getKind(), fromAddr_->hash(), fromPoint_.hash());
         return seed;
     }
 
@@ -257,7 +254,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     size_t SymbolAddress::hash() const {
-        size_t seed = utils::hash_val(getKind(), fromPoint_.hash(), offset_->hash(),
+        size_t seed = utils::hash_val(SymbolicExpr::getKind(), fromPoint_.hash(), offset_->hash(),
                                       length_ ? length_.value()->hash() : 0);
 
         seed = utils::hash_val(seed, fromAddr_ ? fromAddr_.value()->hash() : 0);
@@ -271,7 +268,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     size_t Structure::hash() const {
-        auto seed = utils::hash_val(getKind(), info_.definition_.get());
+        auto seed = utils::hash_val(SymbolicExpr::getKind(), info_.definition_.get());
         for (auto &field : fields_)
             seed = utils::hash_val(seed, field->hash());
         return seed;
@@ -565,32 +562,6 @@ namespace acslg::analyzer::symbolic {
         return SymbolicExpr::GetACSLError::UnknownExpr;
     }
 
-    namespace {
-        std::pair<std::string, std::string> getPrefixSuffixAndUpdateMap(
-            const SymbolicExpr::GetACSLConfig &config,
-            std::unordered_set<SourcePoint> &usedPoints,
-            std::optional<SourcePoint> currentPoint,
-            const SourcePoint &myPoint) {
-            if (!config.noStateLabelFunctionAt && myPoint != currentPoint) {
-                if (auto it = config.predefinedLabels.find(myPoint);
-                    it != config.predefinedLabels.end()) {
-                    return std::pair{"\\at(", ", " + it->second + ")"};
-                } else {
-                    auto label = myPoint.getLabel();
-                    usedPoints.insert(myPoint);
-                    return std::pair{"\\at(", ", " + label + ")"};
-                }
-            }
-            return {};
-        }
-
-        bool isNeedParens(Operator myOp, unsigned parentPrec, bool isRightChild) {
-            auto myPrec = getPrecedence(myOp);
-            return (myPrec < parentPrec) ||
-                   (myPrec == parentPrec && isRightChild && !isRightAssociative(myOp));
-        }
-    } // namespace
-
     utils::expected<std::string, SymbolicExpr::GetACSLError> SymbolValue::doGetACSL(
         const SymbolicExpr::GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
@@ -598,7 +569,7 @@ namespace acslg::analyzer::symbolic {
         unsigned parentPrec,
         bool isRightChild) const {
         auto [prefix, suffix] =
-            getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
+            details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
         bool hasAt    = !(prefix.empty() || suffix.empty());
         auto valueStr = callGetACSLOfValueProxy(*fromAddr_, config, usedPoints, fromPoint_,
                                                 hasAt ? /* enclosed in \\at() */ 0 : parentPrec,
@@ -629,7 +600,7 @@ namespace acslg::analyzer::symbolic {
             offsetStr.value().clear();
 
         auto [prefix, suffix] =
-            getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
+            details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
         bool hasAt     = !(prefix.empty() || suffix.empty());
         bool hasOffset = !offsetStr.value().empty();
 
@@ -666,7 +637,7 @@ namespace acslg::analyzer::symbolic {
         std::optional<SourcePoint>,
         unsigned parentPrec,
         bool isRightChild) const {
-        bool needParens = isNeedParens(Operator::AddrOf, parentPrec, isRightChild);
+        bool needParens = details::isNeedParens(Operator::AddrOf, parentPrec, isRightChild);
         return (needParens ? "(" : "") + std::string{"&"} + from_->getNameAsString() +
                (needParens ? ")" : "");
     }
@@ -682,7 +653,7 @@ namespace acslg::analyzer::symbolic {
         if (!valueStr)
             return valueStr.error();
 
-        bool needParens = isNeedParens(Operator::AddrOf, parentPrec, isRightChild);
+        bool needParens = details::isNeedParens(Operator::AddrOf, parentPrec, isRightChild);
         return (needParens ? "(" : "") + std::string{"&"} + std::move(valueStr.value()) +
                (needParens ? ")" : "");
     }
@@ -697,7 +668,7 @@ namespace acslg::analyzer::symbolic {
             return SymbolicExpr::GetACSLError::HeapAddress;
 
         auto [prefix, suffix] =
-            getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
+            details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
         bool hasAt = !(prefix.empty() || suffix.empty());
 
         auto nameStrExpected =
@@ -729,8 +700,8 @@ namespace acslg::analyzer::symbolic {
             } else
                 subedAddrStr = std::move(nameStr) + "[" + std::move(offsetStr.value()) + "]";
 
-            bool needParens = isNeedParens((useDeref ? Operator::Dereference : Operator::Subscript),
-                                           parentPrec, isRightChild);
+            bool needParens = details::isNeedParens(
+                (useDeref ? Operator::Dereference : Operator::Subscript), parentPrec, isRightChild);
             return (needParens ? "(" : "") + std::move(subedAddrStr) + (needParens ? ")" : "");
         }
 
@@ -755,7 +726,7 @@ namespace acslg::analyzer::symbolic {
         auto subedAddrStr = std::move(nameStr) + "[" + std::move(offsetStr.value()) + " .. " +
                             std::move(rightBoundStr.value()) + "]";
 
-        bool needParens = isNeedParens(Operator::Subscript, parentPrec, isRightChild);
+        bool needParens = details::isNeedParens(Operator::Subscript, parentPrec, isRightChild);
         return (needParens ? "(" : "") + std::move(subedAddrStr) + (needParens ? ")" : "");
     }
 
@@ -789,7 +760,7 @@ namespace acslg::analyzer::symbolic {
         std::string concatenatedStr;
         concatenatedStr = baseStr.value() + "." + fieldStr;
 
-        bool needParens = isNeedParens(Operator::MemberAccess, parentPrec, isRightChild);
+        bool needParens = details::isNeedParens(Operator::MemberAccess, parentPrec, isRightChild);
         return (needParens ? "(" : "") + concatenatedStr + (needParens ? ")" : "");
     }
 
@@ -805,7 +776,7 @@ namespace acslg::analyzer::symbolic {
 
         auto &[fromAddr, fromPoint] = from.value();
         auto [prefix, suffix] =
-            getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint);
+            details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint);
         bool hasAt    = !(prefix.empty() || suffix.empty());
         auto valueStr = callGetACSLOfValueProxy(*fromAddr, config, usedPoints, fromPoint,
                                                 hasAt ? /* enclosed in \\at() */ 0 : parentPrec,
@@ -1114,8 +1085,7 @@ namespace acslg::analyzer::symbolic {
         return fromAddr_.value()->getFromRoot();
     }
 
-    std::optional<utils::not_null<const clang::VarDecl *>> SymbolAddress::BaseInfo::getFromRoot()
-        const {
+    std::optional<utils::not_null<const clang::VarDecl *>> SymbolAddrBaseInfo::getFromRoot() const {
         if (fromAddr_ == std::nullopt)
             return std::nullopt;
         return fromAddr_.value()->getFromRoot();
@@ -1291,6 +1261,102 @@ namespace acslg::analyzer::symbolic {
         return newSt;
     }
 
+    utils::not_null<std::unique_ptr<SymbolicExpr>> LiteralExpr::getRangeIndexSubstituted(
+        const SymbolAddrBaseInfo &,
+        const SymbolicExpr &) const {
+        // Nothing to substitute
+        return clone();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::getRangeIndexSubstituted(
+        const SymbolAddrBaseInfo &,
+        const SymbolicExpr &) const {
+        // Nothing to substitute
+        return clone();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> VariableAddress::getRangeIndexSubstituted(
+        const SymbolAddrBaseInfo &,
+        const SymbolicExpr &) const {
+        // Nothing to substitute
+        return clone();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::getRangeIndexSubstituted(
+        const SymbolAddrBaseInfo &rangeBase,
+        const SymbolicExpr &indexExpr) const {
+        auto expr = fromAddr_->getRangeIndexSubstituted(rangeBase, indexExpr);
+        auto addr = llvm::dyn_cast<Address>(expr.get().get());
+        if (addr == nullptr)
+            UNREACHABLE();
+        return std::make_unique<SymbolValue>(getValType(), addr->addressClone().into_underlying(),
+                                             fromPoint_);
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getRangeIndexSubstituted(
+        const SymbolAddrBaseInfo &rangeBase,
+        const SymbolicExpr &indexExpr) const {
+        if (fromAddr_) {
+            auto subedExpr = fromAddr_.value()->getRangeIndexSubstituted(rangeBase, indexExpr);
+            auto addr      = llvm::dyn_cast<Address>(subedExpr.get().get());
+            if (addr == nullptr)
+                UNREACHABLE();
+
+            if (length_)
+                return std::make_unique<SymbolAddress>(
+                    pointeeType_, addr->addressClone().into_underlying(), fromPoint_,
+                    offset_->getRangeIndexSubstituted(rangeBase, indexExpr).into_underlying(),
+                    length_.value()
+                        ->getRangeIndexSubstituted(rangeBase, indexExpr)
+                        .into_underlying());
+
+            return std::make_unique<SymbolAddress>(
+                pointeeType_, addr->addressClone().into_underlying(), fromPoint_,
+                offset_->getRangeIndexSubstituted(rangeBase, indexExpr).into_underlying(),
+                std::nullopt);
+        }
+        return std::make_unique<SymbolAddress>(
+            pointeeType_, std::nullopt, fromPoint_,
+            offset_->getRangeIndexSubstituted(rangeBase, indexExpr).into_underlying(),
+            std::nullopt);
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> FieldAddress::getRangeIndexSubstituted(
+        const SymbolAddrBaseInfo &rangeBase,
+        const SymbolicExpr &indexExpr) const {
+        auto subedExpr    = baseAddr_->getRangeIndexSubstituted(rangeBase, indexExpr);
+        auto realBaseAddr = llvm::dyn_cast<const Address>(subedExpr.get().get());
+        if (realBaseAddr == nullptr)
+            UNREACHABLE();
+        return std::make_unique<FieldAddress>(
+            pointeeType_, definition_, realBaseAddr->addressClone().into_underlying(), fieldIndex_);
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> BinaryOpExpr::getRangeIndexSubstituted(
+        const SymbolAddrBaseInfo &rangeBase,
+        const SymbolicExpr &indexExpr) const {
+        return std::make_unique<BinaryOpExpr>(
+            left_->getRangeIndexSubstituted(rangeBase, indexExpr), op_,
+            right_->getRangeIndexSubstituted(rangeBase, indexExpr));
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> UnaryOpExpr::getRangeIndexSubstituted(
+        const SymbolAddrBaseInfo &rangeBase,
+        const SymbolicExpr &indexExpr) const {
+        return std::make_unique<UnaryOpExpr>(op_,
+                                             expr_->getRangeIndexSubstituted(rangeBase, indexExpr));
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getRangeIndexSubstituted(
+        const SymbolAddrBaseInfo &rangeBase,
+        const SymbolicExpr &indexExpr) const {
+        auto newSt = std::make_unique<Structure>(*this);
+        for (auto &field : newSt->fieldsValues()) {
+            field = field->getRangeIndexSubstituted(rangeBase, indexExpr);
+        }
+        return newSt;
+    }
+
     std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> BinaryOpExpr::
         doTryEvalAsSymbolAddr() const {
         auto lhs = callTryEvalAsAddr(*left_), rhs = callTryEvalAsAddr(*right_);
@@ -1333,20 +1399,20 @@ namespace acslg::analyzer::symbolic {
         return result;
     }
 
-    SymbolicExpr::UsedMap SymbolValue::collectUsedVarsAndAddrs() const { return {{hash(), this}}; }
+    SymbolicExpr::UsedMap SymbolValue::collectUsedSymbols() const { return {{hash(), this}}; }
 
-    SymbolicExpr::UsedMap BinaryOpExpr::collectUsedVarsAndAddrs() const {
-        auto lmap = left_->collectUsedVarsAndAddrs();
-        auto rmap = right_->collectUsedVarsAndAddrs();
+    SymbolicExpr::UsedMap BinaryOpExpr::collectUsedSymbols() const {
+        auto lmap = left_->collectUsedSymbols();
+        auto rmap = right_->collectUsedSymbols();
         lmap.insert(make_move_iterator(rmap.begin()), make_move_iterator(rmap.end()));
         return lmap;
     }
 
-    SymbolicExpr::UsedMap UnaryOpExpr::collectUsedVarsAndAddrs() const {
-        return expr_->collectUsedVarsAndAddrs();
+    SymbolicExpr::UsedMap UnaryOpExpr::collectUsedSymbols() const {
+        return expr_->collectUsedSymbols();
     }
 
-    SymbolicExpr::UsedMap SymbolAddress::collectUsedVarsAndAddrs() const {
+    SymbolicExpr::UsedMap SymbolAddress::collectUsedSymbols() const {
         if (length_)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
@@ -1364,7 +1430,7 @@ namespace acslg::analyzer::symbolic {
             fromAddr_ = other.fromAddr_.value()->addressClone().into_underlying();
     }
 
-    SymbolAddress::BaseInfo::BaseInfo(const SymbolAddress::BaseInfo &other)
+    SymbolAddrBaseInfo::SymbolAddrBaseInfo(const SymbolAddrBaseInfo &other)
         : fromPoint_(other.fromPoint_) {
         if (other.fromAddr_ == std::nullopt)
             fromAddr_ = std::nullopt;
@@ -1381,8 +1447,8 @@ namespace acslg::analyzer::symbolic {
         : Address(SymbolicExpr::ExprKind::K_SymbolAddress,
                   SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                   pointeeType),
-          offset_(std::make_unique<LiteralExpr>(ZERO_OFFSET)), fromAddr_(std::move(from)),
-          fromPoint_(fromPoint), length_(std::move(length)) {
+          Symbol(Kind::K_SymbolAddress), offset_(std::make_unique<LiteralExpr>(ZERO_OFFSET)),
+          fromAddr_(std::move(from)), fromPoint_(fromPoint), length_(std::move(length)) {
         if (offset != std::nullopt)
             offset_ = std::move(offset.value());
     }
@@ -1434,7 +1500,7 @@ namespace acslg::analyzer::symbolic {
                       .into_underlying();
     }
 
-    size_t SymbolAddress::BaseInfo::hash() const {
+    size_t SymbolAddrBaseInfo::hash() const {
         return utils::hash_val(fromPoint_.hash(), fromAddr_ ? fromAddr_.value()->hash() : 0);
     }
 
@@ -1447,11 +1513,19 @@ namespace acslg::analyzer::symbolic {
                                               length_.value()->clone());
     }
 
-    SymbolAddress::BaseInfo SymbolAddress::getBaseInfo() const {
+    SymbolAddrBaseInfo SymbolAddress::getBaseInfo() const {
         if (fromAddr_ == std::nullopt)
-            return BaseInfo{std::nullopt, fromPoint_, pointeeType_};
-        return BaseInfo{fromAddr_.value()->addressClone().into_underlying(), fromPoint_,
-                        pointeeType_};
+            return SymbolAddrBaseInfo{std::nullopt, fromPoint_, pointeeType_};
+        return SymbolAddrBaseInfo{fromAddr_.value()->addressClone().into_underlying(), fromPoint_,
+                                  pointeeType_};
+    }
+
+    utils::not_null<std::unique_ptr<SymbolAddress::RangeIndex>> SymbolAddress::getRangeIndex(
+        std::string_view indexName) const {
+        if (length_ == std::nullopt)
+            ERROR("This `SymbolAddress` is not a range.");
+        return std::unique_ptr<SymbolAddress::RangeIndex>{
+            new SymbolAddress::RangeIndex{getBaseInfo(), indexName}};
     }
 
     int SymbolAddress::getDimension() const {
@@ -1507,7 +1581,7 @@ namespace acslg::analyzer::symbolic {
               ExprKind::K_Structure,
               Type{ScalarKind::Structure, static_cast<unsigned>(layout.getSize().getQuantity()) *
                                               8 /*By default, char is 8-bit.*/}),
-          info_(Info{RD, layout}) {
+          Symbol(Kind::K_Structure), info_(Info{RD, layout}) {
         fields_.reserve(info_.layout_.getFieldCount());
         for (auto field : info_.definition_->fields()) {
             auto index          = field->getFieldIndex();
@@ -1542,7 +1616,8 @@ namespace acslg::analyzer::symbolic {
     }
 
     SymbolValue::SymbolValue(const SymbolValue &other)
-        : SymbolicExpr(other), fromAddr_(other.fromAddr_->addressClone().into_underlying()),
+        : SymbolicExpr(other), Symbol(Kind::K_SymbolValue),
+          fromAddr_(other.fromAddr_->addressClone().into_underlying()),
           fromPoint_(other.fromPoint_) {}
 
     std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprKind t) {
@@ -1916,6 +1991,20 @@ namespace acslg::analyzer::symbolic {
         bool isRightChild) {
         return Address::callGetACSLOfValue(addr, config, usedPoints, currentPoint, parentPrec,
                                            isRightChild);
+    }
+
+    utils::not_null<SymbolicExpr *> Symbol::toSymbolicExpr() {
+        return llvm::TypeSwitch<Symbol *, SymbolicExpr *>(this)
+#define SUBCLASS(NAME) .Case<NAME>([](NAME *sub) { return static_cast<NAME *>(sub); })
+#include "subclassesOfSymbol.inc"
+#undef SUBCLASS
+            .Default([](Symbol *) {
+                UNREACHABLE();
+                return nullptr;
+            });
+    }
+    utils::not_null<const SymbolicExpr *> Symbol::toSymbolicExpr() const {
+        return const_cast<Symbol *>(this)->toSymbolicExpr();
     }
 
 } // namespace acslg::analyzer::symbolic

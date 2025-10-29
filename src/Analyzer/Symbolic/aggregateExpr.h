@@ -2,16 +2,72 @@
 #define __ACSLG_SRC_ANALYZER_SYMBOLIC_AGGREGATEEXPR_H__
 
 #include <memory>
+#include <string_view>
 
 #include "expr.h"
-#include "utils.h"
+#include "Utils/utils.h"
 
 namespace acslg::analyzer::symbolic {
+    class SymbolAddress::RangeIndex : public SymbolicExpr {
+      public:
+        RangeIndex(const RangeIndex &)            = default;
+        RangeIndex(RangeIndex &&)                 = default;
+        RangeIndex &operator=(const RangeIndex &) = default;
+        RangeIndex &operator=(RangeIndex &&)      = default;
 
-    class OverRangeExpr : public SymbolicExpr, public Symbol {
-      protected:
-        class RangeElement;
+        static bool classof(const SymbolicExpr *e) {
+            return e->getKind() == ExprKind::K_RangeIndex;
+        }
 
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeElement(SourcePoint fromPoint) const {
+            auto elementFromAddr =
+                rangeBase_.fromAddr_
+                    ? std::make_unique<SymbolAddress>(
+                          rangeBase_.pointeeType_,
+                          rangeBase_.fromAddr_.value()->addressClone().into_underlying(),
+                          rangeBase_.fromPoint_, clone().into_underlying())
+                    : std::make_unique<SymbolAddress>(rangeBase_.pointeeType_, std::nullopt,
+                                                      rangeBase_.fromPoint_,
+                                                      clone().into_underlying());
+            return getSymbol(rangeBase_.pointeeType_, std::move(elementFromAddr), fromPoint);
+        }
+
+      private:
+        friend SymbolAddress;
+        RangeIndex(SymbolAddrBaseInfo rangeBase, std::string_view name)
+            : SymbolicExpr(ExprKind::K_RangeIndex, Type{ScalarKind::UInt, 64}),
+              rangeBase_(std::move(rangeBase)), name_(name) {}
+
+        // SymbolicExpr
+      public:
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
+        std::string dump() const override;
+        bool equal(const SymbolicExpr &) const override;
+        std::size_t hash() const override;
+        bool isLinear() const override { return true; };
+        int getMaxDegree() const override { return 0; };
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &,
+            const SourcePoint &) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
+            const SymbolAddrBaseInfo &rangeBase,
+            const SymbolicExpr &indexExpr) const override;
+
+      private:
+        utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &,
+                                                             std::unordered_set<SourcePoint> &,
+                                                             std::optional<SourcePoint>,
+                                                             unsigned,
+                                                             bool) const override {
+            return name_;
+        };
+
+      private:
+        SymbolAddrBaseInfo rangeBase_;
+        std::string name_;
+    };
+
+    class OverRangeExpr : public SymbolicExpr {
       public:
         OverRangeExpr(const OverRangeExpr &);
         OverRangeExpr(OverRangeExpr &&) = default;
@@ -24,89 +80,32 @@ namespace acslg::analyzer::symbolic {
             return (k > ExprKind::K_FirstOverRange) && (k < ExprKind::K_LastOverRange);
         }
 
-        utils::not_null<std::unique_ptr<RangeElement>> getElement() const {
-            return std::make_unique<RangeElement>(indexName_,
-                                                  std::make_unique<const SymbolAddress>(*range_));
-        };
-
         // SymbolicExpr
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override;
-        bool isLinear() const override { return true; };
-        int getMaxDegree() const override { return 1; };
-
-        // Symbol
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
-            return std::nullopt;
-        }
-        std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; };
 
       protected:
         OverRangeExpr(ExprKind kind,
                       Type type,
                       utils::not_null<std::unique_ptr<const SymbolAddress>> range,
-                      std::string_view indexName,
-                      SourcePoint fromPoint)
-            : SymbolicExpr(kind, type), range_(std::move(range)), indexName_(indexName),
-              fromPoint_(std::move(fromPoint)) {
+                      std::string_view indexName)
+            : SymbolicExpr(kind, type), range_(std::move(range)), indexName_(indexName) {
             if (!range_->getLength())
                 ERROR("`range_` is not a memory *range*.");
         }
 
         utils::not_null<std::unique_ptr<const SymbolAddress>> range_;
         std::string indexName_;
-        SourcePoint fromPoint_;
     };
 
-    class OverRangeExpr::RangeElement : public SymbolicExpr {
-      public:
-        RangeElement(std::string_view name,
-                     utils::not_null<std::unique_ptr<const SymbolAddress>> range)
-            : SymbolicExpr(ExprKind::K_RangeElement, Type{ScalarKind::UInt, 64}), indexName_(name),
-              range_(std::move(range)) {
-            if (range_->getLength() == std::nullopt)
-                ERROR("range_ is not a memory *range*.");
-        }
-        RangeElement(const RangeElement &other)
-            : SymbolicExpr(other), indexName_(other.indexName_),
-              range_(std::make_unique<const SymbolAddress>(*other.range_)) {}
-        RangeElement(RangeElement &&) = default;
-        RangeElement &operator=(const RangeElement &);
-        RangeElement &operator=(RangeElement &&) = default;
-
-        static bool classof(const SymbolicExpr *e) {
-            return e->getKind() == ExprKind::K_RangeElement;
-        }
-
-        // SymbolicExpr
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
-        std::string dump() const override;
-        bool equal(const SymbolicExpr &) const override;
-        std::size_t hash() const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
-        bool isLinear() const override { return true; };
-        int getMaxDegree() const override { return 0; };
-
-      private:
-        utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &config,
-                                                             std::unordered_set<SourcePoint> &map,
-                                                             std::optional<SourcePoint> currentPoint,
-                                                             unsigned parentPrec,
-                                                             bool isRightChild) const override;
-
-      private:
-        friend class OverRangeExpr;
-        std::string indexName_;
-        utils::not_null<std::unique_ptr<const SymbolAddress>> range_;
-    };
-
-    class SumOverRange : public OverRangeExpr {
+    class SumOverRange : public OverRangeExpr, public Symbol {
       public:
         static bool classof(const SymbolicExpr *e) {
             return e->getKind() == ExprKind::K_SumOverRange;
+        }
+        static bool classof(const Symbol *e) {
+            return e->getKind() == Symbol::Kind::K_SumOverRange;
         }
 
         SumOverRange(const SumOverRange &)            = default;
@@ -120,8 +119,8 @@ namespace acslg::analyzer::symbolic {
             : OverRangeExpr(ExprKind::K_SumOverRange,
                             deriveType(range->getPointeeType()),
                             std::move(range),
-                            indexName,
-                            std::move(fromPoint)) {}
+                            indexName),
+              Symbol(Kind::K_SumOverRange), fromPoint_(std::move(fromPoint)) {}
 
         // SymbolicExpr
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override {
@@ -130,25 +129,44 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override { return OverRangeExpr::equal(*this); };
         std::size_t hash() const override {
-            return utils::hash_val(getKind(), OverRangeExpr::hash());
+            return utils::hash_val(SymbolicExpr::getKind(), OverRangeExpr::hash());
         };
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
+            const SymbolAddrBaseInfo &rangeBase,
+            const SymbolicExpr &indexExpr) const override;
+        bool isLinear() const override { return true; }
+        int getMaxDegree() const override { return 1; }
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
+            const std::unordered_map<size_t, size_t> &hashIdMap) const override;
 
       private:
-        utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &config,
-                                                             std::unordered_set<SourcePoint> &map,
-                                                             std::optional<SourcePoint> currentPoint,
-                                                             unsigned parentPrec,
-                                                             bool isRightChild) const override;
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
+        // Symbol
+      public:
+        std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
+            return std::nullopt;
+        }
+        std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; };
+
+      private:
+        SourcePoint fromPoint_;
     };
 
     template <class F>
-    concept CallableFromExprToExpr =
+    concept CallableFromIndexToExpr =
         std::invocable<F, utils::not_null<std::unique_ptr<SymbolicExpr>>> &&
-        std::convertible_to<std::invoke_result_t<F, utils::not_null<std::unique_ptr<SymbolicExpr>>>,
-                            utils::not_null<std::unique_ptr<const SymbolicExpr>>>;
+        std::convertible_to<
+            std::invoke_result_t<F, utils::not_null<std::unique_ptr<SymbolAddress::RangeIndex>>>,
+            utils::not_null<std::unique_ptr<const SymbolicExpr>>>;
 
     class QuantifierOverRange : public OverRangeExpr {
       public:
@@ -169,18 +187,17 @@ namespace acslg::analyzer::symbolic {
 
         QuantifierOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
                             std::string_view indexName,
-                            SourcePoint fromPoint,
                             Quantifier quant,
-                            CallableFromExprToExpr auto &&predBuilder)
+                            CallableFromIndexToExpr auto &&predBuilder)
             : OverRangeExpr(ExprKind::K_SumOverRange,
                             Type{ScalarKind::Bool, 8},
                             std::move(range),
-                            indexName,
-                            std::move(fromPoint)),
+                            indexName),
               quant_(quant),
               pred_(std::invoke(
                   std::forward<decltype(predBuilder)>(predBuilder),
-                  /* a placeholder representing an element of the range */ getElement())) {}
+                  /* a placeholder representing index of the range */ range_->getRangeIndex(
+                      indexName_))) {}
 
         // SymbolicExpr
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override {
@@ -194,13 +211,19 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
+            const SymbolAddrBaseInfo &rangeBase,
+            const SymbolicExpr &indexExpr) const override;
+        bool isLinear() const override { return false; }
+        int getMaxDegree() const override { return -1; }
 
       private:
-        utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &config,
-                                                             std::unordered_set<SourcePoint> &map,
-                                                             std::optional<SourcePoint> currentPoint,
-                                                             unsigned parentPrec,
-                                                             bool isRightChild) const override;
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
 
       private:
         Quantifier quant_;

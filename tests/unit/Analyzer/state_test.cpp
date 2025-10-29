@@ -1,11 +1,13 @@
 // tests/unit/SpecGenerator/state_test.cpp
 
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include "xmock.h"
 #include "state.h"
 #include "clang/AST/Decl.h"
-#include "expr.h"
+#include "Symbolic/expr.h"
+#include "Symbolic/aggregateExpr.h" // IWYU pragma: keep
 #include "testHelper.h"
 
 using namespace std;
@@ -676,6 +678,37 @@ namespace acslg::test::unit::analyzer {
             }
             FAIL() << symbolAddr->dump();
         }
+    }
+    namespace {
+        template <typename Base, typename Derived>
+        std::unique_ptr<Base> static_unique_ptr_cast(std::unique_ptr<Derived> &&d) {
+            return std::unique_ptr<Base>{static_cast<Base *>(d.release())};
+        }
+
+    } // namespace
+    TEST_F(MemoryModelTest, ConstRange_RangeIndexSubedCorrectly) {
+        MemoryModel mm;
+        const unsigned baseId = 10;
+
+        // A: [0,10) -> i
+        auto aRange = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(0U),
+                                    make_unique<symbolic::LiteralExpr>(10U));
+        auto eA     = aRange.getRangeIndex("i");
+        mm.write(aRange,
+                 static_unique_ptr_cast<symbolic::SymbolicExpr>(std::move(eA).into_underlying()));
+
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 0, symbolic::LiteralExpr{uint64_t{0}}));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 1, symbolic::LiteralExpr{uint64_t{1}}));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 2, symbolic::LiteralExpr{uint64_t{2}}));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 3, symbolic::LiteralExpr{uint64_t{3}}));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 4, symbolic::LiteralExpr{uint64_t{4}}));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 5, symbolic::LiteralExpr{uint64_t{5}}));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 6, symbolic::LiteralExpr{uint64_t{6}}));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 7, symbolic::LiteralExpr{uint64_t{7}}));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 8, symbolic::LiteralExpr{uint64_t{8}}));
+        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 9, symbolic::LiteralExpr{uint64_t{9}}));
+
+        EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 10));
     }
 
 } // namespace acslg::test::unit::analyzer

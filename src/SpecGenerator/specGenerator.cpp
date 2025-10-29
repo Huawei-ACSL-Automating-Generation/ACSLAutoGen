@@ -7,7 +7,7 @@
 #include <unordered_set>
 
 #include "specGenerator.h"
-#include "expr.h"
+#include "Symbolic/expr.h"
 #include "utilityTemplates.h"
 #include "macros.h"
 #include "state.h"
@@ -220,6 +220,8 @@ namespace acslg::spec_generator {
                 for (auto &cond : info.pathConds_) {
                     auto subedConds = cond->getSubstitutedExpr(entryPath, loopEntryPoint);
                     postBranchInfo.pathConds_.push_back(std::move(subedConds));
+                    // todo: may insert for each unmodified position:
+                    // Symbol(with fromPoint_ = afterLoop) == the current value.
                 }
             }
         }; // updatePostState

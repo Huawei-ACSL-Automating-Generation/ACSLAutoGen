@@ -1,3 +1,4 @@
+#include "Symbolic/aggregateExpr.h"
 #include "expr.h"
 #include "ppl.hh"
 #include "Analyzer/state.h"
@@ -403,6 +404,19 @@ namespace acslg::analyzer::symbolic {
         if (length_ != std::nullopt)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
+        Parma_Polyhedra_Library::Linear_Expression e(0);
+        if (auto it = hashIdMap.find(hash()); it != hashIdMap.end()) {
+            auto id  = it->second;
+            auto var = Parma_Polyhedra_Library::Variable(id);
+            e += var;
+            return e;
+        } else {
+            ERROR("Hash of Variable: {" + dump() + "} can't be found.");
+        }
+    }
+
+    Parma_Polyhedra_Library::Linear_Expression SumOverRange::toLinearExpr(
+        const std::unordered_map<size_t, size_t> &hashIdMap) const {
         Parma_Polyhedra_Library::Linear_Expression e(0);
         if (auto it = hashIdMap.find(hash()); it != hashIdMap.end()) {
             auto id  = it->second;

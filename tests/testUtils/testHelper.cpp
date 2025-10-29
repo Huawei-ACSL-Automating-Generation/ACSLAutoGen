@@ -283,7 +283,7 @@ namespace acslg::test::utils {
         }
         if (*got.value() != expected) {
             return ::testing::AssertionFailure()
-                   << "mismatch at off=" << off << "\n  got:      " << *got
+                   << "mismatch at off=" << off << "\n  got:      " << *got.value()
                    << "\n  expected: " << expected;
         }
         return ::testing::AssertionSuccess();

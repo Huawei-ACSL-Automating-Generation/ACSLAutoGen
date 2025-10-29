@@ -1,14 +1,15 @@
 // src/SpecGenerator/loopInvariantPlugins.cpp
 
-#include "expr.h"
-#include "macros.h"
-#include "specGenerator.h"
 #include <llvm-19/llvm/Support/Casting.h>
 #include <memory>
 #include <unordered_set>
+
 #include "state.h"
 #include "loopInvTemplates.h"
 #include "utils.h"
+#include "Symbolic/expr.h"
+#include "macros.h"
+#include "specGenerator.h"
 
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;

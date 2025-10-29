@@ -5,10 +5,8 @@ add_library(
   analysis.cpp state.cpp Symbolic/expr.cpp Symbolic/aggregateExpr.cpp
   Symbolic/invariant.cpp function.cpp)
 
-target_include_directories(AnalyzerLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(
-  AnalyzerLib PUBLIC ${CMAKE_SOURCE_DIR}/src
-                     ${CMAKE_CURRENT_SOURCE_DIR}/Symbolic)
+target_include_directories(AnalyzerLib PUBLIC ${CMAKE_SOURCE_DIR}/src
+                                              ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(AnalyzerLib PUBLIC ${CMAKE_SOURCE_DIR}/src/Stingx)
 
 target_link_libraries(
@@ -26,23 +24,24 @@ target_link_libraries(
           ${GMPXX_LIBRARY})
 
 # ------------------------------------------------------------------------------------------
-# This entire block of CMake logic is responsible for **automatically generating** a 
-# `.inc` file (`subclassesOfSymbol.inc`) that lists all direct subclasses of the 
-# `acslg::analyzer::symbolic::Symbol` class.
+# This entire block of CMake logic is responsible for **automatically
+# generating** a `.inc` file (`subclassesOfSymbol.inc`) that lists all direct
+# subclasses of the `acslg::analyzer::symbolic::Symbol` class.
 #
-# The generated `.inc` file can then be `#include`d directly in C++ source code 
-# (for example, in a `switch` or `llvm::TypeSwitch` statement) to **replace manual 
-# enumeration of subclasses**. This mechanism is particularly useful for implementing 
-# LLVM-style RTTI (Run-Time Type Information) patterns, where new subclasses can be 
-# automatically picked up at build time without needing to manually update type lists.
+# The generated `.inc` file can then be `#include`d directly in C++ source code
+# (for example, in a `switch` or `llvm::TypeSwitch` statement) to **replace
+# manual enumeration of subclasses**. This mechanism is particularly useful for
+# implementing LLVM-style RTTI (Run-Time Type Information) patterns, where new
+# subclasses can be automatically picked up at build time without needing to
+# manually update type lists.
 #
-# Workflow summary:
-#   1. Collect all headers in the `Symbolic` directory.
-#   2. Auto-generate a synthetic translation unit (`__all_headers__.cpp`) that includes them all.
-#   3. Compile this synthetic TU into an object target to ensure it appears in `compile_commands.json`.
-#   4. Invoke the `emit_subclasses` Clang tool to parse this TU, find all direct subclasses of `Symbol`,
-#      and generate the `.inc` file containing `SUBCLASS(<TypeName>)` macros.
-#   5. Include the generated `.inc` in the build so it is available to the main codebase.
+# Workflow summary: 1. Collect all headers in the `Symbolic` directory. 2.
+# Auto-generate a synthetic translation unit (`__all_headers__.cpp`) that
+# includes them all. 3. Compile this synthetic TU into an object target to
+# ensure it appears in `compile_commands.json`. 4. Invoke the `emit_subclasses`
+# Clang tool to parse this TU, find all direct subclasses of `Symbol`, and
+# generate the `.inc` file containing `SUBCLASS(<TypeName>)` macros. 5. Include
+# the generated `.inc` in the build so it is available to the main codebase.
 # ------------------------------------------------------------------------------------------
 
 # Recursively collect all header files under Symbolic directory (.h and .hpp)

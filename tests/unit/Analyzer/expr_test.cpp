@@ -6,7 +6,7 @@
 #include <clang/AST/Decl.h>
 
 #include "ASTExtractor.h"
-#include "expr.h"
+#include "Symbolic/expr.h"
 #include "testHelper.h"
 
 using namespace clang;

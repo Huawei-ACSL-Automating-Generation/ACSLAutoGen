@@ -1,12 +1,13 @@
 // src/SpecGenerator/functionContractPlugins.cpp
 
+#include <iterator>
+#include <unordered_set>
+
 #include "specGenerator.h"
 #include "macros.h"
 #include "state.h"
 #include "utils.h"
-#include "expr.h"
-#include <iterator>
-#include <unordered_set>
+#include "Symbolic/expr.h"
 
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
