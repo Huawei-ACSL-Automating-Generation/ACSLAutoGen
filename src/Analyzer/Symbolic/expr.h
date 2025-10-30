@@ -1336,11 +1336,11 @@ namespace acslg::analyzer::symbolic {
         FieldAddress(const clang::QualType pointeeType,
                      const clang::RecordDecl *RD,
                      utils::not_null<std::unique_ptr<const Address>> baseAddr,
-                     size_t fieldIndex_)
+                     size_t fieldIndex)
             : Address(SymbolicExpr::ExprKind::K_FieldAddress,
                       SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                       pointeeType),
-              definition_(RD), baseAddr_(std::move(baseAddr)), fieldIndex_(fieldIndex_) {
+              definition_(RD), baseAddr_(std::move(baseAddr)), fieldIndex_(fieldIndex) {
             if (!RD->isCompleteDefinition())
                 ERROR("Incomplete struct definition");
             definition_ = RD->getDefinition();

@@ -554,10 +554,6 @@ namespace acslg::analyzer {
                             addr->setLength(std::move(lengthInElems));
 
                             // Materialize the first element symbol at the allocated base address.
-                            // @SgtPepper114: Here it should be set as an `unknownExpr` or simply
-                            // not insert the addr-value pair in `memoryState_`. Why would one want
-                            // to directly access the value at the allocated address rather than
-                            // assigning it first?
                             auto elemSym = symbolic::UnknownExpr::makeUnknown();
                             memoryState_.write(*addr, elemSym->clone());
 
@@ -579,10 +575,6 @@ namespace acslg::analyzer {
                                 std::make_unique<symbolic::LiteralExpr>(0));
 
                             // Materialize a symbolic structure value at the allocated base address.
-                            // @SgtPepper114: Here it should be set as an `unknownExpr` or simply
-                            // not insert the addr-value pair in `memoryState_`. Why would one want
-                            // to directly access the value at the allocated address rather than
-                            // assigning it first?
                             auto elemSym = symbolic::UnknownExpr::makeUnknown();
                             memoryState_.write(*addr, elemSym->clone());
 
@@ -1682,47 +1674,6 @@ namespace acslg::analyzer {
                 TODO();
             })
             .Case<clang::NullStmt>([](const clang::NullStmt *) { DEBUG("stepping NullStmt..."); })
-            // .Case<UnaryExprOrTypeTraitExpr>([this](const UnaryExprOrTypeTraitExpr *u) ->
-            // EvalResult {
-            //     SymbolicExpr::Type resultTy = deriveVarType(u->getType());
-            //     clang::QualType argTy =
-            //         u->isArgumentType() ? u->getArgumentType() :
-            //         u->getArgumentExpr()->getType();
-            //     if (argTy->isVariableArrayType())
-            //         UNIMPLEMENT("VLA in sizeof/alignof");
-
-            //     uint64_t value = 0;
-            //     switch (u->getKind()) {
-            //         case UETT_SizeOf:
-            //             value =
-            //                 static_cast<uint64_t>(this->getContext().get(argTy).getQuantity());
-            //             break;
-            //         case UETT_AlignOf:
-            //             value =
-            //                 static_cast<uint64_t>(astContext_.getTypeAlignInChars(argTy).getQuantity());
-            //             break;
-            //         case UETT_PreferredAlignOf:
-            //             value = static_cast<uint64_t>(
-            //                 astContext_.getPreferredTypeAlignInChars(argTy).getQuantity());
-            //             break;
-            //         case UETT_VecStep: {
-            //             if (auto vec = argTy->getAs<VectorType>())
-            //                 value = static_cast<uint64_t>(vec->getNumElements());
-            //             else if (auto ext = argTy->getAs<ExtVectorType>())
-            //                 value = static_cast<uint64_t>(ext->getNumElements());
-            //             else
-            //                 UNIMPLEMENT("vec_step on non-std::vector");
-            //             break;
-            //         }
-            //         default: UNIMPLEMENT("unsupported unary type trait");
-            //     }
-
-            //     auto lit = std::make_unique<LiteralExpr>(static_cast<uint64_t>(value));
-            //     lit->setValType(resultTy);
-            //     EvalResult R;
-            //     R.second.emplace_back(std::move(lit));
-            //     return R;
-            // })
             .Default([](const clang::Stmt *s) {
                 UNIMPLEMENT("Unsupported clang::Stmt type: " << s->getStmtClassName());
             });
