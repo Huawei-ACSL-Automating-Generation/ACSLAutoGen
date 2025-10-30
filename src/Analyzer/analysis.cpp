@@ -29,10 +29,10 @@ namespace acslg::analyzer {
             return;
         }
         // @WindOctober: TODO remove.
-        // if (FD->getNameAsString() != "IsLegalFlag" && FD->getNameAsString() != "BN_SetFlag" &&
+        // if (FD->getNameAsString() != "BN_Create" && FD->getNameAsString() != "BN_SetFlag" &&
         //     FD->getNameAsString() != "BN_IsZero")
         //     return;
-        INFO("Processing Function " + FD->getNameAsString());
+        // INFO("Processing Function " + FD->getNameAsString());
 
         auto state = std::make_unique<ProgramState>(std::make_unique<ACSLFunction>(FD), context_);
 

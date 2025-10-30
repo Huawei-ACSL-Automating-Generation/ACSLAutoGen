@@ -1800,15 +1800,36 @@ namespace acslg::analyzer::symbolic {
         auto labelPrefix = std::string{"After_"} + S->getStmtClassName();
         SourcePoint p{SM, std::move(labelPrefix)};
         auto EL = S->getEndLoc();
+        if (EL.isInvalid())
+            ERROR("EndLoc is invalid for the given Stmt.");
 
-        auto AL = clang::Lexer::getLocForEndOfToken(EL, /*Offset*/ 0, SM, LO);
-        if (AL.isInvalid())
-            ERROR("Location after clang::Stmt: {" +
-                  clang::Lexer::getSourceText(
-                      clang::CharSourceRange::getTokenRange(S->getSourceRange()), SM, LO)
-                      .str() +
-                  "} is invalid.");
-        p.loc_ = SM.getExpansionLoc(AL);
+        // Work on spelling loc to avoid macro-ID pitfalls.
+        clang::SourceLocation ELSpelling = SM.getSpellingLoc(EL);
+        if (ELSpelling.isInvalid())
+            ERROR("Spelling EndLoc is invalid for the given Stmt.");
+
+        // Prefer Lexer::getLocForEndOfToken on the spelling loc; fallback to MeasureTokenLength.
+        clang::SourceLocation ALSpelling =
+            clang::Lexer::getLocForEndOfToken(ELSpelling, /*Offset=*/0, SM, LO);
+
+        if (ALSpelling.isInvalid()) {
+            unsigned tokLen = clang::Lexer::MeasureTokenLength(ELSpelling, SM, LO);
+            if (tokLen > 0) {
+                ALSpelling = ELSpelling.getLocWithOffset(static_cast<int>(tokLen));
+            } else {
+                // If token length is 0 (rare but possible), treat "after" as the token end itself.
+                ALSpelling = ELSpelling;
+            }
+        }
+
+        if (ALSpelling.isInvalid()) {
+            auto text = clang::Lexer::getSourceText(
+                clang::CharSourceRange::getTokenRange(S->getSourceRange()), SM, LO);
+            ERROR("Location after clang::Stmt: {" + text.str() + "} is invalid (macro/spelling).");
+        }
+
+        // Map back to expansion loc so downstream logic stays in expansion coordinates.
+        p.loc_ = SM.getExpansionLoc(ALSpelling);
         return p;
     }
 

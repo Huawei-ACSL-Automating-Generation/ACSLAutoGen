@@ -597,7 +597,7 @@ namespace acslg::analyzer {
                         auto pointAfterCall = symbolic::SourcePoint::fromStmtAfter(
                             call, context_.getSourceManager(), context_.getLangOptions());
 
-                        // Reuse the same "pure expression, no-branch" evaluator from calloc.
+                        // TODO: @WindOctober use a
                         auto evalNoBranch = [this](const clang::Expr *e)
                             -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
                             auto ER = this->evalExpr(e);
@@ -634,7 +634,7 @@ namespace acslg::analyzer {
 
                         // Record the freed address as a formula result (optional, for tracking).
                         Formulas exprs;
-                        exprs.emplace_back(std::move(freedAddr));
+                        exprs.emplace_back(std::move(freedAddr).into_underlying());
 
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
