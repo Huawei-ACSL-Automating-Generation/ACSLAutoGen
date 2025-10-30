@@ -425,8 +425,8 @@ namespace acslg::analyzer {
                         auto variableAddr = extractLValue(arrSub->getBase());
                         std::unique_ptr<symbolic::SymbolAddress> addr;
                         if (const auto symbol = memoryState_.read(*variableAddr)) {
-                            auto ptr =
-                                llvm::dyn_cast<const symbolic::SymbolAddress>(symbol.value().get().get());
+                            auto ptr = llvm::dyn_cast<const symbolic::SymbolAddress>(
+                                symbol.value().get().get());
                             if (ptr == nullptr)
                                 ERROR("Value of ArraySubscriptExpr's base is not "
                                       "'symbolic::SymbolAddress', base "
@@ -1090,12 +1090,14 @@ namespace acslg::analyzer {
             if (memoryMap_constantRange_.contains(baseInfo)) {
                 auto offset = symbolAddr->getOffset();
                 if (auto constOffset = offset->tryEvalAsConstant();
-                    constOffset && !symbolAddr->getLength()) {
+                    constOffset &&
+                    (!symbolAddr->getLength() ||
+                     (symbolAddr->getLength().value()->tryEvalAsConstant() &&
+                      symbolAddr->getLength().value()->tryEvalAsConstant().value() == 1))) {
                     if (constOffset.value() < 0)
                         ERROR("Negetive offset.");
                     auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
                     auto &rangeExprMap  = memoryMap_constantRange_.at(baseInfo);
-                    // auto range          = std::pair{unsignedOffset, unsignedOffset + 1};
                     auto rangeForSearch =
                         std::pair{unsignedOffset, std::numeric_limits<uint64_t>::max()};
                     auto upperBoundIt = rangeExprMap.upper_bound(rangeForSearch);
@@ -1116,7 +1118,16 @@ namespace acslg::analyzer {
             if (!memoryMap_symbolicRange_.contains(baseInfo))
                 return std::nullopt;
             auto &addrValueMap = memoryMap_symbolicRange_.at(baseInfo);
-            auto it            = addrValueMap.find(*symbolAddr);
+            if (symbolAddr->getLength() && symbolAddr->getLength().value()->tryEvalAsConstant() &&
+                symbolAddr->getLength().value()->tryEvalAsConstant().value() == 1) {
+                auto fakeRange = std::make_unique<symbolic::SymbolAddress>(*symbolAddr);
+                fakeRange->resetLength();
+                auto it = addrValueMap.find(*fakeRange);
+                if (it == addrValueMap.end())
+                    return std::nullopt;
+                return it->second->clone();
+            }
+            auto it = addrValueMap.find(*symbolAddr);
             if (it == addrValueMap.end())
                 return std::nullopt;
             return it->second->clone();
@@ -1192,6 +1203,13 @@ namespace acslg::analyzer {
             }
             // symbolic range
             auto &addrValueMap = memoryMap_symbolicRange_[baseInfo];
+            if (symbolAddr->getLength() && symbolAddr->getLength().value()->tryEvalAsConstant() &&
+                symbolAddr->getLength().value()->tryEvalAsConstant() == 1) {
+                auto fakeRange = std::make_unique<symbolic::SymbolAddress>(*symbolAddr);
+                fakeRange->resetLength();
+                addrValueMap.insert_or_assign(*fakeRange, std::move(value));
+                return;
+            }
             addrValueMap.insert_or_assign(*symbolAddr, std::move(value));
             return;
         } else if (auto fieldAddr = llvm::dyn_cast<const symbolic::FieldAddress>(&addr)) {

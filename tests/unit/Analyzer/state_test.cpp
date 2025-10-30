@@ -711,4 +711,28 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 10));
     }
 
+    TEST_F(MemoryModelTest, SymbolicRange_RangeWithLength1IsNotARange) {
+        MemoryModel mm;
+        const unsigned baseId = 10;
+
+        auto X = makeSymbolValue(904);
+        // A: [X,X+1) -> v
+        auto aRange = makeRangeAddr(baseId, X->clone().into_underlying(),
+                                    make_unique<symbolic::LiteralExpr>(1U));
+        auto v      = makeSymbolValue(1313);
+
+        mm.write(aRange, v->clone());
+
+        // B: an addr with offset X
+        auto bAddr = makeRangeAddr(baseId, X->clone().into_underlying(), nullptr);
+
+        // read(A) == read(B) == v
+        auto resA = mm.read(aRange);
+        ASSERT_TRUE(resA);
+        EXPECT_EQ(*resA.value(), *v);
+        auto resB = mm.read(bAddr);
+        ASSERT_TRUE(resB);
+        EXPECT_EQ(*resB.value(), *v);
+    }
+
 } // namespace acslg::test::unit::analyzer
