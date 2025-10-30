@@ -100,6 +100,40 @@ namespace acslg::analyzer::symbolic {
         return std::make_unique<UnknownExpr>();
     }
 
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeUnknownStructure(
+        const clang::QualType &ty,
+        utils::not_null<std::unique_ptr<const Address>> baseAddr,
+        SourcePoint fromPoint) {
+        const auto *RT = ty->getAs<clang::RecordType>();
+        if (!RT || !RT->getDecl())
+            UNIMPLEMENT("Invalid structure type in makeUnknownStructure.");
+        const auto *RD = RT->getDecl()->getDefinition();
+        if (!RD || !RD->isCompleteDefinition())
+            UNIMPLEMENT("Incomplete struct definition in makeUnknownStructure.");
+
+        const auto &layout = RD->getASTContext().getASTRecordLayout(RD);
+        auto st = std::make_unique<Structure>(RD, layout, std::move(baseAddr), fromPoint);
+
+        size_t idx = 0;
+        for (const clang::FieldDecl *FD : RD->fields()) {
+            clang::QualType fty = FD->getType();
+            if (fty->isStructureType()) {
+                auto faddr = std::make_unique<FieldAddress>(
+                    fty, RD, st->getFromAddr().value()->addressClone().into_underlying(), idx);
+                auto nested = makeUnknownStructure(fty, std::move(faddr), fromPoint);
+                st->setFieldValue(idx, std::move(nested));
+            } else {
+                st->setFieldValue(
+                    idx, utils::not_null<std::unique_ptr<SymbolicExpr>>{
+                             std::unique_ptr<SymbolicExpr>(std::make_unique<UnknownExpr>())});
+            }
+            ++idx;
+        }
+
+        return utils::not_null<std::unique_ptr<SymbolicExpr>>{
+            std::unique_ptr<SymbolicExpr>(std::move(st))};
+    }
+
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolicExpr::simplifiedExprIfLinear() const {
         if (!isLinear())
             return clone();

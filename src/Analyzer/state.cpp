@@ -550,8 +550,13 @@ namespace acslg::analyzer {
                             auto addr = std::make_unique<symbolic::SymbolAddress>(
                                 elemTy, std::nullopt, pointAfterCall);
 
-                            // Attach the element-wise legal bound to the symbolic address.
-                            addr->setLength(std::move(lengthInElems));
+                            // Note: The length is temporarily omitted since it conceptually
+                            // represents the legal bound of accessible memory, rather than a
+                            // physically distinct memory segment. If future semantics require
+                            // explicit range tracking, this statement can be uncommented to
+                            // re-enable length assignment.
+
+                            // addr->setLength(std::move(lengthInElems));
 
                             // Materialize the first element symbol at the allocated base address.
                             auto elemSym = symbolic::UnknownExpr::makeUnknown();
@@ -566,17 +571,15 @@ namespace acslg::analyzer {
                         // Handle structure pointees consistent with the existing symbolic memory
                         // layout.
                         if (elemTy->isStructureType()) {
-                            const auto *RT = elemTy->getAs<clang::RecordType>();
-                            if (!RT || !RT->getDecl())
-                                UNIMPLEMENT("Invalid structure type returned by BSL_SAL_Calloc.");
-
                             auto addr = std::make_unique<symbolic::SymbolAddress>(
                                 elemTy, std::nullopt, pointAfterCall,
                                 std::make_unique<symbolic::LiteralExpr>(0));
 
-                            // Materialize a symbolic structure value at the allocated base address.
-                            auto elemSym = symbolic::UnknownExpr::makeUnknown();
-                            memoryState_.write(*addr, elemSym->clone());
+                            // Build a Structure whose fields (and nested structs) are Unknown, then
+                            // write it.
+                            auto structVal = symbolic::makeUnknownStructure(
+                                elemTy, addr->addressClone().into_underlying(), pointAfterCall);
+                            memoryState_.write(*addr, std::move(structVal));
 
                             Formulas exprs;
                             exprs.emplace_back(std::move(addr));
@@ -587,6 +590,54 @@ namespace acslg::analyzer {
                         // Reject unsupported pointee categories to preserve soundness.
                         UNIMPLEMENT(
                             "BSL_SAL_Calloc supports pointer-to-structure or builtin scalar only.");
+                    }
+
+                    if (name == "BSL_SAL_Free") {
+                        // Compute the symbolic source location after the call.
+                        auto pointAfterCall = symbolic::SourcePoint::fromStmtAfter(
+                            call, context_.getSourceManager(), context_.getLangOptions());
+
+                        // Reuse the same "pure expression, no-branch" evaluator from calloc.
+                        auto evalNoBranch = [this](const clang::Expr *e)
+                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                            auto ER = this->evalExpr(e);
+                            if (ER.second.size() != 1 || !ER.first.empty())
+                                ERROR("BSL_SAL_Free argument must not branch or fork.");
+                            return ER.second[0]->clone();
+                        };
+
+                        // Expect exactly one argument: the pointer to free.
+                        if (call->getNumArgs() != 1)
+                            UNIMPLEMENT("BSL_SAL_Free expects exactly one pointer argument.");
+                        auto p = evalNoBranch(call->getArg(0));
+
+                        // free(NULL) → no-op.
+                        if (auto c = p->tryEvalAsConstant(); c && *c == 0) {
+                            std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                            Formulas exprs;
+                            return Path::EvalResult(std::move(empty), std::move(exprs));
+                        }
+
+                        // The argument must be a symbolic address.
+                        auto maybeAddr = p->tryEvalAsSymbolAddr();
+                        if (!maybeAddr)
+                            UNIMPLEMENT("BSL_SAL_Free argument must be a valid pointer value.");
+
+                        // Normalize to base address (offset = 0) for consistent memory handling.
+                        auto freedAddr = std::move(*maybeAddr);
+                        freedAddr->resetOffset();
+
+                        // Overwrite freed memory with an UnknownExpr (symbolic tombstone).
+                        // This prevents later reads from reusing stale symbolic values.
+                        auto tomb = symbolic::UnknownExpr::makeUnknown();
+                        memoryState_.write(*freedAddr, tomb->clone());
+
+                        // Record the freed address as a formula result (optional, for tracking).
+                        Formulas exprs;
+                        exprs.emplace_back(std::move(freedAddr));
+
+                        std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                        return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
 
                     auto callArgs = evalCallArgs(this, call);

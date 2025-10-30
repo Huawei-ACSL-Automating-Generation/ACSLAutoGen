@@ -1489,6 +1489,11 @@ namespace acslg::analyzer::symbolic {
 
     std::unique_ptr<SymbolicExpr> createLNotExpr(
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr);
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeUnknownStructure(
+        const clang::QualType &ty,
+        utils::not_null<std::unique_ptr<const Address>> baseAddr,
+        SourcePoint fromPoint);
+
     BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
     BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
     SymbolicExpr::Type deriveType(clang::QualType type);
