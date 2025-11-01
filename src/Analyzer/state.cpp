@@ -1877,7 +1877,8 @@ namespace acslg::analyzer {
             res = emitLoopInvariant(*preState, *loopEntry, loopInfo);
         } else {
             parseComplexLoopInfo(*preState, *loopEntry, loopInfo);
-            res = emitLoopInvariant(*preState, *loopEntry, loopInfo, "ComplexLoopInvariant");
+            res = emitLoopInvariant(*preState, *loopEntry, loopInfo,
+                                    "ComplexPathInsensitiveLoopInv", "ComplexPathSensitiveLoopInv");
         }
         INFO(res.acsl);
 

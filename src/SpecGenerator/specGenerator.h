@@ -25,9 +25,7 @@ namespace acslg::spec_generator {
     std::pair<std::string, std::unordered_set<analyzer::symbolic::SourcePoint>> emitFunctionContract(
         const analyzer::ProgramState &pre,
         const analyzer::ProgramState &post,
-        std::string_view groupName = DEFAULT_FUNC_CONTRACT_PLUGINS,
-        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
-            std::nullopt);
+        std::string_view groupName = DEFAULT_FUNC_CONTRACT_PLUGINS);
 
     struct LoopInfo {
         struct Pattern {
@@ -97,20 +95,15 @@ namespace acslg::spec_generator {
         // TODO(more info to be added)
     };
 
-    std::pair<LoopInfo, bool> parseLoopInfo(
-        const analyzer::ProgramState &preState,
-        const analyzer::ProgramState &loopEntry,
-        const clang::Stmt *loopStmt,
-        std::string_view groupName = DEFAULT_LOOP_INFO_PLUGINS,
-        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
-            std::nullopt);
+    std::pair<LoopInfo, bool> parseLoopInfo(const analyzer::ProgramState &preState,
+                                            const analyzer::ProgramState &loopEntry,
+                                            const clang::Stmt *loopStmt,
+                                            std::string_view groupName = DEFAULT_LOOP_INFO_PLUGINS);
 
     void parseComplexLoopInfo(const analyzer::ProgramState &preState,
                               const analyzer::ProgramState &loopEntry,
                               LoopInfo &loopInfo,
-                              std::string_view groupName = COMPLEX_LOOP_INFO_PLUGINS,
-                              std::optional<std::reference_wrapper<const std::vector<std::string>>>
-                                  extraPluginIds = std::nullopt);
+                              std::string_view groupName = COMPLEX_LOOP_INFO_PLUGINS);
 
     struct EmitLoopInvResult {
         std::string acsl;
@@ -121,13 +114,10 @@ namespace acslg::spec_generator {
         const analyzer::ProgramState &preState,
         const analyzer::ProgramState &loopEntry,
         const LoopInfo &loopInfo,
-        std::string_view groupName = DEFAULT_LOOP_INVARIANT_PLUGINS,
-        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds =
-            std::nullopt);
+        std::string_view piGroupName = DEFAULT_PATH_INSENSITIVE_LOOP_INV_PLUGINS,
+        std::string_view psGroupName = DEFAULT_PATH_SENSITIVE_LOOP_INV_PLUGINS);
 
-    std::string emitInlineContract(const analyzer::ProgramState &state,
-                                   std::string_view groupName,
-                                   const std::vector<std::string> &extraPluginIds);
+    std::string emitInlineContract(const analyzer::ProgramState &state, std::string_view groupName);
 
     /*---------------------------------------*/
     /*-------Framework for ACSLPlugin--------*/
@@ -138,27 +128,41 @@ namespace acslg::spec_generator {
         virtual ~ACSLPlugin()               = default;
         virtual std::string_view id() const = 0;
         enum class Kind {
-            FunctionContract,
-            LoopInvariant,
-            InlineAssertion,
-            LoopInfo
+            K_FuncPlugin,
+            K_LoopInfoPlugin,
+            K_PILoopInvPlugin,
+            K_PSLoopInvPlugin,
+            K_InlinePlugin,
         };
-        virtual Kind kind() const = 0;
+        Kind getKind() const { return kind_; }
+        static bool classof(const ACSLPlugin *) { return true; }
+
+      protected:
+        ACSLPlugin(Kind kind) : kind_(kind) {}
+
+      private:
+        Kind kind_;
     };
 
     class FunctionContractPlugin : public ACSLPlugin {
       public:
-        Kind kind() const override { return Kind::FunctionContract; }
+        static bool classof(const ACSLPlugin *plugin) {
+            return plugin->getKind() == Kind::K_FuncPlugin;
+        }
         using GenResultType = std::pair<std::optional<std::string>,
                                         std::unordered_set<analyzer::symbolic::SourcePoint>>;
         virtual GenResultType generate(const analyzer::ProgramState &pre,
                                        const analyzer::ProgramState &post) const = 0;
+
+      protected:
+        FunctionContractPlugin() : ACSLPlugin(Kind::K_FuncPlugin) {};
     };
 
     class LoopInfoPlugin : public ACSLPlugin {
       public:
-        Kind kind() const override { return Kind::LoopInfo; }
-
+        static bool classof(const ACSLPlugin *plugin) {
+            return plugin->getKind() == Kind::K_LoopInfoPlugin;
+        }
         /// @brief Parse the given loop and fill in loopInfo.
         /// @param preState
         /// @param loopEntry
@@ -168,6 +172,9 @@ namespace acslg::spec_generator {
         virtual bool parse(const analyzer::ProgramState &preState,
                            const analyzer::ProgramState &loopEntry,
                            LoopInfo &loopInfo) const = 0;
+
+      protected:
+        LoopInfoPlugin() : ACSLPlugin(Kind::K_LoopInfoPlugin) {};
     };
 
     struct PostInfo {
@@ -175,27 +182,81 @@ namespace acslg::spec_generator {
             utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
             memoryMap_;
         std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pathConds_;
-    };
-    class LoopInvariantPlugin : public ACSLPlugin {
-      public:
-        Kind kind() const override { return Kind::LoopInvariant; }
 
+        PostInfo(analyzer::symbolic::AddressBoxMap<
+                     utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
+                 std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pcs)
+            : memoryMap_(std::move(mem)), pathConds_(std::move(pcs)) {}
+
+        PostInfo(const PostInfo &other) {
+            for (const auto &kv : other.memoryMap_) {
+                const auto &addr  = kv.first;
+                const auto &exprp = kv.second;
+                auto cloned       = exprp->clone();
+                memoryMap_.emplace(addr, utils::not_null{std::move(cloned)});
+            }
+
+            pathConds_.reserve(other.pathConds_.size());
+            for (const auto &exprp : other.pathConds_) {
+                auto cloned = exprp->clone();
+                pathConds_.push_back(utils::not_null{std::move(cloned)});
+            }
+        }
+
+        PostInfo()                     = default;
+        PostInfo(PostInfo &&) noexcept = default;
+    };
+    class PathInsensitiveLoopInvPlugin : public ACSLPlugin {
+      public:
+        static bool classof(const ACSLPlugin *plugin) {
+            return plugin->getKind() == Kind::K_PILoopInvPlugin;
+        }
         struct GenResultType {
             std::optional<std::string> acsl;
             std::unordered_set<analyzer::symbolic::SourcePoint> acslUsedPoints;
-            bool isContinue;
-            std::vector<PostInfo> perPathPostInfo;
+            PostInfo globalPostInfo;
         };
         virtual GenResultType generate(const analyzer::ProgramState &preState,
                                        const analyzer::ProgramState &loopEntry,
                                        const LoopInfo &loopInfo) const = 0;
+
+      protected:
+        PathInsensitiveLoopInvPlugin() : ACSLPlugin(Kind::K_PILoopInvPlugin) {};
+    };
+
+    class PathSensitiveLoopInvPlugin : public ACSLPlugin {
+      public:
+        static bool classof(const ACSLPlugin *plugin) {
+            return plugin->getKind() == Kind::K_PSLoopInvPlugin;
+        }
+        struct GenResultType {
+            std::optional<std::string> acsl;
+            std::unordered_set<analyzer::symbolic::SourcePoint> acslUsedPoints;
+            std::vector<PostInfo> perPathPostInfos;
+        };
+
+        // todo: may pass pass in some loop information to help the plugin determine whether it
+        // can handle the request and its priority.
+        virtual size_t propose() const                                                   = 0;
+        virtual std::optional<GenResultType> tryGenerate(const analyzer::ProgramState &preState,
+                                                         const analyzer::ProgramState &loopEntry,
+                                                         const LoopInfo &loopInfo) const = 0;
+
+      protected:
+        PathSensitiveLoopInvPlugin() : ACSLPlugin(Kind::K_PSLoopInvPlugin) {};
     };
 
     class InlinePlugin : public ACSLPlugin {
+        static bool classof(const ACSLPlugin *plugin) {
+            return plugin->getKind() == Kind::K_InlinePlugin;
+        }
+
       public:
-        Kind kind() const override { return Kind::InlineAssertion; }
         virtual std::optional<std::string> generate(
             const analyzer::ProgramState &state /* enough? */) = 0;
+
+      protected:
+        InlinePlugin() : ACSLPlugin(Kind::K_InlinePlugin) {};
     };
 
     class ACSLPluginRegistry {
@@ -212,14 +273,6 @@ namespace acslg::spec_generator {
         ACSLPlugin *get(std::string_view id) const {
             auto it = plugins_.find(id);
             return it == plugins_.end() ? nullptr : it->second.get();
-        }
-
-        std::vector<std::string> idsByKind(ACSLPlugin::Kind k) const {
-            std::vector<std::string> v;
-            for (auto const &p : plugins_)
-                if (p.second->kind() == k)
-                    v.push_back(p.first);
-            return v;
         }
 
       private:

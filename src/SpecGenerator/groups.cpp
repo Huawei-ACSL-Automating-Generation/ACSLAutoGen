@@ -7,11 +7,15 @@ namespace acslg::spec_generator {
     REGISTER_ACSL_GROUP(DefaultFunctionContract, "assigns", "poststate");
     REGISTER_ACSL_GROUP(DefaultLoopInfo, "setLoopEntry", "setPatterns", "setIndex");
     REGISTER_ACSL_GROUP(ComplexLoopInfo);
-    REGISTER_ACSL_GROUP(DefaultLoopInvariant,
+    REGISTER_ACSL_GROUP(DefaultPathInsensitiveLoopInv,
                         "checkAndDumpLoopInfo",
                         "loopAssigns",
                         "paradigmMaxMin",
-                        "StInGXPlugin",
                         "loopVariant");
-    REGISTER_ACSL_GROUP(ComplexLoopInvariant, "checkAndDumpLoopInfo", "loopAssigns", "loopVariant");
+    REGISTER_ACSL_GROUP(DefaultPathSensitiveLoopInv, "StInGXPlugin")
+    REGISTER_ACSL_GROUP(ComplexPathInsensitiveLoopInv,
+                        "checkAndDumpLoopInfo",
+                        "loopAssigns",
+                        "loopVariant");
+    REGISTER_ACSL_GROUP(ComplexPathSensitiveLoopInv)
 } // namespace acslg::spec_generator

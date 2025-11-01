@@ -17,10 +17,7 @@ namespace acslg::spec_generator {
 
     namespace {
         // auxiliary function
-        template <typename T>
-        std::vector<const T *> getPlugins(
-            std::string_view groupName,
-            std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
+        template <typename T> std::vector<const T *> getPlugins(std::string_view groupName) {
             const ACSLPluginGroup *group = ACSLPluginGroupRegistry::instance().getGroup(groupName);
             if (!group) {
                 auto names = ACSLPluginGroupRegistry::instance().allGroupNames();
@@ -41,16 +38,13 @@ namespace acslg::spec_generator {
             }
 
             std::vector<std::string> ids = group->pluginIds;
-            if (extraPluginIds)
-                ids.insert(ids.end(), (*extraPluginIds).get().begin(),
-                           (*extraPluginIds).get().end());
 
             std::vector<const T *> plugins;
             for (auto &pid : ids) {
                 auto *pl = ACSLPluginRegistry::instance().get(pid);
                 if (!pl)
                     ERROR("Plugin with id " + pid + " does not exist!");
-                auto *fcp = dynamic_cast<const T *>(pl);
+                auto *fcp = llvm::dyn_cast<const T>(pl);
                 if (fcp) {
                     plugins.push_back(fcp);
                 }
@@ -104,9 +98,8 @@ namespace acslg::spec_generator {
     std::pair<std::string, std::unordered_set<symb::SourcePoint>> emitFunctionContract(
         const analyzer::ProgramState &pre,
         const analyzer::ProgramState &post,
-        std::string_view groupName,
-        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
-        auto plugins     = getPlugins<FunctionContractPlugin>(groupName, extraPluginIds);
+        std::string_view groupName) {
+        auto plugins     = getPlugins<FunctionContractPlugin>(groupName);
         std::string spec = ACSL_HEAD.to_string();
 
         std::unordered_set<symb::SourcePoint> allUsedPoints;
@@ -124,13 +117,11 @@ namespace acslg::spec_generator {
         return std::pair{spec, std::move(allUsedPoints)};
     }
 
-    std::pair<LoopInfo, bool> parseLoopInfo(
-        const analyzer::ProgramState &preState,
-        const analyzer::ProgramState &loopEntry,
-        const clang::Stmt *loopStmt,
-        std::string_view groupName,
-        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
-        auto plugins = getPlugins<LoopInfoPlugin>(groupName, extraPluginIds);
+    std::pair<LoopInfo, bool> parseLoopInfo(const analyzer::ProgramState &preState,
+                                            const analyzer::ProgramState &loopEntry,
+                                            const clang::Stmt *loopStmt,
+                                            std::string_view groupName) {
+        auto plugins = getPlugins<LoopInfoPlugin>(groupName);
 
         LoopInfo loopInfo{loopStmt};
         for (auto &plugin : plugins) {
@@ -143,13 +134,11 @@ namespace acslg::spec_generator {
         return std::pair{std::move(loopInfo), true};
     }
 
-    void parseComplexLoopInfo(
-        const analyzer::ProgramState &preState,
-        const analyzer::ProgramState &loopEntry,
-        LoopInfo &loopInfo,
-        std::string_view groupName,
-        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
-        auto plugins = getPlugins<LoopInfoPlugin>(groupName, extraPluginIds);
+    void parseComplexLoopInfo(const analyzer::ProgramState &preState,
+                              const analyzer::ProgramState &loopEntry,
+                              LoopInfo &loopInfo,
+                              std::string_view groupName) {
+        auto plugins = getPlugins<LoopInfoPlugin>(groupName);
 
         for (auto &plugin : plugins) {
             if (plugin == nullptr)
@@ -162,13 +151,13 @@ namespace acslg::spec_generator {
     }
 
     [[nodiscard]]
-    EmitLoopInvResult emitLoopInvariant(
-        const analyzer::ProgramState &preState,
-        const analyzer::ProgramState &loopEntry,
-        const LoopInfo &loopInfo,
-        std::string_view groupName,
-        std::optional<std::reference_wrapper<const std::vector<std::string>>> extraPluginIds) {
-        auto plugins = getPlugins<LoopInvariantPlugin>(groupName, extraPluginIds);
+    EmitLoopInvResult emitLoopInvariant(const analyzer::ProgramState &preState,
+                                        const analyzer::ProgramState &loopEntry,
+                                        const LoopInfo &loopInfo,
+                                        std::string_view piGroupName,
+                                        std::string_view psGroupName) {
+        auto piPlugins = getPlugins<PathInsensitiveLoopInvPlugin>(piGroupName);
+        auto psPlugins = getPlugins<PathSensitiveLoopInvPlugin>(psGroupName);
         std::vector<std::unique_ptr<analyzer::Path>> invariants;
         std::string spec = ACSL_HEAD.to_string();
         std::unordered_set<symb::SourcePoint> allUsedPoints;
@@ -176,62 +165,90 @@ namespace acslg::spec_generator {
         auto loopEntryPoint = symb::SourcePoint::fromStmtBefore(
             loopInfo.loopStmt_, loopEntry.getContext().getSourceManager(),
             loopEntry.getContext().getLangOptions());
-        auto postState   = preState.clone();
-        auto &postPaths  = postState->getPaths();
-        auto pathNum     = postPaths.size();
+        if (preState.getPaths().size() != loopEntry.getPaths().size()) {
+            ERROR("Branch is unsupported here.");
+        }
+
+        auto &entryPaths = loopEntry.getPaths();
+        auto pathNum     = preState.getPaths().size();
+        auto postState   = preState.clone(/*with path*/ false);
         auto resultInfos = std::vector<std::vector<PostInfo>>{pathNum};
 
-        // Update the resultInfos with a plugin's postInfo.
-        auto updateResultInfos = [&](std::vector<PostInfo> &infos) {
-            if (infos.empty())
-                return;
-            if (preState.getPaths().size() != loopEntry.getPaths().size()) {
-                ERROR("Branch is unsupported here.");
+        auto updateResultInfoWithInfo = [&loopEntryPoint](const analyzer::Path &currentPath,
+                                                          PostInfo &toUpdate, PostInfo &info) {
+            for (auto &[addr, value] : info.memoryMap_) {
+                auto subedAddrExpr = addr.get().getSubstitutedExpr(currentPath, loopEntryPoint);
+                auto subedAddr     = llvm::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
+                if (subedAddr == nullptr)
+                    UNREACHABLE();
+                auto subedValue = value->getSubstitutedExpr(currentPath, loopEntryPoint);
+                if (auto it = toUpdate.memoryMap_.find(*subedAddr);
+                    it != toUpdate.memoryMap_.end() && !it->second->isUnknown()) {
+                    WARN("Another plugin has already updated this address. The new value: "
+                         "{" +
+                         subedValue->dump() + "} is discarded.");
+                    continue;
+                }
+                toUpdate.memoryMap_.insert_or_assign(*subedAddr, std::move(subedValue));
             }
 
-            auto &entryPaths = loopEntry.getPaths();
+            for (auto &cond : info.pathConds_) {
+                auto subedConds = cond->getSubstitutedExpr(currentPath, loopEntryPoint);
+                toUpdate.pathConds_.push_back(std::move(subedConds));
+                // todo: may insert for each unmodified position:
+                // Symbol(with fromPoint_ = afterLoop) == the current value.
+            }
+        };
 
+        auto updateResultInfosWithGlobalInfo = [&](PostInfo &info) {
+            // for every pre-path
             for (auto i : std::views::iota(size_t{0}, pathNum)) {
                 auto &entryPath         = *entryPaths.at(i);
                 auto &postBranchesInfos = resultInfos.at(i);
 
-                if (infos.size() != 1)
-                    TODO();
+                // if there're no post-path (this function may be called before
+                // `updateResultInfosWithPerPathInfo`), insert one.
                 if (postBranchesInfos.empty())
                     postBranchesInfos.emplace_back();
-                auto &info           = infos.at(0);
-                auto &postBranchInfo = postBranchesInfos.at(0);
 
-                for (auto &[addr, value] : info.memoryMap_) {
-                    auto subedAddrExpr = addr.get().getSubstitutedExpr(entryPath, loopEntryPoint);
-                    auto subedAddr = llvm::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
-                    if (subedAddr == nullptr)
-                        UNREACHABLE();
-                    auto subedValue = value->getSubstitutedExpr(entryPath, loopEntryPoint);
-                    if (auto it = postBranchInfo.memoryMap_.find(*subedAddr);
-                        it != postBranchInfo.memoryMap_.end() && !it->second->isUnknown()) {
-                        WARN("Another plugin has already updated this address. The new value: {" +
-                             subedValue->dump() + "} is discarded.");
-                        continue;
-                    }
-                    postBranchInfo.memoryMap_.insert_or_assign(*subedAddr, std::move(subedValue));
-                }
+                // It's global post information, so apply it to every post-path.
+                for (auto &postBranchInfo : postBranchesInfos)
+                    updateResultInfoWithInfo(entryPath, postBranchInfo, info);
+            }
+        }; // updateResultInfosWithGlobalInfo
 
-                for (auto &cond : info.pathConds_) {
-                    auto subedConds = cond->getSubstitutedExpr(entryPath, loopEntryPoint);
-                    postBranchInfo.pathConds_.push_back(std::move(subedConds));
-                    // todo: may insert for each unmodified position:
-                    // Symbol(with fromPoint_ = afterLoop) == the current value.
+        auto updateResultInfosWithPerPathInfo = [&](std::vector<PostInfo> &infos) {
+            // for every pre-path
+            for (auto i : std::views::iota(size_t{0}, pathNum)) {
+                auto &entryPath         = *entryPaths.at(i);
+                auto &postBranchesInfos = resultInfos.at(i);
+
+                // If there're no post-path (this function may be called before
+                // `updateResultInfosWithGlobalInfo`), insert one.
+                if (postBranchesInfos.empty())
+                    postBranchesInfos.emplace_back();
+                if (postBranchesInfos.size() != 1)
+                    ERROR("ResultInfos should only be updated once per-path.");
+
+                // Generate infos.size() post-paths.
+                for (size_t j = 1; j < infos.size(); ++j)
+                    postBranchesInfos.push_back(postBranchesInfos.back());
+
+                assert(postBranchesInfos.size() == infos.size());
+                // It's global post information, so apply it to every post-path.
+                for (size_t j = 0; j < postBranchesInfos.size(); ++j) {
+                    auto &postBranchInfo = postBranchesInfos.at(j);
+                    auto &info           = infos.at(j);
+                    updateResultInfoWithInfo(entryPath, postBranchInfo, info);
                 }
             }
-        }; // updatePostState
+        }; // updateResultInfosWithPerPathInfo
 
-        for (auto &plugin : plugins) {
-            if (plugin == nullptr)
+        for (auto &piPlugin : piPlugins) {
+            if (piPlugin == nullptr)
                 UNREACHABLE();
-            DEBUG("Plugin {" + std::string{plugin->id()} + "} is generating...");
-            auto [s, usedPoints, continueFlag, postInfos] =
-                plugin->generate(preState, loopEntry, loopInfo);
+            DEBUG("Plugin {" + std::string{piPlugin->id()} + "} is generating...");
+            auto [s, usedPoints, postInfo] = piPlugin->generate(preState, loopEntry, loopInfo);
 
             if (s) {
                 spec += "    " /*4 spaces*/ + *s + "\n";
@@ -239,46 +256,69 @@ namespace acslg::spec_generator {
             allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
                                  std::make_move_iterator(usedPoints.end()));
 
-            updateResultInfos(postInfos);
+            updateResultInfosWithGlobalInfo(postInfo);
+        }
 
-            if (!continueFlag)
-                break;
+        std::optional<size_t> lastPriority{};
+        for (auto &psPlugin : psPlugins) {
+            if (psPlugin == nullptr)
+                UNREACHABLE();
+            DEBUG("Plugin {" + std::string{psPlugin->id()} + "} is generating...");
+
+            auto currentPriority = psPlugin->propose();
+            if (lastPriority && lastPriority.value() > currentPriority)
+                continue;
+
+            auto res = psPlugin->tryGenerate(preState, loopEntry, loopInfo);
+            if (res == std::nullopt)
+                continue;
+            lastPriority = currentPriority;
+
+            if (res.value().acsl) {
+                spec += "    " /*4 spaces*/ + *res.value().acsl + "\n";
+            }
+            allUsedPoints.insert(std::make_move_iterator(res.value().acslUsedPoints.begin()),
+                                 std::make_move_iterator(res.value().acslUsedPoints.end()));
+
+            updateResultInfosWithPerPathInfo(res.value().perPathPostInfos);
         }
         spec += ACSL_END.to_string();
 
+        assert(postState->getPaths().empty());
         // Build post-state from result infos.
         for (auto i : std::views::iota(size_t{0}, pathNum)) {
-            auto &prePath           = preState.getPaths().at(i);
-            auto &postPath          = postPaths.at(i);
-            auto &postBranchesInfos = resultInfos.at(i);
-
-            if (postBranchesInfos.empty()) {
-                WARN("A path has no post-info, there might be some errors.");
+            auto &prePath = preState.getPaths().at(i);
+            if (!prePath->isActive()) {
+                postState->insertPath(prePath->clone());
                 continue;
             }
+            auto &postBranchesInfos = resultInfos.at(i);
 
-            if (postBranchesInfos.size() != 1)
-                TODO();
+            if (postBranchesInfos.empty())
+                WARN("A path has no post-info, there might be some errors.");
 
-            auto &postBranchInfo = postBranchesInfos.at(0);
-            for (auto &[addr, value] : postBranchInfo.memoryMap_) {
-                auto root = addr.get().getFromRoot();
-                if (root == std::nullopt)
-                    TODO();
-                if (!postPath->getVarAddr().contains(root.value()))
-                    continue;
-                postPath->updateMemory(addr, std::move(value));
+            for (auto &postBranchInfo : postBranchesInfos) {
+                auto postPath = prePath->clone();
+                for (auto &[addr, value] : postBranchInfo.memoryMap_) {
+                    auto root = addr.get().getFromRoot();
+                    if (root == std::nullopt)
+                        TODO();
+                    if (!postPath->getVarAddr().contains(root.value()))
+                        continue;
+                    postPath->updateMemory(addr, std::move(value));
+                }
+                // for (auto &&[addr, value] : prePath->getMemoryState().flat()) {
+                //     if (postPath->getMemoryState().contains(addr))
+                //         continue;
+                //     postPath->updateMemory(addr, value->clone());
+                // }
+
+                // for (auto &pathCond : prePath->getPathConditions())
+                //     postPath->insertPathCondition(pathCond->clone());
+                for (auto &pathCond : postBranchInfo.pathConds_)
+                    postPath->insertPathCondition(std::move(pathCond));
+                postState->insertPath(std::move(postPath));
             }
-            for (auto &&[addr, value] : prePath->getMemoryState().flat()) {
-                if (postPath->getMemoryState().contains(addr))
-                    continue;
-                postPath->updateMemory(addr, value->clone());
-            }
-
-            for (auto &pathCond : prePath->getPathConditions())
-                postPath->insertPathCondition(pathCond->clone());
-            for (auto &pathCond : postBranchInfo.pathConds_)
-                postPath->insertPathCondition(std::move(pathCond));
         }
 
         return EmitLoopInvResult{.acsl       = spec,

@@ -156,8 +156,9 @@ namespace acslg::test::utils {
         return pair{std::move(loopInfo), result};
     }
 
-    spec_generator::LoopInvariantPlugin::GenResultType doPluginOnFirstLoop(const string &code,
-                                                                           const string &pid) {
+    spec_generator::PathInsensitiveLoopInvPlugin::GenResultType doPIPluginOnFirstLoop(
+        const string &code,
+        const string &pid) {
         static ASTExtractor e;
         static optional<ACSLGContext> context{};
 
@@ -192,9 +193,51 @@ namespace acslg::test::utils {
         auto *pl = ACSLPluginRegistry::instance().get(pid);
         if (!pl)
             ERROR("Plugin with id " + pid + " does not exist!");
-        auto *fcp = dynamic_cast<const LoopInvariantPlugin *>(pl);
+        auto *fcp = dynamic_cast<const PathInsensitiveLoopInvPlugin *>(pl);
 
         return fcp->generate(*preState, *loopEntry, loopInfo);
+    }
+
+    std::optional<spec_generator::PathSensitiveLoopInvPlugin::GenResultType> doPSPluginOnFirstLoop(
+        const string &code,
+        const string &pid) {
+        static ASTExtractor e;
+        static optional<ACSLGContext> context{};
+
+        e.init(code);
+        context.emplace(e.getASTContext());
+        auto func     = e.findFirstDecl<FunctionDecl>();
+        auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
+        Stmt *loopStmt;
+        preState->init();
+        DEBUG(preState->dump());
+        for (Stmt *stmt : func->getBody()->children()) {
+            if (isa<WhileStmt>(stmt) || isa<ForStmt>(stmt) || isa<DoStmt>(stmt)) {
+                loopStmt = stmt;
+                break;
+            }
+            preState->step(stmt);
+            DEBUG(preState->dump());
+        }
+
+        auto loopEntry = preState->clone();
+        if (auto forLoop = dyn_cast<ForStmt>(loopStmt); forLoop && forLoop->getInit()) {
+            loopEntry->step(forLoop->getInit());
+            DEBUG(loopEntry->dump());
+        }
+
+        auto [loopInfo, ok] = parseLoopInfo(*preState, *loopEntry, loopStmt);
+        if (!ok) {
+            // TODO(complex loop)
+            UNIMPLEMENT("Loop is too complex!");
+        }
+
+        auto *pl = ACSLPluginRegistry::instance().get(pid);
+        if (!pl)
+            ERROR("Plugin with id " + pid + " does not exist!");
+        auto *fcp = dynamic_cast<const PathSensitiveLoopInvPlugin *>(pl);
+
+        return fcp->tryGenerate(*preState, *loopEntry, loopInfo);
     }
 
     FixtureWithCode::FixtureWithCode()

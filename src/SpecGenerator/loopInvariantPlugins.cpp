@@ -14,7 +14,7 @@
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
 
-    class CheckAndDumpLoopInfoPlugin : public LoopInvariantPlugin {
+    class CheckAndDumpLoopInfoPlugin : public PathInsensitiveLoopInvPlugin {
       public:
         CheckAndDumpLoopInfoPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
@@ -67,10 +67,7 @@ namespace acslg::spec_generator {
                 INFO("patternInfo_ isn't std::set.");
             }
 
-            return GenResultType{.acsl            = std::nullopt,
-                                 .acslUsedPoints  = {},
-                                 .isContinue      = true,
-                                 .perPathPostInfo = {}};
+            return GenResultType{.acsl = std::nullopt, .acslUsedPoints = {}, .globalPostInfo = {}};
         }
 
       private:
@@ -78,13 +75,14 @@ namespace acslg::spec_generator {
     };
     REGISTER_ACSL_PLUGIN(CheckAndDumpLoopInfoPlugin, "checkAndDumpLoopInfo");
 
-    class LinearInvariantPlugin : public LoopInvariantPlugin {
+    class LinearInvariantPlugin : public PathSensitiveLoopInvPlugin {
       public:
         LinearInvariantPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
-        GenResultType generate(const analyzer::ProgramState &,
-                               const analyzer::ProgramState &,
-                               const LoopInfo &loopInfo) const override {
+        size_t propose() const override { return 0; }
+        std::optional<GenResultType> tryGenerate(const analyzer::ProgramState &,
+                                                 const analyzer::ProgramState &,
+                                                 const LoopInfo &loopInfo) const override {
             if (loopInfo.loopEntryInfo_ == std::nullopt || loopInfo.indexInfo_ == std::nullopt)
                 ERROR("Dependencies are not met.");
 
@@ -180,14 +178,12 @@ namespace acslg::spec_generator {
             }
 
             if (spec.empty())
-                return GenResultType{.acsl            = std::nullopt,
-                                     .acslUsedPoints  = {},
-                                     .isContinue      = true,
-                                     .perPathPostInfo = std::move(postStates)};
-            return GenResultType{.acsl            = std::move(spec),
-                                 .acslUsedPoints  = {},
-                                 .isContinue      = true,
-                                 .perPathPostInfo = std::move(postStates)};
+                return GenResultType{.acsl             = std::nullopt,
+                                     .acslUsedPoints   = {},
+                                     .perPathPostInfos = std::move(postStates)};
+            return GenResultType{.acsl             = std::move(spec),
+                                 .acslUsedPoints   = {},
+                                 .perPathPostInfos = std::move(postStates)};
         }
 
       private:
@@ -196,7 +192,7 @@ namespace acslg::spec_generator {
     REGISTER_ACSL_PLUGIN(LinearInvariantPlugin, "StInGXPlugin");
 
     // todo: deal with complex range
-    class LoopAssignsPlugin : public LoopInvariantPlugin {
+    class LoopAssignsPlugin : public PathInsensitiveLoopInvPlugin {
       public:
         LoopAssignsPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
@@ -218,12 +214,10 @@ namespace acslg::spec_generator {
             auto &entryMS = loopEntryInfo.symbolicLoopEntry_->getPaths().at(0)->getMemoryState();
 
             std::vector<symb::AddressBox> assignedAddrs;
-            std::vector<PostInfo> postInfo;
+            PostInfo postInfo;
 
-            // This plugin does not produce branches.
-            postInfo.emplace_back();
-            auto &memoryMap = postInfo.at(0).memoryMap_;
-            auto &pathConds = postInfo.at(0).pathConds_;
+            auto &memoryMap = postInfo.memoryMap_;
+            auto &pathConds = postInfo.pathConds_;
 
             auto isLocal = [&](const symb::Address &addr) {
                 auto root = addr.getFromRoot();
@@ -465,15 +459,13 @@ namespace acslg::spec_generator {
             }
 
             if (specs.empty())
-                return GenResultType{.acsl            = R"(loop assigns \nothing;)",
-                                     .acslUsedPoints  = {},
-                                     .isContinue      = true,
-                                     .perPathPostInfo = {}};
+                return GenResultType{.acsl           = R"(loop assigns \nothing;)",
+                                     .acslUsedPoints = {},
+                                     .globalPostInfo = {}};
             return GenResultType{.acsl =
                                      "loop assigns " + specs.substr(0, specs.length() - 2) + ";",
-                                 .acslUsedPoints  = std::move(allUsedPoints),
-                                 .isContinue      = true,
-                                 .perPathPostInfo = std::move(postInfo)};
+                                 .acslUsedPoints = std::move(allUsedPoints),
+                                 .globalPostInfo = std::move(postInfo)};
         }
 
       private:
@@ -481,7 +473,7 @@ namespace acslg::spec_generator {
     };
     REGISTER_ACSL_PLUGIN(LoopAssignsPlugin, "loopAssigns");
 
-    class ParadigmMaxMinPlugin : public LoopInvariantPlugin {
+    class ParadigmMaxMinPlugin : public PathInsensitiveLoopInvPlugin {
       public:
         ParadigmMaxMinPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
@@ -507,10 +499,8 @@ namespace acslg::spec_generator {
                 if (it->second == std::nullopt)
                     ERROR("PatternsMap_ is in an invalid state");
                 if ((*it->second).step_ != 1 && (*it->second).step_ != -1)
-                    return GenResultType{.acsl            = std::nullopt,
-                                         .acslUsedPoints  = {},
-                                         .isContinue      = true,
-                                         .perPathPostInfo = {}};
+                    return GenResultType{
+                        .acsl = std::nullopt, .acslUsedPoints = {}, .globalPostInfo = {}};
                 else
                     indexStep = (*it->second).step_;
             } else {
@@ -755,14 +745,11 @@ namespace acslg::spec_generator {
             ifVisitor.runOn(loopInfo.bodyStmt_);
 
             if (spec.empty())
-                return GenResultType{.acsl            = std::nullopt,
-                                     .acslUsedPoints  = {},
-                                     .isContinue      = true,
-                                     .perPathPostInfo = {}};
+                return GenResultType{
+                    .acsl = std::nullopt, .acslUsedPoints = {}, .globalPostInfo = {}};
 
             spec.pop_back(); // earse \n
-            return GenResultType{
-                .acsl = spec, .acslUsedPoints = {}, .isContinue = true, .perPathPostInfo = {}};
+            return GenResultType{.acsl = spec, .acslUsedPoints = {}, .globalPostInfo = {}};
         }
 
       private:
@@ -770,7 +757,7 @@ namespace acslg::spec_generator {
     };
     REGISTER_ACSL_PLUGIN(ParadigmMaxMinPlugin, "paradigmMaxMin");
 
-    class LoopVariantPlugin : public LoopInvariantPlugin {
+    class LoopVariantPlugin : public PathInsensitiveLoopInvPlugin {
       public:
         LoopVariantPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
@@ -788,16 +775,12 @@ namespace acslg::spec_generator {
             if (!acslExpected) {
                 WARN("Variant {" + indexInfo.maxLoopCount_->simplifiedExpr()->dump() +
                      "} getACSL failed.");
-                return GenResultType{.acsl            = std::nullopt,
-                                     .acslUsedPoints  = {},
-                                     .isContinue      = true,
-                                     .perPathPostInfo = {}};
+                return GenResultType{
+                    .acsl = std::nullopt, .acslUsedPoints = {}, .globalPostInfo = {}};
             }
             auto spec = "loop variant " + acslExpected.value().first + ";";
-            return GenResultType{.acsl            = std::move(spec),
-                                 .acslUsedPoints  = {},
-                                 .isContinue      = true,
-                                 .perPathPostInfo = std::vector<PostInfo>{}};
+            return GenResultType{
+                .acsl = std::move(spec), .acslUsedPoints = {}, .globalPostInfo = {}};
         }
 
       private:

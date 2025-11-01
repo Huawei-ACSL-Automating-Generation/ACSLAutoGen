@@ -670,6 +670,9 @@ namespace acslg::analyzer {
         void resetState();
         void resymbolize(symbolic::SourcePoint newStartPoint);
 
+        void insertPath(utils::not_null<std::unique_ptr<Path>> path) {
+            paths_.push_back(std::move(path));
+        }
         auto getPaths() const -> const auto & { return paths_; }
         auto getPaths() -> auto & { return paths_; }
         auto getFunction() const -> const auto & { return func_; }

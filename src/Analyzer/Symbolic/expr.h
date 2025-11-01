@@ -196,10 +196,6 @@ namespace acslg::analyzer::symbolic {
             K_LastOverRange
         };
 
-        enum Trait : uint32_t {
-            T_Symbol = 1u << 0 /* ... */
-        };
-
         /// @enum ScalarKind
         /// @brief Scalar data types for expression values.
         enum class ScalarKind {

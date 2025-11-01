@@ -23,8 +23,12 @@ namespace acslg::test::utils {
     std::pair<spec_generator::LoopInfo, bool> doPluginsOnFirstLoop(
         std::string_view code,
         const std::vector<std::string> pids);
-    spec_generator::LoopInvariantPlugin::GenResultType doPluginOnFirstLoop(const std::string &code,
-                                                                           const std::string &pid);
+    spec_generator::PathInsensitiveLoopInvPlugin::GenResultType doPIPluginOnFirstLoop(
+        const std::string &code,
+        const std::string &pid);
+    std::optional<spec_generator::PathSensitiveLoopInvPlugin::GenResultType> doPSPluginOnFirstLoop(
+        const std::string &code,
+        const std::string &pid);
 
     namespace details {
         consteval unsigned digitCount(unsigned x) {
