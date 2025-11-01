@@ -248,8 +248,8 @@ namespace acslg::test::unit::spec_generator {
     }
 
     TEST(ParadigmMaxMinPluginTest, Simple_0) {
-        auto pluginId                   = "paradigmMaxMin";
-        auto code                       = R"(
+        auto pluginId = "paradigmMaxMin";
+        auto code     = R"(
         void func(int *p, int n){
             int mx = 0;
             for(int i = 0; i < n; i++){
@@ -258,14 +258,14 @@ namespace acslg::test::unit::spec_generator {
             } 
         }
     )";
-        auto [spec, _, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-        EXPECT_NE(spec, nullopt);
-        EXPECT_EQ(continueFlag, true);
+        auto res      = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(res.acsl, nullopt);
+        EXPECT_EQ(res.isContinue, true);
     }
 
     TEST(ParadigmMaxMinPluginTest, Simple_1) {
-        auto pluginId                   = "paradigmMaxMin";
-        auto code                       = R"(
+        auto pluginId = "paradigmMaxMin";
+        auto code     = R"(
         void func(int *p, int n){
             int ms = 0;
             for(int i = 0; i < n; i++){
@@ -274,14 +274,14 @@ namespace acslg::test::unit::spec_generator {
             } 
         }
     )";
-        auto [spec, _, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-        EXPECT_NE(spec, nullopt);
-        EXPECT_EQ(continueFlag, true);
+        auto res      = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(res.acsl, nullopt);
+        EXPECT_EQ(res.isContinue, true);
     }
 
     TEST(ParadigmMaxMinPluginTest, Simple_2) {
-        auto pluginId                   = "paradigmMaxMin";
-        auto code                       = R"(
+        auto pluginId = "paradigmMaxMin";
+        auto code     = R"(
         void func(int *p, int n){
             int mx = 0;
             for(int i = 0; i < n; i++){
@@ -290,14 +290,14 @@ namespace acslg::test::unit::spec_generator {
             } 
         }
     )";
-        auto [spec, _, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-        EXPECT_NE(spec, nullopt);
-        EXPECT_EQ(continueFlag, true);
+        auto res      = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(res.acsl, nullopt);
+        EXPECT_EQ(res.isContinue, true);
     }
 
     TEST(ParadigmMaxMinPluginTest, Simple_3) {
-        auto pluginId                   = "paradigmMaxMin";
-        auto code                       = R"(
+        auto pluginId = "paradigmMaxMin";
+        auto code     = R"(
         void func(int *p, int n){
             int mx = 0;
             int cnt = 0;
@@ -312,14 +312,14 @@ namespace acslg::test::unit::spec_generator {
             } 
         }
     )";
-        auto [spec, _, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-        EXPECT_NE(spec, nullopt);
-        EXPECT_EQ(continueFlag, true);
+        auto res      = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(res.acsl, nullopt);
+        EXPECT_EQ(res.isContinue, true);
     }
 
     TEST(ParadigmMaxMinPluginTest, Simple_4) {
-        auto pluginId                   = "paradigmMaxMin";
-        auto code                       = R"(
+        auto pluginId = "paradigmMaxMin";
+        auto code     = R"(
         void func(int *p, int n){
             int mx = 0;
             int i = 0;
@@ -330,14 +330,14 @@ namespace acslg::test::unit::spec_generator {
             }
         }
     )";
-        auto [spec, _, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-        EXPECT_NE(spec, nullopt);
-        EXPECT_EQ(continueFlag, true);
+        auto res      = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(res.acsl, nullopt);
+        EXPECT_EQ(res.isContinue, true);
     }
 
     TEST(ParadigmMaxMinPluginTest, Simple_5) {
-        auto pluginId                   = "paradigmMaxMin";
-        auto code                       = R"(
+        auto pluginId = "paradigmMaxMin";
+        auto code     = R"(
         void func(int *p, int n){
             int bound = 100;
             int count = 0;
@@ -349,14 +349,14 @@ namespace acslg::test::unit::spec_generator {
             }
         }
     )";
-        auto [spec, _, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-        EXPECT_EQ(spec, nullopt);
-        EXPECT_EQ(continueFlag, true);
+        auto res      = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_EQ(res.acsl, nullopt);
+        EXPECT_EQ(res.isContinue, true);
     }
 
     TEST(ParadigmMaxMinPluginTest, Simple_6) {
-        auto pluginId                   = "paradigmMaxMin";
-        auto code                       = R"(
+        auto pluginId = "paradigmMaxMin";
+        auto code     = R"(
         void func(int *p, int n){
             int mx = 0;
             int i = 0;
@@ -370,9 +370,9 @@ namespace acslg::test::unit::spec_generator {
             }
         }
     )";
-        auto [spec, _, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
-        EXPECT_NE(spec, nullopt);
-        EXPECT_EQ(continueFlag, true);
+        auto res      = doPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(res.acsl, nullopt);
+        EXPECT_EQ(res.isContinue, true);
     }
 
     TEST(LinearInvariantPluginTest, Simple_1) {
@@ -524,7 +524,7 @@ namespace acslg::test::unit::spec_generator {
     //             }
     //         }
     //     )";
-    //     auto [spec, _, continueFlag, _] = doPluginOnFirstLoop(code, pluginId);
+    //     auto res = doPluginOnFirstLoop(code, pluginId);
     //     EXPECT_NE(spec, nullopt);
     //     EXPECT_EQ(continueFlag, true);
     // }

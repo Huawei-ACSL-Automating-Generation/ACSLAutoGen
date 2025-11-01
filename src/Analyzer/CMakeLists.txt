@@ -106,6 +106,73 @@ target_link_libraries(__headers_tu PRIVATE ACSLG_compiler_flags UtilsLib)
 # Define the path for the generated subclass list (.inc file)
 set(GEN_INC ${GEN_DIR}/subclassesOfSymbol.inc)
 
+set(TOOL_ENV_TARGET AnalyzerLib)
+if(NOT TARGET ${TOOL_ENV_TARGET})
+  message(FATAL_ERROR "TOOL_ENV_TARGET '${TOOL_ENV_TARGET}' does not exist.")
+endif()
+
+get_target_property(_incs ${TOOL_ENV_TARGET} INCLUDE_DIRECTORIES)
+get_target_property(_incs_iface ${TOOL_ENV_TARGET}
+                    INTERFACE_INCLUDE_DIRECTORIES)
+set(_all_incs ${_incs} ${_incs_iface})
+
+set(EMIT_INCLUDES "")
+foreach(dir IN LISTS _all_incs)
+  if(dir)
+    list(APPEND EMIT_INCLUDES -I"${dir}")
+  endif()
+endforeach()
+
+set(_llvm_inc_cands ${LLVM_INCLUDE_DIRS} ${LLVM_INCLUDES})
+set(_clang_inc_cands ${Clang_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
+
+foreach(dir IN LISTS _llvm_inc_cands _clang_inc_cands)
+  if(dir)
+    list(APPEND EMIT_SYS_INCLUDES -isystem"${dir}")
+  endif()
+endforeach()
+
+get_target_property(_defs ${TOOL_ENV_TARGET} COMPILE_DEFINITIONS)
+get_target_property(_defs_iface ${TOOL_ENV_TARGET}
+                    INTERFACE_COMPILE_DEFINITIONS)
+set(_all_defs ${_defs} ${_defs_iface})
+
+set(EMIT_DEFS "")
+foreach(d IN LISTS _all_defs)
+  if(d)
+    list(APPEND EMIT_DEFS -D${d})
+  endif()
+endforeach()
+
+get_target_property(_opts ${TOOL_ENV_TARGET} COMPILE_OPTIONS)
+get_target_property(_opts_iface ${TOOL_ENV_TARGET} INTERFACE_COMPILE_OPTIONS)
+set(_all_opts ${_opts} ${_opts_iface})
+
+set(EMIT_OPTS "")
+foreach(opt IN LISTS _all_opts)
+  if(opt)
+    list(APPEND EMIT_OPTS ${opt})
+  endif()
+endforeach()
+
+get_target_property(_std ${TOOL_ENV_TARGET} CXX_STANDARD)
+if(_std)
+  set(EMIT_STD -std=c++${_std})
+endif()
+
+message(STATUS "emit incs: ${EMIT_INCLUDES}")
+message(STATUS "emit sys : ${EMIT_SYS_INCLUDES}")
+message(STATUS "emit defs: ${EMIT_DEFS}")
+message(STATUS "emit opts: ${EMIT_OPTS}")
+message(STATUS "emit std : ${EMIT_STD}")
+
+set(EXTRA_ARGS "")
+foreach(a IN LISTS EMIT_STD EMIT_INCLUDES EMIT_SYS_INCLUDES EMIT_DEFS EMIT_OPTS)
+  if(a)
+    list(APPEND EXTRA_ARGS "-extra-arg=${a}")
+  endif()
+endforeach()
+
 # Custom command: run the emit_subclasses tool to generate the .inc file
 add_custom_command(
   OUTPUT ${GEN_INC}
@@ -116,8 +183,8 @@ add_custom_command(
                                                         # file initially
   COMMAND
     $<TARGET_FILE:emit_subclasses> --base acslg::analyzer::symbolic::Symbol -o
-    ${GEN_INC} -p ${CMAKE_BINARY_DIR} ${UMBRELLA_CPP} # Run the tool with
-                                                      # compile commands
+    ${GEN_INC} ${EXTRA_ARGS} ${UMBRELLA_CPP}
+    # compile commands
   DEPENDS emit_subclasses __headers_tu ${UMBRELLA_CPP} # Regenerate if tool, TU,
                                                        # or headers change
   COMMENT "Generating subclass list: ${GEN_INC}"

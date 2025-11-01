@@ -4,9 +4,9 @@
 // generates a list of all **direct subclasses** of a given base class.
 // Usage example:
 //
-//   emit_subclasses --base acslg::analyzer::symbolic::Symbol \
-//                   -o subclasses.inc \
-//                   -p build \
+//   emit_subclasses --base acslg::analyzer::symbolic::Symbol
+//                   -o subclasses.inc
+//                   -p build
 //                   -- src/file1.cpp src/file2.cpp
 //
 // The tool writes an `.inc` file with lines like:
@@ -115,7 +115,7 @@ namespace acslg::tool {
 
     class Visitor : public RecursiveASTVisitor<Visitor> {
       public:
-        Visitor(Collector &C) : C(C) {}
+        Visitor(Collector &C) : C_(C) {}
 
         bool VisitCXXRecordDecl(CXXRecordDecl *RD) {
             if (!RD)
@@ -127,15 +127,15 @@ namespace acslg::tool {
 
             // Skip the base class itself
             const std::string QN = RD->getQualifiedNameAsString();
-            if (QN == C.BaseQName)
+            if (QN == C_.BaseQName)
                 return true;
 
             auto ClassScope = scopeOfQualified(QN);
-            if (ClassScope != C.BaseScope) {
+            if (ClassScope != C_.BaseScope) {
                 if (Verbose) {
                     llvm::errs() << "[Skip] Different scope: "
                                  << "class=" << QN << " (scope=" << ClassScope << ") "
-                                 << "baseScope=" << C.BaseScope << "\n";
+                                 << "baseScope=" << C_.BaseScope << "\n";
                 }
                 return true; // skip base traversal entirely
             }
@@ -159,10 +159,10 @@ namespace acslg::tool {
                     llvm::errs() << "   - base: " << BName << "\n";
 
                 // If one of the direct bases matches our target base, this is a direct subclass
-                if (BName == C.BaseQName) {
+                if (BName == C_.BaseQName) {
                     if (Verbose)
                         llvm::errs() << "   -> DIRECT SUBCLASS FOUND: " << QN << "\n";
-                    C.DirectDerived.insert(QN);
+                    C_.DirectDerived.insert(QN);
                     break; // no need to check other bases
                 }
             }
@@ -171,7 +171,7 @@ namespace acslg::tool {
         }
 
       private:
-        Collector &C;
+        Collector &C_;
     };
 
     // ---------------------- ASTConsumer ----------------------
@@ -179,19 +179,19 @@ namespace acslg::tool {
 
     class Consumer : public ASTConsumer {
       public:
-        Consumer(Collector &C) : C(C) {}
+        Consumer(Collector &C) : C_(C) {}
 
         void HandleTranslationUnit(ASTContext &Context) override {
             if (Verbose)
                 llvm::errs() << "[TU] Start traversing AST\n";
-            Visitor V(C);
+            Visitor V(C_);
             V.TraverseDecl(Context.getTranslationUnitDecl());
             if (Verbose)
                 llvm::errs() << "[TU] Done traversing AST\n";
         }
 
       private:
-        Collector &C;
+        Collector &C_;
     };
 
     // ---------------------- FrontendAction ----------------------
@@ -199,16 +199,16 @@ namespace acslg::tool {
 
     class Action : public ASTFrontendAction {
       public:
-        explicit Action(Collector &C) : C(C) {}
+        explicit Action(Collector &C) : C_(C) {}
 
         std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
                                                        llvm::StringRef) override {
             CI.getDiagnostics().setIgnoreAllWarnings(true);
-            return std::make_unique<Consumer>(C);
+            return std::make_unique<Consumer>(C_);
         }
 
       private:
-        Collector &C;
+        Collector &C_;
     };
 
     // ---------------------- Custom ActionFactory ----------------------
@@ -216,11 +216,11 @@ namespace acslg::tool {
 
     class ActionFactory : public FrontendActionFactory {
       public:
-        explicit ActionFactory(Collector &C) : C(C) {}
-        std::unique_ptr<FrontendAction> create() override { return std::make_unique<Action>(C); }
+        explicit ActionFactory(Collector &C) : C_(C) {}
+        std::unique_ptr<FrontendAction> create() override { return std::make_unique<Action>(C_); }
 
       private:
-        Collector &C;
+        Collector &C_;
     };
 } // namespace acslg::tool
 
@@ -228,6 +228,12 @@ namespace acslg::tool {
 // Entry point: parse arguments, run ClangTool, collect subclasses, write output.
 
 int main(int argc, const char **argv) {
+    // DEBUG: dump raw argv (BEFORE CommonOptionsParser eats them)
+    // llvm::errs() << "[RAW ARGV]\n";
+    // for (int i = 0; i < argc; ++i)
+    //     llvm::errs() << "  argv[" << i << "] = " << argv[i] << "\n";
+    // llvm::errs() << "\n";
+
     using namespace acslg::tool;
     // Parse CLI arguments
     auto ExpParser = CommonOptionsParser::create(argc, argv, Cat);
@@ -236,6 +242,15 @@ int main(int argc, const char **argv) {
         return 1;
     }
     auto &Parser = *ExpParser;
+
+    // llvm::errs() << "[Compile Commands]\n";
+    // for (auto &Cmd : Parser.getCompilations().getAllCompileCommands()) {
+    //     llvm::errs() << "  file = " << Cmd.Filename << "\n";
+    //     llvm::errs() << "  command line:\n";
+    //     for (auto &Arg : Cmd.CommandLine)
+    //         llvm::errs() << "    " << Arg << "\n";
+    //     llvm::errs() << "\n";
+    // }
 
     // Sanity checks
     if (BaseName.empty()) {
