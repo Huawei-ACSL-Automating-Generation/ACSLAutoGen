@@ -625,7 +625,7 @@ namespace acslg::analyzer::symbolic {
         if (fromAddr_ == std::nullopt)
             return SymbolicExpr::GetACSLError::HeapAddress;
 
-        auto offsetStr = callGetACSL(*offset_, config, usedPoints, fromPoint_,
+        auto offsetStr = callGetACSL(*offset_, config, usedPoints, currentPoint,
                                      getPrecedence(Operator::Add), true);
         if (!offsetStr)
             return offsetStr.error();
@@ -714,7 +714,7 @@ namespace acslg::analyzer::symbolic {
         auto nameStr = prefix + std::move(nameStrExpected.value()) + suffix;
 
         if (length_ == std::nullopt) {
-            auto offsetStr = callGetACSL(*offset_, config, usedPoints, fromPoint_,
+            auto offsetStr = callGetACSL(*offset_, config, usedPoints, currentPoint,
                                          /* enclosed in [] */ 0, false);
             if (!offsetStr)
                 return offsetStr.error();
@@ -741,7 +741,7 @@ namespace acslg::analyzer::symbolic {
 
         /*---------------- deal with range -----------------*/
         auto rangePrec = getPrecedence(Operator::Range);
-        auto offsetStr = callGetACSL(*offset_, config, usedPoints, fromPoint_, rangePrec, false);
+        auto offsetStr = callGetACSL(*offset_, config, usedPoints, currentPoint, rangePrec, false);
         if (!offsetStr)
             return offsetStr.error();
 
@@ -753,7 +753,7 @@ namespace acslg::analyzer::symbolic {
                 BinaryOpExpr::Operator::Subtract, std::make_unique<LiteralExpr>(1))
                 ->simplifiedExpr();
         auto rightBoundStr =
-            callGetACSL(*rightBound, config, usedPoints, fromPoint_, rangePrec, true);
+            callGetACSL(*rightBound, config, usedPoints, currentPoint, rangePrec, true);
         if (!rightBoundStr)
             return rightBoundStr.error();
 

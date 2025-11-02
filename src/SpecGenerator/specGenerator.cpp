@@ -56,8 +56,8 @@ namespace acslg::spec_generator {
     LoopInfo::Pattern &LoopInfo::Pattern::operator=(const Pattern &other) {
         if (this == &other)
             return *this;
-        initialValue_ = other.initialValue_->clone().into_underlying();
-        step_         = other.step_;
+        initialValue = other.initialValue->clone().into_underlying();
+        step         = other.step;
         return *this;
     }
 
@@ -68,27 +68,27 @@ namespace acslg::spec_generator {
 
         oss << type("LoopPattern") << " {\n";
         oss << "  " << key("initialValue") << ": ";
-        oss << initialValue_->dump() << "\n";
-        oss << "  " << key("step") << ": " << lit(std::to_string(step_)) << "\n";
+        oss << initialValue->dump() << "\n";
+        oss << "  " << key("step") << ": " << lit(std::to_string(step)) << "\n";
         oss << "}";
 
         return oss.str();
     }
 
     LoopInfo::LoopInfo(const clang::Stmt *loopStmt)
-        : loopStmt_(loopStmt), initStmt_{nullptr}, condExpr_{nullptr}, incStmt_(nullptr),
-          bodyStmt_(nullptr) {
+        : loopStmt(loopStmt), initStmt{nullptr}, condExpr{nullptr}, incStmt(nullptr),
+          bodyStmt(nullptr) {
         if (const auto *forStmt = dyn_cast<clang::ForStmt>(loopStmt)) {
-            initStmt_ = forStmt->getInit();
-            condExpr_ = forStmt->getCond();
-            incStmt_  = forStmt->getInc();
-            bodyStmt_ = forStmt->getBody();
+            initStmt = forStmt->getInit();
+            condExpr = forStmt->getCond();
+            incStmt  = forStmt->getInc();
+            bodyStmt = forStmt->getBody();
         } else if (const auto *whileStmt = dyn_cast<clang::WhileStmt>(loopStmt)) {
-            condExpr_ = whileStmt->getCond();
-            bodyStmt_ = whileStmt->getBody();
+            condExpr = whileStmt->getCond();
+            bodyStmt = whileStmt->getBody();
         } else if (const auto *doWhileStmt = dyn_cast<clang::DoStmt>(loopStmt)) {
-            condExpr_ = doWhileStmt->getCond();
-            bodyStmt_ = doWhileStmt->getBody();
+            condExpr = doWhileStmt->getCond();
+            bodyStmt = doWhileStmt->getBody();
         } else {
             ERROR("LoopStmt should be a clang::Stmt of loop.");
         }
@@ -163,7 +163,7 @@ namespace acslg::spec_generator {
         std::unordered_set<symb::SourcePoint> allUsedPoints;
 
         auto loopEntryPoint = symb::SourcePoint::fromStmtBefore(
-            loopInfo.loopStmt_, loopEntry.getContext().getSourceManager(),
+            loopInfo.loopStmt, loopEntry.getContext().getSourceManager(),
             loopEntry.getContext().getLangOptions());
         if (preState.getPaths().size() != loopEntry.getPaths().size()) {
             ERROR("Branch is unsupported here.");
@@ -172,35 +172,39 @@ namespace acslg::spec_generator {
         auto &entryPaths = loopEntry.getPaths();
         auto pathNum     = preState.getPaths().size();
         auto postState   = preState.clone(/*with path*/ false);
-        auto resultInfos = std::vector<std::vector<PostInfo>>{pathNum};
+        auto resultInfos = std::vector<std::vector<PostPSInfo>>{pathNum};
 
         auto updateResultInfoWithInfo = [&loopEntryPoint](const analyzer::Path &currentPath,
-                                                          PostInfo &toUpdate, PostInfo &info) {
-            for (auto &[addr, value] : info.memoryMap_) {
+                                                          PostPSInfo &toUpdate, auto &&info) {
+            for (auto &[addr, value] : info.memoryMap) {
                 auto subedAddrExpr = addr.get().getSubstitutedExpr(currentPath, loopEntryPoint);
                 auto subedAddr     = llvm::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
                 if (subedAddr == nullptr)
                     UNREACHABLE();
                 auto subedValue = value->getSubstitutedExpr(currentPath, loopEntryPoint);
-                if (auto it = toUpdate.memoryMap_.find(*subedAddr);
-                    it != toUpdate.memoryMap_.end() && !it->second->isUnknown()) {
+                if (auto it = toUpdate.memoryMap.find(*subedAddr);
+                    it != toUpdate.memoryMap.end() && !it->second->isUnknown()) {
                     WARN("Another plugin has already updated this address. The new value: "
                          "{" +
                          subedValue->dump() + "} is discarded.");
                     continue;
                 }
-                toUpdate.memoryMap_.insert_or_assign(*subedAddr, std::move(subedValue));
+                toUpdate.memoryMap.insert_or_assign(*subedAddr, std::move(subedValue));
             }
 
-            for (auto &cond : info.pathConds_) {
+            for (auto &cond : info.pathConds) {
                 auto subedConds = cond->getSubstitutedExpr(currentPath, loopEntryPoint);
-                toUpdate.pathConds_.push_back(std::move(subedConds));
+                toUpdate.pathConds.push_back(std::move(subedConds));
                 // todo: may insert for each unmodified position:
                 // Symbol(with fromPoint_ = afterLoop) == the current value.
             }
+
+            if constexpr (requires { info.pathState; }) {
+                toUpdate.pathState = info.pathState;
+            }
         };
 
-        auto updateResultInfosWithGlobalInfo = [&](PostInfo &info) {
+        auto updateResultInfosWithGlobalInfo = [&](PostPIInfo &info) {
             // for every pre-path
             for (auto i : std::views::iota(size_t{0}, pathNum)) {
                 auto &entryPath         = *entryPaths.at(i);
@@ -217,7 +221,7 @@ namespace acslg::spec_generator {
             }
         }; // updateResultInfosWithGlobalInfo
 
-        auto updateResultInfosWithPerPathInfo = [&](std::vector<PostInfo> &infos) {
+        auto updateResultInfosWithPerPathInfo = [&](std::vector<PostPSInfo> &infos) {
             // for every pre-path
             for (auto i : std::views::iota(size_t{0}, pathNum)) {
                 auto &entryPath         = *entryPaths.at(i);
@@ -299,7 +303,7 @@ namespace acslg::spec_generator {
 
             for (auto &postBranchInfo : postBranchesInfos) {
                 auto postPath = prePath->clone();
-                for (auto &[addr, value] : postBranchInfo.memoryMap_) {
+                for (auto &[addr, value] : postBranchInfo.memoryMap) {
                     auto root = addr.get().getFromRoot();
                     if (root == std::nullopt)
                         TODO();
@@ -315,7 +319,7 @@ namespace acslg::spec_generator {
 
                 // for (auto &pathCond : prePath->getPathConditions())
                 //     postPath->insertPathCondition(pathCond->clone());
-                for (auto &pathCond : postBranchInfo.pathConds_)
+                for (auto &pathCond : postBranchInfo.pathConds)
                     postPath->insertPathCondition(std::move(pathCond));
                 postState->insertPath(std::move(postPath));
             }

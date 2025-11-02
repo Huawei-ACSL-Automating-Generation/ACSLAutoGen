@@ -29,15 +29,13 @@ namespace acslg::spec_generator {
 
     struct LoopInfo {
         struct Pattern {
-            utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>> initialValue_;
-            int64_t step_;
-            Pattern(utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>>
-                        initialValue,
-                    int64_t step)
-                : initialValue_(std::move(initialValue)), step_(step) {}
+            utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>> initialValue;
+            int64_t step;
+            Pattern(utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>> init,
+                    int64_t st)
+                : initialValue(std::move(init)), step(st) {}
             Pattern(const Pattern &other)
-                : initialValue_(other.initialValue_->clone().into_underlying()),
-                  step_(other.step_) {}
+                : initialValue(other.initialValue->clone().into_underlying()), step(other.step) {}
             Pattern &operator=(const Pattern &other);
             Pattern(Pattern &&other)            = default;
             Pattern &operator=(Pattern &&other) = default;
@@ -46,41 +44,41 @@ namespace acslg::spec_generator {
 
         LoopInfo(const clang::Stmt *loopStmt);
 
-        const clang::Stmt *loopStmt_;
-        const clang::Stmt *initStmt_;
-        const clang::Expr *condExpr_;
-        const clang::Stmt *incStmt_;
-        const clang::Stmt *bodyStmt_;
+        const clang::Stmt *loopStmt;
+        const clang::Stmt *initStmt;
+        const clang::Expr *condExpr;
+        const clang::Stmt *incStmt;
+        const clang::Stmt *bodyStmt;
 
-        // SetLoopEntryPlugin
-        struct LoopEntryInfo {
-            utils::not_null<std::unique_ptr<const analyzer::ProgramState>> symbolicLoopEntry_;
+        // SetEntryAndCurrentPlugin
+        struct EntryAndCurrentInfo {
+            utils::not_null<std::unique_ptr<const analyzer::ProgramState>> symbolicLoopEntry;
+            utils::not_null<std::unique_ptr<const analyzer::ProgramState>> symbolicLoopCurrent;
+            std::vector<utils::not_null<std::unique_ptr<analyzer::Path>>> inactivePaths;
         };
-        std::optional<LoopEntryInfo> loopEntryInfo_;
+        std::optional<EntryAndCurrentInfo> entryAndCurrentInfo;
 
         // SetIndexPlugin
         struct IndexInfo {
-            utils::not_null<const clang::Expr *> indexExpr_;
+            utils::not_null<const clang::Expr *> indexExpr;
             utils::not_null<std::unique_ptr<analyzer::symbolic::Address>>
-                indexRealAddr_; // index's sole address on pre-state
+                indexRealAddr; // index's sole address on pre-state
             utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-                indexSymbolicValue_; // Varibale or Address
-            clang::BinaryOperator::Opcode op_;
+                indexSymbolicValue; // Varibale or Address
+            clang::BinaryOperator::Opcode op;
             utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-                indexBound_; // exclusive bound
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>> preciseLoopCount_;
+                indexBound; // exclusive bound
+            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>> preciseLoopCount;
             utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-                maxLoopCount_; // The absolute value of the difference between the starting index
-                               // and the maximum/minimum possible index.
-            Pattern indexPattern_;
-            bool isLocal_; // Useless, delete this.
+                maxLoopCount; // The absolute value of the difference between the starting index
+                              // and the maximum/minimum possible index.
+            Pattern indexPattern;
+            bool isLocal; // Useless, delete this.
         };
-        std::optional<IndexInfo> indexInfo_;
-
-        // SetIndexPlugin
+        std::optional<IndexInfo> indexInfo;
         std::vector<const clang::Expr *>
-            extraCondConjuncts_; // extraCondConjuncts holds those conjunctive
-                                 // clauses extracted from the loop
+            extraCondConjuncts; // extraCondConjuncts holds those conjunctive
+                                // clauses extracted from the loop
         // condition that are **not** the simple index condition (e.g., i < n).
 
         // SetPatternsPlugin
@@ -88,9 +86,12 @@ namespace acslg::spec_generator {
         // Address with nullopt means too complex.
         // Other addresses' values hold through loop.
         struct PatternInfo {
-            analyzer::symbolic::AddressBoxMap<std::optional<const Pattern>> patternsMap_;
+            analyzer::symbolic::AddressBoxMap<std::optional<const Pattern>> normalExitPatternsMap;
+            std::vector<analyzer::symbolic::AddressBoxMap<std::optional<const Pattern>>>
+                interruptedPathPatternsMaps;
+            analyzer::symbolic::AddressBoxMap<std::optional<const Pattern>> allPatternsMap;
         };
-        std::optional<PatternInfo> patternInfo_;
+        std::optional<PatternInfo> patternInfo;
 
         // TODO(more info to be added)
     };
@@ -177,34 +178,35 @@ namespace acslg::spec_generator {
         LoopInfoPlugin() : ACSLPlugin(Kind::K_LoopInfoPlugin) {};
     };
 
-    struct PostInfo {
+    struct PostPIInfo {
         analyzer::symbolic::AddressBoxMap<
             utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
-            memoryMap_;
-        std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pathConds_;
+            memoryMap;
+        std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pathConds;
 
-        PostInfo(analyzer::symbolic::AddressBoxMap<
-                     utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
-                 std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pcs)
-            : memoryMap_(std::move(mem)), pathConds_(std::move(pcs)) {}
+        PostPIInfo(
+            analyzer::symbolic::AddressBoxMap<
+                utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
+            std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pcs)
+            : memoryMap(std::move(mem)), pathConds(std::move(pcs)) {}
 
-        PostInfo(const PostInfo &other) {
-            for (const auto &kv : other.memoryMap_) {
+        PostPIInfo(const PostPIInfo &other) {
+            for (const auto &kv : other.memoryMap) {
                 const auto &addr  = kv.first;
                 const auto &exprp = kv.second;
                 auto cloned       = exprp->clone();
-                memoryMap_.emplace(addr, utils::not_null{std::move(cloned)});
+                memoryMap.emplace(addr, utils::not_null{std::move(cloned)});
             }
 
-            pathConds_.reserve(other.pathConds_.size());
-            for (const auto &exprp : other.pathConds_) {
+            pathConds.reserve(other.pathConds.size());
+            for (const auto &exprp : other.pathConds) {
                 auto cloned = exprp->clone();
-                pathConds_.push_back(utils::not_null{std::move(cloned)});
+                pathConds.push_back(utils::not_null{std::move(cloned)});
             }
         }
 
-        PostInfo()                     = default;
-        PostInfo(PostInfo &&) noexcept = default;
+        PostPIInfo()                       = default;
+        PostPIInfo(PostPIInfo &&) noexcept = default;
     };
     class PathInsensitiveLoopInvPlugin : public ACSLPlugin {
       public:
@@ -214,7 +216,7 @@ namespace acslg::spec_generator {
         struct GenResultType {
             std::optional<std::string> acsl;
             std::unordered_set<analyzer::symbolic::SourcePoint> acslUsedPoints;
-            PostInfo globalPostInfo;
+            PostPIInfo globalPostInfo;
         };
         virtual GenResultType generate(const analyzer::ProgramState &preState,
                                        const analyzer::ProgramState &loopEntry,
@@ -224,6 +226,38 @@ namespace acslg::spec_generator {
         PathInsensitiveLoopInvPlugin() : ACSLPlugin(Kind::K_PILoopInvPlugin) {};
     };
 
+    struct PostPSInfo {
+        analyzer::symbolic::AddressBoxMap<
+            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
+            memoryMap;
+        std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pathConds;
+        analyzer::Path::PathState pathState;
+
+        PostPSInfo(
+            analyzer::symbolic::AddressBoxMap<
+                utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
+            std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pcs,
+            analyzer::Path::PathState ps)
+            : memoryMap(std::move(mem)), pathConds(std::move(pcs)), pathState(ps) {}
+
+        PostPSInfo(const PostPSInfo &other) {
+            for (const auto &kv : other.memoryMap) {
+                const auto &addr  = kv.first;
+                const auto &exprp = kv.second;
+                auto cloned       = exprp->clone();
+                memoryMap.emplace(addr, utils::not_null{std::move(cloned)});
+            }
+
+            pathConds.reserve(other.pathConds.size());
+            for (const auto &exprp : other.pathConds) {
+                auto cloned = exprp->clone();
+                pathConds.push_back(utils::not_null{std::move(cloned)});
+            }
+        }
+
+        PostPSInfo()                       = default;
+        PostPSInfo(PostPSInfo &&) noexcept = default;
+    };
     class PathSensitiveLoopInvPlugin : public ACSLPlugin {
       public:
         static bool classof(const ACSLPlugin *plugin) {
@@ -232,7 +266,7 @@ namespace acslg::spec_generator {
         struct GenResultType {
             std::optional<std::string> acsl;
             std::unordered_set<analyzer::symbolic::SourcePoint> acslUsedPoints;
-            std::vector<PostInfo> perPathPostInfos;
+            std::vector<PostPSInfo> perPathPostInfos;
         };
 
         // todo: may pass pass in some loop information to help the plugin determine whether it

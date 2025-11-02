@@ -33,15 +33,15 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
         EXPECT_EQ(continueFlag, true);
-        ASSERT_NE(loopInfo.patternInfo_, nullopt);
-        auto &patternInfo = loopInfo.patternInfo_.value();
-        EXPECT_EQ(patternInfo.patternsMap_.size(), 2);
-        for (auto &[addr, pattern] : patternInfo.patternsMap_) {
+        ASSERT_NE(loopInfo.patternInfo, nullopt);
+        auto &patternInfo = loopInfo.patternInfo.value();
+        EXPECT_EQ(patternInfo.allPatternsMap.size(), 2);
+        for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
             DEBUG(addr.get().dump());
             if (pattern != nullopt) {
-                DEBUG(pattern.value().initialValue_->dump() +
-                      ", step: " + to_string(pattern.value().step_));
-                EXPECT_EQ(pattern.value().step_, 1);
+                DEBUG(pattern.value().initialValue->dump() +
+                      ", step: " + to_string(pattern.value().step));
+                EXPECT_EQ(pattern.value().step, 1);
             } else {
                 DEBUG("too complex");
                 FAIL();
@@ -61,15 +61,15 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
         EXPECT_EQ(continueFlag, true);
-        ASSERT_NE(loopInfo.patternInfo_, nullopt);
-        auto &patternInfo = loopInfo.patternInfo_.value();
-        EXPECT_EQ(patternInfo.patternsMap_.size(), 2);
-        for (auto &[addr, pattern] : patternInfo.patternsMap_) {
+        ASSERT_NE(loopInfo.patternInfo, nullopt);
+        auto &patternInfo = loopInfo.patternInfo.value();
+        EXPECT_EQ(patternInfo.allPatternsMap.size(), 2);
+        for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
             DEBUG(addr.get().dump());
             if (pattern != nullopt) {
-                DEBUG(pattern.value().initialValue_->dump() +
-                      ", step: " + to_string(pattern.value().step_));
-                EXPECT_EQ(pattern.value().step_, 1);
+                DEBUG(pattern.value().initialValue->dump() +
+                      ", step: " + to_string(pattern.value().step));
+                EXPECT_EQ(pattern.value().step, 1);
             } else {
                 DEBUG("too complex");
                 FAIL();
@@ -90,15 +90,15 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
         EXPECT_EQ(continueFlag, true);
-        ASSERT_NE(loopInfo.patternInfo_, nullopt);
-        auto &patternInfo = loopInfo.patternInfo_.value();
-        EXPECT_EQ(patternInfo.patternsMap_.size(), 3);
-        for (auto &[addr, pattern] : patternInfo.patternsMap_) {
+        ASSERT_NE(loopInfo.patternInfo, nullopt);
+        auto &patternInfo = loopInfo.patternInfo.value();
+        EXPECT_EQ(patternInfo.allPatternsMap.size(), 3);
+        for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
             DEBUG(addr.get().dump());
             if (pattern != nullopt) {
-                DEBUG(pattern.value().initialValue_->dump() +
-                      ", step: " + to_string(pattern.value().step_));
-                EXPECT_EQ(pattern.value().step_, 1);
+                DEBUG(pattern.value().initialValue->dump() +
+                      ", step: " + to_string(pattern.value().step));
+                EXPECT_EQ(pattern.value().step, 1);
             } else {
                 DEBUG("too complex");
                 if (!llvm::isa<SymbolAddress>(addr.get()))
@@ -119,18 +119,18 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
         EXPECT_EQ(continueFlag, true);
-        ASSERT_NE(loopInfo.patternInfo_, nullopt);
-        auto &patternInfo = loopInfo.patternInfo_.value();
-        EXPECT_EQ(patternInfo.patternsMap_.size(), 2);
-        for (auto &[addr, pattern] : patternInfo.patternsMap_) {
+        ASSERT_NE(loopInfo.patternInfo, nullopt);
+        auto &patternInfo = loopInfo.patternInfo.value();
+        EXPECT_EQ(patternInfo.allPatternsMap.size(), 2);
+        for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
             DEBUG(addr.get().dump());
             ASSERT_NE(pattern, nullopt);
-            DEBUG(pattern.value().initialValue_->dump() +
-                  ", step: " + to_string(pattern.value().step_));
+            DEBUG(pattern.value().initialValue->dump() +
+                  ", step: " + to_string(pattern.value().step));
             if (llvm::isa<SymbolAddress>(addr.get()))
-                EXPECT_EQ(pattern.value().step_, -1);
+                EXPECT_EQ(pattern.value().step, -1);
             else
-                EXPECT_EQ(pattern.value().step_, 1);
+                EXPECT_EQ(pattern.value().step, 1);
         }
     }
 
@@ -168,25 +168,25 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
         EXPECT_EQ(continueFlag, true);
-        ASSERT_NE(loopInfo.patternInfo_, nullopt);
-        auto &patternInfo = loopInfo.patternInfo_.value();
-        EXPECT_EQ(patternInfo.patternsMap_.size(), 6);
-        for (auto &[addr, pattern] : patternInfo.patternsMap_) {
+        ASSERT_NE(loopInfo.patternInfo, nullopt);
+        auto &patternInfo = loopInfo.patternInfo.value();
+        EXPECT_EQ(patternInfo.allPatternsMap.size(), 6);
+        for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
             auto res = addr.get().getACSLOfValue({.noStateLabelFunctionAt = true});
             ASSERT_TRUE(res) << "Address {" + addr.get().dump() << "} getACSL failed.";
             auto addrStr = res.value().first;
             if (addrStr == "aa") {
                 ASSERT_NE(pattern, nullopt);
-                EXPECT_EQ(pattern.value().step_, 1);
+                EXPECT_EQ(pattern.value().step, 1);
             } else if (addrStr == "bb") {
                 ASSERT_NE(pattern, nullopt);
-                EXPECT_EQ(pattern.value().step_, 1);
+                EXPECT_EQ(pattern.value().step, 1);
             } else if (addrStr == "rr") {
                 ASSERT_NE(pattern, nullopt);
-                EXPECT_EQ(pattern.value().step_, 1);
+                EXPECT_EQ(pattern.value().step, 1);
             } else if (addrStr == "nn") {
                 ASSERT_NE(pattern, nullopt);
-                EXPECT_EQ(pattern.value().step_, -1);
+                EXPECT_EQ(pattern.value().step, -1);
             } else if (addrStr == "*rr" || addrStr == "rr[0]") {
                 EXPECT_EQ(pattern, nullopt);
             } else if (addrStr == "carry") {
@@ -210,19 +210,19 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
         EXPECT_EQ(continueFlag, true);
-        ASSERT_NE(loopInfo.indexInfo_, nullopt);
-        auto &indexInfo = loopInfo.indexInfo_.value();
-        ASSERT_NE(indexInfo.indexRealAddr_->getFromRoot(), nullopt);
-        EXPECT_EQ(indexInfo.indexRealAddr_->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue_));
+        ASSERT_NE(loopInfo.indexInfo, nullopt);
+        auto &indexInfo = loopInfo.indexInfo.value();
+        ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
+        EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
+        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue));
         EXPECT_OK_AND_FIRST_EQ(
-            indexInfo.indexSymbolicValue_->getACSL({.noStateLabelFunctionAt = true}), "i");
-        EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
-        EXPECT_OK_AND_FIRST_EQ(indexInfo.indexBound_->getACSL({.noStateLabelFunctionAt = true}),
+            indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
+        EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_LT);
+        EXPECT_OK_AND_FIRST_EQ(indexInfo.indexBound->getACSL({.noStateLabelFunctionAt = true}),
                                "n");
-        EXPECT_OK_AND_FIRST_EQ(indexInfo.preciseLoopCount_->simplifiedExpr()->getACSL(
-                                   {.noStateLabelFunctionAt = true}),
-                               "n - i");
+        EXPECT_OK_AND_FIRST_EQ(
+            indexInfo.preciseLoopCount->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}),
+            "n - i");
     }
 
     TEST(SetIndexPluginTest, SimpleLoop_2) {
@@ -237,19 +237,19 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
         EXPECT_EQ(continueFlag, true);
-        ASSERT_NE(loopInfo.indexInfo_, nullopt);
-        auto &indexInfo = loopInfo.indexInfo_.value();
-        ASSERT_NE(indexInfo.indexRealAddr_->getFromRoot(), nullopt);
-        EXPECT_EQ(indexInfo.indexRealAddr_->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue_));
+        ASSERT_NE(loopInfo.indexInfo, nullopt);
+        auto &indexInfo = loopInfo.indexInfo.value();
+        ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
+        EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
+        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue));
         EXPECT_OK_AND_FIRST_EQ(
-            indexInfo.indexSymbolicValue_->getACSL({.noStateLabelFunctionAt = true}), "i");
-        EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_NE);
-        EXPECT_OK_AND_FIRST_EQ(indexInfo.indexBound_->getACSL({.noStateLabelFunctionAt = true}),
+            indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
+        EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_NE);
+        EXPECT_OK_AND_FIRST_EQ(indexInfo.indexBound->getACSL({.noStateLabelFunctionAt = true}),
                                "0");
-        EXPECT_OK_AND_FIRST_EQ(indexInfo.preciseLoopCount_->simplifiedExpr()->getACSL(
-                                   {.noStateLabelFunctionAt = true}),
-                               "i");
+        EXPECT_OK_AND_FIRST_EQ(
+            indexInfo.preciseLoopCount->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}),
+            "i");
     }
 
     TEST(SetIndexPluginTest, SimpleLoop_3) {
@@ -266,19 +266,19 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
         EXPECT_EQ(continueFlag, true);
-        ASSERT_NE(loopInfo.indexInfo_, nullopt);
-        auto &indexInfo = loopInfo.indexInfo_.value();
-        ASSERT_NE(indexInfo.indexRealAddr_->getFromRoot(), nullopt);
-        EXPECT_EQ(indexInfo.indexRealAddr_->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue_));
+        ASSERT_NE(loopInfo.indexInfo, nullopt);
+        auto &indexInfo = loopInfo.indexInfo.value();
+        ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
+        EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
+        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue));
         EXPECT_OK_AND_FIRST_EQ(
-            indexInfo.indexSymbolicValue_->getACSL({.noStateLabelFunctionAt = true}), "i");
-        EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_GE);
-        EXPECT_OK_AND_FIRST_EQ(indexInfo.indexBound_->getACSL({.noStateLabelFunctionAt = true}),
+            indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
+        EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_GE);
+        EXPECT_OK_AND_FIRST_EQ(indexInfo.indexBound->getACSL({.noStateLabelFunctionAt = true}),
                                "0");
-        EXPECT_OK_AND_FIRST_EQ(indexInfo.preciseLoopCount_->simplifiedExpr()->getACSL(
-                                   {.noStateLabelFunctionAt = true}),
-                               "i + 1");
+        EXPECT_OK_AND_FIRST_EQ(
+            indexInfo.preciseLoopCount->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}),
+            "i + 1");
     }
 
     TEST(SetIndexPluginTest, SimpleLoop_4) {
@@ -292,19 +292,19 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
         EXPECT_EQ(continueFlag, true);
-        ASSERT_NE(loopInfo.indexInfo_, nullopt);
-        auto &indexInfo = loopInfo.indexInfo_.value();
-        ASSERT_NE(indexInfo.indexRealAddr_->getFromRoot(), nullopt);
-        EXPECT_EQ(indexInfo.indexRealAddr_->getFromRoot().value()->getNameAsString(), "pt");
-        EXPECT_TRUE(llvm::isa<Address>(*indexInfo.indexSymbolicValue_));
+        ASSERT_NE(loopInfo.indexInfo, nullopt);
+        auto &indexInfo = loopInfo.indexInfo.value();
+        ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
+        EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "pt");
+        EXPECT_TRUE(llvm::isa<Address>(*indexInfo.indexSymbolicValue));
         EXPECT_OK_AND_FIRST_EQ(
-            indexInfo.indexSymbolicValue_->getACSL({.noStateLabelFunctionAt = true}), "pt");
-        EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
-        EXPECT_OK_AND_FIRST_EQ(indexInfo.indexBound_->getACSL({.noStateLabelFunctionAt = true}),
+            indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "pt");
+        EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_LT);
+        EXPECT_OK_AND_FIRST_EQ(indexInfo.indexBound->getACSL({.noStateLabelFunctionAt = true}),
                                "end");
-        EXPECT_OK_AND_FIRST_THAT(indexInfo.preciseLoopCount_->simplifiedExpr()->getACSL(
-                                     {.noStateLabelFunctionAt = true}),
-                                 AnyOf("end - pt", "-1 * pt + end"));
+        EXPECT_OK_AND_FIRST_THAT(
+            indexInfo.preciseLoopCount->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}),
+            AnyOf("end - pt", "-1 * pt + end"));
     }
 
     TEST(SetIndexPluginTest, ComplexLoop_1) {
@@ -323,7 +323,7 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
         EXPECT_EQ(continueFlag, false);
-        EXPECT_EQ(loopInfo.indexInfo_, nullopt);
+        EXPECT_EQ(loopInfo.indexInfo, nullopt);
     }
 
     TEST(SetIndexPluginTest, openHITLS_1) {
@@ -357,21 +357,21 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
         EXPECT_EQ(continueFlag, false);
-        ASSERT_NE(loopInfo.indexInfo_, nullopt);
-        auto &indexInfo = loopInfo.indexInfo_.value();
-        ASSERT_NE(indexInfo.indexRealAddr_->getFromRoot(), nullopt);
-        EXPECT_EQ(indexInfo.indexRealAddr_->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue_));
+        ASSERT_NE(loopInfo.indexInfo, nullopt);
+        auto &indexInfo = loopInfo.indexInfo.value();
+        ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
+        EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
+        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue));
         EXPECT_OK_AND_FIRST_EQ(
-            indexInfo.indexSymbolicValue_->getACSL({.noStateLabelFunctionAt = true}), "i");
-        EXPECT_EQ(indexInfo.op_, clang::BinaryOperatorKind::BO_LT);
-        EXPECT_OK_AND_FIRST_EQ(indexInfo.indexBound_->getACSL({.noStateLabelFunctionAt = true}),
+            indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
+        EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_LT);
+        EXPECT_OK_AND_FIRST_EQ(indexInfo.indexBound->getACSL({.noStateLabelFunctionAt = true}),
                                "size");
-        EXPECT_EQ(indexInfo.preciseLoopCount_->isUnknown(), true);
+        EXPECT_EQ(indexInfo.preciseLoopCount->isUnknown(), true);
         EXPECT_OK_AND_FIRST_THAT(
-            indexInfo.maxLoopCount_->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}),
+            indexInfo.maxLoopCount->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}),
             AllOf(AnyOf(StartsWith("size"), HasSubstr("+ size")),
                   AnyOf(StartsWith("-1 * i"), HasSubstr("- i"))));
-        EXPECT_EQ(loopInfo.extraCondConjuncts_.size(), 1);
+        EXPECT_EQ(loopInfo.extraCondConjuncts.size(), 1);
     }
 } // namespace acslg::test::unit::spec_generator

@@ -37,8 +37,8 @@ namespace acslg::test::unit::spec_generator {
         auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("mx"));
-        ASSERT_EQ(postInfo.memoryMap_.size(), 1);
-        EXPECT_TRUE(llvm::isa<UnknownExpr>(*postInfo.memoryMap_.begin()->second));
+        ASSERT_EQ(postInfo.memoryMap.size(), 1);
+        EXPECT_TRUE(llvm::isa<UnknownExpr>(*postInfo.memoryMap.begin()->second));
     }
 
     TEST(LoopAssignsPluginTest, Simple_1) {
@@ -55,9 +55,9 @@ namespace acslg::test::unit::spec_generator {
         auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("cnt"));
-        EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. n - 1\])"));
-        EXPECT_EQ(postInfo.memoryMap_.size(), 2);
-        for (auto &[addr, value] : postInfo.memoryMap_) {
+        EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. \\at\(n, [^)]+\) - 1\])"));
+        EXPECT_EQ(postInfo.memoryMap.size(), 2);
+        for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
@@ -95,9 +95,9 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("i"));
         EXPECT_THAT(*spec, HasSubstr("cnt"));
-        EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. n - 1\])"));
-        EXPECT_EQ(postInfo.memoryMap_.size(), 3);
-        for (auto &[addr, value] : postInfo.memoryMap_) {
+        EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. \\at\(n, [^)]+\) - 1\])"));
+        EXPECT_EQ(postInfo.memoryMap.size(), 3);
+        for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
@@ -138,9 +138,9 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("i"));
         EXPECT_THAT(*spec, HasSubstr("cnt"));
-        EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. n - 1\])"));
-        EXPECT_EQ(postInfo.memoryMap_.size(), 4);
-        for (auto &[addr, value] : postInfo.memoryMap_) {
+        EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. \\at\(n, [^)]+\) - 1\])"));
+        EXPECT_EQ(postInfo.memoryMap.size(), 4);
+        for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
@@ -205,10 +205,10 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_THAT(*spec, HasSubstr("bb"));
         EXPECT_THAT(*spec, HasSubstr("rr"));
         EXPECT_THAT(*spec, HasSubstr("nn"));
-        EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(r, [^)]+\)\[0 \.\. n - 1\])"));
+        EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(r, [^)]+\)\[0 \.\. \\at\(n, [^)]+\) - 1\])"));
 
-        EXPECT_EQ(postInfo.memoryMap_.size(), 6);
-        for (auto &[addr, value] : postInfo.memoryMap_) {
+        EXPECT_EQ(postInfo.memoryMap.size(), 6);
+        for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
@@ -378,7 +378,7 @@ namespace acslg::test::unit::spec_generator {
 
         ASSERT_EQ(postInfos.size(), 1);
         auto &postInfo = postInfos.at(0);
-        for (auto &[addr, value] : postInfo.memoryMap_) {
+        for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
@@ -419,7 +419,7 @@ namespace acslg::test::unit::spec_generator {
 
         ASSERT_EQ(postInfos.size(), 1);
         auto &postInfo = postInfos.at(0);
-        for (auto &[addr, value] : postInfo.memoryMap_) {
+        for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
@@ -454,7 +454,7 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_NE(spec, nullopt);
         ASSERT_EQ(postInfos.size(), 1);
         auto &postInfo = postInfos.at(0);
-        for (auto &[addr, value] : postInfo.memoryMap_) {
+        for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
@@ -488,7 +488,7 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_NE(spec, nullopt);
         ASSERT_EQ(postInfos.size(), 1);
         auto &postInfo = postInfos.at(0);
-        for (auto &[addr, value] : postInfo.memoryMap_) {
+        for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(

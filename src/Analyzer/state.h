@@ -646,7 +646,7 @@ namespace acslg::analyzer {
         void init();
 
         void step(const clang::Stmt *stmt);
-        Formulas stepExpr(const clang::Expr *expr);
+        void stepExpr(const clang::Expr *expr);
 
         void addNewDecls(const std::vector<const clang::VarDecl *> &varDecls);
 
@@ -667,7 +667,7 @@ namespace acslg::analyzer {
         const clang::Stmt *StmtCtx = nullptr;
 
         std::string dump() const;
-        void resetState();
+        void resetBreakState();
         void resymbolize(symbolic::SourcePoint newStartPoint);
 
         void insertPath(utils::not_null<std::unique_ptr<Path>> path) {

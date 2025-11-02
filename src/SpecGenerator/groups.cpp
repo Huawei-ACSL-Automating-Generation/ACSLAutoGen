@@ -5,7 +5,7 @@
 namespace acslg::spec_generator {
     REGISTER_ACSL_GROUP(EmptyGroup);
     REGISTER_ACSL_GROUP(DefaultFunctionContract, "assigns", "poststate");
-    REGISTER_ACSL_GROUP(DefaultLoopInfo, "setLoopEntry", "setPatterns", "setIndex");
+    REGISTER_ACSL_GROUP(DefaultLoopInfo, "SetEntryAndCurrent", "setPatterns", "setIndex");
     REGISTER_ACSL_GROUP(ComplexLoopInfo);
     REGISTER_ACSL_GROUP(DefaultPathInsensitiveLoopInv,
                         "checkAndDumpLoopInfo",

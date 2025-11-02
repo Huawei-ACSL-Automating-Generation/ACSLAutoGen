@@ -1681,7 +1681,7 @@ namespace acslg::analyzer {
                          << switchStmt);
                 }
 
-                resetState();
+                resetBreakState();
                 this->StmtCtx = prevStmtCtx;
             })
             .Case<clang::ForStmt>([this](const clang::ForStmt *forStmt) {
@@ -1689,7 +1689,7 @@ namespace acslg::analyzer {
                 auto prevStmtCtx = this->StmtCtx;
                 this->StmtCtx    = forStmt;
                 stepLoop(forStmt);
-                resetState();
+                resetBreakState();
                 this->StmtCtx = prevStmtCtx;
             })
             .Case<clang::WhileStmt>([this](const clang::WhileStmt *whileStmt) {
@@ -1697,7 +1697,7 @@ namespace acslg::analyzer {
                 auto prevStmtCtx = this->StmtCtx;
                 this->StmtCtx    = whileStmt;
                 stepLoop(whileStmt);
-                resetState();
+                resetBreakState();
                 this->StmtCtx = prevStmtCtx;
             })
             .Case<clang::DoStmt>([this](const clang::DoStmt *doStmt) {
@@ -1705,7 +1705,7 @@ namespace acslg::analyzer {
                 auto prevStmtCtx = this->StmtCtx;
                 this->StmtCtx    = doStmt;
                 stepLoop(doStmt);
-                resetState();
+                resetBreakState();
                 this->StmtCtx = prevStmtCtx;
             })
             .Case<clang::CXXForRangeStmt>([this](const clang::CXXForRangeStmt *rangeStmt) {
@@ -1713,7 +1713,7 @@ namespace acslg::analyzer {
                 auto prevStmtCtx = this->StmtCtx;
                 this->StmtCtx    = rangeStmt;
                 stepLoop(rangeStmt);
-                resetState();
+                resetBreakState();
                 this->StmtCtx = prevStmtCtx;
             })
             .Case<clang::BreakStmt>([this](const clang::BreakStmt *) {
@@ -1739,24 +1739,24 @@ namespace acslg::analyzer {
         return;
     }
 
-    Formulas ProgramState::stepExpr(const clang::Expr *expr) {
+    void ProgramState::stepExpr(const clang::Expr *expr) {
         std::vector<utils::not_null<std::unique_ptr<Path>>> updatedPaths;
-        Formulas evaluated;
 
         for (auto &path : paths_) {
-            auto [newPathGroup, exprGroup] = path->evalExpr(expr);
+            if (!path->isActive()) {
+                updatedPaths.push_back(std::move(path));
+                continue;
+            }
 
+            auto [newPathGroup, exprGroup] = path->evalExpr(expr);
             updatedPaths.push_back(std::move(path));
-            evaluated.push_back(std::move(exprGroup[0]));
 
             for (size_t i = 0; i < newPathGroup.size(); ++i) {
                 updatedPaths.push_back(std::move(newPathGroup[i]));
-                evaluated.push_back(std::move(exprGroup[i + 1]));
             }
         }
 
         paths_ = std::move(updatedPaths);
-        return evaluated;
     }
 
     void ProgramState::stepBranch(const std::vector<const clang::Expr *> &branchConds,
@@ -2177,10 +2177,13 @@ namespace acslg::analyzer {
         return clone;
     }
 
-    void ProgramState::resetState() {
+    void ProgramState::resetBreakState() {
         for (auto &path : paths_) {
-            if (!path->isActive() && (path->StmtCtx && path->StmtCtx == this->StmtCtx))
+            if (path->getPathState() == Path::PathState::Break &&
+                (path->StmtCtx && path->StmtCtx == this->StmtCtx))
                 path->setPathState(Path::PathState::Step);
+            if (path->getPathState() == Path::PathState::Continue)
+                TODO();
         }
     }
     static void collectCaseBlocks(const clang::CompoundStmt *body,

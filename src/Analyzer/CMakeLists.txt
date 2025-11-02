@@ -160,11 +160,10 @@ if(_std)
   set(EMIT_STD -std=c++${_std})
 endif()
 
-message(STATUS "emit incs: ${EMIT_INCLUDES}")
-message(STATUS "emit sys : ${EMIT_SYS_INCLUDES}")
-message(STATUS "emit defs: ${EMIT_DEFS}")
-message(STATUS "emit opts: ${EMIT_OPTS}")
-message(STATUS "emit std : ${EMIT_STD}")
+# message(STATUS "emit incs: ${EMIT_INCLUDES}") message(STATUS "emit sys :
+# ${EMIT_SYS_INCLUDES}") message(STATUS "emit defs: ${EMIT_DEFS}")
+# message(STATUS "emit opts: ${EMIT_OPTS}") message(STATUS "emit std :
+# ${EMIT_STD}")
 
 set(EXTRA_ARGS "")
 foreach(a IN LISTS EMIT_STD EMIT_INCLUDES EMIT_SYS_INCLUDES EMIT_DEFS EMIT_OPTS)

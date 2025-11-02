@@ -136,7 +136,7 @@ namespace acslg::test::utils {
 
         LoopInfo loopInfo{loopStmt};
 
-        if (auto *pl = ACSLPluginRegistry::instance().get("setLoopEntry")) {
+        if (auto *pl = ACSLPluginRegistry::instance().get("SetEntryAndCurrent")) {
             auto *setLoopEntryPlugin = dynamic_cast<const LoopInfoPlugin *>(pl);
 
             if (!setLoopEntryPlugin->parse(*preState, *loopEntry, loopInfo))
