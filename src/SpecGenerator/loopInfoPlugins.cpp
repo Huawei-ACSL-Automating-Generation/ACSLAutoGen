@@ -360,6 +360,7 @@ namespace acslg::spec_generator {
 
             std::optional<utils::not_null<const clang::Expr *>> indexExpr;
             std::optional<utils::not_null<std::unique_ptr<symb::Address>>> indexRealAddr;
+            std::optional<utils::not_null<std::unique_ptr<symb::Address>>> indexSymbolicAddr;
             std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> indexValue;
             std::optional<clang::BinaryOperator::Opcode> opCode;
             std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> boundValue;
@@ -409,6 +410,9 @@ namespace acslg::spec_generator {
                 if (values.size() != 1)
                     UNREACHABLE();
                 indexValue = std::move(values.at(0));
+
+                indexSymbolicAddr =
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(index);
 
                 if (unchangedAfterOneRound(bound)) {
                     auto evalResult = entryPath->evalExpr(bound);
@@ -506,6 +510,10 @@ namespace acslg::spec_generator {
                     UNREACHABLE();
                 indexValue = std::move(values.at(0));
 
+                indexSymbolicAddr =
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(
+                        unaryExpr);
+
                 opCode     = clang::BinaryOperatorKind::BO_NE;
                 boundValue = std::make_unique<symb::LiteralExpr>((int64_t)0);
 
@@ -585,6 +593,9 @@ namespace acslg::spec_generator {
                     UNREACHABLE();
                 indexValue = std::move(values.at(0));
 
+                indexSymbolicAddr =
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(refExpr);
+
                 opCode     = clang::BinaryOperatorKind::BO_NE;
                 boundValue = std::make_unique<symb::LiteralExpr>((int64_t)0);
 
@@ -619,14 +630,15 @@ namespace acslg::spec_generator {
 
             // 	Check and assign in bulk
             if (indexExpr == std::nullopt || indexRealAddr == std::nullopt ||
-                indexValue == std::nullopt || opCode == std::nullopt ||
-                boundValue == std::nullopt || preciseLoopCount == std::nullopt ||
-                maxLoopCount == std::nullopt || indexPattern == std::nullopt ||
-                isLocal == std::nullopt)
+                indexSymbolicAddr == std::nullopt || indexValue == std::nullopt ||
+                opCode == std::nullopt || boundValue == std::nullopt ||
+                preciseLoopCount == std::nullopt || maxLoopCount == std::nullopt ||
+                indexPattern == std::nullopt || isLocal == std::nullopt)
                 UNREACHABLE();
             loopInfo.indexInfo =
                 LoopInfo::IndexInfo{.indexExpr          = std::move(indexExpr.value()),
                                     .indexRealAddr      = std::move(indexRealAddr.value()),
+                                    .indexSymbolicAddr  = std::move(indexSymbolicAddr.value()),
                                     .indexSymbolicValue = std::move(indexValue.value()),
                                     .op                 = std::move(opCode.value()),
                                     .indexBound         = std::move(boundValue.value()),

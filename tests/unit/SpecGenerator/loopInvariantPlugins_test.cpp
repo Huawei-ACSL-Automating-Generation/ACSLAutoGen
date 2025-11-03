@@ -503,6 +503,45 @@ namespace acslg::test::unit::spec_generator {
         }
     }
 
+    TEST(ParadigmSearchPluginTest, openHiTLS_1) {
+        auto pluginId = "paradigmSearch";
+        auto code     = R"(
+    #include <stdint.h>
+    #define BN_UINT uint32_t
+
+    uint32_t BinFixSize(const BN_UINT *data, uint32_t size)
+{
+    uint32_t fix = size;
+    uint32_t i = size;
+    for (; i > 0; i--) {
+        if (data[i - 1] != 0) {
+            return fix;
+        };
+        fix--;
+    }
+    return fix;
+}
+    )";
+        auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ASSERT_TRUE(res);
+        auto &[spec, _, postInfos] = res.value();
+        EXPECT_NE(spec, nullopt);
+        DEBUG(spec.value());
+        ASSERT_EQ(postInfos.size(), 2);
+        auto &normalPath      = postInfos.at(0);
+        auto &interruptedPath = postInfos.at(1);
+        for (auto &pathCond : normalPath.pathConds) {
+            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            assert(expected);
+            DEBUG(expected.value().first);
+        }
+        for (auto &pathCond : interruptedPath.pathConds) {
+            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            assert(expected);
+            DEBUG(expected.value().first);
+        }
+    }
+
     // TEST(LinearInvariantPluginTest, Simple_5) {
     //     auto pluginId                = "StInGXPlugin";
     //     auto code                    = R"(

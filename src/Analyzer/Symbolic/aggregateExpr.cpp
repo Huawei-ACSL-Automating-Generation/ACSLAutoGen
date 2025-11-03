@@ -62,33 +62,27 @@ namespace acslg::analyzer::symbolic {
             return false;
 
         // `name_` does not determine equality.
-        return rangeBase_ == index->rangeBase_;
+        return true;
     }
 
-    std::size_t SymbolAddress::RangeIndex::hash() const {
-        return utils::hash_val(getKind(), rangeBase_.hash());
-    }
+    std::size_t SymbolAddress::RangeIndex::hash() const { return utils::hash_val(getKind()); }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::getSubstitutedExpr(
-        const Path &pathSubTo,
-        const SourcePoint &pointToSub) const {
-        if (rangeBase_.fromPoint_ != pointToSub || rangeBase_.fromAddr_ == std::nullopt)
-            return clone();
-        auto subedExpr = rangeBase_.fromAddr_.value()->getSubstitutedExpr(pathSubTo, pointToSub);
-        auto subedRangeBaseFrom = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRangeBaseFrom == nullptr)
-            ERROR("Substituted expression should be an address.");
-        auto baseCopy      = rangeBase_;
-        baseCopy.fromAddr_ = subedRangeBaseFrom->addressClone().into_underlying();
-        return std::unique_ptr<RangeIndex>(new RangeIndex{std::move(baseCopy), name_});
+        const Path &,
+        const SourcePoint &) const {
+        return clone();
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::
-        getRangeIndexSubstituted(const SymbolAddrBaseInfo &rangeBase,
-                                 const SymbolicExpr &indexExpr) const {
-        if (rangeBase != rangeBase_)
-            return clone();
+        getRangeIndexSubstituted(const SymbolAddrBaseInfo &, const SymbolicExpr &indexExpr) const {
         return indexExpr.clone();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        return clone();
     }
 
     std::string SumOverRange::dump() const {
@@ -123,6 +117,18 @@ namespace acslg::analyzer::symbolic {
                                               indexName_, fromPoint_);
     }
 
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        auto subedExpr  = range_->getSubstitutedValueExpr(hashExprMap);
+        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
+        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
+            ERROR("Substituted expression should be a *range*");
+        return std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
+                                              indexName_, fromPoint_);
+    }
+
     utils::expected<std::string, SymbolicExpr::GetACSLError> SumOverRange::doGetACSL(
         const GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
@@ -130,7 +136,7 @@ namespace acslg::analyzer::symbolic {
         unsigned,
         bool) const {
         auto st = spec_generator::StringTemplate{
-            "\\sum(integer {i} = {0}; {i} < {n}; {i}++, {prefix}{a}[{i}]{suffix})"};
+            "\\sum(integer ${i} = ${0}; ${i} < ${n}; ${i}++, ${prefix}${a}[${i}]${suffix})"};
 
         auto zeroStr = callGetACSL(*range_->getOffset(), config, usedPoints, currentPoint,
                                    getPrecedence(Operator::Assign), true);
@@ -198,11 +204,28 @@ namespace acslg::analyzer::symbolic {
         return newQOR;
     }
 
+    utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        auto subedExpr  = range_->getSubstitutedValueExpr(hashExprMap);
+        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
+        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
+            ERROR("Substituted expression should be a *range*");
+        auto subedPred = pred_->getSubstitutedValueExpr(hashExprMap);
+
+        auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
+        newQOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
+        newQOR->pred_  = std::move(subedPred).into_underlying();
+        return newQOR;
+    }
+
     QuantifierOverRange &QuantifierOverRange::operator=(const QuantifierOverRange &other) {
         if (&other == this)
             return *this;
         OverRangeExpr::operator=(other);
-        pred_ = other.pred_->clone().into_underlying();
+        quant_ = other.quant_;
+        pred_  = other.pred_->clone().into_underlying();
         return *this;
     }
 
@@ -228,30 +251,31 @@ namespace acslg::analyzer::symbolic {
         std::optional<SourcePoint> currentPoint,
         unsigned,
         bool) const {
-        auto st =
-            spec_generator::StringTemplate{"\\{quant} integer {i}; {0} <= {i} < {n} ==> {pred};"};
+        auto st = spec_generator::StringTemplate{
+            "\\${quant} integer ${i}; ${0} <= ${i} < ${n} ==> ${pred};"};
 
         std::string quantStr;
         switch (quant_) {
             using enum Quantifier;
             case ForAll: quantStr = "forall"; break;
             case Exist: quantStr = "exist"; break;
+            default: UNREACHABLE();
         }
 
-        auto zeroStr = callGetACSL(*range_->getOffset(), config, usedPoints, currentPoint,
-                                   getPrecedence(Operator::LessThan), false);
+        auto zeroStr = callGetACSL(*range_->getOffset()->simplifiedExpr(), config, usedPoints,
+                                   currentPoint, getPrecedence(Operator::LessThan), false);
         if (!zeroStr)
             return zeroStr.error();
 
         auto rightBound = range_->getRightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
-        auto nStr = callGetACSL(*rightBound.value(), config, usedPoints, currentPoint,
-                                getPrecedence(Operator::LessThan), true);
+        auto nStr = callGetACSL(*rightBound.value()->simplifiedExpr(), config, usedPoints,
+                                currentPoint, getPrecedence(Operator::LessThan), true);
         if (!nStr)
             return nStr.error();
 
-        auto predStr = callGetACSL(*pred_, config, usedPoints, currentPoint,
+        auto predStr = callGetACSL(*pred_->simplifiedExpr(), config, usedPoints, currentPoint,
                                    getPrecedence(Operator::Entailment), true);
         if (!predStr)
             return predStr.error();

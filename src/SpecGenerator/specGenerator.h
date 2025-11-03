@@ -63,6 +63,7 @@ namespace acslg::spec_generator {
             utils::not_null<const clang::Expr *> indexExpr;
             utils::not_null<std::unique_ptr<analyzer::symbolic::Address>>
                 indexRealAddr; // index's sole address on pre-state
+            utils::not_null<std::unique_ptr<analyzer::symbolic::Address>> indexSymbolicAddr;
             utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
                 indexSymbolicValue; // Varibale or Address
             clang::BinaryOperator::Opcode op;

@@ -12,7 +12,7 @@ namespace acslg::spec_generator {
                         "loopAssigns",
                         "paradigmMaxMin",
                         "loopVariant");
-    REGISTER_ACSL_GROUP(DefaultPathSensitiveLoopInv, "StInGXPlugin")
+    REGISTER_ACSL_GROUP(DefaultPathSensitiveLoopInv, "paradigmSearch", "StInGXPlugin")
     REGISTER_ACSL_GROUP(ComplexPathInsensitiveLoopInv,
                         "checkAndDumpLoopInfo",
                         "loopAssigns",

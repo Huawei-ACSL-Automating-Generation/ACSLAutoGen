@@ -1391,6 +1391,102 @@ namespace acslg::analyzer::symbolic {
         return newSt;
     }
 
+    utils::not_null<std::unique_ptr<SymbolicExpr>> LiteralExpr::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        return clone();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        return clone();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> VariableAddress::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        return clone();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        auto expr = fromAddr_->getSubstitutedValueExpr(hashExprMap);
+        auto addr = llvm::dyn_cast<Address>(expr.get().get());
+        if (addr == nullptr)
+            UNREACHABLE();
+        return std::make_unique<SymbolValue>(getValType(), addr->addressClone().into_underlying(),
+                                             fromPoint_);
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        if (fromAddr_) {
+            auto subedExpr = fromAddr_.value()->getSubstitutedValueExpr(hashExprMap);
+            auto addr      = llvm::dyn_cast<Address>(subedExpr.get().get());
+            if (addr == nullptr)
+                UNREACHABLE();
+
+            if (length_)
+                return std::make_unique<SymbolAddress>(
+                    pointeeType_, addr->addressClone().into_underlying(), fromPoint_,
+                    offset_->getSubstitutedValueExpr(hashExprMap).into_underlying(),
+                    length_.value()->getSubstitutedValueExpr(hashExprMap).into_underlying());
+
+            return std::make_unique<SymbolAddress>(
+                pointeeType_, addr->addressClone().into_underlying(), fromPoint_,
+                offset_->getSubstitutedValueExpr(hashExprMap).into_underlying(), std::nullopt);
+        }
+        return std::make_unique<SymbolAddress>(
+            pointeeType_, std::nullopt, fromPoint_,
+            offset_->getSubstitutedValueExpr(hashExprMap).into_underlying(), std::nullopt);
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> FieldAddress::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        auto subedExpr    = baseAddr_->getSubstitutedValueExpr(hashExprMap);
+        auto realBaseAddr = llvm::dyn_cast<const Address>(subedExpr.get().get());
+        if (realBaseAddr == nullptr)
+            UNREACHABLE();
+        return std::make_unique<FieldAddress>(
+            pointeeType_, definition_, realBaseAddr->addressClone().into_underlying(), fieldIndex_);
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> BinaryOpExpr::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        return std::make_unique<BinaryOpExpr>(left_->getSubstitutedValueExpr(hashExprMap), op_,
+                                              right_->getSubstitutedValueExpr(hashExprMap));
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> UnaryOpExpr::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        return std::make_unique<UnaryOpExpr>(op_, expr_->getSubstitutedValueExpr(hashExprMap));
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        auto newSt = std::make_unique<Structure>(*this);
+        for (auto &field : newSt->fieldsValues()) {
+            field = field->getSubstitutedValueExpr(hashExprMap);
+        }
+        return newSt;
+    }
+
     std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> BinaryOpExpr::
         doTryEvalAsSymbolAddr() const {
         auto lhs = callTryEvalAsAddr(*left_), rhs = callTryEvalAsAddr(*right_);
@@ -1552,14 +1648,6 @@ namespace acslg::analyzer::symbolic {
             return SymbolAddrBaseInfo{std::nullopt, fromPoint_, pointeeType_};
         return SymbolAddrBaseInfo{fromAddr_.value()->addressClone().into_underlying(), fromPoint_,
                                   pointeeType_};
-    }
-
-    utils::not_null<std::unique_ptr<SymbolAddress::RangeIndex>> SymbolAddress::getRangeIndex(
-        std::string_view indexName) const {
-        if (length_ == std::nullopt)
-            ERROR("This `SymbolAddress` is not a range.");
-        return std::unique_ptr<SymbolAddress::RangeIndex>{
-            new SymbolAddress::RangeIndex{getBaseInfo(), indexName}};
     }
 
     int SymbolAddress::getDimension() const {

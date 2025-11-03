@@ -693,9 +693,8 @@ namespace acslg::test::unit::analyzer {
         // A: [0,10) -> i
         auto aRange = makeRangeAddr(baseId, make_unique<symbolic::LiteralExpr>(0U),
                                     make_unique<symbolic::LiteralExpr>(10U));
-        auto eA     = aRange.getRangeIndex("i");
-        mm.write(aRange,
-                 static_unique_ptr_cast<symbolic::SymbolicExpr>(std::move(eA).into_underlying()));
+        auto eA     = std::make_unique<symbolic::SymbolAddress::RangeIndex>("i");
+        mm.write(aRange, static_unique_ptr_cast<symbolic::SymbolicExpr>(std::move(eA)));
 
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 0, symbolic::LiteralExpr{uint64_t{0}}));
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 1, symbolic::LiteralExpr{uint64_t{1}}));

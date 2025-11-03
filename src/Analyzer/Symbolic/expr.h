@@ -9,7 +9,6 @@
 #include <span>
 #include <ranges>
 #include <algorithm>
-#include <string_view>
 #include <type_traits>
 #include <ppl.hh>
 #include <clang/AST/Decl.h>
@@ -371,6 +370,11 @@ namespace acslg::analyzer::symbolic {
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const = 0;
 
+        using HashExprMap =
+            std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>;
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
+            const HashExprMap &hashToExprMap) const = 0;
+
         //===----------------------------------------------------------------------===//
         // StInG Interface Utilities - Symbolic Expression Adapter
         //
@@ -535,6 +539,10 @@ namespace acslg::analyzer::symbolic {
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
 
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
+            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
+                &hashToExprMap) const override;
+
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 0; }
@@ -635,6 +643,9 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
+            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
+                &hashToExprMap) const override;
 
         // StInG: Support functions for affine invariant analysis
         UsedMap collectUsedSymbols() const override;
@@ -712,6 +723,9 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
+            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
+                &hashToExprMap) const override;
 
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return expr_->isUnknown(); };
@@ -765,6 +779,9 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
+            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
+                &hashToExprMap) const override;
 
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return false; }
@@ -919,6 +936,9 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
+            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
+                &hashToExprMap) const override;
 
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override {
@@ -1106,7 +1126,6 @@ namespace acslg::analyzer::symbolic {
 
         std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> getRightBound() const;
         SymbolAddrBaseInfo getBaseInfo() const;
-        utils::not_null<std::unique_ptr<RangeIndex>> getRangeIndex(std::string_view indexName) const;
 
         // SymbolExpr
       public:
@@ -1121,6 +1140,9 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
+            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
+                &hashToExprMap) const override;
         // StInG: Support functions for affine invariant analysis
         UsedMap collectUsedSymbols() const override;
         bool isLinear() const override {
@@ -1267,6 +1289,9 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
+            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
+                &hashToExprMap) const override;
 
         auto getFrom() const -> const auto & { return from_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
@@ -1361,6 +1386,9 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
+            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
+                &hashToExprMap) const override;
 
         auto getDefinition() const -> const auto & { return definition_; }
         auto getBaseAddr() const -> const auto & { return baseAddr_; }
@@ -1453,6 +1481,9 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
+            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
+                &hashToExprMap) const override;
         std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
             return fromAddr_->addressClone().into_underlying();
         }
