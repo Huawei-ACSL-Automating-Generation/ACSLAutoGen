@@ -258,7 +258,7 @@ namespace acslg::analyzer::symbolic {
         switch (quant_) {
             using enum Quantifier;
             case ForAll: quantStr = "forall"; break;
-            case Exist: quantStr = "exist"; break;
+            case Exist: quantStr = "exists"; break;
             default: UNREACHABLE();
         }
 
