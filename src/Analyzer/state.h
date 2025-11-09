@@ -648,7 +648,7 @@ namespace acslg::analyzer {
         void step(const clang::Stmt *stmt);
         void stepExpr(const clang::Expr *expr);
 
-        void addNewDecls(const std::vector<const clang::VarDecl *> &varDecls);
+        void addNewDecls(const clang::DeclStmt *declStmt);
 
         void setStates(Path::PathState state, const clang::Stmt *stmt);
 

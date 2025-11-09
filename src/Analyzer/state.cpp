@@ -1623,14 +1623,7 @@ namespace acslg::analyzer {
             })
             .Case<clang::DeclStmt>([this](const clang::DeclStmt *declStmt) {
                 DEBUG("stepping clang::DeclStmt...");
-                std::vector<const clang::VarDecl *> varDecls;
-                for (auto it = declStmt->decl_begin(); it != declStmt->decl_end(); ++it) {
-                    clang::Decl *decl = *it;
-                    if (!isa<clang::VarDecl>(decl))
-                        UNIMPLEMENT("Unhandled clang::Decl type: "s + decl->getDeclKindName());
-                    varDecls.push_back(dyn_cast<clang::VarDecl>(decl));
-                }
-                addNewDecls(varDecls);
+                addNewDecls(declStmt);
             })
             .Case<clang::BinaryOperator>([this](const clang::BinaryOperator *binOp) {
                 DEBUG("stepping BinaryOperator...");
@@ -1989,7 +1982,14 @@ namespace acslg::analyzer {
         paths_ = std::move(updatedPaths);
     }
 
-    void ProgramState::addNewDecls(const std::vector<const clang::VarDecl *> &varDecls) {
+    void ProgramState::addNewDecls(const clang::DeclStmt *declStmt) {
+        std::vector<const clang::VarDecl *> varDecls;
+        for (auto it = declStmt->decl_begin(); it != declStmt->decl_end(); ++it) {
+            clang::Decl *decl = *it;
+            if (!isa<clang::VarDecl>(decl))
+                UNIMPLEMENT("Unhandled clang::Decl type: "s + decl->getDeclKindName());
+            varDecls.push_back(dyn_cast<clang::VarDecl>(decl));
+        }
         for (const clang::VarDecl *varDecl : varDecls) {
             const clang::Expr *initExpr = varDecl->getInit();
             std::vector<utils::not_null<std::unique_ptr<Path>>> updatedPaths;
@@ -2000,26 +2000,20 @@ namespace acslg::analyzer {
                     continue;
                 }
 
-                auto varAddr_ = path->allocMemory(varDecl);
+                auto varAddr = path->allocMemory(varDecl);
 
                 if (initExpr == nullptr) {
                     // TODO: add default initialization for basic types.
                     WARN("Uninitialized variable " + varDecl->getNameAsString());
 
-                    auto varType = varDecl->getType();
-                    if (auto RD = varType->getAsRecordDecl();
-                        RD != nullptr && varType->isStructureType()) {
-                        // If varDecl is a struct, memoryState_ should std::map an incomplete
-                        // symbolic::Structure (with no field values initialized).
-                        if (!RD->isCompleteDefinition())
-                            ERROR("Struct with incomplete definition!");
+                    auto pointAfterDecl = symbolic::SourcePoint::fromStmtAfter(
+                        declStmt, context_.getSourceManager(), context_.getLangOptions());
 
-                        RD      = RD->getDefinition();
-                        auto st = std::make_unique<symbolic::Structure>(
-                            RD, RD->getASTContext().getASTRecordLayout(RD),
-                            varAddr_->addressClone().into_underlying(), startPoint_);
-                        path->updateVarState(varDecl, std::move(st));
-                    }
+                    auto varType = varDecl->getType();
+                    path->updateVarState(
+                        varDecl,
+                        symbolic::getSymbol(varType, varAddr->addressClone().into_underlying(),
+                                            pointAfterDecl));
 
                     updatedPaths.push_back(std::move(path));
                     continue;
@@ -2038,7 +2032,7 @@ namespace acslg::analyzer {
 
                         auto st = std::make_unique<symbolic::Structure>(
                             RD, RD->getASTContext().getASTRecordLayout(RD),
-                            varAddr_->addressClone().into_underlying(), startPoint_);
+                            varAddr->addressClone().into_underlying(), startPoint_);
                         if (initListExpr->getNumInits() != st->getNumFields())
                             ERROR("Initializer std::list size mismatches the struct's field "
                                   "count.");
