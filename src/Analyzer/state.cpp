@@ -640,11 +640,19 @@ namespace acslg::analyzer {
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
 
-                    auto callArgs = evalCallArgs(this, call);
-
                     std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                     Formulas outExprs;
 
+                    if (!callee->hasBody()) {
+                        if (callee->getNumParams() == 0) {
+                            outExprs.push_back(
+                                symbolic::UnknownExpr::makeUnknown().into_underlying());
+                            return {std::move(outPaths), std::move(outExprs)};
+                        }
+                        UNIMPLEMENT("Calling a function with no visible body.");
+                    }
+
+                    auto callArgs   = evalCallArgs(this, call);
                     bool firstTaken = false;
                     for (size_t k = 0; k < callArgs.size(); ++k) {
                         auto initPath = std::move(callArgs[k].path);
@@ -2065,13 +2073,16 @@ namespace acslg::analyzer {
                         auto newPath  = (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
                         auto newValue = std::move(eval.second[i]);
 
-                        if (auto it = newPath->getVarAddr().find(varDecl);
-                            it != newPath->getVarAddr().end()) {
-                            auto &dstAddr = it->second;
-                            newPath->updateMemory(*dstAddr, std::move(newValue));
-                        } else {
-                            ERROR("Can't find varDecl's");
+                        if (newValue->isUnknown()) {
+                            auto pointAfterDecl = symbolic::SourcePoint::fromStmtAfter(
+                                declStmt, context_.getSourceManager(), context_.getLangOptions());
+
+                            auto varType = varDecl->getType();
+                            newValue     = symbolic::getSymbol(
+                                varType, varAddr->addressClone().into_underlying(), pointAfterDecl);
                         }
+
+                        newPath->updateVarState(varDecl, std::move(newValue));
                         updatedPaths.push_back(std::move(newPath));
                     }
                     continue;
