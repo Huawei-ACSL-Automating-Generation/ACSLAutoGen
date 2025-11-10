@@ -55,6 +55,7 @@ namespace acslg::spec_generator {
             utils::not_null<std::unique_ptr<const analyzer::ProgramState>> symbolicLoopEntry;
             utils::not_null<std::unique_ptr<const analyzer::ProgramState>> symbolicLoopCurrent;
             std::vector<utils::not_null<std::unique_ptr<analyzer::Path>>> inactivePaths;
+            analyzer::symbolic::SourcePoint loopEntryPoint;
         };
         std::optional<EntryAndCurrentInfo> entryAndCurrentInfo;
 

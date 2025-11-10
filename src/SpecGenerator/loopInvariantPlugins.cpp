@@ -799,7 +799,7 @@ namespace acslg::spec_generator {
         std::string_view id() const override { return id_; }
         size_t propose() const override { return 100; }
         std::optional<GenResultType> tryGenerate(const analyzer::ProgramState &,
-                                                 const analyzer::ProgramState &,
+                                                 const analyzer::ProgramState &loopEntry,
                                                  const LoopInfo &loopInfo) const override {
             if (loopInfo.entryAndCurrentInfo == std::nullopt ||
                 loopInfo.indexInfo == std::nullopt || loopInfo.patternInfo == std::nullopt)
@@ -881,7 +881,22 @@ namespace acslg::spec_generator {
                         std::make_unique<symb::BinaryOpExpr>(
                             indexInfo.indexSymbolicValue->clone(), Subtract,
                             std::make_unique<symb::SymbolAddress::RangeIndex>("k"))));
-            };
+            }; // getSubExpr ends
+
+            auto sameValueOnRealEntries = [&](const symb::SymbolicExpr &expr)
+                -> std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> {
+                std::unique_ptr<symb::SymbolicExpr> commonValue{nullptr};
+                for (auto &entry : loopEntry.getPaths()) {
+                    auto subedExpr = expr.getSubstitutedExpr(
+                        *entry, loopInfo.entryAndCurrentInfo->loopEntryPoint);
+                    if (commonValue == nullptr)
+                        commonValue = std::move(subedExpr).into_underlying();
+                    else if (*commonValue != *subedExpr)
+                        return std::nullopt;
+                }
+                return commonValue;
+            }; // sameValueOnRealEntries ends
+
             symb::SymbolicExpr::HashExprMap hashExprMapForSub{};
             std::unique_ptr<symb::SymbolAddress> arrayInCond;
             for (auto &[hash, symbol] : interruptedCond->collectUsedSymbols()) {
@@ -963,10 +978,18 @@ namespace acslg::spec_generator {
                 usedPoints = std::move(expected.value().second);
                 std::string leftBoundStr, rightBoundStr;
                 if (indexStep > 0) {
-                    auto leftBound = "0"; // todo
+                    auto leftBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
+                    if (leftBound == std::nullopt)
+                        leftBound = indexInfo.indexPattern.initialValue->clone();
+                    auto leftExpected =
+                        leftBound.value()->getACSL({}, entryAndCurrentInfo.loopEntryPoint);
+                    assert(leftBound);
                     auto rightExpected =
                         indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true});
                     assert(rightExpected);
+                    leftBoundStr = leftExpected.value().first;
+                    usedPoints.insert(std::make_move_iterator(leftExpected.value().second.begin()),
+                                      std::make_move_iterator(leftExpected.value().second.end()));
                     rightBoundStr = rightExpected.value().first;
                     usedPoints.insert(std::make_move_iterator(rightExpected.value().second.begin()),
                                       std::make_move_iterator(rightExpected.value().second.end()));
@@ -974,10 +997,18 @@ namespace acslg::spec_generator {
                     auto leftExpected =
                         indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true});
                     assert(leftExpected);
-                    leftBoundStr  = leftExpected.value().first;
-                    rightBoundStr = "size";
+                    auto rightBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
+                    if (rightBound == std::nullopt)
+                        rightBound = indexInfo.indexPattern.initialValue->clone();
+                    auto rightExpected =
+                        rightBound.value()->getACSL({}, entryAndCurrentInfo.loopEntryPoint);
+                    assert(rightBound);
+                    leftBoundStr = leftExpected.value().first;
                     usedPoints.insert(std::make_move_iterator(leftExpected.value().second.begin()),
                                       std::make_move_iterator(leftExpected.value().second.end()));
+                    rightBoundStr = rightExpected.value().first;
+                    usedPoints.insert(std::make_move_iterator(rightExpected.value().second.begin()),
+                                      std::make_move_iterator(rightExpected.value().second.end()));
                 }
 
                 return GenResultType{.acsl = resACSL.to_string({{"leftBound", leftBoundStr},

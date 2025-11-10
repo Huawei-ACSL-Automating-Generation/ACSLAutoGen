@@ -29,9 +29,11 @@ namespace acslg::spec_generator {
 
             auto [loopCurrent, inactiveState] = symbolicState->splitActiveInactive();
 
-            loopInfo.entryAndCurrentInfo.emplace(std::move(symbolicLoopEntry),
-                                                 std::move(loopCurrent),
-                                                 std::move(inactiveState->getPaths()));
+            loopInfo.entryAndCurrentInfo.emplace(
+                LoopInfo::EntryAndCurrentInfo{.symbolicLoopEntry   = std::move(symbolicLoopEntry),
+                                              .symbolicLoopCurrent = std::move(loopCurrent),
+                                              .inactivePaths = std::move(inactiveState->getPaths()),
+                                              .loopEntryPoint = loopEntryPoint});
             return true;
         }
 
