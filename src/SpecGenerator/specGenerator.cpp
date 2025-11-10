@@ -201,6 +201,11 @@ namespace acslg::spec_generator {
 
             if constexpr (requires { info.pathState; }) {
                 toUpdate.pathState = info.pathState;
+                if (info.pathState == analyzer::Path::PathState::Return) {
+                    assert(info.returnExpr);
+                    toUpdate.returnExpr =
+                        info.returnExpr.value()->getSubstitutedExpr(currentPath, loopEntryPoint);
+                }
             }
         };
 
@@ -311,14 +316,8 @@ namespace acslg::spec_generator {
                         continue;
                     postPath->updateMemory(addr, std::move(value));
                 }
-                // for (auto &&[addr, value] : prePath->getMemoryState().flat()) {
-                //     if (postPath->getMemoryState().contains(addr))
-                //         continue;
-                //     postPath->updateMemory(addr, value->clone());
-                // }
-
-                // for (auto &pathCond : prePath->getPathConditions())
-                //     postPath->insertPathCondition(pathCond->clone());
+                postPath->setPathState(postBranchInfo.pathState);
+                postPath->setReturnExpr(std::move(postBranchInfo.returnExpr));
                 for (auto &pathCond : postBranchInfo.pathConds)
                     postPath->insertPathCondition(std::move(pathCond));
                 postState->insertPath(std::move(postPath));

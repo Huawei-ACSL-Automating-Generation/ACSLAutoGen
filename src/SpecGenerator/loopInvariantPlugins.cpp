@@ -929,6 +929,18 @@ namespace acslg::spec_generator {
             std::vector<PostPSInfo> postInfos{2};
             auto &normalPathInfo      = postInfos.at(0);
             auto &interruptedPathInfo = postInfos.at(1);
+            if (interruptedPath->getPathState() == analyzer::Path::PathState::Return) {
+                if (interruptedPath->getReturnExpr() == std::nullopt)
+                    ERROR("This path has path state 'return' but no return expr.");
+                if (!interruptedPath->getReturnExpr().value()->collectUsedSymbols().empty()) {
+                    interruptedPathInfo.returnExpr =
+                        symb::UnknownExpr::makeUnknown().into_underlying();
+                    // todo
+                } else {
+                    interruptedPathInfo.returnExpr =
+                        interruptedPath->getReturnExpr().value()->clone();
+                }
+            }
             using enum symb::QuantifierOverRange::Quantifier;
             using enum symb::BinaryOpExpr::Operator;
 

@@ -234,6 +234,7 @@ namespace acslg::spec_generator {
             memoryMap;
         std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pathConds;
         analyzer::Path::PathState pathState;
+        std::optional<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> returnExpr;
 
         PostPSInfo(
             analyzer::symbolic::AddressBoxMap<
