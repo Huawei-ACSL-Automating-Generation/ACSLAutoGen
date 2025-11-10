@@ -240,10 +240,12 @@ namespace acslg::spec_generator {
             analyzer::symbolic::AddressBoxMap<
                 utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
             std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pcs,
-            analyzer::Path::PathState ps)
-            : memoryMap(std::move(mem)), pathConds(std::move(pcs)), pathState(ps) {}
+            analyzer::Path::PathState ps,
+            std::optional<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> re)
+            : memoryMap(std::move(mem)), pathConds(std::move(pcs)), pathState(ps),
+              returnExpr(std::move(re)) {}
 
-        PostPSInfo(const PostPSInfo &other) {
+        PostPSInfo(const PostPSInfo &other) : pathState(other.pathState), returnExpr(std::nullopt) {
             for (const auto &kv : other.memoryMap) {
                 const auto &addr  = kv.first;
                 const auto &exprp = kv.second;
@@ -256,6 +258,9 @@ namespace acslg::spec_generator {
                 auto cloned = exprp->clone();
                 pathConds.push_back(utils::not_null{std::move(cloned)});
             }
+
+            if (other.returnExpr)
+                returnExpr = other.returnExpr.value()->clone();
         }
 
         PostPSInfo()                       = default;

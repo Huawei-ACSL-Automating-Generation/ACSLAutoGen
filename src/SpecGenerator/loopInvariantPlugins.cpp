@@ -170,7 +170,7 @@ namespace acslg::spec_generator {
                     spec += '\n';
                 }
                 postInfos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
-                                       analyzer::Path::PathState::Step);
+                                       analyzer::Path::PathState::Step, std::nullopt);
             }
             if (!spec.empty()) {
                 // restd::move '\n'
