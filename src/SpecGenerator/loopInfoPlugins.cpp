@@ -649,11 +649,6 @@ namespace acslg::spec_generator {
                                     .indexPattern       = std::move(indexPattern.value()),
                                     .isLocal            = std::move(isLocal.value())};
             loopInfo.extraCondConjuncts = std::move(extraConds);
-            if (std::abs(loopInfo.indexInfo.value().indexPattern.step) != 1) {
-                return false;
-            } else if (!loopInfo.extraCondConjuncts.empty()) {
-                return false;
-            }
             return true;
         }
 

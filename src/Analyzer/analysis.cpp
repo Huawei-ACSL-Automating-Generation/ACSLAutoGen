@@ -11,6 +11,8 @@ namespace acslg::analyzer {
     void ACSLAnalyzer::analyzeFunctions() {
         PROCESS("Running analysis functions...");
         for (auto *func : this->context_.getFunctions()) {
+            if (!func->hasBody())
+                continue;
             auto loc = func->getLocation();
             if (!context_.getSourceManager().isInMainFile(loc))
                 continue;

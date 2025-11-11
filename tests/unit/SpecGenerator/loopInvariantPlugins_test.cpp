@@ -503,6 +503,43 @@ namespace acslg::test::unit::spec_generator {
         }
     }
 
+    TEST(LinearInvariantPluginTest, Simple_5) {
+        auto pluginId = "StInGXPlugin";
+        auto code     = R"(
+    void func(int x, int y) {
+        while(x < 100){
+            x = x + 1;
+            if(x > 50)
+                y = y + 1;
+        }
+    }
+    )";
+        auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ASSERT_TRUE(res);
+        auto &[spec, _, postInfos] = res.value();
+        EXPECT_NE(spec, nullopt);
+        DEBUG(spec.value());
+    }
+
+    // TEST(LinearInvariantPluginTest, Simple_6) {
+    //     auto pluginId = "StInGXPlugin";
+    //     auto code     = R"(
+    // int unknown();
+
+    // void func(int x, int y) {
+    //     while(unknown()){
+    //         x = x + 1;
+    //         y = y + 2;
+    //     }
+    // }
+    // )";
+    //     auto res      = doPSPluginOnFirstLoop(code, pluginId);
+    //     ASSERT_TRUE(res);
+    //     auto &[spec, _, postInfos] = res.value();
+    //     EXPECT_NE(spec, nullopt);
+    //     DEBUG(spec.value());
+    // }
+
     TEST(ParadigmSearchPluginTest, openHiTLS_1) {
         auto pluginId = "paradigmSearch";
         auto code     = R"(
@@ -541,20 +578,4 @@ namespace acslg::test::unit::spec_generator {
             DEBUG(expected.value().first);
         }
     }
-
-    // TEST(LinearInvariantPluginTest, Simple_5) {
-    //     auto pluginId                = "StInGXPlugin";
-    //     auto code                    = R"(
-    //         void func(int *p, int n){
-    //             int mx = 0;
-    //             for(int i = 0; i < n; i++){
-    //                 if(mx < p[i])
-    //                     mx = p[i];
-    //             }
-    //         }
-    //     )";
-    //     auto res = doPluginOnFirstLoop(code, pluginId);
-    //     EXPECT_NE(spec, nullopt);
-    //
-    // }
 } // namespace acslg::test::unit::spec_generator

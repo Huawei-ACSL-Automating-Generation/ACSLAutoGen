@@ -42,7 +42,7 @@ namespace acslg::spec_generator {
             std::string dump() const;
         };
 
-        LoopInfo(const clang::Stmt *loopStmt);
+        LoopInfo(const clang::Stmt *ls);
 
         const clang::Stmt *loopStmt;
         const clang::Stmt *initStmt;
@@ -247,15 +247,15 @@ namespace acslg::spec_generator {
 
         PostPSInfo(const PostPSInfo &other) : pathState(other.pathState), returnExpr(std::nullopt) {
             for (const auto &kv : other.memoryMap) {
-                const auto &addr  = kv.first;
-                const auto &exprp = kv.second;
-                auto cloned       = exprp->clone();
+                const auto &addr = kv.first;
+                const auto &expr = kv.second;
+                auto cloned      = expr->clone();
                 memoryMap.emplace(addr, utils::not_null{std::move(cloned)});
             }
 
             pathConds.reserve(other.pathConds.size());
-            for (const auto &exprp : other.pathConds) {
-                auto cloned = exprp->clone();
+            for (const auto &expr : other.pathConds) {
+                auto cloned = expr->clone();
                 pathConds.push_back(utils::not_null{std::move(cloned)});
             }
 

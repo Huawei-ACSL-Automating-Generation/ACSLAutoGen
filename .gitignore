@@ -4,6 +4,7 @@ build/
 *.list
 *.sh
 .cache/
+.clangd
 **/_*/
 
 test.c

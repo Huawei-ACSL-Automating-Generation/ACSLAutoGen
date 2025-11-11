@@ -153,43 +153,91 @@ namespace acslg::spec_generator {
             auto loopEntry   = entryAndCurrentInfo.symbolicLoopEntry->clone();
             auto loopCurrent = entryAndCurrentInfo.symbolicLoopCurrent->clone();
 
-            auto &paths = loopCurrent->getPaths();
-
-            auto invsAndPaths =
-                analyzer::buildLoopInvariant(std::move(loopCond), *loopEntry, *loopCurrent);
-
-            if (invsAndPaths.size() != 1)
-                UNIMPLEMENT("Only support one path now");
-
-            std::string spec;
-            std::vector<PostPSInfo> postInfos;
-            for (auto &[inv, postInfo] : invsAndPaths) {
-                // TODO: use behavior
-                if (inv != std::nullopt) {
-                    spec += *inv;
-                    spec += '\n';
-                }
-                postInfos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
-                                       analyzer::Path::PathState::Step, std::nullopt);
-            }
-            if (!spec.empty()) {
-                // restd::move '\n'
-                spec.pop_back();
+            if (loopCurrent->getPaths().size() + entryAndCurrentInfo.inactivePaths.size() >
+                (2 << 5)) {
+                // time/memory limit exceeded
+                return {};
             }
 
-            if (spec.empty())
+            auto [spec, postInfos] = analyzer::buildLoopInvariant(
+                std::move(loopCond), *loopEntry, *loopCurrent, entryAndCurrentInfo.inactivePaths);
+
+            std::vector<PostPSInfo> postPSInfos;
+            for (auto &postInfo : postInfos)
+                postPSInfos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
+                                         analyzer::Path::PathState::Step, std::nullopt);
+
+            if (spec == std::nullopt)
                 return GenResultType{.acsl             = std::nullopt,
                                      .acslUsedPoints   = {},
-                                     .perPathPostInfos = std::move(postInfos)};
+                                     .perPathPostInfos = std::move(postPSInfos)};
             return GenResultType{.acsl             = std::move(spec),
                                  .acslUsedPoints   = {},
-                                 .perPathPostInfos = std::move(postInfos)};
+                                 .perPathPostInfos = std::move(postPSInfos)};
         }
 
       private:
         std::string id_;
     };
     REGISTER_ACSL_PLUGIN(LinearInvariantPlugin, "StInGXPlugin");
+
+    class LinearInvariantPluginForComplexLoop : public PathSensitiveLoopInvPlugin {
+      public:
+        LinearInvariantPluginForComplexLoop(const std::string &ID) : id_(ID) {}
+        std::string_view id() const override { return id_; }
+        size_t propose() const override { return 0; }
+        std::optional<GenResultType> tryGenerate(const analyzer::ProgramState &,
+                                                 const analyzer::ProgramState &,
+                                                 const LoopInfo &loopInfo) const override {
+            if (loopInfo.entryAndCurrentInfo == std::nullopt)
+                ERROR("Dependencies are not met.");
+
+            auto &entryAndCurrentInfo = loopInfo.entryAndCurrentInfo.value();
+
+            if (entryAndCurrentInfo.symbolicLoopEntry->getPaths().size() != 1) {
+                ERROR("symbolicLoopEntry has something wrong, check the SetLoopEntryPlugin?");
+            }
+            auto &loopEntryPath = entryAndCurrentInfo.symbolicLoopEntry->getPaths().front();
+
+            using mem_map_vector =
+                std::vector<symb::AddressBoxMap<std::unique_ptr<symb::SymbolicExpr>>>;
+
+            auto [_, evalExprs] = loopEntryPath->evalExpr(loopInfo.condExpr);
+            if (evalExprs.size() != 1)
+                ERROR("Branching is not allowed here.");
+            auto &loopCond = evalExprs.front();
+
+            auto loopEntry   = entryAndCurrentInfo.symbolicLoopEntry->clone();
+            auto loopCurrent = entryAndCurrentInfo.symbolicLoopCurrent->clone();
+
+            if (loopCurrent->getPaths().size() + entryAndCurrentInfo.inactivePaths.size() >
+                (2 << 5)) {
+                // time/memory limit exceeded
+                return {};
+            }
+
+            auto [spec, postInfos] =
+                analyzer::buildLoopInvariant(std::move(loopCond).into_underlying(), *loopEntry,
+                                             *loopCurrent, entryAndCurrentInfo.inactivePaths);
+
+            std::vector<PostPSInfo> postPSInfos;
+            for (auto &postInfo : postInfos)
+                postPSInfos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
+                                         analyzer::Path::PathState::Step, std::nullopt);
+
+            if (spec == std::nullopt)
+                return GenResultType{.acsl             = std::nullopt,
+                                     .acslUsedPoints   = {},
+                                     .perPathPostInfos = std::move(postPSInfos)};
+            return GenResultType{.acsl             = std::move(spec),
+                                 .acslUsedPoints   = {},
+                                 .perPathPostInfos = std::move(postPSInfos)};
+        }
+
+      private:
+        std::string id_;
+    };
+    REGISTER_ACSL_PLUGIN(LinearInvariantPluginForComplexLoop, "StInGXPluginForComplexLoop");
 
     // todo: deal with complex range
     class LoopAssignsPlugin : public PathInsensitiveLoopInvPlugin {

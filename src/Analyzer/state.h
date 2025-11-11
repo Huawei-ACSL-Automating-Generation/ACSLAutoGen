@@ -745,20 +745,23 @@ namespace acslg::analyzer {
     };
 
     struct InvsAndPostStates {
-        std::optional<std::string> invs_;
-        std::pair<symbolic::AddressBoxMap<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>,
-                  std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>
-            postStates_;
+        std::optional<std::string> invs;
+        std::vector<std::pair<
+            symbolic::AddressBoxMap<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>,
+            std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>>
+            postStates;
     };
 
-    std::vector<InvsAndPostStates> buildLoopInvariant(
-        std::unique_ptr<symbolic::SymbolicExpr> loopCond,
-        const std::vector<std::unique_ptr<Path>> &paths,
-        const ProgramState &initState);
+    InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
+                                         const std::vector<std::unique_ptr<Path>> &paths,
+                                         const ProgramState &initState);
 
-    std::vector<InvsAndPostStates> buildLoopInvariant(
-        std::unique_ptr<symbolic::SymbolicExpr> loopCond,
-        const ProgramState &loopEntry,
-        const ProgramState &loopCurrent);
+    InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
+                                         const ProgramState &loopEntry,
+                                         const ProgramState &loopCurrent,
+                                         std::ranges::range auto &inactivePaths);
 } // namespace acslg::analyzer
+
+#include "Symbolic/invariant.tpp"
+
 #endif

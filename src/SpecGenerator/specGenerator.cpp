@@ -75,9 +75,8 @@ namespace acslg::spec_generator {
         return oss.str();
     }
 
-    LoopInfo::LoopInfo(const clang::Stmt *loopStmt)
-        : loopStmt(loopStmt), initStmt{nullptr}, condExpr{nullptr}, incStmt(nullptr),
-          bodyStmt(nullptr) {
+    LoopInfo::LoopInfo(const clang::Stmt *ls)
+        : loopStmt(ls), initStmt{nullptr}, condExpr{nullptr}, incStmt(nullptr), bodyStmt(nullptr) {
         if (const auto *forStmt = dyn_cast<clang::ForStmt>(loopStmt)) {
             initStmt = forStmt->getInit();
             condExpr = forStmt->getCond();
