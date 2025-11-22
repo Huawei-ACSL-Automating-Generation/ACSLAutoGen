@@ -233,6 +233,11 @@ namespace acslg::analyzer::symbolic {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("QuantifierOverRange ");
+        switch (quant_) {
+            case Quantifier::Exist: oss << accent("Exists"); break;
+            case Quantifier::ForAll: oss << accent("ForAll"); break;
+            default: UNREACHABLE();
+        }
         oss << OverRangeExpr::dump() << ", ";
         oss << "{" << key("predicate: ") << pred_->dump() << "}";
         return oss.str();
@@ -252,13 +257,19 @@ namespace acslg::analyzer::symbolic {
         unsigned,
         bool) const {
         auto st = spec_generator::StringTemplate{
-            "\\${quant} integer ${i}; ${0} <= ${i} < ${n} ==> ${pred};"};
+            "\\${quant} integer ${i}; ${0} <= ${i} < ${n} ${entailOrAnd} ${pred}"};
 
-        std::string quantStr;
+        std::string quantStr, entailOrAnd;
         switch (quant_) {
             using enum Quantifier;
-            case ForAll: quantStr = "forall"; break;
-            case Exist: quantStr = "exists"; break;
+            case ForAll:
+                quantStr    = "forall";
+                entailOrAnd = "==>";
+                break;
+            case Exist:
+                quantStr    = "exists";
+                entailOrAnd = "&&";
+                break;
             default: UNREACHABLE();
         }
 
@@ -275,8 +286,10 @@ namespace acslg::analyzer::symbolic {
         if (!nStr)
             return nStr.error();
 
-        auto predStr = callGetACSL(*pred_->simplifiedExpr(), config, usedPoints, currentPoint,
-                                   getPrecedence(Operator::Entailment), true);
+        auto predStr = callGetACSL(
+            *pred_->simplifiedExpr(), config, usedPoints, currentPoint,
+            getPrecedence(entailOrAnd == "==>" ? Operator::Entailment : Operator::LogicalAnd),
+            true);
         if (!predStr)
             return predStr.error();
 
@@ -284,6 +297,7 @@ namespace acslg::analyzer::symbolic {
                              {"i", indexName_},
                              {"0", zeroStr.value()},
                              {"n", nStr.value()},
+                             {"entailOrAnd", entailOrAnd},
                              {"pred", predStr.value()}});
     }
 

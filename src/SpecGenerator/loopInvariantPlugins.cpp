@@ -331,7 +331,7 @@ namespace acslg::spec_generator {
 
             std::unordered_map<size_t, utils::not_null<std::unique_ptr<symb::SymbolicExpr>>>
                 condsForInsert;
-            for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
+            for (auto &[addr, pattern] : patternInfo.normalExitPatternsMap) {
                 using enum symb::BinaryOpExpr::Operator;
                 if (isLocal(addr))
                     continue;
@@ -524,6 +524,108 @@ namespace acslg::spec_generator {
     };
     REGISTER_ACSL_PLUGIN(LoopAssignsPlugin, "loopAssigns");
 
+    class ComplexLoopAssignsPlugin : public PathInsensitiveLoopInvPlugin {
+      public:
+        ComplexLoopAssignsPlugin(const std::string &ID) : id_(ID) {}
+        std::string_view id() const override { return id_; }
+        GenResultType generate(const analyzer::ProgramState &preState,
+                               const analyzer::ProgramState &loopEntry,
+                               const LoopInfo &loopInfo) const override {
+            if (loopInfo.entryAndCurrentInfo == std::nullopt)
+                ERROR("Dependencies are not met.");
+
+            auto &entryAndCurrentInfo = loopInfo.entryAndCurrentInfo.value();
+
+            if (entryAndCurrentInfo.symbolicLoopEntry->getPaths().size() != 1) {
+                ERROR("symbolicLoopEntry has something wrong, check the SetLoopEntryPlugin?");
+            }
+
+            auto loopEntryPoint = entryAndCurrentInfo.symbolicLoopEntry->getStartPoint();
+
+            auto isLocal = [&](const symb::Address &addr) {
+                auto root = addr.getFromRoot();
+                if (root == std::nullopt)
+                    TODO();
+                auto &varAddrMap = preState.getPaths().at(0)->getVarAddr();
+                if (!varAddrMap.contains(root.value()))
+                    return true;
+                return false;
+            };
+
+            std::vector<symb::AddressBox> assignedAddrs;
+            std::unordered_set<size_t> insertedAddrHashes;
+            auto collectAssignedFromPath = [&](const analyzer::Path &path) {
+                for (auto &&[addr, value] : path.getMemoryState().flat()) {
+                    (void)value;
+                    if (isLocal(addr.get()))
+                        continue;
+                    if (path.is_point_to_structure(addr))
+                        continue;
+                    if (path.isUnchanged(addr, entryAndCurrentInfo.loopEntryPoint))
+                        continue;
+                    if (!insertedAddrHashes.insert(addr.hash()).second)
+                        continue;
+                    assignedAddrs.emplace_back(addr);
+                }
+            };
+
+            for (auto &path : entryAndCurrentInfo.symbolicLoopCurrent->getPaths())
+                collectAssignedFromPath(*path);
+            for (auto &path : entryAndCurrentInfo.inactivePaths)
+                collectAssignedFromPath(*path);
+
+            PostPIInfo postInfo;
+            for (auto &addr : assignedAddrs) {
+                postInfo.memoryMap.emplace(addr,
+                                           symb::UnknownExpr::makeUnknown().into_underlying());
+            }
+
+            std::string specs;
+            std::unordered_set<symb::SourcePoint> allUsedPoints;
+            std::unordered_set<size_t> insertedACSL{};
+            for (auto &addr : assignedAddrs) {
+                for (auto &path : loopEntry.getPaths()) {
+                    auto concreteAddrExpr = addr.get().getSubstitutedExpr(*path, loopEntryPoint);
+                    auto concreteAddr =
+                        llvm::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
+                    if (concreteAddr == nullptr)
+                        UNREACHABLE();
+
+                    auto acslExpected = concreteAddr->getACSLOfValue({});
+                    if (!acslExpected &&
+                        acslExpected.error() == symb::SymbolicExpr::GetACSLError::UnknownExpr)
+                        acslExpected = addr.get().getACSLOfValue(
+                            {.predefinedLabels = {{loopEntryPoint, "LoopEntry"}}}, loopEntryPoint);
+                    if (!acslExpected) {
+                        WARN("Value of {" + concreteAddr->dump() + "} getACSL failed.");
+                        continue;
+                    }
+                    auto &[spec, usedPoints] = acslExpected.value();
+                    auto specHash            = utils::hash_val(spec);
+                    if (insertedACSL.contains(specHash))
+                        continue;
+                    insertedACSL.insert(specHash);
+                    specs += spec + ", ";
+                    allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
+                                         std::make_move_iterator(usedPoints.end()));
+                }
+            }
+
+            if (specs.empty())
+                return GenResultType{.acsl           = R"(loop assigns \nothing;)",
+                                     .acslUsedPoints = {},
+                                     .globalPostInfo = std::move(postInfo)};
+            return GenResultType{.acsl =
+                                     "loop assigns " + specs.substr(0, specs.length() - 2) + ";",
+                                 .acslUsedPoints = std::move(allUsedPoints),
+                                 .globalPostInfo = std::move(postInfo)};
+        }
+
+      private:
+        std::string id_;
+    };
+    REGISTER_ACSL_PLUGIN(ComplexLoopAssignsPlugin, "complexLoopAssigns");
+
     class ParadigmMaxMinPlugin : public PathInsensitiveLoopInvPlugin {
       public:
         ParadigmMaxMinPlugin(const std::string &ID) : id_(ID) {}
@@ -577,10 +679,14 @@ namespace acslg::spec_generator {
                 if (auto acslExpected =
                         indexInfo.indexRealAddr->getACSLOfValue({.noStateLabelFunctionAt = true})) {
                     param_index = acslExpected.value().first;
+                } else {
+                    return;
                 }
                 if (auto acslExpected =
                         indexInfo.indexBound->getACSL({.noStateLabelFunctionAt = true})) {
                     param_n = acslExpected.value().first;
+                } else {
+                    return;
                 }
 
                 auto getAddress = [&](const clang::Expr *expr)
@@ -740,8 +846,9 @@ namespace acslg::spec_generator {
 
                 if (specTemplate == std::nullopt || param_n == std::nullopt ||
                     param_array == std::nullopt || param_index == std::nullopt ||
-                    param_m == std::nullopt)
+                    param_m == std::nullopt) {
                     UNREACHABLE();
+                }
 
                 // Verify 'then' of if.
                 if (auto thenStmt = s->getThen()) {
@@ -906,7 +1013,7 @@ namespace acslg::spec_generator {
                     return std::nullopt;
                 auto it = patternInfo.normalExitPatternsMap.find(*fromAddr.value());
                 // The value on this address doesn't change during loop, so just copy it.
-                if (it != patternInfo.normalExitPatternsMap.end())
+                if (it == patternInfo.normalExitPatternsMap.end())
                     return symbol.toSymbolicExpr()->clone();
                 if (it->second == std::nullopt)
                     return std::nullopt;
@@ -975,8 +1082,9 @@ namespace acslg::spec_generator {
             auto pred = interruptedCond->getSubstitutedValueExpr(hashExprMapForSub);
 
             std::vector<PostPSInfo> postInfos{2};
-            auto &normalPathInfo      = postInfos.at(0);
-            auto &interruptedPathInfo = postInfos.at(1);
+            auto &normalPathInfo          = postInfos.at(0);
+            auto &interruptedPathInfo     = postInfos.at(1);
+            interruptedPathInfo.pathState = interruptedPath->getPathState();
             if (interruptedPath->getPathState() == analyzer::Path::PathState::Return) {
                 if (interruptedPath->getReturnExpr() == std::nullopt)
                     ERROR("This path has path state 'return' but no return expr.");
@@ -993,37 +1101,26 @@ namespace acslg::spec_generator {
             using enum symb::BinaryOpExpr::Operator;
 
             assert(arrayInCond != nullptr);
-            auto normalRange = std::make_unique<symb::SymbolAddress>(*arrayInCond);
+            auto arrayRange = std::make_unique<symb::SymbolAddress>(*arrayInCond);
             if (indexStep > 0) {
-                normalRange->setOffset(indexInfo.indexSymbolicValue->clone());
-                normalRange->setLength(
+                arrayRange->setOffset(indexInfo.indexSymbolicValue->clone());
+                arrayRange->setLength(
                     std::make_unique<symb::BinaryOpExpr>(indexInfo.indexBound->clone(), Subtract,
                                                          indexInfo.indexSymbolicValue->clone()));
             } else {
-                normalRange->setOffset(indexInfo.indexBound->clone());
-                normalRange->setLength(
+                arrayRange->setOffset(indexInfo.indexBound->clone());
+                arrayRange->setLength(
                     std::make_unique<symb::BinaryOpExpr>(indexInfo.indexSymbolicValue->clone(),
                                                          Subtract, indexInfo.indexBound->clone()));
             }
             normalPathInfo.pathState = analyzer::Path::PathState::Step;
             normalPathInfo.pathConds.push_back(std::make_unique<symb::QuantifierOverRange>(
-                std::move(normalRange), "k", ForAll,
+                std::make_unique<symb::SymbolAddress>(*arrayRange), "k", ForAll,
                 std::make_unique<symb::UnaryOpExpr>(symb::UnaryOpExpr::Operator::LogicalNot,
                                                     pred->clone())));
 
-            auto interruptedRange = std::make_unique<symb::SymbolAddress>(*arrayInCond);
-            if (indexStep > 0) {
-                interruptedRange->setOffset(indexInfo.indexSymbolicValue->clone());
-                interruptedRange->setLength(std::make_unique<symb::BinaryOpExpr>(
-                    indexValueAfterLoop->clone(), Subtract, indexInfo.indexSymbolicValue->clone()));
-            } else {
-                interruptedRange->setOffset(indexValueAfterLoop->clone());
-                interruptedRange->setLength(std::make_unique<symb::BinaryOpExpr>(
-                    indexInfo.indexSymbolicValue->clone(), Subtract, indexValueAfterLoop->clone()));
-            }
-            normalPathInfo.pathState = interruptedPath->getPathState();
-            normalPathInfo.pathConds.push_back(std::make_unique<symb::QuantifierOverRange>(
-                std::move(interruptedRange), "k", Exist, pred->clone().into_underlying()));
+            interruptedPathInfo.pathConds.push_back(std::make_unique<symb::QuantifierOverRange>(
+                std::move(arrayRange), "k", Exist, pred->clone().into_underlying()));
 
             auto expected =
                 std::make_unique<symb::UnaryOpExpr>(symb::UnaryOpExpr::Operator::LogicalNot,

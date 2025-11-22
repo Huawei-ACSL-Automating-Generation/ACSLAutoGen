@@ -596,8 +596,6 @@ namespace acslg::analyzer {
         bool is_point_to_structure(const symbolic::Address &addr) const;
         std::unique_ptr<Path> clone() const;
 
-        const clang::Stmt *StmtCtx = nullptr;
-
         std::string dump() const;
         EvalResult evalExpr(const clang::Expr *expr);
         friend class ProgramState;
@@ -630,6 +628,8 @@ namespace acslg::analyzer {
         context::ACSLGContext &context_;
 
         symbolic::SourcePoint startPoint_;
+
+        const clang::Stmt *stmtCtx_ = nullptr;
     };
 
     class ProgramState {
@@ -664,8 +664,6 @@ namespace acslg::analyzer {
             std::vector<std::unique_ptr<Path>> &newPaths) const;
         bool isInactive() const;
 
-        const clang::Stmt *StmtCtx = nullptr;
-
         std::string dump() const;
         void resetBreakState();
         void resymbolize(symbolic::SourcePoint newStartPoint);
@@ -683,6 +681,7 @@ namespace acslg::analyzer {
         std::vector<utils::not_null<std::unique_ptr<Path>>> takeAllPaths();
 
       private:
+        void setStmtCtx(const clang::Stmt *stmtCtx);
         // TODO: remove from private member. [a local helper function.]
         // Only be used in step when processing SwitchStmt, just for a cleaner code.
         std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<symbolic::SymbolicExpr>>> splitStateBySwitchCond(
@@ -701,6 +700,8 @@ namespace acslg::analyzer {
         context::ACSLGContext &context_;
 
         symbolic::SourcePoint startPoint_;
+
+        const clang::Stmt *stmtCtx_ = nullptr;
     };
 
     struct VarManager {

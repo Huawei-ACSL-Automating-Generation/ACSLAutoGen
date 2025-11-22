@@ -51,8 +51,8 @@ namespace acslg::context {
                 if (usedPoints_.contains(point))
                     continue;
                 usedPoints_.insert(point);
-                rewriter_.InsertText(point.asSourceLocation(),
-                                     "\n//@ ghost " + point.getLabel() + ":\n", false, true);
+                rewriter_.InsertText(point.asSourceLocation(), "\n" + point.getLabel() + ":\n;\n",
+                                     false, true);
             }
         }
 

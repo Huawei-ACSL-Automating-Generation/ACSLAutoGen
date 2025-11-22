@@ -651,4 +651,27 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
         }
     }
 
+    TEST(StateTest, Simple_Search) {
+        auto code      = R"(
+int arraySearch(int *a, int x, int n) {
+        int p = 0;
+
+        while (p < n) {
+            if (a[p] == x) {
+                return 1;
+            }
+            p++;
+        }
+        return 0;
+    }
+    )";
+        auto postState = execOnFirstFunc(code);
+
+        ASSERT_EQ(postState->getPaths().size(), 2);
+        for (auto &path : postState->getPaths()) {
+            DEBUG(path->dump());
+        }
+        doAll(code);
+    }
+
 } // namespace acslg::test::integration

@@ -238,6 +238,91 @@ namespace acslg::test::unit::spec_generator {
         }
     }
 
+    TEST(ComplexLoopAssignsPluginTest, SimpleScalar) {
+        auto pluginId            = "complexLoopAssigns";
+        auto code                = R"(
+        void func(int *p, int n){
+            int mx = 0;
+            for(int i = 0; i < n; i++){
+                if(mx < p[i])
+                    mx = p[i];
+            } 
+        }
+    )";
+        auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_THAT(*spec, HasSubstr("mx"));
+        ASSERT_EQ(postInfo.memoryMap.size(), 1);
+        EXPECT_TRUE(llvm::isa<UnknownExpr>(*postInfo.memoryMap.begin()->second));
+    }
+
+    // TEST(ComplexLoopAssignsPluginTest, ArrayAndScalar) {
+    //     auto pluginId            = "complexLoopAssigns";
+    //     auto code                = R"(
+    //     void func(int *p, int n){
+    //         int cnt = 0;
+    //         for(int i = 0; i < n; i++){
+    //             p[i]++;
+    //             cnt -= 1;
+    //         }
+    //     }
+    // )";
+    //     auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
+    //     EXPECT_NE(spec, nullopt);
+    //     EXPECT_THAT(*spec, HasSubstr("cnt"));
+    //     EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. \\at\(n, [^)]+\) - 1\])"));
+    //     EXPECT_EQ(postInfo.memoryMap.size(), 2);
+    //     for (auto &[addr, value] : postInfo.memoryMap) {
+    //         ASSERT_OK_AND_GET_FIRST_TO_VAR(
+    //             addr.get().getACSLOfValue(
+    //                 {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+    //             addrStr);
+    //         if (addrStr == "p[i .. n - 1]") {
+    //             EXPECT_TRUE(value->isUnknown());
+    //         } else if (addrStr == "cnt") {
+    //             EXPECT_TRUE(value->isUnknown());
+    //         } else {
+    //             FAIL() << addrStr;
+    //         }
+    //     }
+    // }
+
+    TEST(ComplexLoopAssignsPluginTest, InactivePathWrites) {
+        auto pluginId            = "complexLoopAssigns";
+        auto code                = R"(
+        int find_first_zero(int *p, int n){
+            int found = -1;
+            int i = 0;
+            while(i < n){
+                if(p[i] == 0){
+                    found = i;
+                    break;
+                }
+                ++i;
+            }
+            return found;
+        }
+    )";
+        auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
+        EXPECT_NE(spec, nullopt);
+        EXPECT_THAT(*spec, HasSubstr("found"));
+        EXPECT_THAT(*spec, HasSubstr("i"));
+        ASSERT_EQ(postInfo.memoryMap.size(), 2);
+        for (auto &[addr, value] : postInfo.memoryMap) {
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(
+                addr.get().getACSLOfValue(
+                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                addrStr);
+            if (addrStr == "found") {
+                EXPECT_TRUE(value->isUnknown());
+            } else if (addrStr == "i") {
+                EXPECT_TRUE(value->isUnknown());
+            } else {
+                FAIL() << addrStr;
+            }
+        }
+    }
+
     TEST(ParadigmMaxMinPluginTest, Simple_0) {
         auto pluginId = "paradigmMaxMin";
         auto code     = R"(
@@ -572,6 +657,90 @@ namespace acslg::test::unit::spec_generator {
             assert(expected);
             DEBUG(expected.value().first);
         }
+        for (auto &pathCond : interruptedPath.pathConds) {
+            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            assert(expected);
+            DEBUG(expected.value().first);
+        }
+    }
+
+    TEST(ParadigmSearchPluginTest, Simple_0) {
+        auto pluginId = "paradigmSearch";
+        auto code     = R"(
+int arraySearch(int *a, int x, int n) {
+        int p = 0;
+
+        while (p < n) {
+            if (a[p] == x) {
+                return 1;
+            }
+            p++;
+        }
+        return 0;
+    }
+    )";
+        auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ASSERT_TRUE(res);
+        auto &[spec, _, postInfos] = res.value();
+        EXPECT_NE(spec, nullopt);
+        DEBUG(spec.value());
+        ASSERT_EQ(postInfos.size(), 2);
+        auto &normalPath      = postInfos.at(0);
+        auto &interruptedPath = postInfos.at(1);
+        for (auto &pathCond : normalPath.pathConds) {
+            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            assert(expected);
+            DEBUG(expected.value().first);
+        }
+        EXPECT_TRUE(interruptedPath.pathState == analyzer::Path::PathState::Return);
+        EXPECT_TRUE(interruptedPath.returnExpr);
+        DEBUG(interruptedPath.returnExpr.value()->dump());
+        for (auto &pathCond : interruptedPath.pathConds) {
+            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            assert(expected);
+            DEBUG(expected.value().first);
+        }
+    }
+
+    TEST(ParadigmSearchPluginTest, X509_parser_bufs_differ) {
+        auto pluginId = "paradigmSearch";
+        auto code     = R"(
+#include <stdint.h>
+
+typedef uint8_t	  u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+
+int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
+{
+	int ret = 0;
+	u32 i = 0;
+
+	for (i = 0; i < n; i++) {
+		if(b1[i] != b2[i]) {
+			ret = 1;
+			break;
+		}
+	}
+
+	return ret;
+}
+    )";
+        auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ASSERT_TRUE(res);
+        auto &[spec, _, postInfos] = res.value();
+        EXPECT_NE(spec, nullopt);
+        DEBUG(spec.value());
+        ASSERT_EQ(postInfos.size(), 2);
+        auto &normalPath      = postInfos.at(0);
+        auto &interruptedPath = postInfos.at(1);
+        for (auto &pathCond : normalPath.pathConds) {
+            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            assert(expected);
+            DEBUG(expected.value().first);
+        }
+        EXPECT_TRUE(interruptedPath.pathState == analyzer::Path::PathState::Break);
         for (auto &pathCond : interruptedPath.pathConds) {
             auto expected = pathCond->simplifiedExpr()->getACSL({});
             assert(expected);

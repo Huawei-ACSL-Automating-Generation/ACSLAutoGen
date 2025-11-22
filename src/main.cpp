@@ -39,7 +39,7 @@ namespace acslg {
                 auto path =
                     fs::path{SM.getFilename(SM.getLocForStartOfFile(SM.getMainFileID())).str()};
                 path.replace_filename(
-                    path.stem().concat("_with_acsl").concat(path.extension().string()));
+                    path.stem().concat(path.extension().string()).concat("_with_acsl"));
                 llvm::raw_fd_ostream Out(path.string(), EC, llvm::sys::fs::OF_None);
                 if (EC)
                     ERROR("Error opening file " + path.string() + ": " + EC.message());

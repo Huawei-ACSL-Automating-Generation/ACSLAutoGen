@@ -15,7 +15,6 @@ namespace acslg::spec_generator {
     REGISTER_ACSL_GROUP(DefaultPathSensitiveLoopInv, "paradigmSearch", "StInGXPlugin")
     REGISTER_ACSL_GROUP(ComplexPathInsensitiveLoopInv,
                         "checkAndDumpLoopInfo",
-                        "loopAssigns",
-                        "loopVariant");
+                        "complexLoopAssigns");
     REGISTER_ACSL_GROUP(ComplexPathSensitiveLoopInv, "StInGXPluginForComplexLoop");
 } // namespace acslg::spec_generator

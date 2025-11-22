@@ -33,14 +33,21 @@ namespace acslg::spec_generator {
                 for (auto &postPath : post.getPaths()) {
                     // INFO("path");
                     for (auto &&[addr, value] : postPath->getMemoryState().flat()) {
+                        auto fromRoot = addr.get().getFromRoot();
+                        if (fromRoot == std::nullopt)
+                            continue;
+                        if (!prePath->getVarAddr().contains(fromRoot.value()))
+                            continue;
+                        if (!is_symbol_addr(addr))
+                            continue;
                         // INFO(addr.get().dump());
                         // INFO(value->dump());
 
-                        // If the current address corresponds to a pointer targeting a structure,
-                        // the associated handling is deliberately omitted. This omission is
-                        // justified by the design of the flat() traversal: the fields of the
-                        // structure are enumerated and processed individually. Thus, treating the
-                        // pointer itself would introduce redundancy.
+                        // If the current address corresponds to a pointer targeting a
+                        // structure, the associated handling is deliberately omitted. This
+                        // omission is justified by the design of the flat() traversal: the
+                        // fields of the structure are enumerated and processed individually.
+                        // Thus, treating the pointer itself would introduce redundancy.
                         if (is_symbol_addr(addr) && postPath->is_point_to_structure(addr))
                             continue;
 
@@ -84,8 +91,9 @@ namespace acslg::spec_generator {
         DetailBehaviorPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
 
-        GenResultType generate(const analyzer::ProgramState &,
+        GenResultType generate(const analyzer::ProgramState &pre,
                                const analyzer::ProgramState &post) const override {
+            auto &prePath = pre.getPaths().front();
             auto oldPoint = post.getStartPoint();
             std::unordered_set<symb::SourcePoint> allUsedPoints{};
 
@@ -99,6 +107,13 @@ namespace acslg::spec_generator {
 
                 std::unordered_map<size_t, const symb::AddressBox> assignedAddrs;
                 for (auto &&[a, v] : path.getMemoryState().flat()) {
+                    auto fromRoot = a.get().getFromRoot();
+                    if (fromRoot == std::nullopt)
+                        continue;
+                    if (!prePath->getVarAddr().contains(fromRoot.value()))
+                        continue;
+                    if (!is_symbol_addr(a))
+                        continue;
                     if (is_symbol_addr(a) && path.is_point_to_structure(a))
                         continue;
                     if (!path.isUnchanged(a))
@@ -138,6 +153,13 @@ namespace acslg::spec_generator {
 
                 // Memory equations
                 for (auto &&[addr, value] : path.getMemoryState().flat()) {
+                    auto fromRoot = addr.get().getFromRoot();
+                    if (fromRoot == std::nullopt)
+                        continue;
+                    if (!prePath->getVarAddr().contains(fromRoot.value()))
+                        continue;
+                    if (!is_symbol_addr(addr))
+                        continue;
                     if (is_symbol_addr(addr) && llvm::isa<symb::Structure>(value.get()))
                         continue;
 
@@ -166,7 +188,7 @@ namespace acslg::spec_generator {
                 std::string block;
                 block += IND1 + "behavior " + bname + ":\n";
                 if (!req.empty())
-                    block += IND2 + "requires " + req + ";\n";
+                    block += IND2 + "assumes " + req + ";\n";
                 block += IND2 + "assigns " + assignsSpec + ";\n";
                 for (auto &e : ensures)
                     block += IND2 + "ensures " + e + ";\n";
@@ -193,16 +215,18 @@ namespace acslg::spec_generator {
 
         static std::string joinConj(const analyzer::Formulas &conds, symb::SourcePoint oldPoint) {
             std::string s;
-            for (size_t i = 0; i < conds.size(); ++i) {
-                const auto &c = conds[i];
-                if (c->isUnknown())
+            for (auto &cond : conds) {
+                if (cond->isUnknown())
                     continue;
-                auto rf = c->simplifiedExpr()->getACSL({.predefinedLabels = {{oldPoint, "Old"}}});
+                auto rf = cond->simplifiedExpr()->getACSL({.predefinedLabels = {{oldPoint, "Old"}}},
+                                                          oldPoint);
                 if (!rf || rf.value().first.empty())
+                    continue;
+                if (!rf.value().second.empty())
                     continue;
                 if (!s.empty())
                     s += " && ";
-                s += "(" + rf.value().first + ")";
+                s += rf.value().first;
             }
             return s;
         }

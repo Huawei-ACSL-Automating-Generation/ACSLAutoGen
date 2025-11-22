@@ -28,8 +28,8 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override;
-        bool isLinear() const override { return true; };
-        int getMaxDegree() const override { return 0; };
+        bool isLinear() const override { return false; };
+        int getMaxDegree() const override { return -1; };
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &,
             const SourcePoint &) const override;

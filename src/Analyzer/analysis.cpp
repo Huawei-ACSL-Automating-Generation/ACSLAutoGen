@@ -10,6 +10,7 @@
 namespace acslg::analyzer {
     void ACSLAnalyzer::analyzeFunctions() {
         PROCESS("Running analysis functions...");
+        static int count = 0;
         for (auto *func : this->context_.getFunctions()) {
             if (!func->hasBody())
                 continue;
@@ -17,6 +18,9 @@ namespace acslg::analyzer {
             if (!context_.getSourceManager().isInMainFile(loc))
                 continue;
 
+            if (func->getNameAsString() == "main" && count)
+                continue;
+            ++count;
             auto wrappedFunc = std::make_unique<ACSLFunction>(func);
             generateFunctionSpec(wrappedFunc.get());
             functions_.push_back(std::move(wrappedFunc));
@@ -49,7 +53,7 @@ namespace acslg::analyzer {
 
         for (const clang::Stmt *stmt : CS->children())
             state->step(stmt);
-        INFO(state->dump());
+        // INFO(state->dump());
 
         if (FD->getNameAsString() == "main") {
             WARN("Ignore the contracts generating of MAIN Function.");

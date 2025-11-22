@@ -9,3 +9,7 @@ build/
 
 test.c
 *_acsl.c
+
+benchmark_results.tsv
+benchmark_logs
+benchmark_summary.txt

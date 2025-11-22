@@ -1181,8 +1181,9 @@ namespace acslg::analyzer {
                     }
                 }
 
-                if (!lhs)
-                    UNREACHABLE();
+                if (!lhs) {
+                    continue;
+                }
 
                 Coefficient c0 = constraint.inhomogeneous_term();
                 if (c0 != 0) {

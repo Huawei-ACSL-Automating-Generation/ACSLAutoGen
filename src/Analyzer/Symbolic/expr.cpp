@@ -1,5 +1,6 @@
 #include "expr.h"
 
+#include <clang/AST/Type.h>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -1835,7 +1836,7 @@ namespace acslg::analyzer::symbolic {
         if (FD == nullptr)
             ERROR("FunctionDecl is null.");
         if (!FD->hasBody())
-            ERROR("FunctionDecl has no body.");
+            ERROR("FunctionDecl: " << FD->getNameAsString() << " has no body.");
 
         auto labelPrefix = "BeginOf_" + FD->getNameAsString();
         SourcePoint p{SM, labelPrefix};
@@ -2074,12 +2075,19 @@ namespace acslg::analyzer::symbolic {
         std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
         SourcePoint fromPoint) {
         if (type->isPointerType()) {
+            auto pointerType = llvm::cast<clang::PointerType>(type);
+            auto pointeeType = pointerType->getPointeeType();
             if (from)
-                return std::make_unique<SymbolAddress>(type, std::move(from.value()),
+                return std::make_unique<SymbolAddress>(pointeeType, std::move(from.value()),
                                                        std::move(fromPoint));
-            return std::make_unique<SymbolAddress>(type, std::nullopt, std::move(fromPoint));
+            return std::make_unique<SymbolAddress>(pointeeType, std::nullopt, std::move(fromPoint));
         } else if (type->isArrayType()) {
-            TODO();
+            auto arrayType   = llvm::cast<clang::ArrayType>(type);
+            auto elementType = arrayType->getElementType();
+            if (from)
+                return std::make_unique<SymbolAddress>(elementType, std::move(from.value()),
+                                                       std::move(fromPoint));
+            return std::make_unique<SymbolAddress>(elementType, std::nullopt, std::move(fromPoint));
         } else if (type->isStructureType()) {
             if (from == std::nullopt)
                 ERROR("Structure should *from* an `Address`.");

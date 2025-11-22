@@ -160,6 +160,38 @@ namespace acslg::spec_generator {
         std::vector<std::unique_ptr<analyzer::Path>> invariants;
         std::string spec = ACSL_HEAD.to_string();
         std::unordered_set<symb::SourcePoint> allUsedPoints;
+        std::vector<std::string> assignsClauses;
+        std::vector<std::string> invariantClauses;
+        std::vector<std::string> variantClauses;
+
+        enum class LoopClauseKind { Assigns, Invariant, Variant };
+        auto classifyClauseKind = [](std::string_view clause) {
+            auto startsWith = [](std::string_view text, std::string_view prefix) {
+                return text.size() >= prefix.size() && text.compare(0, prefix.size(), prefix) == 0;
+            };
+            auto firstNotSpace = clause.find_first_not_of(" \t");
+            if (firstNotSpace != std::string_view::npos)
+                clause.remove_prefix(firstNotSpace);
+            if (startsWith(clause, "loop assigns"))
+                return LoopClauseKind::Assigns;
+            if (startsWith(clause, "loop variant"))
+                return LoopClauseKind::Variant;
+            return LoopClauseKind::Invariant;
+        };
+        auto storeClause = [&](std::string clause) {
+            switch (classifyClauseKind(clause)) {
+                case LoopClauseKind::Assigns:
+                    assignsClauses.emplace_back(std::move(clause));
+                    break;
+                case LoopClauseKind::Variant:
+                    variantClauses.emplace_back(std::move(clause));
+                    break;
+                case LoopClauseKind::Invariant:
+                default:
+                    invariantClauses.emplace_back(std::move(clause));
+                    break;
+            }
+        };
 
         auto loopEntryPoint = symb::SourcePoint::fromStmtBefore(
             loopInfo.loopStmt, loopEntry.getContext().getSourceManager(),
@@ -259,7 +291,7 @@ namespace acslg::spec_generator {
             auto [s, usedPoints, postInfo] = piPlugin->generate(preState, loopEntry, loopInfo);
 
             if (s) {
-                spec += "    " /*4 spaces*/ + *s + "\n";
+                storeClause(std::move(*s));
             }
             allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
                                  std::make_move_iterator(usedPoints.end()));
@@ -283,13 +315,21 @@ namespace acslg::spec_generator {
             lastPriority = currentPriority;
 
             if (res.value().acsl) {
-                spec += "    " /*4 spaces*/ + *res.value().acsl + "\n";
+                storeClause(std::move(*res.value().acsl));
             }
             allUsedPoints.insert(std::make_move_iterator(res.value().acslUsedPoints.begin()),
                                  std::make_move_iterator(res.value().acslUsedPoints.end()));
 
             updateResultInfosWithPerPathInfo(res.value().perPathPostInfos);
         }
+        auto appendClauses = [&](const std::vector<std::string> &clauses) {
+            for (const auto &clause : clauses) {
+                spec += "    " /*4 spaces*/ + clause + "\n";
+            }
+        };
+        appendClauses(assignsClauses);
+        appendClauses(invariantClauses);
+        appendClauses(variantClauses);
         spec += ACSL_END.to_string();
 
         assert(postState->getPaths().empty());

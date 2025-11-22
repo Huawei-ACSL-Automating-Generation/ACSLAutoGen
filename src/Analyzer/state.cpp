@@ -1,6 +1,7 @@
 #include "state.h"
 
 #include <clang/AST/Type.h>
+#include <llvm-19/llvm/Support/Casting.h>
 #include <queue>
 #include <unordered_map>
 #include <memory>
@@ -232,7 +233,7 @@ namespace acslg::analyzer {
             cloned->returnExpr_.emplace(returnExpr_.value()->clone().into_underlying());
         else
             cloned->returnExpr_ = std::nullopt;
-        cloned->StmtCtx = StmtCtx;
+        cloned->stmtCtx_ = stmtCtx_;
         return cloned;
     }
 
@@ -480,7 +481,13 @@ namespace acslg::analyzer {
                         "llvm.dbg.declare", "llvm.lifetime.start", "llvm.lifetime.end", "printf",
                         "__assert_fail"};
                     std::string name = callee->getNameAsString();
-                    if (ignoreNames.contains(name)) {
+                    std::string lowerName(name);
+                    std::transform(
+                        lowerName.begin(), lowerName.end(), lowerName.begin(),
+                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                    if (ignoreNames.contains(name) ||
+                        lowerName.find("assert") != std::string::npos ||
+                        lowerName.find("print") != std::string::npos) {
                         Formulas exprs;
                         exprs.emplace_back(symbolic::UnknownExpr::makeUnknown().into_underlying());
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
@@ -491,6 +498,7 @@ namespace acslg::analyzer {
                     if (name == "BSL_SAL_Calloc") {
                         // Extract element type T from any argument that syntactically contains
                         // `sizeof(T)`.
+
                         std::optional<clang::QualType> elemTyOpt;
                         for (unsigned i = 0; i < call->getNumArgs(); ++i) {
                             if (auto qt = acslg::utils::findSizeofQualType(call->getArg(i))) {
@@ -1024,8 +1032,8 @@ namespace acslg::analyzer {
         }
 
         // ---- Statement Context (source snippet) ---------------------------------
-        if (StmtCtx) {
-            if (auto opt = context_.getStmtInfo(StmtCtx)) {
+        if (stmtCtx_) {
+            if (auto opt = context_.getStmtInfo(stmtCtx_)) {
                 const auto &sourceText = std::get<0>(*opt);
                 if (!sourceText.empty()) {
                     oss << "  " << key("stmt") << ": " << path(sourceText.str()) << "\n";
@@ -1066,6 +1074,10 @@ namespace acslg::analyzer {
 
     bool Path::isUnchanged(const symbolic::Address &addr,
                            std::optional<symbolic::SourcePoint> since) const {
+        if (auto symbolAddr = llvm::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
+            if (symbolAddr->getLength())
+                return false;
+        }
         auto value = memoryState_.read(addr);
         if (value == std::nullopt)
             return true; // Assume it has not been accessed yet.
@@ -1076,6 +1088,10 @@ namespace acslg::analyzer {
     }
 
     bool Path::is_point_to_structure(const symbolic::Address &addr) const {
+        if (auto symbolAddr = llvm::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
+            if (symbolAddr->getLength())
+                return false;
+        }
         auto opt = memoryState_.read(addr);
         if (!opt)
             return false;
@@ -1641,6 +1657,10 @@ namespace acslg::analyzer {
                     UNIMPLEMENT("BinaryOperator not implemented: " << binOp->getOpcode());
                 updateVarState(binOp);
             })
+            .Case<clang::ParenExpr>([this](const clang::ParenExpr *parenExpr) {
+                DEBUG("stepping clang::ParenExpr...");
+                step(parenExpr->getSubExpr());
+            })
             .Case<clang::Expr>([this](const clang::Expr *expr) {
                 DEBUG("stepping clang::Expr...");
                 stepExpr(expr);
@@ -1661,8 +1681,9 @@ namespace acslg::analyzer {
             })
             .Case<clang::SwitchStmt>([this](const clang::SwitchStmt *switchStmt) {
                 DEBUG("stepping SwitchStmt...");
-                auto prevStmtCtx = this->StmtCtx;
-                this->StmtCtx    = switchStmt;
+                auto prevStmtCtx = this->stmtCtx_;
+                this->stmtCtx_   = switchStmt;
+                setStmtCtx(switchStmt);
 
                 if (switchStmt->hasInitStorage())
                     UNIMPLEMENT("Unsupported Switch type, Cond has init statement: "
@@ -1683,43 +1704,43 @@ namespace acslg::analyzer {
                 }
 
                 resetBreakState();
-                this->StmtCtx = prevStmtCtx;
+                setStmtCtx(prevStmtCtx);
             })
             .Case<clang::ForStmt>([this](const clang::ForStmt *forStmt) {
                 DEBUG("stepping clang::ForStmt...");
-                auto prevStmtCtx = this->StmtCtx;
-                this->StmtCtx    = forStmt;
+                auto prevStmtCtx = this->stmtCtx_;
+                setStmtCtx(forStmt);
                 stepLoop(forStmt);
                 resetBreakState();
-                this->StmtCtx = prevStmtCtx;
+                setStmtCtx(prevStmtCtx);
             })
             .Case<clang::WhileStmt>([this](const clang::WhileStmt *whileStmt) {
                 DEBUG("stepping clang::WhileStmt...");
-                auto prevStmtCtx = this->StmtCtx;
-                this->StmtCtx    = whileStmt;
+                auto prevStmtCtx = this->stmtCtx_;
+                setStmtCtx(whileStmt);
                 stepLoop(whileStmt);
                 resetBreakState();
-                this->StmtCtx = prevStmtCtx;
+                setStmtCtx(prevStmtCtx);
             })
             .Case<clang::DoStmt>([this](const clang::DoStmt *doStmt) {
                 DEBUG("stepping clang::DoStmt...");
-                auto prevStmtCtx = this->StmtCtx;
-                this->StmtCtx    = doStmt;
+                auto prevStmtCtx = this->stmtCtx_;
+                setStmtCtx(doStmt);
                 stepLoop(doStmt);
                 resetBreakState();
-                this->StmtCtx = prevStmtCtx;
+                setStmtCtx(prevStmtCtx);
             })
             .Case<clang::CXXForRangeStmt>([this](const clang::CXXForRangeStmt *rangeStmt) {
                 DEBUG("stepping CXXForRangeStmt...");
-                auto prevStmtCtx = this->StmtCtx;
-                this->StmtCtx    = rangeStmt;
+                auto prevStmtCtx = this->stmtCtx_;
+                this->stmtCtx_   = rangeStmt;
                 stepLoop(rangeStmt);
                 resetBreakState();
-                this->StmtCtx = prevStmtCtx;
+                this->stmtCtx_ = prevStmtCtx;
             })
             .Case<clang::BreakStmt>([this](const clang::BreakStmt *) {
                 DEBUG("stepping BreakStmt...");
-                setStates(Path::PathState::Break, StmtCtx);
+                setStates(Path::PathState::Break, stmtCtx_);
             })
             .Case<clang::ContinueStmt>([](const clang::ContinueStmt *) {
                 DEBUG("stepping ContinueStmt...");
@@ -1892,14 +1913,14 @@ namespace acslg::analyzer {
             UNREACHABLE();
         *this = std::move(*res.postState);
 
-        INFO(this->dump());
+        // INFO(this->dump());
     }
 
     void ProgramState::setStates(Path::PathState state, const clang::Stmt *stmt) {
         for (auto &pathPtr : paths_) {
             if (pathPtr->isActive()) {
                 pathPtr->setPathState(state);
-                pathPtr->StmtCtx = stmt;
+                pathPtr->stmtCtx_ = stmt;
             }
         }
     }
@@ -1994,9 +2015,14 @@ namespace acslg::analyzer {
         std::vector<const clang::VarDecl *> varDecls;
         for (auto it = declStmt->decl_begin(); it != declStmt->decl_end(); ++it) {
             clang::Decl *decl = *it;
-            if (!isa<clang::VarDecl>(decl))
-                UNIMPLEMENT("Unhandled clang::Decl type: "s + decl->getDeclKindName());
-            varDecls.push_back(dyn_cast<clang::VarDecl>(decl));
+            if (auto *varDecl = dyn_cast<clang::VarDecl>(decl)) {
+                varDecls.push_back(varDecl);
+                continue;
+            }
+            if (isa<clang::StaticAssertDecl>(decl))
+                continue; // already enforced at compile time, nothing to track at runtime
+
+            UNIMPLEMENT("Unhandled clang::Decl type: "s + decl->getDeclKindName());
         }
         for (const clang::VarDecl *varDecl : varDecls) {
             const clang::Expr *initExpr = varDecl->getInit();
@@ -2168,7 +2194,7 @@ namespace acslg::analyzer {
             }
         }
 
-        newState->StmtCtx = StmtCtx;
+        newState->stmtCtx_ = stmtCtx_;
         return newState;
     }
 
@@ -2184,8 +2210,7 @@ namespace acslg::analyzer {
 
     void ProgramState::resetBreakState() {
         for (auto &path : paths_) {
-            if (path->getPathState() == Path::PathState::Break &&
-                (path->StmtCtx && path->StmtCtx == this->StmtCtx))
+            if (path->getPathState() == Path::PathState::Break && path->stmtCtx_ == this->stmtCtx_)
                 path->setPathState(Path::PathState::Step);
             if (path->getPathState() == Path::PathState::Continue)
                 TODO();
@@ -2359,5 +2384,15 @@ namespace acslg::analyzer {
         std::vector<utils::not_null<std::unique_ptr<Path>>> out;
         out.swap(paths_);
         return out;
+    }
+
+    void ProgramState::setStmtCtx(const clang::Stmt *stmtCtx) {
+        for (auto &path : paths_) {
+            if (!path->isActive())
+                continue;
+            assert(path->stmtCtx_ == stmtCtx_);
+            path->stmtCtx_ = stmtCtx;
+        }
+        stmtCtx_ = stmtCtx;
     }
 } // namespace acslg::analyzer
