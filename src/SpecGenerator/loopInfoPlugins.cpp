@@ -3,6 +3,7 @@
 #include "specGenerator.h"
 #include "macros.h"
 #include "state.h"
+#include <llvm-19/llvm/Support/Casting.h>
 
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
@@ -21,6 +22,7 @@ namespace acslg::spec_generator {
                 symbolicState->getContext().getLangOptions());
 
             symbolicState->resymbolize(std::move(loopEntryPoint));
+
             auto symbolicLoopEntry = symbolicState->clone();
 
             symbolicState->step(loopInfo.condExpr);
@@ -59,15 +61,15 @@ namespace acslg::spec_generator {
                 ERROR("symbolicLoopEntry has something wrong, check the SetLoopEntryPlugin?");
             }
 
-            auto &loopCurrent = entryAndCurrentInfo.symbolicLoopCurrent;
+            auto &symbolicLoopEntry = entryAndCurrentInfo.symbolicLoopEntry;
+            auto &loopCurrent       = entryAndCurrentInfo.symbolicLoopCurrent;
 
             using Pattern = LoopInfo::Pattern;
 
             auto getPatternsFromPath = [&](const analyzer::Path &currentEntry) {
                 symb::AddressBoxMap<std::optional<const Pattern>> patterns;
-                auto &preVA = entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->getVarAddr();
-                auto &preMS =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->getMemoryState();
+                auto &preVA = symbolicLoopEntry->getPaths().at(0)->getVarAddr();
+                auto &preMS = symbolicLoopEntry->getPaths().at(0)->getMemoryState();
                 for (auto &&[addr, currentExpr] : currentEntry.getMemoryState().flat()) {
                     if (auto rootDecl = addr.get().getFromRoot();
                         rootDecl == std::nullopt || !preVA.contains(rootDecl.value()))
@@ -76,7 +78,7 @@ namespace acslg::spec_generator {
                         if (*preValue.value() == *currentExpr)
                             continue; // unchanged
                     } else {
-                        if (currentEntry.isUnchanged(addr))
+                        if (currentEntry.isUnchanged(addr, *symbolicLoopEntry->getPaths().front()))
                             continue; // unchanged
                     }
                     std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> entryExpr;
@@ -90,7 +92,7 @@ namespace acslg::spec_generator {
                             continue;
                         }
                         if (isFrom(*hashAddrMap.begin()->second->toSymbolicExpr(), addr,
-                                   entryAndCurrentInfo.symbolicLoopEntry->getStartPoint())) {
+                                   symbolicLoopEntry->getStartPoint())) {
                             entryExpr = hashAddrMap.begin()->second->toSymbolicExpr()->clone();
                         } else {
                             patterns.emplace(addr, std::nullopt);
@@ -195,6 +197,48 @@ namespace acslg::spec_generator {
         std::string id_;
     };
     REGISTER_ACSL_PLUGIN(SetPatternsPlugin, "setPatterns");
+
+    class SetSharedStatePlugin : public LoopInfoPlugin {
+      public:
+        SetSharedStatePlugin(const std::string &ID) : id_(ID) {}
+        std::string_view id() const override { return id_; }
+        bool parse(const analyzer::ProgramState &,
+                   const analyzer::ProgramState &loopEntry,
+                   LoopInfo &loopInfo) const override {
+            std::vector<analyzer::Path *> activePaths;
+            for (auto &p : loopEntry.getPaths()) {
+                if (p->isActive())
+                    activePaths.push_back(p.get().get());
+            }
+            if (activePaths.empty())
+                return true;
+
+            auto merged = activePaths.front()->clone();
+            for (size_t i = 1; i < activePaths.size(); ++i)
+                merged->mergeWith(*activePaths[i]);
+
+            analyzer::symbolic::AddressBoxMap<
+                utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
+                sharedMemory;
+            for (auto &&[addr, value] : merged->getMemoryState().flat()) {
+                if (llvm::isa<analyzer::symbolic::UnknownExpr>(value.get()))
+                    continue;
+                sharedMemory.emplace(addr, value->clone());
+            }
+
+            analyzer::PathConditions sharedConds;
+            for (const auto &cond : merged->getPathConditions())
+                sharedConds.emplace(cond->clone());
+
+            loopInfo.sharedMemoryMap = std::move(sharedMemory);
+            loopInfo.sharedPathConds = std::move(sharedConds);
+            return true;
+        }
+
+      private:
+        std::string id_;
+    };
+    REGISTER_ACSL_PLUGIN(SetSharedStatePlugin, "setSharedState");
 
     class SetIndexPlugin : public LoopInfoPlugin {
       public:

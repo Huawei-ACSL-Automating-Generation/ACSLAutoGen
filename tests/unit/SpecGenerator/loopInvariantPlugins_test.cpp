@@ -1,5 +1,6 @@
 // tests/unit/SpecGenerator/loopInvariantPlugins_test.cpp
 
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
@@ -469,16 +470,12 @@ namespace acslg::test::unit::spec_generator {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
             if (addrStr == "x") {
-                EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("x"), HasSubstr("+ x")),
-                                            AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
-                                            AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+                EXPECT_THAT(valueStr, "n");
             } else if (addrStr == "y") {
                 EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("y"), HasSubstr("+ y")),
-                                            AnyOf(StartsWith("i"), HasSubstr("+ i")),
                                             AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
             } else if (addrStr == "z") {
-                EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("z"), HasSubstr("+ z")),
-                                            AnyOf(StartsWith("i"), HasSubstr("+ i")),
+                EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("10"), HasSubstr("+ 10")),
                                             AnyOf(StartsWith("-1 * n"), HasSubstr("- n"))));
             } else if (addrStr != "i" && addrStr != "n") {
                 FAIL() << addrStr;
@@ -510,9 +507,7 @@ namespace acslg::test::unit::spec_generator {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
             if (addrStr == "x") {
-                EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("x"), HasSubstr("+ x")),
-                                            AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
-                                            AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+                EXPECT_THAT(valueStr, "n");
             } else if (addrStr != "i" && addrStr != "n") {
                 FAIL() << addrStr;
             }
@@ -545,9 +540,7 @@ namespace acslg::test::unit::spec_generator {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
             if (addrStr == "i") {
-                EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("i"), HasSubstr("+ i")),
-                                            AnyOf(StartsWith("2 * j"), HasSubstr("+ 2 * j")),
-                                            AnyOf(StartsWith("22"), HasSubstr("+ 22"))));
+                EXPECT_THAT(valueStr, "43");
             } else if (addrStr == "j") {
                 EXPECT_THAT(valueStr, "-11");
             } else {
@@ -579,8 +572,7 @@ namespace acslg::test::unit::spec_generator {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
             if (addrStr == "pt") {
-                EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("-1 * i"), HasSubstr("- i")),
-                                            AnyOf(StartsWith("n"), HasSubstr("+ n")),
+                EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("n"), HasSubstr("+ n")),
                                             AnyOf(StartsWith("p"), HasSubstr("+ p"))));
             } else if (addrStr != "p" && addrStr != "n" && addrStr != "i") {
                 FAIL() << addrStr;
@@ -592,6 +584,8 @@ namespace acslg::test::unit::spec_generator {
         auto pluginId = "StInGXPlugin";
         auto code     = R"(
     void func(int x, int y) {
+        x = 0;
+        y = 50;
         while(x < 100){
             x = x + 1;
             if(x > 50)

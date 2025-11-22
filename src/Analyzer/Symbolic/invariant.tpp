@@ -17,6 +17,7 @@ namespace acslg::analyzer {
         ppl::C_Polyhedron buildPathPoly(const Path &path, const VarManager &vm, bool init = false);
         ppl::C_Polyhedron primedPolyhedron(const ppl::C_Polyhedron &poly, const VarManager &vm);
         Formulas preprocessConjConds(const Formulas &conjConds);
+        Formulas preprocessConjConds(const PathConditions &conjConds);
         void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm);
         void dump(const Parma_Polyhedra_Library::Linear_Expression &expr, const VarManager &vm);
 
@@ -43,16 +44,15 @@ namespace acslg::analyzer {
     } // namespace details
 
     InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
-                                         const ProgramState &loopEntry,
+                                         const Path &entryPath,
                                          const ProgramState &loopCurrent,
                                          std::ranges::range auto &inactivePaths) {
         InvsAndPostStates invsAndPostStates;
         auto &paths         = loopCurrent.getPaths();
         auto normalPathsNum = paths.size();
-        VarManager vm       = VarManager::fromPaths(loopEntry.getPaths());
+        VarManager vm       = VarManager::fromPath(entryPath);
 
-        auto &initPath    = loopEntry.getPaths().at(0);
-        auto initPathPoly = details::buildPathPoly(*initPath, vm, true);
+        auto initPathPoly = details::buildPathPoly(entryPath, vm, true);
 
         std::vector<Parma_Polyhedra_Library::C_Polyhedron> transPolys;
         for (const auto &path : paths)
@@ -183,7 +183,7 @@ namespace acslg::analyzer {
 
         // todo: build post states from interrupted paths.
         for (auto &exitInv : invs.exitInvs)
-            invsAndPostStates.postStates.push_back(details::buildPostState(exitInv, *initPath, vm));
+            invsAndPostStates.postStates.push_back(details::buildPostState(exitInv, entryPath, vm));
 
         return invsAndPostStates;
     }

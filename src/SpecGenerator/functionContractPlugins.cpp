@@ -51,7 +51,7 @@ namespace acslg::spec_generator {
                         if (is_symbol_addr(addr) && postPath->is_point_to_structure(addr))
                             continue;
 
-                        if (!postPath->isUnchanged(addr))
+                        if (!postPath->isUnchanged(addr, *pre.getPaths().front()))
                             auto [_, ok] = assignedAddrs.try_emplace(addr.hash(), std::move(addr));
                     }
                 }
@@ -116,7 +116,7 @@ namespace acslg::spec_generator {
                         continue;
                     if (is_symbol_addr(a) && path.is_point_to_structure(a))
                         continue;
-                    if (!path.isUnchanged(a))
+                    if (!path.isUnchanged(a, *pre.getPaths().front()))
                         (void)assignedAddrs.try_emplace(a.hash(), std::move(a));
                 }
 
@@ -213,7 +213,8 @@ namespace acslg::spec_generator {
       private:
         std::string id_;
 
-        static std::string joinConj(const analyzer::Formulas &conds, symb::SourcePoint oldPoint) {
+        static std::string joinConj(const analyzer::PathConditions &conds,
+                                    symb::SourcePoint oldPoint) {
             std::string s;
             for (auto &cond : conds) {
                 if (cond->isUnknown())

@@ -95,6 +95,12 @@ namespace acslg::spec_generator {
         };
         std::optional<PatternInfo> patternInfo;
 
+        // SetSharedStatePlugin
+        std::optional<analyzer::symbolic::AddressBoxMap<
+            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>>
+            sharedMemoryMap;
+        std::optional<analyzer::PathConditions> sharedPathConds;
+
         // TODO(more info to be added)
     };
 

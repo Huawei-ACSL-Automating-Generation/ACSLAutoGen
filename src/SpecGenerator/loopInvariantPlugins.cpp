@@ -96,9 +96,6 @@ namespace acslg::spec_generator {
                 ERROR("symbolicLoopEntry has something wrong, check the SetLoopEntryPlugin?");
             }
 
-            using mem_map_vector =
-                std::vector<symb::AddressBoxMap<std::unique_ptr<symb::SymbolicExpr>>>;
-
             std::unique_ptr<symb::SymbolicExpr> loopCond;
             auto lhs = indexInfo.indexSymbolicValue->clone();
             auto rhs = indexInfo.indexBound->clone();
@@ -148,9 +145,19 @@ namespace acslg::spec_generator {
                 default:
                     ERROR("Unexpected operator, check `setIndexPlugin` may solve this problem.");
             }
-            DEBUG(loopCond->dump());
 
-            auto loopEntry   = entryAndCurrentInfo.symbolicLoopEntry->clone();
+            auto symbolEntry = entryAndCurrentInfo.symbolicLoopEntry->getPaths().front()->clone();
+            if (loopInfo.sharedMemoryMap) {
+                for (const auto &[addr, val] : *loopInfo.sharedMemoryMap) {
+                    if (!llvm::isa<symb::VariableAddress>(addr.get()))
+                        continue;
+                    auto constVal = val->tryEvalAsConstant();
+                    if (constVal == std::nullopt)
+                        continue;
+                    symbolEntry->getMutMemoryState().write(
+                        addr, std::make_unique<symb::LiteralExpr>(constVal.value()));
+                }
+            }
             auto loopCurrent = entryAndCurrentInfo.symbolicLoopCurrent->clone();
 
             if (loopCurrent->getPaths().size() + entryAndCurrentInfo.inactivePaths.size() >
@@ -160,7 +167,7 @@ namespace acslg::spec_generator {
             }
 
             auto [spec, postInfos] = analyzer::buildLoopInvariant(
-                std::move(loopCond), *loopEntry, *loopCurrent, entryAndCurrentInfo.inactivePaths);
+                std::move(loopCond), *symbolEntry, *loopCurrent, entryAndCurrentInfo.inactivePaths);
 
             std::vector<PostPSInfo> postPSInfos;
             for (auto &postInfo : postInfos)
@@ -197,17 +204,24 @@ namespace acslg::spec_generator {
             if (entryAndCurrentInfo.symbolicLoopEntry->getPaths().size() != 1) {
                 ERROR("symbolicLoopEntry has something wrong, check the SetLoopEntryPlugin?");
             }
-            auto &loopEntryPath = entryAndCurrentInfo.symbolicLoopEntry->getPaths().front();
+            auto symbolEntry = entryAndCurrentInfo.symbolicLoopEntry->getPaths().front()->clone();
+            if (loopInfo.sharedMemoryMap) {
+                for (const auto &[addr, val] : *loopInfo.sharedMemoryMap) {
+                    if (!llvm::isa<symb::VariableAddress>(addr.get()))
+                        continue;
+                    auto constVal = val->tryEvalAsConstant();
+                    if (constVal == std::nullopt)
+                        continue;
+                    symbolEntry->getMutMemoryState().write(
+                        addr, std::make_unique<symb::LiteralExpr>(constVal.value()));
+                }
+            }
 
-            using mem_map_vector =
-                std::vector<symb::AddressBoxMap<std::unique_ptr<symb::SymbolicExpr>>>;
-
-            auto [_, evalExprs] = loopEntryPath->evalExpr(loopInfo.condExpr);
+            auto [_, evalExprs] = symbolEntry->evalExpr(loopInfo.condExpr);
             if (evalExprs.size() != 1)
                 ERROR("Branching is not allowed here.");
             auto &loopCond = evalExprs.front();
 
-            auto loopEntry   = entryAndCurrentInfo.symbolicLoopEntry->clone();
             auto loopCurrent = entryAndCurrentInfo.symbolicLoopCurrent->clone();
 
             if (loopCurrent->getPaths().size() + entryAndCurrentInfo.inactivePaths.size() >
@@ -217,7 +231,7 @@ namespace acslg::spec_generator {
             }
 
             auto [spec, postInfos] =
-                analyzer::buildLoopInvariant(std::move(loopCond).into_underlying(), *loopEntry,
+                analyzer::buildLoopInvariant(std::move(loopCond).into_underlying(), *symbolEntry,
                                              *loopCurrent, entryAndCurrentInfo.inactivePaths);
 
             std::vector<PostPSInfo> postPSInfos;
@@ -561,7 +575,8 @@ namespace acslg::spec_generator {
                         continue;
                     if (path.is_point_to_structure(addr))
                         continue;
-                    if (path.isUnchanged(addr, entryAndCurrentInfo.loopEntryPoint))
+                    if (path.isUnchanged(
+                            addr, *entryAndCurrentInfo.symbolicLoopEntry->getPaths().front()))
                         continue;
                     if (!insertedAddrHashes.insert(addr.hash()).second)
                         continue;
@@ -885,7 +900,9 @@ namespace acslg::spec_generator {
                         if (auto varAddrIt = path->getVarAddr().find(maxDecl);
                             varAddrIt != path->getVarAddr().end()) {
                             auto &maxAddr = varAddrIt->second;
-                            if (!path->isUnchanged(*maxAddr))
+                            if (!path->isUnchanged(
+                                    *maxAddr,
+                                    *entryAndCurrentInfo.symbolicLoopEntry->getPaths().front()))
                                 return;
                         } else {
                             ERROR("Can't find maxDecl after step, something must be wrong.");
@@ -991,10 +1008,11 @@ namespace acslg::spec_generator {
             }
 
             // todo: may deal with multiple conditions.
-            if (interruptedPath->getPathConditions().size() != 1)
+            const auto &interruptedConds = interruptedPath->getPathConditions();
+            if (interruptedConds.size() != 1)
                 return {};
 
-            auto &interruptedCond = interruptedPath->getPathConditions().front();
+            const auto &interruptedCond = *interruptedConds.begin();
 
             auto pointAfterLoop = symb::SourcePoint::fromStmtAfter(
                 loopInfo.bodyStmt,

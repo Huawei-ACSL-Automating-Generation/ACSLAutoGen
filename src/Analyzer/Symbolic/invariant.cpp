@@ -586,6 +586,15 @@ namespace acslg::analyzer {
             return result;
         }
 
+        Formulas preprocessConjConds(const PathConditions &conjConds) {
+            Formulas copied;
+            copied.reserve(conjConds.size());
+            for (const auto &cond : conjConds) {
+                copied.push_back(cond->clone());
+            }
+            return preprocessConjConds(copied);
+        }
+
         Formulas preprocessConjConds(const Formulas &conjConds) {
             Formulas result;
             for (auto &cond : conjConds) {

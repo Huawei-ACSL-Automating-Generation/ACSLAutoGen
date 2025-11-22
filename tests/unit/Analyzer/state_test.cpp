@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <llvm-19/llvm/Support/Casting.h>
 #include "xmock.h"
 #include "state.h"
 #include "clang/AST/Decl.h"
@@ -259,6 +260,22 @@ namespace acslg::test::unit::analyzer {
 
     namespace {
         struct MemoryModelTest : public FixtureWithCode {};
+
+        struct MergeWithTest : public FixtureWithCode {
+            MergeWithTest()
+                : acslContext(e.getASTContext()),
+                  pathA(std::make_unique<Path>(acslContext, defaultPoint)),
+                  pathB(std::make_unique<Path>(acslContext, defaultPoint)) {}
+
+            context::ACSLGContext acslContext;
+            std::unique_ptr<Path> pathA;
+            std::unique_ptr<Path> pathB;
+
+            static auto makeLiteral(int v) {
+                return acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>{
+                    std::make_unique<symbolic::LiteralExpr>(v)};
+            }
+        };
     } // namespace
 
     TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
@@ -384,6 +401,86 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 4));
         EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 9));
+    }
+
+    TEST_F(MergeWithTest, UnionsVarAddrAndUnknownensMissingMemory) {
+        auto var0 = getVarDecl(0);
+        auto var1 = getVarDecl(1);
+
+        auto addr0A = pathA->allocMemory(var0);
+        auto addr1B = pathB->allocMemory(var1);
+
+        auto val0     = makeSymbolValue(10);
+        auto val1     = makeSymbolValue(20);
+        auto val1Copy = val1->clone();
+
+        pathA->updateMemory(*addr0A, std::move(val0));
+        pathB->updateMemory(*addr1B, std::move(val1));
+
+        pathA->mergeWith(*pathB);
+
+        ASSERT_EQ(pathA->getVarAddr().size(), 2u);
+        EXPECT_TRUE(pathA->getVarAddr().contains(var0));
+        EXPECT_TRUE(pathA->getVarAddr().contains(var1));
+
+        auto gotVal1 = pathA->getMemoryState().read(*pathA->getVarAddr().at(var0));
+        ASSERT_TRUE(gotVal1);
+        EXPECT_TRUE(gotVal1.value()->isUnknown());
+
+        auto gotVal2 = pathA->getMemoryState().read(*pathA->getVarAddr().at(var1));
+        ASSERT_TRUE(gotVal2);
+        EXPECT_TRUE(gotVal2.value()->isUnknown());
+    }
+
+    TEST_F(MergeWithTest, ConflictingValuesBecomeUnknown) {
+        auto var0   = getVarDecl(0);
+        auto addr0A = pathA->allocMemory(var0);
+        auto addr0B = pathB->allocMemory(var0);
+
+        pathA->updateMemory(*addr0A, makeSymbolValue(1));
+        pathB->updateMemory(*addr0B, makeSymbolValue(2));
+
+        pathA->mergeWith(*pathB);
+
+        auto val = pathA->getMemoryState().read(*addr0A);
+        ASSERT_TRUE(val);
+        EXPECT_NE(llvm::dyn_cast<symbolic::UnknownExpr>(val->get().get()), nullptr);
+    }
+
+    TEST_F(MergeWithTest, PathConditionsIntersect) {
+        auto condShared = makeLiteral(1);
+        auto condAOnly  = makeLiteral(2);
+
+        pathA->insertPathCondition(condShared->clone());
+        pathA->insertPathCondition(std::move(condAOnly));
+        pathB->insertPathCondition(condShared->clone());
+
+        pathA->mergeWith(*pathB);
+
+        ASSERT_EQ(pathA->getPathConditions().size(), 1u);
+        const auto &onlyCond = *pathA->getPathConditions().begin();
+        auto lit             = llvm::dyn_cast<symbolic::LiteralExpr>(onlyCond.get().get());
+        ASSERT_NE(lit, nullptr);
+        EXPECT_EQ(*lit, *condShared);
+    }
+
+    TEST_F(MergeWithTest, ReturnExprDiffersBecomesUnknown) {
+        auto var0 = getVarDecl(0);
+        pathA->allocMemory(var0);
+        pathB->allocMemory(var0);
+
+        pathA->setPathState(Path::PathState::Return);
+        pathB->setPathState(Path::PathState::Return);
+
+        pathA->setReturnExpr(makeLiteral(1));
+        pathB->setReturnExpr(makeLiteral(2));
+
+        pathA->mergeWith(*pathB);
+
+        ASSERT_TRUE(pathA->getReturnExpr());
+        EXPECT_NE(
+            llvm::dyn_cast<const symbolic::UnknownExpr>(pathA->getReturnExpr().value().get().get()),
+            nullptr);
     }
 
     TEST_F(MemoryModelTest, MergeConstantRanges_TouchingSameValue_ShouldCoalesce) {

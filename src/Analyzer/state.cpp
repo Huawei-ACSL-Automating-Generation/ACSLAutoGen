@@ -27,7 +27,7 @@ namespace acslg::analyzer {
         : context_(other.context_), startPoint_(other.startPoint_) {
         if (shallowCopy) {
             for (const auto &cond : other.pathConditions_) {
-                pathConditions_.push_back(cond->clone());
+                pathConditions_.emplace(cond->clone());
             }
             currentState_ = other.currentState_;
             if (other.returnExpr_)
@@ -47,6 +47,70 @@ namespace acslg::analyzer {
         swap(varAddr_, o.varAddr_);
         swap(memoryState_, o.memoryState_);
         swap(startPoint_, o.startPoint_);
+    }
+
+    void Path::mergeWith(const Path &other) {
+        if (&context_ != &other.context_)
+            ERROR("mergeWith: context mismatch.");
+        if (currentState_ != other.currentState_)
+            ERROR("mergeWith: path state mismatch.");
+        if (!(startPoint_ == other.startPoint_))
+            ERROR("mergeWith: start point mismatch.");
+        if (stmtCtx_ != other.stmtCtx_)
+            ERROR("mergeWith: statement context mismatch.");
+
+        // Union variable addresses
+        for (const auto &[var, addr] : other.varAddr_)
+            varAddr_.emplace(var, std::make_unique<symbolic::VariableAddress>(*addr));
+
+        // Merge memory state
+        MemoryModel::KeySet addresses;
+        for (auto &&[addr, value] : memoryState_.flat())
+            addresses.insert(addr);
+        for (auto &&[addr, value] : other.memoryState_.flat())
+            addresses.insert(addr);
+
+        for (const auto &addrBox : addresses) {
+            auto lhsVal = memoryState_.read(addrBox);
+            auto rhsVal = other.memoryState_.read(addrBox);
+
+            if (lhsVal && llvm::isa<symbolic::Structure>(lhsVal.value().get().get()))
+                continue;
+            if (rhsVal && llvm::isa<symbolic::Structure>(rhsVal.value().get().get()))
+                continue;
+
+            if (lhsVal && rhsVal) {
+                if (*lhsVal.value() == *rhsVal.value())
+                    continue;
+            } else if (rhsVal) {
+                if (symbolic::isFrom(*rhsVal.value(), addrBox, other.startPoint_))
+                    continue;
+            } else if (lhsVal) {
+                if (symbolic::isFrom(*lhsVal.value(), addrBox, startPoint_))
+                    continue;
+            } else {
+                UNREACHABLE();
+            }
+            memoryState_.write(addrBox, symbolic::UnknownExpr::makeUnknown().into_underlying());
+        }
+
+        // Intersect path conditions
+        PathConditions intersected;
+        intersected.reserve(std::min(pathConditions_.size(), other.pathConditions_.size()));
+        for (const auto &cond : pathConditions_) {
+            if (other.pathConditions_.find(cond) != other.pathConditions_.end())
+                intersected.emplace(cond->clone());
+        }
+        pathConditions_ = std::move(intersected);
+
+        // Merge return expression if applicable
+        if (currentState_ == PathState::Return) {
+            if (!returnExpr_ || !other.returnExpr_)
+                ERROR("mergeWith: Return state without return expression.");
+            if (*returnExpr_.value() == *other.returnExpr_.value())
+                return;
+            returnExpr_.emplace(symbolic::UnknownExpr::makeUnknown().into_underlying());
+        }
     }
 
     void Path::resymbolize(symbolic::SourcePoint newStartPoint) {
@@ -183,7 +247,7 @@ namespace acslg::analyzer {
         return value.value()->clone();
     }
 
-    const Formulas &Path::getPathConditions() const { return pathConditions_; }
+    const PathConditions &Path::getPathConditions() const { return pathConditions_; }
 
     utils::not_null<symbolic::VariableAddress *> Path::allocMemory(const clang::VarDecl *var) {
         auto canonicalVar = var->getCanonicalDecl();
@@ -217,7 +281,7 @@ namespace acslg::analyzer {
     }
 
     void Path::insertPathCondition(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> cond) {
-        pathConditions_.push_back(std::move(cond));
+        pathConditions_.emplace(std::move(cond));
     }
 
     std::unique_ptr<Path> Path::clone() const {
@@ -228,7 +292,7 @@ namespace acslg::analyzer {
                                      std::make_unique<symbolic::VariableAddress>(*entry.second));
         cloned->memoryState_ = memoryState_;
         for (const auto &cond : pathConditions_)
-            cloned->pathConditions_.push_back(cond->clone());
+            cloned->pathConditions_.emplace(cond->clone());
         if (returnExpr_)
             cloned->returnExpr_.emplace(returnExpr_.value()->clone().into_underlying());
         else
@@ -987,9 +1051,10 @@ namespace acslg::analyzer {
 
         // ---- Path Conditions -----------------------------------------------------
         oss << "  " << key("conditions") << ":\n";
-        for (size_t i = 0; i < pathConditions_.size(); ++i) {
+        size_t condIdx = 0;
+        for (const auto &cond : pathConditions_) {
             oss << "    "
-                << "[" << lit(std::to_string(i)) << "] " << pathConditions_[i]->dump() << "\n";
+                << "[" << lit(std::to_string(condIdx++)) << "] " << cond->dump() << "\n";
         }
         if (pathConditions_.empty()) {
             oss << "    " << hint("<empty>") << "\n";
@@ -1072,8 +1137,7 @@ namespace acslg::analyzer {
         return oss.str();
     }
 
-    bool Path::isUnchanged(const symbolic::Address &addr,
-                           std::optional<symbolic::SourcePoint> since) const {
+    bool Path::isUnchanged(const symbolic::Address &addr, const Path &since) const {
         if (auto symbolAddr = llvm::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
             if (symbolAddr->getLength())
                 return false;
@@ -1082,9 +1146,10 @@ namespace acslg::analyzer {
         if (value == std::nullopt)
             return true; // Assume it has not been accessed yet.
 
-        if (since != std::nullopt)
-            return isFrom(*value.value(), addr, std::move(since).value());
-        return isFrom(*value.value(), addr, startPoint_);
+        auto oldValue = since.getMemoryState().read(addr);
+        if (oldValue)
+            return *value.value() == *oldValue.value();
+        return isFrom(*value.value(), addr, since.getStartPoint());
     }
 
     bool Path::is_point_to_structure(const symbolic::Address &addr) const {

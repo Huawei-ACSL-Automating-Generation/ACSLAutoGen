@@ -2,6 +2,7 @@
 #define __ACSLG_SRC_ANALYZER_STATE_H__
 
 #include <unordered_map>
+#include <unordered_set>
 #include <map>
 #include <stack>
 #include <clang/AST/Decl.h>
@@ -14,6 +15,55 @@
 
 namespace acslg::analyzer {
     using Formulas = std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>;
+    struct SymbolicExprPtrHash {
+        using is_transparent = void;
+
+        std::size_t operator()(
+            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &ptr) const noexcept {
+            return ptr->hash();
+        }
+        std::size_t operator()(const symbolic::SymbolicExpr &expr) const noexcept {
+            return expr.hash();
+        }
+        std::size_t operator()(const symbolic::SymbolicExpr *expr) const noexcept {
+            return expr ? expr->hash() : 0;
+        }
+    };
+    struct SymbolicExprPtrEqual {
+        using is_transparent = void;
+
+        bool operator()(const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
+                        const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const
+            noexcept {
+            return lhs->equal(*rhs);
+        }
+        bool operator()(const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
+                        const symbolic::SymbolicExpr &rhs) const noexcept {
+            return lhs->equal(rhs);
+        }
+        bool operator()(const symbolic::SymbolicExpr &lhs,
+                        const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const
+            noexcept {
+            return lhs.equal(*rhs);
+        }
+        bool operator()(const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
+                        const symbolic::SymbolicExpr *rhs) const noexcept {
+            return rhs && lhs->equal(*rhs);
+        }
+        bool operator()(const symbolic::SymbolicExpr *lhs,
+                        const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const
+            noexcept {
+            return lhs && lhs->equal(*rhs);
+        }
+        bool operator()(const symbolic::SymbolicExpr *lhs,
+                        const symbolic::SymbolicExpr *rhs) const noexcept {
+            return lhs && rhs && lhs->equal(*rhs);
+        }
+    };
+    using PathConditions = std::unordered_set<
+        utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>,
+        SymbolicExprPtrHash,
+        SymbolicExprPtrEqual>;
     using TransRel = std::tuple<int, int, Parma_Polyhedra_Library::C_Polyhedron *>;
     using InitRel  = std::pair<int, Parma_Polyhedra_Library::C_Polyhedron *>;
 
@@ -570,7 +620,7 @@ namespace acslg::analyzer {
 
         utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> getVarState(
             const clang::VarDecl *var) const;
-        const Formulas &getPathConditions() const;
+        const PathConditions &getPathConditions() const;
 
         utils::not_null<symbolic::VariableAddress *> allocMemory(const clang::VarDecl *);
 
@@ -591,9 +641,9 @@ namespace acslg::analyzer {
         void setPathState(PathState state) { currentState_ = state; }
 
         bool isActive() const { return currentState_ == PathState::Step; }
-        bool isUnchanged(const symbolic::Address &addr,
-                         std::optional<symbolic::SourcePoint> since = std::nullopt) const;
+        bool isUnchanged(const symbolic::Address &addr, const Path &since) const;
         bool is_point_to_structure(const symbolic::Address &addr) const;
+        void mergeWith(const Path &other);
         std::unique_ptr<Path> clone() const;
 
         std::string dump() const;
@@ -616,8 +666,9 @@ namespace acslg::analyzer {
 
         MemoryModel memoryState_;
 
-        // SET: List of symbolic expressions representing the path condition.
-        Formulas pathConditions_;
+        // SET: List of symbolic expressions representing the path
+        // condition.
+        PathConditions pathConditions_;
 
         // Holds the current path state. Default is set to Step
         PathState currentState_ = PathState::Step;
@@ -716,8 +767,8 @@ namespace acslg::analyzer {
             std::vector<std::pair<std::string, const clang::VarDecl *>> rawVars;
             size_t varCounter = 0;
 
-            for (const auto &path : paths) {
-                const auto &varAddrMap = path->getVarAddr();
+            auto collectFromPath = [&](const Path &path) {
+                const auto &varAddrMap = path.getVarAddr();
                 for (const auto &[varDecl, addrPtr] : varAddrMap) {
                     if (!varDecl)
                         continue;
@@ -731,7 +782,10 @@ namespace acslg::analyzer {
                         ++varCounter;
                     }
                 }
-            }
+            };
+
+            for (const auto &path : paths)
+                collectFromPath(*path);
 
             for (const auto &[name, varDecl] : rawVars) {
                 vm.orderedVars.push_back(name);
@@ -742,6 +796,12 @@ namespace acslg::analyzer {
 
             vm.numVars = rawVars.size() * 2;
             return vm;
+        }
+
+        static VarManager fromPath(const Path &path) {
+            std::vector<utils::not_null<std::unique_ptr<Path>>> single;
+            single.emplace_back(path.clone());
+            return fromPaths(single);
         }
     };
 
@@ -758,11 +818,11 @@ namespace acslg::analyzer {
                                          const ProgramState &initState);
 
     InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
-                                         const ProgramState &loopEntry,
+                                         const Path &entryPath,
                                          const ProgramState &loopCurrent,
                                          std::ranges::range auto &inactivePaths);
 } // namespace acslg::analyzer
 
-#include "Symbolic/invariant.tpp"
+#include "Symbolic/invariant.tpp" // IWYU pragma: keep
 
 #endif
