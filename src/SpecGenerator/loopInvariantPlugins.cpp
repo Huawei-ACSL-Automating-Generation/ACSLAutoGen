@@ -1,5 +1,6 @@
 // src/SpecGenerator/loopInvariantPlugins.cpp
 
+#include <cstddef>
 #include <iterator>
 #include <llvm-19/llvm/Support/Casting.h>
 #include <memory>
@@ -70,7 +71,8 @@ namespace acslg::spec_generator {
                 INFO("patternInfo_ isn't std::set.");
             }
 
-            return GenResultType{.acsl = std::nullopt, .acslUsedPoints = {}, .globalPostInfo = {}};
+            return GenResultType{
+                .acsl = std::nullopt, .acslUsedPoints = {}, .globalNormalPathPostInfo = {}};
         }
 
       private:
@@ -166,21 +168,43 @@ namespace acslg::spec_generator {
                 return {};
             }
 
-            auto [spec, postInfos] = analyzer::buildLoopInvariant(
+            auto [spec, normalPostInfos, interruptPostInfos] = analyzer::buildLoopInvariant(
                 std::move(loopCond), *symbolEntry, *loopCurrent, entryAndCurrentInfo.inactivePaths);
 
-            std::vector<PostPSInfo> postPSInfos;
-            for (auto &postInfo : postInfos)
-                postPSInfos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
-                                         analyzer::Path::PathState::Step, std::nullopt);
+            std::vector<PostPSInfo> normalPostPSInfos;
+            for (auto &postInfo : normalPostInfos)
+                normalPostPSInfos.emplace_back(std::move(postInfo.first),
+                                               std::move(postInfo.second),
+                                               analyzer::Path::PathState::Step, std::nullopt);
 
+            std::vector<std::vector<PostPSInfo>> interruptPathsPostPSInfos;
+            assert(loopInfo.entryAndCurrentInfo->inactivePaths.size() == interruptPostInfos.size());
+            for (size_t i = 0, inactivePathNum = loopInfo.entryAndCurrentInfo->inactivePaths.size();
+                 i < inactivePathNum; ++i) {
+                auto &interruptPath = loopInfo.entryAndCurrentInfo->inactivePaths.at(i);
+                auto &postInfos     = interruptPostInfos.at(i);
+                std::vector<PostPSInfo> infos;
+                for (auto &postInfo : postInfos) {
+                    if (interruptPath->getPathState() == analyzer::Path::PathState::Return)
+                        infos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
+                                           analyzer::Path::PathState::Return,
+                                           symb::UnknownExpr::makeUnknown().into_underlying());
+                    else
+                        infos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
+                                           interruptPath->getPathState(), std::nullopt);
+                }
+                interruptPathsPostPSInfos.push_back(std::move(infos));
+            }
             if (spec == std::nullopt)
-                return GenResultType{.acsl             = std::nullopt,
-                                     .acslUsedPoints   = {},
-                                     .perPathPostInfos = std::move(postPSInfos)};
-            return GenResultType{.acsl             = std::move(spec),
-                                 .acslUsedPoints   = {},
-                                 .perPathPostInfos = std::move(postPSInfos)};
+                return GenResultType{.acsl                = std::nullopt,
+                                     .acslUsedPoints      = {},
+                                     .normalPathPostInfos = std::move(normalPostPSInfos),
+                                     .interruptPathsPostInfos =
+                                         std::move(interruptPathsPostPSInfos)};
+            return GenResultType{.acsl                    = std::move(spec),
+                                 .acslUsedPoints          = {},
+                                 .normalPathPostInfos     = std::move(normalPostPSInfos),
+                                 .interruptPathsPostInfos = std::move(interruptPathsPostPSInfos)};
         }
 
       private:
@@ -230,22 +254,44 @@ namespace acslg::spec_generator {
                 return {};
             }
 
-            auto [spec, postInfos] =
+            auto [spec, normalPostInfos, interruptPostInfos] =
                 analyzer::buildLoopInvariant(std::move(loopCond).into_underlying(), *symbolEntry,
                                              *loopCurrent, entryAndCurrentInfo.inactivePaths);
 
-            std::vector<PostPSInfo> postPSInfos;
-            for (auto &postInfo : postInfos)
-                postPSInfos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
-                                         analyzer::Path::PathState::Step, std::nullopt);
+            std::vector<PostPSInfo> normalPostPSInfos;
+            for (auto &postInfo : normalPostInfos)
+                normalPostPSInfos.emplace_back(std::move(postInfo.first),
+                                               std::move(postInfo.second),
+                                               analyzer::Path::PathState::Step, std::nullopt);
 
+            std::vector<std::vector<PostPSInfo>> interruptPathsPostPSInfos;
+            assert(loopInfo.entryAndCurrentInfo->inactivePaths.size() == interruptPostInfos.size());
+            for (size_t i = 0, inactivePathNum = loopInfo.entryAndCurrentInfo->inactivePaths.size();
+                 i < inactivePathNum; ++i) {
+                auto &interruptPath = loopInfo.entryAndCurrentInfo->inactivePaths.at(i);
+                auto &postInfos     = interruptPostInfos.at(i);
+                std::vector<PostPSInfo> infos;
+                for (auto &postInfo : postInfos) {
+                    if (interruptPath->getPathState() == analyzer::Path::PathState::Return)
+                        infos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
+                                           analyzer::Path::PathState::Return,
+                                           symb::UnknownExpr::makeUnknown().into_underlying());
+                    else
+                        infos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
+                                           interruptPath->getPathState(), std::nullopt);
+                }
+                interruptPathsPostPSInfos.push_back(std::move(infos));
+            }
             if (spec == std::nullopt)
-                return GenResultType{.acsl             = std::nullopt,
-                                     .acslUsedPoints   = {},
-                                     .perPathPostInfos = std::move(postPSInfos)};
-            return GenResultType{.acsl             = std::move(spec),
-                                 .acslUsedPoints   = {},
-                                 .perPathPostInfos = std::move(postPSInfos)};
+                return GenResultType{.acsl                = std::nullopt,
+                                     .acslUsedPoints      = {},
+                                     .normalPathPostInfos = std::move(normalPostPSInfos),
+                                     .interruptPathsPostInfos =
+                                         std::move(interruptPathsPostPSInfos)};
+            return GenResultType{.acsl                    = std::move(spec),
+                                 .acslUsedPoints          = {},
+                                 .normalPathPostInfos     = std::move(normalPostPSInfos),
+                                 .interruptPathsPostInfos = std::move(interruptPathsPostPSInfos)};
         }
 
       private:
@@ -277,10 +323,10 @@ namespace acslg::spec_generator {
                 entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->getMemoryState();
 
             std::vector<symb::AddressBox> assignedAddrs;
-            PostPIInfo postInfo;
+            PostPIInfo normalPostInfo;
 
-            auto &memoryMap = postInfo.memoryMap;
-            auto &pathConds = postInfo.pathConds;
+            auto &memoryMap = normalPostInfo.memoryMap;
+            auto &pathConds = normalPostInfo.pathConds;
 
             auto isLocal = [&](const symb::Address &addr) {
                 auto root = addr.getFromRoot();
@@ -303,8 +349,8 @@ namespace acslg::spec_generator {
                 // offset (or to check it for reliability).
                 if (from == std::nullopt)
                     ERROR("Invalid state");
-                if (auto it = patternInfo.allPatternsMap.find(*from.value());
-                    it != patternInfo.allPatternsMap.end()) {
+                if (auto it = patternInfo.normalExitPatternsMap.find(*from.value());
+                    it != patternInfo.normalExitPatternsMap.end()) {
                     auto &pattern = it->second;
                     if (pattern == std::nullopt)
                         TODO();
@@ -324,8 +370,8 @@ namespace acslg::spec_generator {
                     auto symbolValueFrom = symbolValue->getFromAddr();
                     if (symbolValueFrom == std::nullopt)
                         TODO();
-                    if (auto it = patternInfo.allPatternsMap.find(*symbolValueFrom.value());
-                        it != patternInfo.allPatternsMap.end()) {
+                    if (auto it = patternInfo.normalExitPatternsMap.find(*symbolValueFrom.value());
+                        it != patternInfo.normalExitPatternsMap.end()) {
                         auto &pattern = it->second;
                         if (pattern == std::nullopt)
                             TODO();
@@ -389,7 +435,7 @@ namespace acslg::spec_generator {
                     }
                     assignedAddrs.emplace_back(std::move(range.value()));
                 } else {
-                    // Use lambda to eliminate nested if。
+                    // Use lambda to eliminate nested if
                     [&]() {
                         if (!pattern)
                             return;
@@ -523,14 +569,37 @@ namespace acslg::spec_generator {
                 }
             }
 
+            std::vector<PostPIInfo> interruptPostInfos{entryAndCurrentInfo.inactivePaths.size()};
+
+            assert(interruptPostInfos.size() == patternInfo.interruptedPathPatternsMaps.size());
+            for (size_t i = 0, infoNum = interruptPostInfos.size(); i < infoNum; ++i) {
+                auto &postMemoryMap = interruptPostInfos.at(i).memoryMap;
+
+                for (auto &assignedAddr : assignedAddrs) {
+                    postMemoryMap.emplace(assignedAddr,
+                                          symb::UnknownExpr::makeUnknown().into_underlying());
+                }
+                for (auto &[addr, _] : patternInfo.interruptedPathPatternsMaps.at(i)) {
+                    if (auto range = tryGetAsRange(addr)) {
+                        postMemoryMap.emplace(std::move(range.value()),
+                                              symb::UnknownExpr::makeUnknown().into_underlying());
+                    } else {
+                        postMemoryMap.emplace(addr,
+                                              symb::UnknownExpr::makeUnknown().into_underlying());
+                    }
+                }
+            }
+
             if (specs.empty())
-                return GenResultType{.acsl           = R"(loop assigns \nothing;)",
-                                     .acslUsedPoints = {},
-                                     .globalPostInfo = {}};
+                return GenResultType{.acsl                         = R"(loop assigns \nothing;)",
+                                     .acslUsedPoints               = {},
+                                     .globalNormalPathPostInfo     = {},
+                                     .globalInterruptPathsPostInfo = std::move(interruptPostInfos)};
             return GenResultType{.acsl =
                                      "loop assigns " + specs.substr(0, specs.length() - 2) + ";",
-                                 .acslUsedPoints = std::move(allUsedPoints),
-                                 .globalPostInfo = std::move(postInfo)};
+                                 .acslUsedPoints               = std::move(allUsedPoints),
+                                 .globalNormalPathPostInfo     = std::move(normalPostInfo),
+                                 .globalInterruptPathsPostInfo = std::move(interruptPostInfos)};
         }
 
       private:
@@ -566,33 +635,32 @@ namespace acslg::spec_generator {
                 return false;
             };
 
-            std::vector<symb::AddressBox> assignedAddrs;
-            std::unordered_set<size_t> insertedAddrHashes;
-            auto collectAssignedFromPath = [&](const analyzer::Path &path) {
-                for (auto &&[addr, value] : path.getMemoryState().flat()) {
-                    (void)value;
-                    if (isLocal(addr.get()))
-                        continue;
-                    if (path.is_point_to_structure(addr))
-                        continue;
-                    if (path.isUnchanged(
-                            addr, *entryAndCurrentInfo.symbolicLoopEntry->getPaths().front()))
-                        continue;
-                    if (!insertedAddrHashes.insert(addr.hash()).second)
-                        continue;
-                    assignedAddrs.emplace_back(addr);
-                }
-            };
+            std::unordered_set<symb::AddressBox, symb::AddressBoxHash, symb::AddressBoxEq>
+                assignedAddrs;
+            auto collectAssignedFromPath =
+                [&](const analyzer::Path &path,
+                    std::unordered_set<symb::AddressBox, symb::AddressBoxHash, symb::AddressBoxEq>
+                        &setToUpdate) {
+                    for (auto &&[addr, value] : path.getMemoryState().flat()) {
+                        (void)value;
+                        if (isLocal(addr.get()))
+                            continue;
+                        if (path.is_point_to_structure(addr))
+                            continue;
+                        if (path.isUnchanged(
+                                addr, *entryAndCurrentInfo.symbolicLoopEntry->getPaths().front()))
+                            continue;
+                        setToUpdate.insert(addr);
+                    }
+                };
 
             for (auto &path : entryAndCurrentInfo.symbolicLoopCurrent->getPaths())
-                collectAssignedFromPath(*path);
-            for (auto &path : entryAndCurrentInfo.inactivePaths)
-                collectAssignedFromPath(*path);
+                collectAssignedFromPath(*path, assignedAddrs);
 
-            PostPIInfo postInfo;
+            PostPIInfo normalPostInfo;
             for (auto &addr : assignedAddrs) {
-                postInfo.memoryMap.emplace(addr,
-                                           symb::UnknownExpr::makeUnknown().into_underlying());
+                normalPostInfo.memoryMap.emplace(
+                    addr, symb::UnknownExpr::makeUnknown().into_underlying());
             }
 
             std::string specs;
@@ -626,14 +694,30 @@ namespace acslg::spec_generator {
                 }
             }
 
+            std::vector<PostPIInfo> interruptePostInfos{entryAndCurrentInfo.inactivePaths.size()};
+            for (size_t i = 0, infoNum = interruptePostInfos.size(); i < infoNum; ++i) {
+                auto &postInfo              = interruptePostInfos.at(i);
+                auto &path                  = entryAndCurrentInfo.inactivePaths.at(i);
+                auto interruptAssignedAddrs = assignedAddrs;
+                collectAssignedFromPath(*path, interruptAssignedAddrs);
+
+                for (auto &addr : interruptAssignedAddrs) {
+                    postInfo.memoryMap.emplace(addr,
+                                               symb::UnknownExpr::makeUnknown().into_underlying());
+                }
+            }
+
             if (specs.empty())
-                return GenResultType{.acsl           = R"(loop assigns \nothing;)",
-                                     .acslUsedPoints = {},
-                                     .globalPostInfo = std::move(postInfo)};
+                return GenResultType{.acsl                     = R"(loop assigns \nothing;)",
+                                     .acslUsedPoints           = {},
+                                     .globalNormalPathPostInfo = std::move(normalPostInfo),
+                                     .globalInterruptPathsPostInfo =
+                                         std::move(interruptePostInfos)};
             return GenResultType{.acsl =
                                      "loop assigns " + specs.substr(0, specs.length() - 2) + ";",
-                                 .acslUsedPoints = std::move(allUsedPoints),
-                                 .globalPostInfo = std::move(postInfo)};
+                                 .acslUsedPoints               = std::move(allUsedPoints),
+                                 .globalNormalPathPostInfo     = std::move(normalPostInfo),
+                                 .globalInterruptPathsPostInfo = std::move(interruptePostInfos)};
         }
 
       private:
@@ -668,7 +752,7 @@ namespace acslg::spec_generator {
                     ERROR("PatternsMap_ is in an invalid state");
                 if ((*it->second).step != 1 && (*it->second).step != -1)
                     return GenResultType{
-                        .acsl = std::nullopt, .acslUsedPoints = {}, .globalPostInfo = {}};
+                        .acsl = std::nullopt, .acslUsedPoints = {}, .globalNormalPathPostInfo = {}};
                 else
                     indexStep = (*it->second).step;
             } else {
@@ -922,11 +1006,16 @@ namespace acslg::spec_generator {
             ifVisitor.runOn(loopInfo.bodyStmt);
 
             if (spec.empty())
-                return GenResultType{
-                    .acsl = std::nullopt, .acslUsedPoints = {}, .globalPostInfo = {}};
+                return GenResultType{.acsl                         = std::nullopt,
+                                     .acslUsedPoints               = {},
+                                     .globalNormalPathPostInfo     = {},
+                                     .globalInterruptPathsPostInfo = {}};
 
             spec.pop_back(); // earse \n
-            return GenResultType{.acsl = spec, .acslUsedPoints = {}, .globalPostInfo = {}};
+            return GenResultType{.acsl                         = spec,
+                                 .acslUsedPoints               = {},
+                                 .globalNormalPathPostInfo     = {},
+                                 .globalInterruptPathsPostInfo = {}};
         }
 
       private:
@@ -952,12 +1041,16 @@ namespace acslg::spec_generator {
             if (!acslExpected) {
                 WARN("Variant {" + indexInfo.maxLoopCount->simplifiedExpr()->dump() +
                      "} getACSL failed.");
-                return GenResultType{
-                    .acsl = std::nullopt, .acslUsedPoints = {}, .globalPostInfo = {}};
+                return GenResultType{.acsl                         = std::nullopt,
+                                     .acslUsedPoints               = {},
+                                     .globalNormalPathPostInfo     = {},
+                                     .globalInterruptPathsPostInfo = {}};
             }
             auto spec = "loop variant " + acslExpected.value().first + ";";
-            return GenResultType{
-                .acsl = std::move(spec), .acslUsedPoints = {}, .globalPostInfo = {}};
+            return GenResultType{.acsl                         = std::move(spec),
+                                 .acslUsedPoints               = {},
+                                 .globalNormalPathPostInfo     = {},
+                                 .globalInterruptPathsPostInfo = {}};
         }
 
       private:
@@ -1099,9 +1192,10 @@ namespace acslg::spec_generator {
 
             auto pred = interruptedCond->getSubstitutedValueExpr(hashExprMapForSub);
 
-            std::vector<PostPSInfo> postInfos{2};
-            auto &normalPathInfo          = postInfos.at(0);
-            auto &interruptedPathInfo     = postInfos.at(1);
+            std::vector<PostPSInfo> normalPostInfos{1};
+            std::vector<std::vector<PostPSInfo>> interruptedPathsInfos{std::vector<PostPSInfo>{1}};
+            auto &normalPathInfo          = normalPostInfos.at(0);
+            auto &interruptedPathInfo     = interruptedPathsInfos.at(0).at(0);
             interruptedPathInfo.pathState = interruptedPath->getPathState();
             if (interruptedPath->getPathState() == analyzer::Path::PathState::Return) {
                 if (interruptedPath->getReturnExpr() == std::nullopt)
@@ -1189,13 +1283,15 @@ namespace acslg::spec_generator {
                 return GenResultType{.acsl = resACSL.to_string({{"leftBound", leftBoundStr},
                                                                 {"rightBound", rightBoundStr},
                                                                 {"pred", expected.value().first}}),
-                                     .acslUsedPoints   = std::move(usedPoints),
-                                     .perPathPostInfos = std::move(postInfos)};
+                                     .acslUsedPoints          = std::move(usedPoints),
+                                     .normalPathPostInfos     = std::move(normalPostInfos),
+                                     .interruptPathsPostInfos = std::move(interruptedPathsInfos)};
             }
 
-            return GenResultType{.acsl             = std::nullopt,
-                                 .acslUsedPoints   = {},
-                                 .perPathPostInfos = std::move(postInfos)};
+            return GenResultType{.acsl                    = std::nullopt,
+                                 .acslUsedPoints          = {},
+                                 .normalPathPostInfos     = std::move(normalPostInfos),
+                                 .interruptPathsPostInfos = std::move(interruptedPathsInfos)};
         }
 
       private:

@@ -25,8 +25,8 @@ namespace acslg::test::unit::spec_generator {
     using ::testing::HasSubstr;
 
     TEST(LoopAssignsPluginTest, Simple_0) {
-        auto pluginId            = "loopAssigns";
-        auto code                = R"(
+        auto pluginId                                      = "loopAssigns";
+        auto code                                          = R"(
         void func(int *p, int n){
             int mx = 0;
             for(int i = 0; i < n; i++){
@@ -35,16 +35,17 @@ namespace acslg::test::unit::spec_generator {
             } 
         }
     )";
-        auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
+        auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("mx"));
-        ASSERT_EQ(postInfo.memoryMap.size(), 1);
-        EXPECT_TRUE(llvm::isa<UnknownExpr>(*postInfo.memoryMap.begin()->second));
+        ASSERT_EQ(normalPostInfo.memoryMap.size(), 1);
+        EXPECT_TRUE(llvm::isa<UnknownExpr>(*normalPostInfo.memoryMap.begin()->second));
+        ASSERT_TRUE(interruptPostInfos.empty());
     }
 
     TEST(LoopAssignsPluginTest, Simple_1) {
-        auto pluginId            = "loopAssigns";
-        auto code                = R"(
+        auto pluginId                                      = "loopAssigns";
+        auto code                                          = R"(
         void func(int *p, int n){
             int cnt = 0;
             for(int i = 0; i < n; i++){
@@ -53,12 +54,13 @@ namespace acslg::test::unit::spec_generator {
             } 
         }
     )";
-        auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
+        auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("cnt"));
         EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. \\at\(n, [^)]+\) - 1\])"));
-        EXPECT_EQ(postInfo.memoryMap.size(), 2);
-        for (auto &[addr, value] : postInfo.memoryMap) {
+        EXPECT_EQ(normalPostInfo.memoryMap.size(), 2);
+        ASSERT_TRUE(interruptPostInfos.empty());
+        for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
@@ -80,8 +82,8 @@ namespace acslg::test::unit::spec_generator {
     }
 
     TEST(LoopAssignsPluginTest, Simple_2) {
-        auto pluginId            = "loopAssigns";
-        auto code                = R"(
+        auto pluginId                                      = "loopAssigns";
+        auto code                                          = R"(
         void func(int *p, int n){
             int cnt = 0;
             int i = 0;
@@ -92,13 +94,14 @@ namespace acslg::test::unit::spec_generator {
             } 
         }
     )";
-        auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
+        auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("i"));
         EXPECT_THAT(*spec, HasSubstr("cnt"));
         EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. \\at\(n, [^)]+\) - 1\])"));
-        EXPECT_EQ(postInfo.memoryMap.size(), 3);
-        for (auto &[addr, value] : postInfo.memoryMap) {
+        EXPECT_EQ(normalPostInfo.memoryMap.size(), 3);
+        ASSERT_TRUE(interruptPostInfos.empty());
+        for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
@@ -122,8 +125,8 @@ namespace acslg::test::unit::spec_generator {
     }
 
     TEST(LoopAssignsPluginTest, Simple_3) {
-        auto pluginId            = "loopAssigns";
-        auto code                = R"(
+        auto pluginId                                      = "loopAssigns";
+        auto code                                          = R"(
         void func(int *p, int n){
             int cnt = 0;
             int i = 0;
@@ -135,13 +138,14 @@ namespace acslg::test::unit::spec_generator {
             } 
         }
     )";
-        auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
+        auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("i"));
         EXPECT_THAT(*spec, HasSubstr("cnt"));
         EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. \\at\(n, [^)]+\) - 1\])"));
-        EXPECT_EQ(postInfo.memoryMap.size(), 4);
-        for (auto &[addr, value] : postInfo.memoryMap) {
+        EXPECT_EQ(normalPostInfo.memoryMap.size(), 4);
+        ASSERT_TRUE(interruptPostInfos.empty());
+        for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
@@ -169,8 +173,8 @@ namespace acslg::test::unit::spec_generator {
     }
 
     TEST(LoopAssignsPluginTest, openHiTLS_1) {
-        auto pluginId            = "loopAssigns";
-        auto code                = R"(
+        auto pluginId                                      = "loopAssigns";
+        auto code                                          = R"(
     #include <stdint.h>
     #define BN_UINT uint32_t
 
@@ -200,7 +204,7 @@ namespace acslg::test::unit::spec_generator {
     return carry;
 }
     )";
-        auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
+        auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("aa"));
         EXPECT_THAT(*spec, HasSubstr("bb"));
@@ -208,8 +212,9 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_THAT(*spec, HasSubstr("nn"));
         EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(r, [^)]+\)\[0 \.\. \\at\(n, [^)]+\) - 1\])"));
 
-        EXPECT_EQ(postInfo.memoryMap.size(), 6);
-        for (auto &[addr, value] : postInfo.memoryMap) {
+        EXPECT_EQ(normalPostInfo.memoryMap.size(), 6);
+        ASSERT_TRUE(interruptPostInfos.empty());
+        for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
@@ -240,8 +245,8 @@ namespace acslg::test::unit::spec_generator {
     }
 
     TEST(ComplexLoopAssignsPluginTest, SimpleScalar) {
-        auto pluginId            = "complexLoopAssigns";
-        auto code                = R"(
+        auto pluginId                                      = "complexLoopAssigns";
+        auto code                                          = R"(
         void func(int *p, int n){
             int mx = 0;
             for(int i = 0; i < n; i++){
@@ -250,11 +255,12 @@ namespace acslg::test::unit::spec_generator {
             } 
         }
     )";
-        auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
+        auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("mx"));
-        ASSERT_EQ(postInfo.memoryMap.size(), 1);
-        EXPECT_TRUE(llvm::isa<UnknownExpr>(*postInfo.memoryMap.begin()->second));
+        ASSERT_EQ(normalPostInfo.memoryMap.size(), 1);
+        ASSERT_TRUE(interruptPostInfos.empty());
+        EXPECT_TRUE(llvm::isa<UnknownExpr>(*normalPostInfo.memoryMap.begin()->second));
     }
 
     // TEST(ComplexLoopAssignsPluginTest, ArrayAndScalar) {
@@ -289,8 +295,8 @@ namespace acslg::test::unit::spec_generator {
     // }
 
     TEST(ComplexLoopAssignsPluginTest, InactivePathWrites) {
-        auto pluginId            = "complexLoopAssigns";
-        auto code                = R"(
+        auto pluginId                                      = "complexLoopAssigns";
+        auto code                                          = R"(
         int find_first_zero(int *p, int n){
             int found = -1;
             int i = 0;
@@ -304,19 +310,32 @@ namespace acslg::test::unit::spec_generator {
             return found;
         }
     )";
-        auto [spec, _, postInfo] = doPIPluginOnFirstLoop(code, pluginId);
+        auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
         EXPECT_NE(spec, nullopt);
-        EXPECT_THAT(*spec, HasSubstr("found"));
         EXPECT_THAT(*spec, HasSubstr("i"));
-        ASSERT_EQ(postInfo.memoryMap.size(), 2);
-        for (auto &[addr, value] : postInfo.memoryMap) {
+        ASSERT_EQ(normalPostInfo.memoryMap.size(), 1);
+        EXPECT_TRUE(normalPostInfo.memoryMap.size() == 1);
+        for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
-            if (addrStr == "found") {
+            if (addrStr == "i") {
                 EXPECT_TRUE(value->isUnknown());
-            } else if (addrStr == "i") {
+            } else {
+                FAIL() << addrStr;
+            }
+        }
+        ASSERT_EQ(interruptPostInfos.size(), 1);
+        EXPECT_TRUE(interruptPostInfos.front().memoryMap.size() == 2);
+        for (auto &[addr, value] : interruptPostInfos.front().memoryMap) {
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(
+                addr.get().getACSLOfValue(
+                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                addrStr);
+            if (addrStr == "i") {
+                EXPECT_TRUE(value->isUnknown());
+            } else if (addrStr == "found") {
                 EXPECT_TRUE(value->isUnknown());
             } else {
                 FAIL() << addrStr;
@@ -459,11 +478,12 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
         ASSERT_TRUE(res);
-        auto &[spec, _, postInfos] = res.value();
+        auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
 
-        ASSERT_EQ(postInfos.size(), 1);
-        auto &postInfo = postInfos.at(0);
+        ASSERT_EQ(normalPostInfos.size(), 1);
+        ASSERT_TRUE(interruptPostInfos.empty());
+        auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
@@ -496,11 +516,12 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
         ASSERT_TRUE(res);
-        auto &[spec, _, postInfos] = res.value();
+        auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
 
-        ASSERT_EQ(postInfos.size(), 1);
-        auto &postInfo = postInfos.at(0);
+        ASSERT_EQ(normalPostInfos.size(), 1);
+        ASSERT_TRUE(interruptPostInfos.empty());
+        auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
@@ -530,10 +551,11 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
         ASSERT_TRUE(res);
-        auto &[spec, _, postInfos] = res.value();
+        auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
-        ASSERT_EQ(postInfos.size(), 1);
-        auto &postInfo = postInfos.at(0);
+        ASSERT_EQ(normalPostInfos.size(), 1);
+        ASSERT_TRUE(interruptPostInfos.empty());
+        auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
@@ -562,10 +584,11 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
         ASSERT_TRUE(res);
-        auto &[spec, _, postInfos] = res.value();
+        auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
-        ASSERT_EQ(postInfos.size(), 1);
-        auto &postInfo = postInfos.at(0);
+        ASSERT_EQ(normalPostInfos.size(), 1);
+        ASSERT_TRUE(interruptPostInfos.empty());
+        auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
@@ -595,9 +618,57 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
         ASSERT_TRUE(res);
-        auto &[spec, _, postInfos] = res.value();
+        auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
+        EXPECT_NE(spec, nullopt);
+        ASSERT_EQ(normalPostInfos.size(), 2);
+        ASSERT_TRUE(interruptPostInfos.empty());
+        DEBUG(spec.value());
+    }
+
+    TEST(LinearInvariantPluginTest, X509_parser_bufs_differ) {
+        auto pluginId = "StInGXPlugin";
+        auto code     = R"(
+#include <stdint.h>
+
+typedef uint8_t	  u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+
+int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
+{
+	int ret = 0;
+	u32 i = 0;
+
+	for (i = 0; i < n; i++) {
+		if(b1[i] != b2[i]) {
+			ret = 1;
+			break;
+		}
+	}
+
+	return ret;
+}
+    )";
+        auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ASSERT_TRUE(res);
+        auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
         DEBUG(spec.value());
+        DEBUG(normalPostInfos.size());
+        ASSERT_FALSE(interruptPostInfos.empty());
+        for (auto &postInfo : normalPostInfos) {
+            DEBUG("");
+            for (auto &[addr, value] : postInfo.memoryMap) {
+                DEBUG(addr.get().dump());
+                DEBUG(value->dump());
+            }
+            for (auto &pathCond : postInfo.pathConds) {
+                auto expected = pathCond->simplifiedExpr()->getACSL({});
+                assert(expected);
+                DEBUG(expected.value().first);
+            }
+        }
     }
 
     // TEST(LinearInvariantPluginTest, Simple_6) {
@@ -640,12 +711,14 @@ namespace acslg::test::unit::spec_generator {
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
         ASSERT_TRUE(res);
-        auto &[spec, _, postInfos] = res.value();
+        auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
         DEBUG(spec.value());
-        ASSERT_EQ(postInfos.size(), 2);
-        auto &normalPath      = postInfos.at(0);
-        auto &interruptedPath = postInfos.at(1);
+        ASSERT_EQ(normalPostInfos.size(), 1);
+        ASSERT_EQ(interruptPostInfos.size(), 1);
+        ASSERT_EQ(interruptPostInfos.front().size(), 1);
+        auto &normalPath      = normalPostInfos.at(0);
+        auto &interruptedPath = interruptPostInfos.front().at(0);
         for (auto &pathCond : normalPath.pathConds) {
             auto expected = pathCond->simplifiedExpr()->getACSL({});
             assert(expected);
@@ -675,12 +748,14 @@ int arraySearch(int *a, int x, int n) {
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
         ASSERT_TRUE(res);
-        auto &[spec, _, postInfos] = res.value();
+        auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
         DEBUG(spec.value());
-        ASSERT_EQ(postInfos.size(), 2);
-        auto &normalPath      = postInfos.at(0);
-        auto &interruptedPath = postInfos.at(1);
+        ASSERT_EQ(normalPostInfos.size(), 1);
+        ASSERT_EQ(interruptPostInfos.size(), 1);
+        ASSERT_EQ(interruptPostInfos.front().size(), 1);
+        auto &normalPath      = normalPostInfos.at(0);
+        auto &interruptedPath = interruptPostInfos.front().at(0);
         for (auto &pathCond : normalPath.pathConds) {
             auto expected = pathCond->simplifiedExpr()->getACSL({});
             assert(expected);
@@ -723,12 +798,14 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
         ASSERT_TRUE(res);
-        auto &[spec, _, postInfos] = res.value();
+        auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
         DEBUG(spec.value());
-        ASSERT_EQ(postInfos.size(), 2);
-        auto &normalPath      = postInfos.at(0);
-        auto &interruptedPath = postInfos.at(1);
+        ASSERT_EQ(normalPostInfos.size(), 1);
+        ASSERT_EQ(interruptPostInfos.size(), 1);
+        ASSERT_EQ(interruptPostInfos.front().size(), 1);
+        auto &normalPath      = normalPostInfos.at(0);
+        auto &interruptedPath = interruptPostInfos.front().at(0);
         for (auto &pathCond : normalPath.pathConds) {
             auto expected = pathCond->simplifiedExpr()->getACSL({});
             assert(expected);

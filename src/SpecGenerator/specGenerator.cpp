@@ -1,5 +1,6 @@
 // src/SpecGenerator/specGenerators.cpp
 
+#include <algorithm>
 #include <iterator>
 #include <llvm-19/llvm/Support/Casting.h>
 #include <ranges>
@@ -164,7 +165,11 @@ namespace acslg::spec_generator {
         std::vector<std::string> invariantClauses;
         std::vector<std::string> variantClauses;
 
-        enum class LoopClauseKind { Assigns, Invariant, Variant };
+        enum class LoopClauseKind {
+            Assigns,
+            Invariant,
+            Variant
+        };
         auto classifyClauseKind = [](std::string_view clause) {
             auto startsWith = [](std::string_view text, std::string_view prefix) {
                 return text.size() >= prefix.size() && text.compare(0, prefix.size(), prefix) == 0;
@@ -180,16 +185,10 @@ namespace acslg::spec_generator {
         };
         auto storeClause = [&](std::string clause) {
             switch (classifyClauseKind(clause)) {
-                case LoopClauseKind::Assigns:
-                    assignsClauses.emplace_back(std::move(clause));
-                    break;
-                case LoopClauseKind::Variant:
-                    variantClauses.emplace_back(std::move(clause));
-                    break;
+                case LoopClauseKind::Assigns: assignsClauses.emplace_back(std::move(clause)); break;
+                case LoopClauseKind::Variant: variantClauses.emplace_back(std::move(clause)); break;
                 case LoopClauseKind::Invariant:
-                default:
-                    invariantClauses.emplace_back(std::move(clause));
-                    break;
+                default: invariantClauses.emplace_back(std::move(clause)); break;
             }
         };
 
@@ -203,7 +202,81 @@ namespace acslg::spec_generator {
         auto &entryPaths = loopEntry.getPaths();
         auto pathNum     = preState.getPaths().size();
         auto postState   = preState.clone(/*with path*/ false);
-        auto resultInfos = std::vector<std::vector<PostPSInfo>>{pathNum};
+        assert(loopInfo.entryAndCurrentInfo);
+        size_t interruptPathNum = loopInfo.entryAndCurrentInfo->inactivePaths.size();
+
+        auto exprEqual = [](const symb::SymbolicExpr &lhs, const symb::SymbolicExpr &rhs) {
+            return lhs.equal(rhs);
+        };
+
+        auto mergePostInfo = [&](PostPSInfo &lhs, const PostPSInfo &rhs) {
+            if (lhs.pathState != rhs.pathState)
+                ERROR("PathState mismatch when merging post infos.");
+
+            std::unordered_set<symb::AddressBox, symb::AddressBoxHash, symb::AddressBoxEq> addresses;
+            for (const auto &[addr, _] : lhs.memoryMap)
+                addresses.insert(addr);
+            for (const auto &[addr, _] : rhs.memoryMap)
+                addresses.insert(addr);
+
+            for (const auto &addr : addresses) {
+                auto lhsIt = lhs.memoryMap.find(addr);
+                auto rhsIt = rhs.memoryMap.find(addr);
+
+                if (lhsIt != lhs.memoryMap.end() && rhsIt != rhs.memoryMap.end()) {
+                    if (exprEqual(*lhsIt->second, *rhsIt->second))
+                        continue;
+                } else if (rhsIt != rhs.memoryMap.end()) {
+                    continue;
+                } else {
+                    continue;
+                }
+
+                lhs.memoryMap.insert_or_assign(addr,
+                                               symb::UnknownExpr::makeUnknown().into_underlying());
+            }
+
+            std::vector<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> intersected;
+            intersected.reserve(std::min(lhs.pathConds.size(), rhs.pathConds.size()));
+            for (auto &cond : lhs.pathConds) {
+                bool found = false;
+                for (const auto &rcond : rhs.pathConds) {
+                    if (exprEqual(*cond, *rcond)) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (found)
+                    intersected.push_back(std::move(cond));
+            }
+            lhs.pathConds = std::move(intersected);
+
+            if (lhs.pathState == analyzer::Path::PathState::Return) {
+                if (!(lhs.returnExpr && rhs.returnExpr))
+                    UNREACHABLE();
+                if (!exprEqual(*lhs.returnExpr.value(), *rhs.returnExpr.value())) {
+                    lhs.returnExpr = symb::UnknownExpr::makeUnknown().into_underlying();
+                }
+            }
+        };
+
+        auto mergeAllPostInfos =
+            [&](const std::vector<PostPSInfo> &infos) -> std::optional<PostPSInfo> {
+            if (infos.empty())
+                return std::nullopt;
+            PostPSInfo merged{infos.front()};
+            for (size_t i = 1; i < infos.size(); ++i)
+                mergePostInfo(merged, infos.at(i));
+            return merged;
+        };
+
+        struct BranchInfos {
+            std::vector<PostPSInfo> normal;
+            std::vector<std::vector<PostPSInfo>> interrupts;
+        };
+        auto resultInfos = std::vector<BranchInfos>{pathNum};
+        for (auto &infos : resultInfos)
+            infos.interrupts.resize(interruptPathNum);
 
         auto updateResultInfoWithInfo = [&loopEntryPoint](const analyzer::Path &currentPath,
                                                           PostPSInfo &toUpdate, auto &&info) {
@@ -244,7 +317,7 @@ namespace acslg::spec_generator {
             // for every pre-path
             for (auto i : std::views::iota(size_t{0}, pathNum)) {
                 auto &entryPath         = *entryPaths.at(i);
-                auto &postBranchesInfos = resultInfos.at(i);
+                auto &postBranchesInfos = resultInfos.at(i).normal;
 
                 // if there're no post-path (this function may be called before
                 // `updateResultInfosWithPerPathInfo`), insert one.
@@ -257,11 +330,51 @@ namespace acslg::spec_generator {
             }
         }; // updateResultInfosWithGlobalInfo
 
+        auto updateResultInfosWithGlobalInterruptInfo = [&](size_t interruptIdx, PostPIInfo &info) {
+            for (auto i : std::views::iota(size_t{0}, pathNum)) {
+                auto &entryPath = *entryPaths.at(i);
+                auto &branches  = resultInfos.at(i).interrupts.at(interruptIdx);
+
+                if (branches.empty())
+                    branches.emplace_back();
+
+                for (auto &postBranchInfo : branches)
+                    updateResultInfoWithInfo(entryPath, postBranchInfo, info);
+            }
+        }; // updateResultInfosWithGlobalInterruptInfo
+
+        auto updateResultInfosWithMergedNormalPathInfo = [&](PostPSInfo &info) {
+            for (auto i : std::views::iota(size_t{0}, pathNum)) {
+                auto &entryPath = *entryPaths.at(i);
+                auto &branches  = resultInfos.at(i).normal;
+
+                if (branches.empty())
+                    branches.emplace_back();
+
+                for (auto &postBranchInfo : branches)
+                    updateResultInfoWithInfo(entryPath, postBranchInfo, info);
+            }
+        }; // updateResultInfosWithMergedNormalPathInfo
+
+        auto updateResultInfosWithMergedInterruptPathInfo = [&](size_t interruptIdx,
+                                                                PostPSInfo &info) {
+            for (auto i : std::views::iota(size_t{0}, pathNum)) {
+                auto &entryPath = *entryPaths.at(i);
+                auto &branches  = resultInfos.at(i).interrupts.at(interruptIdx);
+
+                if (branches.empty())
+                    branches.emplace_back();
+
+                for (auto &postBranchInfo : branches)
+                    updateResultInfoWithInfo(entryPath, postBranchInfo, info);
+            }
+        }; // updateResultInfosWithMergedInterruptPathInfo
+
         auto updateResultInfosWithPerPathInfo = [&](std::vector<PostPSInfo> &infos) {
             // for every pre-path
             for (auto i : std::views::iota(size_t{0}, pathNum)) {
                 auto &entryPath         = *entryPaths.at(i);
-                auto &postBranchesInfos = resultInfos.at(i);
+                auto &postBranchesInfos = resultInfos.at(i).normal;
 
                 // If there're no post-path (this function may be called before
                 // `updateResultInfosWithGlobalInfo`), insert one.
@@ -284,11 +397,35 @@ namespace acslg::spec_generator {
             }
         }; // updateResultInfosWithPerPathInfo
 
+        auto updateResultInfosWithPerInterruptPathInfo = [&](size_t interruptIdx,
+                                                             std::vector<PostPSInfo> &infos) {
+            for (auto i : std::views::iota(size_t{0}, pathNum)) {
+                auto &entryPath         = *entryPaths.at(i);
+                auto &postBranchesInfos = resultInfos.at(i).interrupts.at(interruptIdx);
+
+                if (postBranchesInfos.empty())
+                    postBranchesInfos.emplace_back();
+                if (postBranchesInfos.size() != 1)
+                    ERROR("ResultInfos should only be updated once per-path.");
+
+                for (size_t j = 1; j < infos.size(); ++j)
+                    postBranchesInfos.push_back(postBranchesInfos.back());
+
+                assert(postBranchesInfos.size() == infos.size());
+                for (size_t j = 0; j < postBranchesInfos.size(); ++j) {
+                    auto &postBranchInfo = postBranchesInfos.at(j);
+                    auto &info           = infos.at(j);
+                    updateResultInfoWithInfo(entryPath, postBranchInfo, info);
+                }
+            }
+        }; // updateResultInfosWithPerInterruptPathInfo
+
         for (auto &piPlugin : piPlugins) {
             if (piPlugin == nullptr)
                 UNREACHABLE();
             DEBUG("Plugin {" + std::string{piPlugin->id()} + "} is generating...");
-            auto [s, usedPoints, postInfo] = piPlugin->generate(preState, loopEntry, loopInfo);
+            auto [s, usedPoints, normalPostInfo, interruptPathsPostInfo] =
+                piPlugin->generate(preState, loopEntry, loopInfo);
 
             if (s) {
                 storeClause(std::move(*s));
@@ -296,31 +433,68 @@ namespace acslg::spec_generator {
             allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
                                  std::make_move_iterator(usedPoints.end()));
 
-            updateResultInfosWithGlobalInfo(postInfo);
+            updateResultInfosWithGlobalInfo(normalPostInfo);
+            if (interruptPathsPostInfo.empty())
+                continue;
+            if (interruptPathNum != interruptPathsPostInfo.size()) {
+                ERROR("Interrupt paths count mismatch between LoopInfo and plugin result.");
+            } else {
+                for (size_t idx = 0; idx < interruptPathsPostInfo.size(); ++idx)
+                    updateResultInfosWithGlobalInterruptInfo(idx, interruptPathsPostInfo[idx]);
+            }
         }
 
-        std::optional<size_t> lastPriority{};
+        std::optional<size_t> bestPriority{};
+        std::optional<PathSensitiveLoopInvPlugin::GenResultType> bestResult{};
+        std::vector<PathSensitiveLoopInvPlugin::GenResultType> otherResults;
         for (auto &psPlugin : psPlugins) {
             if (psPlugin == nullptr)
                 UNREACHABLE();
             DEBUG("Plugin {" + std::string{psPlugin->id()} + "} is generating...");
 
             auto currentPriority = psPlugin->propose();
-            if (lastPriority && lastPriority.value() > currentPriority)
-                continue;
-
-            auto res = psPlugin->tryGenerate(preState, loopEntry, loopInfo);
+            auto res             = psPlugin->tryGenerate(preState, loopEntry, loopInfo);
             if (res == std::nullopt)
                 continue;
-            lastPriority = currentPriority;
 
-            if (res.value().acsl) {
-                storeClause(std::move(*res.value().acsl));
+            if (res->acsl) {
+                storeClause(std::move(res->acsl.value()));
+                allUsedPoints.insert(std::make_move_iterator(res.value().acslUsedPoints.begin()),
+                                     std::make_move_iterator(res.value().acslUsedPoints.end()));
             }
-            allUsedPoints.insert(std::make_move_iterator(res.value().acslUsedPoints.begin()),
-                                 std::make_move_iterator(res.value().acslUsedPoints.end()));
 
-            updateResultInfosWithPerPathInfo(res.value().perPathPostInfos);
+            if (!bestPriority || currentPriority > bestPriority.value()) {
+                if (bestResult)
+                    otherResults.push_back(std::move(bestResult.value()));
+                bestPriority = currentPriority;
+                bestResult   = std::move(res.value());
+            } else {
+                otherResults.push_back(std::move(res.value()));
+            }
+        }
+        if (bestResult) {
+            updateResultInfosWithPerPathInfo(bestResult->normalPathPostInfos);
+            if (interruptPathNum != bestResult->interruptPathsPostInfos.size()) {
+                ERROR("Interrupt paths count mismatch between LoopInfo and plugin result.");
+            } else {
+                for (size_t idx = 0; idx < bestResult->interruptPathsPostInfos.size(); ++idx)
+                    updateResultInfosWithPerInterruptPathInfo(
+                        idx, bestResult->interruptPathsPostInfos.at(idx));
+            }
+        }
+
+        for (auto &res : otherResults) {
+            if (auto merged = mergeAllPostInfos(res.normalPathPostInfos))
+                updateResultInfosWithMergedNormalPathInfo(*merged);
+
+            if (interruptPathNum != res.interruptPathsPostInfos.size()) {
+                ERROR("Interrupt paths count mismatch between LoopInfo and plugin result.");
+                continue;
+            }
+            for (size_t idx = 0; idx < res.interruptPathsPostInfos.size(); ++idx) {
+                if (auto merged = mergeAllPostInfos(res.interruptPathsPostInfos.at(idx)))
+                    updateResultInfosWithMergedInterruptPathInfo(idx, *merged);
+            }
         }
         auto appendClauses = [&](const std::vector<std::string> &clauses) {
             for (const auto &clause : clauses) {
@@ -342,25 +516,33 @@ namespace acslg::spec_generator {
             }
             auto &postBranchesInfos = resultInfos.at(i);
 
-            if (postBranchesInfos.empty())
+            auto appendPostPaths = [&](std::vector<PostPSInfo> &branches) {
+                for (auto &postBranchInfo : branches) {
+                    auto postPath = prePath->clone();
+                    for (auto &[addr, value] : postBranchInfo.memoryMap) {
+                        auto root = addr.get().getFromRoot();
+                        if (root == std::nullopt)
+                            TODO();
+                        if (!postPath->getVarAddr().contains(root.value()))
+                            continue;
+                        postPath->updateMemory(addr, std::move(value));
+                    }
+                    postPath->setPathState(postBranchInfo.pathState);
+                    postPath->setReturnExpr(std::move(postBranchInfo.returnExpr));
+                    for (auto &pathCond : postBranchInfo.pathConds)
+                        postPath->insertPathCondition(std::move(pathCond));
+                    postState->insertPath(std::move(postPath));
+                }
+            };
+
+            if (postBranchesInfos.normal.empty() &&
+                std::ranges::all_of(postBranchesInfos.interrupts,
+                                    [](const auto &branches) { return branches.empty(); }))
                 WARN("A path has no post-info, there might be some errors.");
 
-            for (auto &postBranchInfo : postBranchesInfos) {
-                auto postPath = prePath->clone();
-                for (auto &[addr, value] : postBranchInfo.memoryMap) {
-                    auto root = addr.get().getFromRoot();
-                    if (root == std::nullopt)
-                        TODO();
-                    if (!postPath->getVarAddr().contains(root.value()))
-                        continue;
-                    postPath->updateMemory(addr, std::move(value));
-                }
-                postPath->setPathState(postBranchInfo.pathState);
-                postPath->setReturnExpr(std::move(postBranchInfo.returnExpr));
-                for (auto &pathCond : postBranchInfo.pathConds)
-                    postPath->insertPathCondition(std::move(pathCond));
-                postState->insertPath(std::move(postPath));
-            }
+            appendPostPaths(postBranchesInfos.normal);
+            for (auto &interruptInfos : postBranchesInfos.interrupts)
+                appendPostPaths(interruptInfos);
         }
 
         return EmitLoopInvResult{.acsl       = spec,

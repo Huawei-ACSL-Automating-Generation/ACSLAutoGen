@@ -839,7 +839,7 @@ namespace acslg::analyzer {
 
             PathsAndExitInvs result;
             for (auto &pathName : locations) {
-                if (pathName == "init" || pathName == "exit")
+                if (pathName == "init" || pathName == "normal_exit")
                     continue;
 
                 std::vector<Parma_Polyhedra_Library::C_Polyhedron> pathInvs;
@@ -849,13 +849,13 @@ namespace acslg::analyzer {
                 result.pathsInvs.push_back(std::move(pathInvs));
             }
 
-            const auto &exitInvariants = invariants["exit"];
+            const auto &exitInvariants = invariants["normal_exit"];
 
             for (const auto *p : exitInvariants) {
-                result.exitInvs.emplace_back(*p);
+                result.normalExitInvs.emplace_back(*p);
             }
 
-            if (result.exitInvs.empty()) {
+            if (result.normalExitInvs.empty()) {
                 // TODO: exitInvs_.size() is unstable now.
                 result.pathsInvs.clear();
             }
@@ -865,6 +865,7 @@ namespace acslg::analyzer {
 
         PathsAndExitInvs computeLinearInv(
             const std::vector<std::string> &locations,
+            size_t exitIdx,
             std::vector<std::tuple<size_t, size_t, C_Polyhedron>> &transitions,
             const std::pair<size_t, C_Polyhedron> &initial,
             const VarManager &vm) {
@@ -895,9 +896,10 @@ namespace acslg::analyzer {
             auto invariants = linTS->getInvMap();
 
             PathsAndExitInvs result;
-            for (auto &pathName : locations) {
-                if (pathName == "init" || pathName == "exit")
-                    continue;
+            for (size_t i = 1; i < exitIdx; ++i) {
+                auto &pathName = locations.at(i);
+                assert(pathName.find("init") == std::string::npos &&
+                       pathName.find("exit") == std::string::npos);
 
                 std::vector<Parma_Polyhedra_Library::C_Polyhedron> pathInvs;
 
@@ -906,16 +908,20 @@ namespace acslg::analyzer {
                 result.pathsInvs.push_back(std::move(pathInvs));
             }
 
-            const auto &exitInvariants = invariants["exit"];
+            const auto &exitInvariants = invariants["normal_exit"];
 
             for (const auto *p : exitInvariants) {
-                result.exitInvs.emplace_back(*p);
+                result.normalExitInvs.emplace_back(*p);
             }
 
-            if (result.exitInvs.empty()) {
-                ERROR("?");
-                // TODO: exitInvs_.size() is unstable now.
-                result.pathsInvs.clear();
+            for (size_t i = exitIdx + 1, locationsNum = locations.size(); i < locationsNum; ++i) {
+                auto &pathName = locations[i];
+                assert(pathName.find("interrupt_exit_") != string::npos);
+
+                std::vector<Parma_Polyhedra_Library::C_Polyhedron> exitInvs;
+                for (auto &p : invariants[pathName])
+                    exitInvs.push_back(*p);
+                result.interruptExitInvs.push_back(std::move(exitInvs));
             }
 
             return result;
@@ -1193,6 +1199,9 @@ namespace acslg::analyzer {
                 if (!lhs) {
                     continue;
                 }
+
+                if (lhs.value()->tryEvalAsConstant())
+                    continue;
 
                 Coefficient c0 = constraint.inhomogeneous_term();
                 if (c0 != 0) {

@@ -32,27 +32,27 @@ namespace acslg::analyzer {
     struct SymbolicExprPtrEqual {
         using is_transparent = void;
 
-        bool operator()(const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
-                        const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const
-            noexcept {
+        bool operator()(
+            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
+            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const noexcept {
             return lhs->equal(*rhs);
         }
         bool operator()(const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
                         const symbolic::SymbolicExpr &rhs) const noexcept {
             return lhs->equal(rhs);
         }
-        bool operator()(const symbolic::SymbolicExpr &lhs,
-                        const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const
-            noexcept {
+        bool operator()(
+            const symbolic::SymbolicExpr &lhs,
+            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const noexcept {
             return lhs.equal(*rhs);
         }
         bool operator()(const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
                         const symbolic::SymbolicExpr *rhs) const noexcept {
             return rhs && lhs->equal(*rhs);
         }
-        bool operator()(const symbolic::SymbolicExpr *lhs,
-                        const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const
-            noexcept {
+        bool operator()(
+            const symbolic::SymbolicExpr *lhs,
+            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const noexcept {
             return lhs && lhs->equal(*rhs);
         }
         bool operator()(const symbolic::SymbolicExpr *lhs,
@@ -60,10 +60,10 @@ namespace acslg::analyzer {
             return lhs && rhs && lhs->equal(*rhs);
         }
     };
-    using PathConditions = std::unordered_set<
-        utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>,
-        SymbolicExprPtrHash,
-        SymbolicExprPtrEqual>;
+    using PathConditions =
+        std::unordered_set<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>,
+                           SymbolicExprPtrHash,
+                           SymbolicExprPtrEqual>;
     using TransRel = std::tuple<int, int, Parma_Polyhedra_Library::C_Polyhedron *>;
     using InitRel  = std::pair<int, Parma_Polyhedra_Library::C_Polyhedron *>;
 
@@ -807,10 +807,11 @@ namespace acslg::analyzer {
 
     struct InvsAndPostStates {
         std::optional<std::string> invs;
-        std::vector<std::pair<
+        using MemoryMapAndPathConds = std::pair<
             symbolic::AddressBoxMap<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>,
-            std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>>
-            postStates;
+            std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>;
+        std::vector<MemoryMapAndPathConds> normalPostStates;
+        std::vector<std::vector<MemoryMapAndPathConds>> interruptPostStates;
     };
 
     InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,

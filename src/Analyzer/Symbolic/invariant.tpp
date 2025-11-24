@@ -23,10 +23,12 @@ namespace acslg::analyzer {
 
         struct PathsAndExitInvs {
             std::vector<std::vector<ppl::C_Polyhedron>> pathsInvs;
-            std::vector<ppl::C_Polyhedron> exitInvs;
+            std::vector<ppl::C_Polyhedron> normalExitInvs;
+            std::vector<std::vector<ppl::C_Polyhedron>> interruptExitInvs;
         };
         PathsAndExitInvs computeLinearInv(
             const std::vector<std::string> &locations,
+            size_t exitIdx,
             std::vector<std::tuple<size_t, size_t, ppl::C_Polyhedron>> &transitions,
             const std::pair<size_t, ppl::C_Polyhedron> &initial,
             const VarManager &vm);
@@ -81,12 +83,14 @@ namespace acslg::analyzer {
             locations.push_back("normal_path_" + std::to_string(i));
         for (size_t i = 0; i < inactivePaths.size(); ++i)
             locations.push_back("interrupt_path_" + std::to_string(i));
-        locations.push_back("exit");
+        locations.push_back("normal_exit");
+        for (size_t i = 0; i < inactivePaths.size(); ++i)
+            locations.push_back("interrupt_exit_" + std::to_string(i));
 
         auto pathNum   = paths.size() + inactivePaths.size();
         size_t initIdx = 0;
         size_t exitIdx = pathNum + 1;
-        assert(pathNum + 2 == locations.size());
+        assert(pathNum + 2 + inactivePaths.size() == locations.size());
 
         auto identityPoly = details::buildIdentityPoly(vm); // shared across all paths
 
@@ -109,7 +113,7 @@ namespace acslg::analyzer {
         }
         if (negatedCondPolys.empty()) {
             // if loop condition is 'true', this loop may has unknown condition or just be an
-            // infinite loop. So we set the exit condition as true to get a (maybe fake) post
+            // infinite loop. So we set the normal_exit condition as true to get a (maybe fake) post
             // state.
             negatedCondPolys.emplace_back(dimension, Parma_Polyhedra_Library::UNIVERSE);
         }
@@ -163,7 +167,7 @@ namespace acslg::analyzer {
             }
         }
 
-        // === path_j -> exit using precomputed negatedPolys
+        // === path_j -> normal_exit using precomputed negatedPolys
         for (size_t j = 0; j < normalPathsNum; ++j) {
             for (auto &negatedCondPoly : negatedCondPolys) {
                 auto exitPoly = details::primedPolyhedron(negatedCondPoly, vm);
@@ -175,15 +179,33 @@ namespace acslg::analyzer {
             }
         }
 
+        for (size_t j = normalPathsNum, k = exitIdx + 1; j < pathNum; ++j, ++k) {
+            assert(k < locations.size());
+            auto joined = transPolys.at(j);
+            joined.intersection_assign(locAsStartPolys.at(j));
+            joined.intersection_assign(baseConditionPoly);
+
+            if (!joined.is_empty())
+                transitions.push_back(std::make_tuple(j + 1, k, joined));
+        }
+
         // === this initPoly as InitRel ===
         auto initRel = std::make_pair(initIdx, initPathPoly);
-        auto invs    = details::computeLinearInv(locations, transitions, initRel, vm);
+        auto invs    = details::computeLinearInv(locations, exitIdx, transitions, initRel, vm);
 
         invsAndPostStates.invs = details::buildInvs(invs.pathsInvs, vm);
 
         // todo: build post states from interrupted paths.
-        for (auto &exitInv : invs.exitInvs)
-            invsAndPostStates.postStates.push_back(details::buildPostState(exitInv, entryPath, vm));
+        for (auto &exitInv : invs.normalExitInvs)
+            invsAndPostStates.normalPostStates.push_back(
+                details::buildPostState(exitInv, entryPath, vm));
+
+        for (auto &exitInvsPerPath : invs.interruptExitInvs) {
+            std::vector<InvsAndPostStates::MemoryMapAndPathConds> postState;
+            for (auto &exitInv : exitInvsPerPath)
+                postState.push_back(details::buildPostState(exitInv, entryPath, vm));
+            invsAndPostStates.interruptPostStates.push_back(std::move(postState));
+        }
 
         return invsAndPostStates;
     }

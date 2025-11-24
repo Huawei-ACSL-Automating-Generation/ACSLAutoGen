@@ -224,7 +224,8 @@ namespace acslg::spec_generator {
         struct GenResultType {
             std::optional<std::string> acsl;
             std::unordered_set<analyzer::symbolic::SourcePoint> acslUsedPoints;
-            PostPIInfo globalPostInfo;
+            PostPIInfo globalNormalPathPostInfo;
+            std::vector<PostPIInfo> globalInterruptPathsPostInfo;
         };
         virtual GenResultType generate(const analyzer::ProgramState &preState,
                                        const analyzer::ProgramState &loopEntry,
@@ -280,7 +281,8 @@ namespace acslg::spec_generator {
         struct GenResultType {
             std::optional<std::string> acsl;
             std::unordered_set<analyzer::symbolic::SourcePoint> acslUsedPoints;
-            std::vector<PostPSInfo> perPathPostInfos;
+            std::vector<PostPSInfo> normalPathPostInfos;
+            std::vector<std::vector<PostPSInfo>> interruptPathsPostInfos;
         };
 
         // todo: may pass pass in some loop information to help the plugin determine whether it
