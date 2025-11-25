@@ -48,7 +48,8 @@ namespace acslg::analyzer {
     InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
                                          const Path &entryPath,
                                          const ProgramState &loopCurrent,
-                                         std::ranges::range auto &inactivePaths) {
+                                         std::ranges::range auto &inactivePaths,
+                                         bool generateBranches) {
         InvsAndPostStates invsAndPostStates;
         auto &paths         = loopCurrent.getPaths();
         auto normalPathsNum = paths.size();
@@ -195,16 +196,39 @@ namespace acslg::analyzer {
 
         invsAndPostStates.invs = details::buildInvs(invs.pathsInvs, vm);
 
-        // todo: build post states from interrupted paths.
-        for (auto &exitInv : invs.normalExitInvs)
-            invsAndPostStates.normalPostStates.push_back(
-                details::buildPostState(exitInv, entryPath, vm));
+        auto mergeClosures = [](const std::vector<Parma_Polyhedra_Library::C_Polyhedron> &polys)
+            -> std::optional<Parma_Polyhedra_Library::C_Polyhedron> {
+            if (polys.empty())
+                return std::nullopt;
+            Parma_Polyhedra_Library::C_Polyhedron merged = polys.front();
+            for (size_t i = 1; i < polys.size(); ++i)
+                merged.poly_hull_assign(polys.at(i));
+            return merged;
+        };
 
-        for (auto &exitInvsPerPath : invs.interruptExitInvs) {
-            std::vector<InvsAndPostStates::MemoryMapAndPathConds> postState;
-            for (auto &exitInv : exitInvsPerPath)
-                postState.push_back(details::buildPostState(exitInv, entryPath, vm));
-            invsAndPostStates.interruptPostStates.push_back(std::move(postState));
+        if (generateBranches) {
+            for (auto &exitInv : invs.normalExitInvs)
+                invsAndPostStates.normalPostStates.push_back(
+                    details::buildPostState(exitInv, entryPath, vm));
+
+            for (auto &exitInvsPerPath : invs.interruptExitInvs) {
+                std::vector<InvsAndPostStates::MemoryMapAndPathConds> postState;
+                for (auto &exitInv : exitInvsPerPath)
+                    postState.push_back(details::buildPostState(exitInv, entryPath, vm));
+                invsAndPostStates.interruptPostStates.push_back(std::move(postState));
+            }
+        } else {
+            if (auto mergedExit = mergeClosures(invs.normalExitInvs)) {
+                invsAndPostStates.normalPostStates.push_back(
+                    details::buildPostState(*mergedExit, entryPath, vm));
+            }
+
+            for (auto &exitInvsPerPath : invs.interruptExitInvs) {
+                std::vector<InvsAndPostStates::MemoryMapAndPathConds> postState;
+                if (auto mergedExit = mergeClosures(exitInvsPerPath))
+                    postState.push_back(details::buildPostState(*mergedExit, entryPath, vm));
+                invsAndPostStates.interruptPostStates.push_back(std::move(postState));
+            }
         }
 
         return invsAndPostStates;

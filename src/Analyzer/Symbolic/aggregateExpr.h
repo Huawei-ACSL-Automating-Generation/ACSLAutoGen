@@ -113,10 +113,8 @@ namespace acslg::analyzer::symbolic {
             return std::make_unique<SumOverRange>(*this);
         };
         std::string dump() const override;
-        bool equal(const SymbolicExpr &) const override { return OverRangeExpr::equal(*this); };
-        std::size_t hash() const override {
-            return utils::hash_val(SymbolicExpr::getKind(), OverRangeExpr::hash());
-        };
+        bool equal(const SymbolicExpr &) const override;
+        std::size_t hash() const override;
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
@@ -179,7 +177,7 @@ namespace acslg::analyzer::symbolic {
                             std::string_view indexName,
                             Quantifier quant,
                             utils::not_null<std::unique_ptr<const SymbolicExpr>> pred)
-            : OverRangeExpr(ExprKind::K_SumOverRange,
+            : OverRangeExpr(ExprKind::K_QuantifierOverRange,
                             Type{ScalarKind::Bool, 8},
                             std::move(range),
                             indexName),
@@ -217,6 +215,89 @@ namespace acslg::analyzer::symbolic {
       private:
         Quantifier quant_;
         utils::not_null<std::unique_ptr<const SymbolicExpr>> pred_;
+    };
+
+    class MaxMinOverRange : public OverRangeExpr, public Symbol {
+      public:
+        static bool classof(const SymbolicExpr *e) {
+            return e->getKind() == ExprKind::K_MaxMinOverRange;
+        }
+        static bool classof(const Symbol *e) {
+            return e->getKind() == Symbol::Kind::K_MaxMinOverRange;
+        }
+
+        enum class Extremum {
+            Max,
+            Min
+        };
+
+        MaxMinOverRange(const MaxMinOverRange &other)
+            : OverRangeExpr(other), Symbol(other), extremum_(other.extremum_),
+              expr_(other.expr_->clone().into_underlying()), fromPoint_(other.fromPoint_) {}
+        MaxMinOverRange(MaxMinOverRange &&) = default;
+        MaxMinOverRange &operator=(const MaxMinOverRange &);
+        MaxMinOverRange &operator=(MaxMinOverRange &&) = default;
+
+        MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
+                        std::string_view indexName,
+                        Extremum extremum,
+                        SourcePoint fromPoint);
+        MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
+                        std::string_view indexName,
+                        Extremum extremum,
+                        utils::not_null<std::unique_ptr<const SymbolicExpr>> expr,
+                        SourcePoint fromPoint)
+            : OverRangeExpr(ExprKind::K_MaxMinOverRange,
+                            expr->getValType(),
+                            std::move(range),
+                            indexName),
+              Symbol(Kind::K_MaxMinOverRange), extremum_(extremum), expr_(std::move(expr)),
+              fromPoint_(std::move(fromPoint)) {}
+
+        // SymbolicExpr
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override {
+            return std::make_unique<MaxMinOverRange>(*this);
+        };
+        std::string dump() const override;
+        bool equal(const SymbolicExpr &) const override;
+        std::size_t hash() const override {
+            return utils::hash_val(SymbolicExpr::getKind(), OverRangeExpr::hash(), extremum_,
+                                   expr_->hash(), fromPoint_.hash());
+        };
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
+            const Path &pathSubTo,
+            const SourcePoint &pointToSub) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
+            const SymbolAddrBaseInfo &rangeBase,
+            const SymbolicExpr &indexExpr) const override;
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
+            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
+                &hashToExprMap) const override;
+        bool isLinear() const override { return false; }
+        int getMaxDegree() const override { return -1; }
+
+        // Symbol
+      public:
+        std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
+            return std::nullopt;
+        }
+        std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; };
+
+      private:
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
+      private:
+        Extremum extremum_;
+        utils::not_null<std::unique_ptr<const SymbolicExpr>> expr_;
+        SourcePoint fromPoint_;
+
+        static utils::not_null<std::unique_ptr<const SymbolicExpr>> makeDefaultExpr(
+            const SymbolAddress &range, std::string_view indexName, const SourcePoint &fromPoint);
     };
 } // namespace acslg::analyzer::symbolic
 

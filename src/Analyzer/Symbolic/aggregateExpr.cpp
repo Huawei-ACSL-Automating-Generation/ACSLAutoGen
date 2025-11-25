@@ -93,6 +93,17 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
+    bool SumOverRange::equal(const SymbolicExpr &other) const {
+        auto SOR = llvm::dyn_cast<const SumOverRange>(&other);
+        if (SOR == nullptr)
+            return false;
+        return OverRangeExpr::equal(*SOR) && fromPoint_ == SOR->fromPoint_;
+    }
+
+    std::size_t SumOverRange::hash() const {
+        return utils::hash_val(SymbolicExpr::getKind(), OverRangeExpr::hash(), fromPoint_.hash());
+    }
+
     utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
@@ -299,6 +310,169 @@ namespace acslg::analyzer::symbolic {
                              {"n", nStr.value()},
                              {"entailOrAnd", entailOrAnd},
                              {"pred", predStr.value()}});
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getSubstitutedExpr(
+        const Path &pathSubTo,
+        const SourcePoint &pointToSub) const {
+        auto subedExpr  = range_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
+        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
+            ERROR("Substituted expression should be a *range*");
+
+        auto subedBody = expr_->getSubstitutedExpr(pathSubTo, pointToSub);
+
+        auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
+        newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
+        newMMOR->expr_  = std::move(subedBody).into_underlying();
+        if (fromPoint_ == pointToSub)
+            TODO();
+        return newMMOR;
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getRangeIndexSubstituted(
+        const SymbolAddrBaseInfo &rangeBase,
+        const SymbolicExpr &indexExpr) const {
+        auto subedExpr  = range_->getRangeIndexSubstituted(rangeBase, indexExpr);
+        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
+        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
+            ERROR("Substituted expression should be a *range*");
+        auto subedBody = expr_->getRangeIndexSubstituted(rangeBase, indexExpr);
+
+        auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
+        newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
+        newMMOR->expr_  = std::move(subedBody).into_underlying();
+        return newMMOR;
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getSubstitutedValueExpr(
+        const HashExprMap &hashExprMap) const {
+        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
+            return it->second->clone();
+        auto subedExpr  = range_->getSubstitutedValueExpr(hashExprMap);
+        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
+        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
+            ERROR("Substituted expression should be a *range*");
+        auto subedBody = expr_->getSubstitutedValueExpr(hashExprMap);
+
+        auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
+        newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
+        newMMOR->expr_  = std::move(subedBody).into_underlying();
+        return newMMOR;
+    }
+
+    MaxMinOverRange &MaxMinOverRange::operator=(const MaxMinOverRange &other) {
+        if (&other == this)
+            return *this;
+        OverRangeExpr::operator=(other);
+        Symbol::operator=(other);
+        extremum_  = other.extremum_;
+        expr_      = other.expr_->clone().into_underlying();
+        fromPoint_ = other.fromPoint_;
+        return *this;
+    }
+
+    MaxMinOverRange::MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
+                                     std::string_view indexName,
+                                     Extremum extremum,
+                                     SourcePoint fromPoint)
+        : OverRangeExpr(ExprKind::K_MaxMinOverRange,
+                        deriveType(range->getPointeeType()),
+                        std::move(range),
+                        indexName),
+          Symbol(Kind::K_MaxMinOverRange), extremum_(extremum),
+          expr_(makeDefaultExpr(*range_, indexName, fromPoint).into_underlying()),
+          fromPoint_(std::move(fromPoint)) {}
+
+    utils::not_null<std::unique_ptr<const SymbolicExpr>> MaxMinOverRange::makeDefaultExpr(
+        const SymbolAddress &range,
+        std::string_view indexName,
+        const SourcePoint &fromPoint) {
+        auto indexedRange = std::make_unique<SymbolAddress>(range);
+        indexedRange->setOffset(std::make_unique<SymbolAddress::RangeIndex>(indexName));
+        indexedRange->resetLength();
+        return getSymbol(range.getPointeeType(), std::move(indexedRange), fromPoint)
+            .into_underlying();
+    }
+
+    std::string MaxMinOverRange::dump() const {
+        using namespace utils::dump_fmt;
+        std::ostringstream oss;
+        oss << type("MaxMinOverRange ");
+        switch (extremum_) {
+            case Extremum::Max: oss << accent("Max"); break;
+            case Extremum::Min: oss << accent("Min"); break;
+            default: UNREACHABLE();
+        }
+        oss << OverRangeExpr::dump() << ", ";
+        oss << "{" << key("expr: ") << expr_->dump() << "}";
+        return oss.str();
+    }
+
+    bool MaxMinOverRange::equal(const SymbolicExpr &other) const {
+        auto MMOR = llvm::dyn_cast<const MaxMinOverRange>(&other);
+        if (MMOR == nullptr)
+            return false;
+        return OverRangeExpr::equal(*MMOR) && extremum_ == MMOR->extremum_ &&
+               *expr_ == *MMOR->expr_ && fromPoint_ == MMOR->fromPoint_;
+    }
+
+    utils::expected<std::string, SymbolicExpr::GetACSLError> MaxMinOverRange::doGetACSL(
+        const GetACSLConfig &config,
+        std::unordered_set<SourcePoint> &usedPoints,
+        std::optional<SourcePoint> currentPoint,
+        unsigned,
+        bool) const {
+        // todo: use axiom to define a \max.
+        // WP plugin doesn't support \max
+        /*
+        auto st = spec_generator::StringTemplate{
+            "\\${extremum}(${l}, ${u}, \\lambda integer ${i}; ${expr})"};
+        // ...
+        return st.to_string({{"extremum", extremumStr},
+                             {"i", indexName_},
+                             {"l", lowerStr.value()},
+                             {"u", upperStr.value()},
+                             {"expr", exprStr.value()}});
+        */
+
+        auto tmpl = spec_generator::StringTemplate{
+            "(\\forall integer ${i}; ${l} <= ${i} < ${u} ==> \\result ${cmp} ${expr}) &&\n"
+            "      (\\exists integer ${i}; ${l} <= ${i} < ${u} && \\result == ${expr})"};
+
+        auto rightBound = range_->getRightBound();
+        if (rightBound == std::nullopt)
+            UNREACHABLE();
+
+        auto [prefix, suffix] =
+            details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
+
+        auto lowerStr = callGetACSL(*range_->getOffset()->simplifiedExpr(), config, usedPoints,
+                                    fromPoint_, getPrecedence(Operator::LessEqual), false);
+        if (!lowerStr)
+            return lowerStr.error();
+
+        auto upperStr = callGetACSL(*rightBound.value()->simplifiedExpr(), config, usedPoints,
+                                    fromPoint_, getPrecedence(Operator::LessThan), true);
+        if (!upperStr)
+            return upperStr.error();
+
+        auto cmpOp   = extremum_ == Extremum::Max ? Operator::GreaterEqual : Operator::LessEqual;
+        auto exprStr = callGetACSL(*expr_->simplifiedExpr(), config, usedPoints, fromPoint_,
+                                   getPrecedence(cmpOp), true);
+        if (!exprStr)
+            return exprStr.error();
+
+        auto exprVal = (!prefix.empty() || !suffix.empty()) ? prefix + exprStr.value() + suffix
+                                                            : exprStr.value();
+
+        std::string cmpStr = extremum_ == Extremum::Max ? ">=" : "<=";
+
+        return tmpl.to_string({{"i", indexName_},
+                               {"l", lowerStr.value()},
+                               {"u", upperStr.value()},
+                               {"cmp", cmpStr},
+                               {"expr", exprVal}});
     }
 
 } // namespace acslg::analyzer::symbolic

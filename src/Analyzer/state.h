@@ -816,12 +816,14 @@ namespace acslg::analyzer {
 
     InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
                                          const std::vector<std::unique_ptr<Path>> &paths,
-                                         const ProgramState &initState);
+                                         const ProgramState &initState,
+                                         bool generateBranches = true);
 
     InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
                                          const Path &entryPath,
                                          const ProgramState &loopCurrent,
-                                         std::ranges::range auto &inactivePaths);
+                                         std::ranges::range auto &inactivePaths,
+                                         bool generateBranches = true);
 } // namespace acslg::analyzer
 
 #include "Symbolic/invariant.tpp" // IWYU pragma: keep

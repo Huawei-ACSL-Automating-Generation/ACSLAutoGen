@@ -192,6 +192,7 @@ namespace acslg::analyzer::symbolic {
             K_FirstOverRange,
             K_SumOverRange,
             K_QuantifierOverRange,
+            K_MaxMinOverRange,
             K_LastOverRange
         };
 
@@ -809,6 +810,7 @@ namespace acslg::analyzer::symbolic {
             K_SymbolAddress,
             K_SymbolValue,
             K_SumOverRange,
+            K_MaxMinOverRange,
         };
         Kind getKind() const { return kind_; }
 
@@ -1693,11 +1695,11 @@ namespace acslg::analyzer::symbolic::details {
             if (auto it = config.predefinedLabels.find(myPoint);
                 it != config.predefinedLabels.end()) {
                 return std::pair{"\\at(", ", " + it->second + ")"};
-            } else {
-                auto label = myPoint.getLabel();
-                usedPoints.insert(myPoint);
-                return std::pair{"\\at(", ", " + label + ")"};
             }
+
+            auto label = myPoint.getLabel();
+            usedPoints.insert(myPoint);
+            return std::pair{"\\at(", ", " + label + ")"};
         }
         return {};
     }

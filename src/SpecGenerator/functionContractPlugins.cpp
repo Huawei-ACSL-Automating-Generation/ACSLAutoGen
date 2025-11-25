@@ -8,6 +8,7 @@
 #include "state.h"
 #include "utils.h"
 #include "Symbolic/expr.h"
+#include "Symbolic/aggregateExpr.h"
 
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
@@ -145,9 +146,22 @@ namespace acslg::spec_generator {
                     if (auto expected = ret.value()->simplifiedExpr()->getACSL(
                             {.predefinedLabels = {{oldPoint, "Old"}}})) {
                         auto &[spec, usedPoints] = expected.value();
-                        ensures.push_back("\\result == " + spec);
-                        allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
-                                             std::make_move_iterator(usedPoints.end()));
+                        if (usedPoints.empty())
+                            if (!llvm::isa<symb::OverRangeExpr>(*ret.value()))
+                                ensures.push_back("\\result == " + spec);
+                            else
+                                ensures.push_back(spec);
+                        else {
+                            // todo: maintain the write information, so can we know two source
+                            // point are *same*. no way to do it right now :)
+                            auto wrongExpected = ret.value()->simplifiedExpr()->getACSL(
+                                {.noStateLabelFunctionAt = true});
+                            assert(wrongExpected);
+                            if (!llvm::isa<symb::OverRangeExpr>(*ret.value()))
+                                ensures.push_back("\\result == " + wrongExpected.value().first);
+                            else
+                                ensures.push_back(wrongExpected.value().first);
+                        }
                     }
                 }
 
@@ -180,15 +194,18 @@ namespace acslg::spec_generator {
                                          std::make_move_iterator(rhsOpt.value().second.end()));
                 }
 
-                auto req = joinConj(path.getPathConditions(), oldPoint);
-                if (ensures.empty() && req.empty() && assignsSpec == "\\nothing")
+                auto [assumesSpec, requiresSpec] = joinConj(path.getPathConditions(), oldPoint);
+                if (ensures.empty() && assumesSpec.empty() && requiresSpec.empty() &&
+                    assignsSpec == "\\nothing")
                     continue;
 
                 std::string bname = "b" + std::to_string(idx++);
                 std::string block;
                 block += IND1 + "behavior " + bname + ":\n";
-                if (!req.empty())
-                    block += IND2 + "assumes " + req + ";\n";
+                if (!assumesSpec.empty())
+                    block += IND2 + "assumes " + assumesSpec + ";\n";
+                if (!requiresSpec.empty())
+                    block += IND2 + "requires " + requiresSpec + ";\n";
                 block += IND2 + "assigns " + assignsSpec + ";\n";
                 for (auto &e : ensures)
                     block += IND2 + "ensures " + e + ";\n";
@@ -206,30 +223,33 @@ namespace acslg::spec_generator {
             std::vector<std::string> names;
             for (int i = 0; i < (int)behaviors.size(); ++i)
                 names.push_back("b" + std::to_string(i));
-            out += IND1 + "complete behaviors " + joinCSV(names) + ";\n";
+            // out += IND1 + "complete behaviors " + joinCSV(names) + ";\n";
             return std::pair{out, std::move(allUsedPoints)};
         }
 
       private:
         std::string id_;
 
-        static std::string joinConj(const analyzer::PathConditions &conds,
-                                    symb::SourcePoint oldPoint) {
-            std::string s;
+        static std::pair<std::string, std::string> joinConj(const analyzer::PathConditions &conds,
+                                                            symb::SourcePoint oldPoint) {
+            std::string assumeStr;
+            std::string requireStr;
             for (auto &cond : conds) {
                 if (cond->isUnknown())
                     continue;
-                auto rf = cond->simplifiedExpr()->getACSL({.predefinedLabels = {{oldPoint, "Old"}}},
-                                                          oldPoint);
+                auto simplified = cond->simplifiedExpr();
+                auto rf = simplified->getACSL({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
                 if (!rf || rf.value().first.empty())
                     continue;
                 if (!rf.value().second.empty())
                     continue;
-                if (!s.empty())
-                    s += " && ";
-                s += rf.value().first;
+                auto &target =
+                    llvm::isa<symb::OverRangeExpr>(simplified.get()) ? assumeStr : requireStr;
+                if (!target.empty())
+                    target += " && ";
+                target += rf.value().first;
             }
-            return s;
+            return {assumeStr, requireStr};
         }
 
         static std::string joinCSV(const std::vector<std::string> &v) {

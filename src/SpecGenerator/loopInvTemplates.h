@@ -3,7 +3,6 @@
 #ifndef __ACSLG_SRC_SPECGENERATOR_LOOPINVTEMPLATES_H__
 #define __ACSLG_SRC_SPECGENERATOR_LOOPINVTEMPLATES_H__
 
-
 #include "stringTemplate.h"
 
 namespace acslg::spec_generator {
@@ -17,37 +16,29 @@ namespace acslg::spec_generator {
     const StringTemplate FIND_MAX_LOOP_WITH_VAR_BOUND = R"(loop invariant \forall integer j;
         0 <= j < ${index} ==> ${m} >= ${array}[j];
     loop invariant \exists integer j;
-        0 <= j < ${index} ==> (\valid(${array} + j) && ${array}[j] == ${m});
-    loop invariant 0 <= ${index} < ${n};
-    loop invariant ${array} == \at(${array}, Pre) && ${n} == \at(${n}, Pre);
-    loop invariant \valid(${array} + (0..${n}-1));)";
+        0 <= j < ${index} && ${m} == ${array}[j];
+    loop invariant 0 <= ${index} <= ${n};)";
 
     // Placeholders: n, index, array, m.
     const StringTemplate FIND_MAX_LOOP_WITH_OTHER_BOUND = R"(loop invariant \forall integer j;
         0 <= j < ${index} ==> ${m} >= ${array}[j];
     loop invariant \exists integer j;
-        0 <= j < ${index} ==> (\valid(${array} + j) && ${array}[j] == ${m});
-    loop invariant 0 <= ${index} < ${n};
-    loop invariant ${array} == \at(${array}, Pre);
-    loop invariant \valid(${array} + (0..${n}-1));)";
+        0 <= j < ${index} && ${m} == ${array}[j];
+    loop invariant 0 <= ${index} <= ${n};)";
 
     // Placeholders: n, index, array, m.
     const StringTemplate FIND_MIN_LOOP_WITH_VAR_BOUND = R"(loop invariant \forall integer j;
         0 <= j < ${index} ==> ${m} <= ${array}[j];
     loop invariant \exists integer j;
-        0 <= j < ${index} ==> (\valid(${array} + j) && ${array}[j] == ${m});
-    loop invariant 0 <= ${index} < ${n};
-    loop invariant ${array} == \at(${array}, Pre) && ${n} == \at(${n}, Pre);
-    loop invariant \valid(${array} + (0..${n}-1));)";
+        0 <= j < ${index} && ${m} == ${array}[j]);
+    loop invariant 0 <= ${index} < ${n};)";
 
     // Placeholders: n, index, array, m.
     const StringTemplate FIND_MIN_LOOP_WITH_OTHER_BOUND = R"(loop invariant \forall integer j;
         0 <= j < ${index} ==> ${m} <= ${array}[j];
     loop invariant \exists integer j;
-        0 <= j < ${index} ==> (\valid(${array} + j) && ${array}[j] == ${m});
-    loop invariant 0 <= ${index} < ${n};
-    loop invariant ${array} == \at(${array}, Pre);
-    loop invariant \valid(${array} + (0..${n}-1));)";
+        0 <= j < ${index} && ${m} == ${array}[j]);
+    loop invariant 0 <= ${index} < ${n};)";
 } // namespace acslg::spec_generator
 
 #endif

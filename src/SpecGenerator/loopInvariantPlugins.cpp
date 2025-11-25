@@ -10,6 +10,7 @@
 #include "loopInvTemplates.h"
 #include "stringTemplate.h"
 #include "utils.h"
+#include <clang/AST/RecursiveASTVisitor.h>
 #include "Symbolic/expr.h"
 #include "macros.h"
 #include "specGenerator.h"
@@ -17,6 +18,50 @@
 
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
+
+    namespace {
+        // Detect whether a statement subtree touches array or pointer typed expressions.
+        bool stmtHasArrayOrPointer(const clang::Stmt *stmt) {
+            if (!stmt)
+                return false;
+            struct ArrayOrPointerVisitor : clang::RecursiveASTVisitor<ArrayOrPointerVisitor> {
+                bool found = false;
+
+                bool TraverseStmt(clang::Stmt *S) {
+                    if (found || !S)
+                        return true;
+                    return clang::RecursiveASTVisitor<ArrayOrPointerVisitor>::TraverseStmt(S);
+                }
+
+                bool VisitExpr(clang::Expr *E) {
+                    if (!E)
+                        return true;
+                    auto qt = E->getType();
+                    if (!qt.isNull() && (qt->isPointerType() || qt->isArrayType()))
+                        found = true;
+                    if (llvm::isa<clang::ArraySubscriptExpr>(E))
+                        found = true;
+                    if (auto *UO = llvm::dyn_cast<clang::UnaryOperator>(E)) {
+                        if (UO->getOpcode() == clang::UO_Deref ||
+                            UO->getOpcode() == clang::UO_AddrOf)
+                            found = true;
+                    }
+                    return true;
+                }
+            };
+
+            ArrayOrPointerVisitor visitor;
+            visitor.TraverseStmt(const_cast<clang::Stmt *>(stmt));
+            return visitor.found;
+        }
+
+        bool loopHasArrayOrPointer(const LoopInfo &loopInfo) {
+            return stmtHasArrayOrPointer(loopInfo.bodyStmt) ||
+                   stmtHasArrayOrPointer(loopInfo.condExpr) ||
+                   stmtHasArrayOrPointer(loopInfo.incStmt) ||
+                   stmtHasArrayOrPointer(loopInfo.initStmt);
+        }
+    } // namespace
 
     class CheckAndDumpLoopInfoPlugin : public PathInsensitiveLoopInvPlugin {
       public:
@@ -168,8 +213,12 @@ namespace acslg::spec_generator {
                 return {};
             }
 
-            auto [spec, normalPostInfos, interruptPostInfos] = analyzer::buildLoopInvariant(
-                std::move(loopCond), *symbolEntry, *loopCurrent, entryAndCurrentInfo.inactivePaths);
+            bool generateBranches =
+                !loopHasArrayOrPointer(loopInfo); // collapse branches for array/pointer loops
+
+            auto [spec, normalPostInfos, interruptPostInfos] =
+                analyzer::buildLoopInvariant(std::move(loopCond), *symbolEntry, *loopCurrent,
+                                             entryAndCurrentInfo.inactivePaths, generateBranches);
 
             std::vector<PostPSInfo> normalPostPSInfos;
             for (auto &postInfo : normalPostInfos)
@@ -760,6 +809,7 @@ namespace acslg::spec_generator {
             }
 
             std::string spec;
+            PostPIInfo normalPostInfo;
 
             // Hook which deals with every if.
             auto ifVisitor = utils::StmtVisitor{[&](const clang::IfStmt *s) {
@@ -767,9 +817,11 @@ namespace acslg::spec_generator {
                     return;
 
                 std::optional<StringTemplate> specTemplate{std::nullopt};
+                std::optional<symb::MaxMinOverRange::Extremum> extremum{};
                 // Parameters for template filling, see StringTemplate for more information.
                 std::optional<std::string> param_n{std::nullopt}, param_array{std::nullopt},
                     param_index{std::nullopt}, param_m{std::nullopt};
+                std::unique_ptr<symb::SymbolAddress> arrayAddr{nullptr};
                 // @SgtPepper114 2025/10/26: I'm in the middle of rewriting `regularForm` as
                 // `getACSL`. This plugin is a beast and barely anyone uses it, so I'm not gonna
                 // worry about the correct way to do it for now. If it breaks, just band-aid it by
@@ -817,6 +869,12 @@ namespace acslg::spec_generator {
                             if (auto acslExpected = addr.value()->getACSLOfValue(
                                     {.noStateLabelFunctionAt = true})) {
                                 param_array = acslExpected.value().first;
+                                if (auto *symbolAddr =
+                                        llvm::dyn_cast<symb::Address>(addr.value().get().get()))
+                                    arrayAddr = std::make_unique<symb::SymbolAddress>(
+                                        arraySub->getType(),
+                                        symbolAddr->addressClone().into_underlying(),
+                                        entryAndCurrentInfo.symbolicLoopEntry->getStartPoint());
                                 return true;
                             }
                         return false;
@@ -837,6 +895,12 @@ namespace acslg::spec_generator {
                                 if (auto acslExpected = addr.value()->getACSLOfValue(
                                         {.noStateLabelFunctionAt = true})) {
                                     param_array = acslExpected.value().first;
+                                    if (auto *symbolAddr =
+                                            llvm::dyn_cast<symb::Address>(addr.value().get().get()))
+                                        arrayAddr = std::make_unique<symb::SymbolAddress>(
+                                            unary->getType(),
+                                            symbolAddr->addressClone().into_underlying(),
+                                            entryAndCurrentInfo.symbolicLoopEntry->getStartPoint());
                                     return true;
                                 }
                             return false;
@@ -855,6 +919,12 @@ namespace acslg::spec_generator {
                             if (auto acslExpected = addr.value()->getACSLOfValue(
                                     {.noStateLabelFunctionAt = true})) {
                                 param_array = acslExpected.value().first;
+                                if (auto *symbolAddr =
+                                        llvm::dyn_cast<symb::Address>(addr.value().get().get()))
+                                    arrayAddr = std::make_unique<symb::SymbolAddress>(
+                                        declRef->getType(),
+                                        symbolAddr->addressClone().into_underlying(),
+                                        entryAndCurrentInfo.symbolicLoopEntry->getStartPoint());
                                 return true;
                             }
                             return false;
@@ -911,6 +981,8 @@ namespace acslg::spec_generator {
                             else
                                 specTemplate = maxOnLeft ? FIND_MAX_LOOP_WITH_OTHER_BOUND
                                                          : FIND_MIN_LOOP_WITH_OTHER_BOUND;
+                            extremum = maxOnLeft ? symb::MaxMinOverRange::Extremum::Max
+                                                 : symb::MaxMinOverRange::Extremum::Min;
                             break;
                         case BO_GE:
                         case BO_GT:
@@ -920,6 +992,8 @@ namespace acslg::spec_generator {
                             else
                                 specTemplate = maxOnLeft ? FIND_MIN_LOOP_WITH_OTHER_BOUND
                                                          : FIND_MAX_LOOP_WITH_OTHER_BOUND;
+                            extremum = maxOnLeft ? symb::MaxMinOverRange::Extremum::Min
+                                                 : symb::MaxMinOverRange::Extremum::Max;
                             break;
                         default: return;
                     }
@@ -995,6 +1069,9 @@ namespace acslg::spec_generator {
                 }
                 DEBUG("Else Verified.");
 
+                if (!arrayAddr || extremum == std::nullopt)
+                    return;
+
                 // Pretty sure we have found a 'find_max' loop.
                 spec += (*specTemplate)
                             .to_string(NameMap{{"n", *param_n},
@@ -1002,19 +1079,50 @@ namespace acslg::spec_generator {
                                                {"index", *param_index},
                                                {"m", *param_m}}) +
                         "\n";
+
+                using enum symb::BinaryOpExpr::Operator;
+                auto arrayRange = std::make_unique<symb::SymbolAddress>(*arrayAddr);
+                if (indexStep > 0) {
+                    arrayRange->resetOffset(); // just zero offset, :)
+                    arrayRange->setLength(indexInfo.indexBound->clone());
+                    // arrayRange->setOffset(indexInfo.indexSymbolicValue->clone());
+                    // arrayRange->setLength(std::make_unique<symb::BinaryOpExpr>(
+                    //     indexInfo.indexBound->clone(), Subtract,
+                    //     indexInfo.indexSymbolicValue->clone()));
+                } else {
+                    arrayRange->resetOffset(); // just zero offset, :)
+                    // arrayRange->setOffset(indexInfo.indexBound->clone());
+                    arrayRange->setLength(std::make_unique<symb::BinaryOpExpr>(
+                        indexInfo.indexSymbolicValue->clone(), Subtract,
+                        indexInfo.indexBound->clone()));
+                }
+
+                auto &entryPath = entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0);
+                auto maxAddrIt  = entryPath->getVarAddr().find(maxDecl);
+                if (maxAddrIt == entryPath->getVarAddr().end())
+                    return;
+
+                auto pointAfterLoop = symb::SourcePoint::fromStmtAfter(
+                    loopInfo.bodyStmt,
+                    entryAndCurrentInfo.symbolicLoopEntry->getContext().getSourceManager(),
+                    entryAndCurrentInfo.symbolicLoopEntry->getContext().getLangOptions());
+                symb::AddressBox maxAddrBox{*maxAddrIt->second};
+                normalPostInfo.memoryMap.emplace(
+                    maxAddrBox, std::make_unique<symb::MaxMinOverRange>(std::move(arrayRange), "k",
+                                                                        *extremum, pointAfterLoop));
             }}; // ifVisitor end
             ifVisitor.runOn(loopInfo.bodyStmt);
 
             if (spec.empty())
                 return GenResultType{.acsl                         = std::nullopt,
                                      .acslUsedPoints               = {},
-                                     .globalNormalPathPostInfo     = {},
+                                     .globalNormalPathPostInfo     = normalPostInfo,
                                      .globalInterruptPathsPostInfo = {}};
 
             spec.pop_back(); // earse \n
             return GenResultType{.acsl                         = spec,
                                  .acslUsedPoints               = {},
-                                 .globalNormalPathPostInfo     = {},
+                                 .globalNormalPathPostInfo     = std::move(normalPostInfo),
                                  .globalInterruptPathsPostInfo = {}};
         }
 
