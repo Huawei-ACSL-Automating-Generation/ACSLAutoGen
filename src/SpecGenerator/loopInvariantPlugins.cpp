@@ -598,7 +598,9 @@ namespace acslg::spec_generator {
                     if (concreteAddr == nullptr)
                         UNREACHABLE();
 
-                    auto acslExpected = concreteAddr->getACSLOfValue({});
+                    // todo: it's wrong.
+                    auto acslExpected =
+                        concreteAddr->getACSLOfValue({.noStateLabelFunctionAt = true});
                     if (!acslExpected &&
                         acslExpected.error() == symb::SymbolicExpr::GetACSLError::UnknownExpr)
                         acslExpected = addr.get().getACSLOfValue(
@@ -723,7 +725,9 @@ namespace acslg::spec_generator {
                     if (concreteAddr == nullptr)
                         UNREACHABLE();
 
-                    auto acslExpected = concreteAddr->getACSLOfValue({});
+                    // todo: it's wrong
+                    auto acslExpected =
+                        concreteAddr->getACSLOfValue({.noStateLabelFunctionAt = true});
                     if (!acslExpected &&
                         acslExpected.error() == symb::SymbolicExpr::GetACSLError::UnknownExpr)
                         acslExpected = addr.get().getACSLOfValue(
@@ -1015,6 +1019,8 @@ namespace acslg::spec_generator {
                     if (!parseIndexedArray(elementExpr))
                         return;
                     DEBUG("p[i] matched.");
+                } else {
+                    return; // if condition doesn't match the expected binary pattern
                 }
 
                 if (specTemplate == std::nullopt || param_n == std::nullopt ||

@@ -307,6 +307,8 @@ namespace acslg::spec_generator {
                 toUpdate.pathState = info.pathState;
                 if (info.pathState == analyzer::Path::PathState::Return) {
                     assert(info.returnExpr);
+                    if (info.returnExpr.value()->isUnknown())
+                        return;
                     toUpdate.returnExpr =
                         info.returnExpr.value()->getSubstitutedExpr(currentPath, loopEntryPoint);
                 }
