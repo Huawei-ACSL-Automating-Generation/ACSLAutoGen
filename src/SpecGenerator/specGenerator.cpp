@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <iterator>
-#include <llvm-19/llvm/Support/Casting.h>
+#include <llvm/Support/Casting.h>
 #include <ranges>
 #include <llvm/ADT/TypeSwitch.h>
 #include <unordered_set>

@@ -1,5 +1,5 @@
 #include <iterator>
-#include <llvm-19/llvm/Support/Casting.h>
+#include <llvm/Support/Casting.h>
 #include <queue>
 #include <regex>
 #include "ppl.hh"

@@ -1,7 +1,7 @@
 #include "state.h"
 
 #include <clang/AST/Type.h>
-#include <llvm-19/llvm/Support/Casting.h>
+#include <llvm/Support/Casting.h>
 #include <queue>
 #include <unordered_map>
 #include <memory>

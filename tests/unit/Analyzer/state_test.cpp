@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include <llvm-19/llvm/Support/Casting.h>
+#include <llvm/Support/Casting.h>
 #include "xmock.h"
 #include "state.h"
 #include "clang/AST/Decl.h"

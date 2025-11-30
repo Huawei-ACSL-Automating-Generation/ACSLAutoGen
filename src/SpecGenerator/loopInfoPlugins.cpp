@@ -3,7 +3,7 @@
 #include "specGenerator.h"
 #include "macros.h"
 #include "state.h"
-#include <llvm-19/llvm/Support/Casting.h>
+#include <llvm/Support/Casting.h>
 
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
