@@ -172,6 +172,18 @@ foreach(a IN LISTS EMIT_STD EMIT_INCLUDES EMIT_SYS_INCLUDES EMIT_DEFS EMIT_OPTS)
   endif()
 endforeach()
 
+# clang tooling needs a valid resource dir so builtin headers (e.g., stddef.h) are found
+find_program(CLANG_PROG clang)
+if(CLANG_PROG)
+  execute_process(
+    COMMAND ${CLANG_PROG} -print-resource-dir
+    OUTPUT_VARIABLE CLANG_RESOURCE_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(CLANG_RESOURCE_DIR)
+    list(APPEND EXTRA_ARGS "-extra-arg=-resource-dir=${CLANG_RESOURCE_DIR}")
+  endif()
+endif()
+
 # Custom command: run the emit_subclasses tool to generate the .inc file
 add_custom_command(
   OUTPUT ${GEN_INC}

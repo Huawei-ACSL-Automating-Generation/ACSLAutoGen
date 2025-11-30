@@ -303,15 +303,7 @@ namespace acslg::analyzer::symbolic {
                         merged.emplace(k, v);
                     } else {
 #ifndef DEBUG_MODE
-                        const auto same = std::visit(
-                            [&](auto a) -> bool {
-                                using T = std::decay_t<decltype(a)>;
-                                if (!std::holds_alternative<T>(it->second))
-                                    return false;
-                                auto b = std::get<T>(it->second);
-                                return a.get() == b.get();
-                            },
-                            v);
+                        const auto same = it->second.get() == v.get();
                         assert(same &&
                                "collectUsedVarsAndAddrs key conflict with different targets");
 #endif

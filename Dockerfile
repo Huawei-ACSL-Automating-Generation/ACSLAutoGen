@@ -27,6 +27,13 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     libzstd-dev \
     libtinfo-dev \
+    opam \
+    graphviz \
+    libcairo2-dev \
+    libgtk-3-dev \
+    libgtksourceview-3.0-dev \
+    libgmp-dev \
+    time \
     && rm -rf /var/lib/apt/lists/*
 
 # -------------------------------------------------------------------
@@ -93,10 +100,10 @@ RUN rm -rf build && \
     -DPPL_LIBRARY=$CONDA_DIR/lib/libppl.so \
     -DZ3_LIBRARY=$Z3_LIBRARY \
     -DZ3_INCLUDE_DIR=$Z3_INCLUDE_DIR \
-    -DZLIB_LIBRARY=$CONDA_DIR/lib/libz.so \
-    -DZLIB_INCLUDE_DIR=$CONDA_DIR/include \
-    -Dzstd_LIBRARY=$CONDA_DIR/lib/libzstd.so \
-    -Dzstd_INCLUDE_DIR=$CONDA_DIR/include \
+    -DZLIB_LIBRARY=/usr/lib/x86_64-linux-gnu/libz.so \
+    -DZLIB_INCLUDE_DIR=/usr/include \
+    -Dzstd_LIBRARY=/usr/lib/x86_64-linux-gnu/libzstd.so \
+    -Dzstd_INCLUDE_DIR=/usr/include \
     -DCMAKE_BUILD_TYPE=Release && \
     make -j$(nproc)
 
