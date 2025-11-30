@@ -34,15 +34,15 @@ This performs ACSL annotation inference on the target C program using Clang's fr
 
 ---
 
-### 📁 Reproducing the noLoop.in Example
+### 📁 Reproducing the experiment
 
-To reproduce the example included in the project (located in `noLoop.in`), simply execute:
+This repository snapshot is tailored for the FM2026 submission. To reproduce the packaged experiment, run the benchmark driver:
 
 ```bash
-./all.sh
+bash benchmark-FM2026/doAll.sh
 ```
 
-This script runs ACSLGen over the test input and demonstrates the end-to-end annotation generation workflow. [Remark: do not use compile.sh, which is only for local test.]
+The script generates ACSL annotations, preprocesses them, runs verification, and collects the successful goals used in the FM2026 results.
 
 ---
 

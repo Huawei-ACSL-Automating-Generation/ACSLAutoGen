@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -10,6 +10,7 @@ ENV PATH=$CONDA_DIR/bin:$PATH
 # -------------------------------------------------------------------
 # Stage 1: Install essential system dependencies and build utilities
 # -------------------------------------------------------------------
+# Added dependencies for Frama-C: opam, graphviz, libcairo2-dev, etc.
 RUN apt-get update && apt-get install -y \
     cmake \
     wget \
@@ -27,7 +28,15 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     libzstd-dev \
     libtinfo-dev \
+    opam \
+    graphviz \
+    libcairo2-dev \
+    libgtk-3-dev \
+    libgtksourceview-3.0-dev \
+    libgmp-dev \
     && rm -rf /var/lib/apt/lists/*
+# Note: libgmp-dev added to system apt because opam usually looks for system headers, 
+# not conda headers, unless explicitly configured.
 
 # -------------------------------------------------------------------
 # Stage 2: Install Miniconda and Conda-based toolchains
@@ -47,7 +56,7 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
         clang=19 \
         gmp ppl zstd     
 
-# Configure Conda-provided GCC as the default compiler
+# Configure Conda-provided GCC as the default compiler (Global setting)
 ENV CC=$CONDA_DIR/bin/x86_64-conda-linux-gnu-cc
 ENV CXX=$CONDA_DIR/bin/x86_64-conda-linux-gnu-c++
 
@@ -71,6 +80,26 @@ RUN git clone https://github.com/Z3Prover/z3.git /tmp/z3 && \
 ENV Z3_INCLUDE_DIR=/opt/z3/include
 ENV Z3_LIBRARY=/opt/z3/lib/libz3.so
 ENV LD_LIBRARY_PATH=/opt/z3/lib:$LD_LIBRARY_PATH
+
+# -------------------------------------------------------------------
+# Stage 3.5: Install Opam and Frama-C 31.0 (Argon)
+# -------------------------------------------------------------------
+# 1. Initialize Opam.
+# 2. Create a switch (environment) with OCaml compiler.
+# 3. Install Frama-C deps.
+# Note: We temporarily unset CC/CXX to avoid conflict between Conda GCC and Opam's build system
+#       if Opam expects system paths. Or we explicitly trust the system compiler for OCaml.
+RUN opam init --disable-sandboxing --shell-setup -y && \
+    opam switch create 4.14.1 && \
+    eval $(opam env) && \
+    opam install -y depext && \
+    opam install -y "frama-c=31.0"
+
+# Add Opam environment variables to PATH so frama-c is executable
+ENV PATH="/root/.opam/4.14.1/bin:$PATH"
+
+# Ensure that Frama-C can find solvers.
+RUN why3 config detect
 
 # -------------------------------------------------------------------
 # Stage 4: Build the target project
@@ -103,4 +132,6 @@ RUN rm -rf build && \
 # -------------------------------------------------------------------
 # Default entrypoint
 # -------------------------------------------------------------------
+# Ensure opam env is loaded in interactive shell
+RUN echo 'eval $(opam env)' >> /root/.bashrc
 CMD ["/bin/bash"]

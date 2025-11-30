@@ -2,14 +2,18 @@
 build/
 .DS_STORE
 *.list
-*.sh
 .cache/
 .clangd
 **/_*/
 
 test.c
 *_acsl.c
+*_with_acsl
 
 benchmark_results.tsv
 benchmark_logs
 benchmark_summary.txt
+verify_results.tsv
+verify_logs
+verify_summary.txt
+fully_verified
