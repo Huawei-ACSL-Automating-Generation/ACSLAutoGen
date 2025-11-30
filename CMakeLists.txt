@@ -4,6 +4,7 @@ project(
   VERSION 1.0.0
   LANGUAGES C CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_compile_options(-Wno-deprecated-declarations)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,6 +38,22 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
 
+set(_acslg_clang_inc_candidates ${Clang_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
+if(LLVM_INCLUDE_DIRS)
+  list(APPEND _acslg_clang_inc_candidates ${LLVM_INCLUDE_DIRS})
+endif()
+if(LLVM_DIR)
+  list(APPEND _acslg_clang_inc_candidates ${LLVM_DIR}/../../../include
+                                          ${LLVM_DIR}/../../include)
+endif()
+if(Clang_DIR)
+  list(APPEND _acslg_clang_inc_candidates ${Clang_DIR}/../../../include
+                                          ${Clang_DIR}/../../include)
+endif()
+find_path(ACSLG_CLANG_INCLUDE_DIR
+          NAMES clang/AST/Type.h
+          HINTS ${_acslg_clang_inc_candidates})
+
 add_library(ACSLG_strict_flags INTERFACE)
 target_compile_options(
   ACSLG_strict_flags
@@ -66,8 +83,13 @@ endif()
 add_library(ACSLG_system_includes INTERFACE)
 target_include_directories(ACSLG_system_includes
                            INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set(_acslg_system_includes ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS}
+                           ${CLANG_INCLUDE_DIRS})
+if(ACSLG_CLANG_INCLUDE_DIR)
+  list(APPEND _acslg_system_includes ${ACSLG_CLANG_INCLUDE_DIR})
+endif()
 target_include_directories(ACSLG_system_includes SYSTEM
-                           INTERFACE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS})
+                           INTERFACE ${_acslg_system_includes})
 
 add_library(ACSLG_compiler_flags INTERFACE)
 target_link_libraries(ACSLG_compiler_flags INTERFACE ACSLG_strict_flags

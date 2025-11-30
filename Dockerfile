@@ -1,117 +1,110 @@
 FROM ubuntu:24.04
 
-# Prevent interactive prompts during package installation
+# Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Define essential environment variables for Conda
+# Define environment variables
 ENV CONDA_DIR=/opt/conda
 ENV PATH=$CONDA_DIR/bin:$PATH
 
 # -------------------------------------------------------------------
-# Stage 1: Install essential system dependencies and build utilities
+# Stage 1: System Dependencies
 # -------------------------------------------------------------------
-# Added dependencies for Frama-C: opam, graphviz, libcairo2-dev, etc.
 RUN apt-get update && apt-get install -y \
+    build-essential \
     cmake \
     wget \
     curl \
     git \
     bzip2 \
     ca-certificates \
-    gnupg \
     python3 \
     python3-pip \
     pkg-config \
     libedit-dev \
     libffi-dev \
+    libgmp-dev \
     libncurses-dev \
     zlib1g-dev \
     libzstd-dev \
-    libtinfo-dev \
     opam \
     graphviz \
     libcairo2-dev \
     libgtk-3-dev \
     libgtksourceview-3.0-dev \
-    libgmp-dev \
+    libfontconfig1-dev \
+    libfreetype6-dev \
     time \
     && rm -rf /var/lib/apt/lists/*
-# Note: libgmp-dev added to system apt because opam usually looks for system headers, 
-# not conda headers, unless explicitly configured.
 
 # -------------------------------------------------------------------
-# Stage 2: Install Miniconda and Conda-based toolchains
+# Stage 2: Install Conda Environment (Conda-Forge Only)
 # -------------------------------------------------------------------
-RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh && \
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-py312_24.11.1-0-Linux-x86_64.sh -O miniconda.sh && \
     bash miniconda.sh -b -p $CONDA_DIR && \
     rm miniconda.sh && \
-    conda update -n base -c defaults conda -y && \
+    conda config --remove channels defaults || true && \
     conda config --add channels conda-forge && \
     conda config --set channel_priority strict && \
     conda install -y \
-        gcc=15.1.0 gxx=15.1.0 \
+        gcc=14 \
+        gxx=14 \
         llvm=19 \
         llvmdev=19 \
         llvm-tools=19 \
         clangdev=19.1.7 \
         clang=19 \
-        gmp ppl zstd     
-
-# Configure Conda-provided GCC as the default compiler (Global setting)
-ENV CC=$CONDA_DIR/bin/x86_64-conda-linux-gnu-cc
-ENV CXX=$CONDA_DIR/bin/x86_64-conda-linux-gnu-c++
-
-# Configure LLVM and Clang CMake package paths
-ENV LLVM_DIR=$CONDA_DIR/lib/cmake/llvm
-ENV Clang_DIR=$CONDA_DIR/lib/cmake/clang
-ENV CMAKE_PREFIX_PATH=$LLVM_DIR:$Clang_DIR:$CMAKE_PREFIX_PATH
+        make \
+        gmp ppl zstd && \
+    conda clean -afy
 
 # -------------------------------------------------------------------
-# Stage 3: Install Z3 Theorem Prover with C++ API support
+# Stage 3: Install Z3 (Source Build)
 # -------------------------------------------------------------------
-RUN git clone https://github.com/Z3Prover/z3.git /tmp/z3 && \
+RUN git clone --depth 1 --branch z3-4.15.7 https://github.com/Z3Prover/z3.git /tmp/z3 && \
     cd /tmp/z3 && \
-    CXX=$CXX python3 scripts/mk_make.py --prefix=/opt/z3 && \
+    CC=$CONDA_DIR/bin/x86_64-conda-linux-gnu-cc \
+    CXX=$CONDA_DIR/bin/x86_64-conda-linux-gnu-c++ \
+    python3 scripts/mk_make.py --prefix=/opt/z3 && \
     cd build && \
     make -j$(nproc) && \
     make install && \
     rm -rf /tmp/z3
-    
-# Expose Z3 headers and libraries for the build system
+
 ENV Z3_INCLUDE_DIR=/opt/z3/include
 ENV Z3_LIBRARY=/opt/z3/lib/libz3.so
-ENV LD_LIBRARY_PATH=/opt/z3/lib:$LD_LIBRARY_PATH
 
 # -------------------------------------------------------------------
-# Stage 3.5: Install Opam and Frama-C 31.0 (Argon)
+# Stage 4: Install Opam and Frama-C
 # -------------------------------------------------------------------
-# 1. Initialize Opam.
-# 2. Create a switch (environment) with OCaml compiler.
-# 3. Install Frama-C deps.
-# Note: We temporarily unset CC/CXX to avoid conflict between Conda GCC and Opam's build system
-#       if Opam expects system paths. Or we explicitly trust the system compiler for OCaml.
-RUN opam init --disable-sandboxing --shell-setup -y && \
-    opam switch create 4.14.1 && \
+RUN export PATH="/usr/bin:/bin:/usr/sbin:/sbin" && \
+    opam init --disable-sandboxing --shell-setup -y --compiler=4.14.2 && \
     eval $(opam env) && \
-    opam install -y depext && \
-    opam install -y "frama-c=31.0"
+    opam install -y "frama-c=31.0" && \
+    opam clean -a -c -s --logs
 
-# Add Opam environment variables to PATH so frama-c is executable
-ENV PATH="/root/.opam/4.14.1/bin:$PATH"
+# Add Opam to PATH
+ENV PATH="/root/.opam/4.14.2/bin:$PATH"
 
-# Ensure that Frama-C can find solvers.
-RUN why3 config detect
+# Detect solvers
+RUN eval $(opam env) && why3 config detect
 
 # -------------------------------------------------------------------
-# Stage 4: Build the target project
+# Stage 5: Configure Environment for Final Project
+# -------------------------------------------------------------------
+ENV CC=$CONDA_DIR/bin/x86_64-conda-linux-gnu-cc
+ENV CXX=$CONDA_DIR/bin/x86_64-conda-linux-gnu-c++
+ENV LLVM_DIR=$CONDA_DIR/lib/cmake/llvm
+ENV Clang_DIR=$CONDA_DIR/lib/cmake/clang
+
+# -------------------------------------------------------------------
+# Stage 6: Build User Project
 # -------------------------------------------------------------------
 WORKDIR /app
 COPY . /app
 
-RUN rm -rf build && \
-    mkdir build && \
-    cd build && \
-    cmake .. \
+RUN rm -rf /app/build && \
+    cmake -S /app -B /app/build \
     -DLLVM_DIR=$LLVM_DIR \
     -DClang_DIR=$Clang_DIR \
     -DCMAKE_PREFIX_PATH=$LLVM_DIR:$Clang_DIR \
@@ -128,11 +121,7 @@ RUN rm -rf build && \
     -Dzstd_LIBRARY=/usr/lib/x86_64-linux-gnu/libzstd.so \
     -Dzstd_INCLUDE_DIR=/usr/include \
     -DCMAKE_BUILD_TYPE=Release && \
-    make -j$(nproc)
+    cmake --build /app/build -j$(nproc)
 
-# -------------------------------------------------------------------
-# Default entrypoint
-# -------------------------------------------------------------------
-# Ensure opam env is loaded in interactive shell
 RUN echo 'eval $(opam env)' >> /root/.bashrc
 CMD ["/bin/bash"]

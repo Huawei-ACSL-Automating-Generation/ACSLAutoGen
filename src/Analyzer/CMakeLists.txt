@@ -119,16 +119,29 @@ set(_all_incs ${_incs} ${_incs_iface})
 set(EMIT_INCLUDES "")
 foreach(dir IN LISTS _all_incs)
   if(dir)
-    list(APPEND EMIT_INCLUDES -I"${dir}")
+    list(APPEND EMIT_INCLUDES -I${dir})
   endif()
 endforeach()
 
 set(_llvm_inc_cands ${LLVM_INCLUDE_DIRS} ${LLVM_INCLUDES})
 set(_clang_inc_cands ${Clang_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
+if(LLVM_DIR)
+  list(APPEND _llvm_inc_cands ${LLVM_DIR}/../../../include ${LLVM_DIR}/../../include)
+endif()
+if(Clang_DIR)
+  list(APPEND _clang_inc_cands ${Clang_DIR}/../../../include ${Clang_DIR}/../../include)
+endif()
+
+find_path(EMIT_CLANG_AST_INCLUDE_DIR
+          NAMES clang/AST/Type.h
+          HINTS ${_clang_inc_cands} ${_llvm_inc_cands})
+if(EMIT_CLANG_AST_INCLUDE_DIR)
+  list(APPEND _clang_inc_cands ${EMIT_CLANG_AST_INCLUDE_DIR})
+endif()
 
 foreach(dir IN LISTS _llvm_inc_cands _clang_inc_cands)
   if(dir)
-    list(APPEND EMIT_SYS_INCLUDES -isystem"${dir}")
+    list(APPEND EMIT_SYS_INCLUDES -isystem${dir})
   endif()
 endforeach()
 
@@ -194,7 +207,7 @@ add_custom_command(
                                                         # file initially
   COMMAND
     $<TARGET_FILE:emit_subclasses> --base acslg::analyzer::symbolic::Symbol -o
-    ${GEN_INC} ${EXTRA_ARGS} ${UMBRELLA_CPP}
+    ${GEN_INC} -p ${CMAKE_BINARY_DIR} ${EXTRA_ARGS} ${UMBRELLA_CPP}
     # compile commands
   DEPENDS emit_subclasses __headers_tu ${UMBRELLA_CPP} # Regenerate if tool, TU,
                                                        # or headers change

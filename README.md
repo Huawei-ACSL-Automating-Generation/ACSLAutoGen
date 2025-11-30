@@ -39,7 +39,7 @@ This performs ACSL annotation inference on the target C program using Clang's fr
 This repository snapshot is tailored for the FM2026 submission. To reproduce the packaged experiment, run the benchmark driver:
 
 ```bash
-bash benchmark-FM2026/doAll.sh
+bash benchmark-FM2026/do_all.sh
 ```
 
 The script generates ACSL annotations, preprocesses them, runs verification, and collects the successful goals used in the FM2026 results.
