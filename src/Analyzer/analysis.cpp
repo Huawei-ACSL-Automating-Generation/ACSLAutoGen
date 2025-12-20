@@ -18,8 +18,11 @@ namespace acslg::analyzer {
             if (!context_.getSourceManager().isInMainFile(loc))
                 continue;
 
+            if (!targetFuncName_.empty() && func->getNameAsString() != targetFuncName_)
+                continue;
             if (func->getNameAsString() == "main" && count)
                 continue;
+
             ++count;
             auto wrappedFunc = std::make_unique<ACSLFunction>(func);
             generateFunctionSpec(wrappedFunc.get());

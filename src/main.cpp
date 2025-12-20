@@ -21,6 +21,11 @@ namespace acslg {
         llvm::cl::desc("Output only the entire AST (Decls) using Clang's pretty print"),
         llvm::cl::cat(ACSLGCategory));
 
+    static llvm::cl::opt<std::string> TargetFunction(
+        "func",
+        llvm::cl::desc("Only analyze the function with this name"),
+        llvm::cl::cat(ACSLGCategory));
+
     class TUASTConsumer : public clang::ASTConsumer {
       public:
         void HandleTranslationUnit(clang::ASTContext &context) override {
@@ -29,7 +34,7 @@ namespace acslg {
                 TUDecl->dump();
             } else {
                 auto acslContext = context::ACSLGContext{context};
-                auto analyzer    = analyzer::ACSLAnalyzer{acslContext};
+                auto analyzer    = analyzer::ACSLAnalyzer(acslContext, std::string(TargetFunction));
                 analyzer.analyzeFunctions();
                 auto &SM       = acslContext.getSourceManager();
                 auto &rewriter = acslContext.getRewriter();
