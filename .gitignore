@@ -17,3 +17,13 @@ verify_results.tsv
 verify_logs
 verify_summary.txt
 fully_verified
+
+# Local WP experiment outputs
+bn_basic_wp_results.txt
+wp_logs_bn_basic/
+
+# Local helper scripts (not part of repo)
+compile.sh
+example.sh
+frama_cpp_wrapper.sh
+print-ast.sh
