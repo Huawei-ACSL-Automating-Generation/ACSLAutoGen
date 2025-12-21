@@ -1,3 +1,7 @@
+/**
+ * @file state.h
+ * @brief Declares symbolic execution state, path tracking, and memory modeling helpers.
+ */
 #ifndef __ACSLG_SRC_ANALYZER_STATE_H__
 #define __ACSLG_SRC_ANALYZER_STATE_H__
 
@@ -93,8 +97,11 @@ namespace acslg::analyzer {
          * and its associated symbolic expression in a flattened sequence.
          */
         struct flat_view;
+        /// @brief Default construct an empty memory model.
         MemoryModel() = default;
+        /// @brief Copy construct, duplicating all stored symbolic ranges.
         MemoryModel(const MemoryModel &);
+        /// @brief Copy-assign, replacing memory content with another model.
         MemoryModel &operator=(const MemoryModel &);
         MemoryModel(MemoryModel &&)            = default;
         MemoryModel &operator=(MemoryModel &&) = default;
@@ -597,14 +604,36 @@ namespace acslg::analyzer {
         MemoryModel &owner_; ///< Reference to owning MemoryModel
     };
 
+    /**
+     * @class Path
+     * @brief Represents a single symbolic execution path and its evolving memory state.
+     *
+     * A Path owns variable allocations, symbolic memory, accumulated path conditions, and the
+     * current control state (e.g., continuing, breaking, returning). It is cloned and merged while
+     * exploring control-flow constructs.
+     */
     class Path {
       public:
         using EvalResult = std::pair<std::vector<utils::not_null<std::unique_ptr<Path>>>, Formulas>;
 
+        /**
+         * @brief Construct a path with an initial source point.
+         * @param context [in] Shared analysis context for AST and rewrite operations.
+         * @param startPoint [in] Source location representing where symbolic execution begins.
+         */
         Path(context::ACSLGContext &context, symbolic::SourcePoint startPoint)
             : context_(context), startPoint_(startPoint) {};
         ~Path() = default;
+        /**
+         * @brief Copy constructor supporting shallow or deep semantics depending on usage.
+         * @param other [in] Path to copy from.
+         * @param shallowCopy [in] When true, reuses symbolic expressions instead of duplicating.
+         */
         Path(const Path &other, bool shallowCopy);
+        /**
+         * @brief Swap all internal resources with another path.
+         * @param o [in,out] Other path instance to exchange state with.
+         */
         void swap(Path &o) noexcept;
 
         enum class PathState {
@@ -614,20 +643,57 @@ namespace acslg::analyzer {
             Return
         };
 
+        /**
+         * @brief Recreate symbolic values using a new starting source point.
+         * @param newStartPoint [in] Source point that tags newly generated symbols.
+         */
         void resymbolize(symbolic::SourcePoint newStartPoint);
 
+        /**
+         * @brief Derive the symbolic l-value address from a left-hand side expression.
+         * @param lhs [in] Expression used as an assignment target.
+         * @return Address pointing to the storage referenced by the expression.
+         */
         utils::not_null<std::unique_ptr<symbolic::Address>> extractLValue(const clang::Expr *lhs);
 
+        /**
+         * @brief Retrieve the symbolic value of a variable within the path.
+         * @param var [in] Variable declaration to query.
+         * @return A clone of the stored symbolic expression.
+         */
         utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> getVarState(
             const clang::VarDecl *var) const;
+        /**
+         * @brief Access accumulated path conditions.
+         * @return Const reference to path condition set.
+         */
         const PathConditions &getPathConditions() const;
 
+        /**
+         * @brief Allocate symbolic memory for a variable if not already allocated.
+         * @param var [in] Variable declaration to allocate.
+         * @return Pointer to the symbolic variable address.
+         */
         utils::not_null<symbolic::VariableAddress *> allocMemory(const clang::VarDecl *);
 
+        /**
+         * @brief Write a symbolic value to the specified address in memory.
+         * @param addr [in] Target address.
+         * @param expr [in] Symbolic expression to store.
+         */
         void updateMemory(const symbolic::Address &addr,
                           utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr);
+        /**
+         * @brief Update the symbolic state of a variable.
+         * @param var [in] Variable declaration being updated.
+         * @param expr [in] New symbolic value.
+         */
         void updateVarState(utils::not_null<const clang::VarDecl *> var,
                             utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr);
+        /**
+         * @brief Add a new constraint to the path condition set.
+         * @param cond [in] Constraint expression to insert.
+         */
         void insertPathCondition(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> cond);
 
         void setReturnExpr(
@@ -638,15 +704,45 @@ namespace acslg::analyzer {
             }
             returnExpr_.emplace(std::move(expr).value().into_underlying());
         };
+        /// @brief Update the control-flow marker for this path.
         void setPathState(PathState state) { currentState_ = state; }
 
+        /// @brief Check whether the path is still active (not terminated or branched away).
         bool isActive() const { return currentState_ == PathState::Step; }
+        /**
+         * @brief Determine if a memory address has been modified since another path snapshot.
+         * @param addr [in] Address to compare.
+         * @param since [in] Reference path providing the baseline state.
+         * @return True if the address holds the same symbolic value.
+         */
         bool isUnchanged(const symbolic::Address &addr, const Path &since) const;
+        /**
+         * @brief Test if the address refers to a structure object.
+         * @param addr [in] Address to inspect.
+         * @return True if the address resolves to a structure.
+         */
         bool is_point_to_structure(const symbolic::Address &addr) const;
+        /**
+         * @brief Merge another compatible path into this one, reconciling memory and conditions.
+         * @param other [in] Path to merge.
+         */
         void mergeWith(const Path &other);
+        /**
+         * @brief Create a deep copy of the path.
+         * @return Newly allocated clone with duplicated symbolic state.
+         */
         std::unique_ptr<Path> clone() const;
 
+        /**
+         * @brief Produce a textual dump of the path for debugging.
+         * @return String representation of state and constraints.
+         */
         std::string dump() const;
+        /**
+         * @brief Evaluate a clang expression symbolically.
+         * @param expr [in] Expression to evaluate.
+         * @return Pair of forked paths (if branching occurs) and resulting symbolic values.
+         */
         EvalResult evalExpr(const clang::Expr *expr);
         friend class ProgramState;
 
@@ -683,52 +779,138 @@ namespace acslg::analyzer {
         const clang::Stmt *stmtCtx_ = nullptr;
     };
 
+    /**
+     * @class ProgramState
+     * @brief Owns the collection of active paths for a function and coordinates stepping logic.
+     *
+     * A ProgramState orchestrates symbolic execution by advancing statements, splitting on
+     * branches, and merging paths. It also exposes helpers to clone states and introspect
+     * execution progress.
+     */
     class ProgramState {
       public:
+        /**
+         * @brief Construct with an initial path and function wrapper.
+         * @param initialPath [in] Pre-built symbolic path to seed execution.
+         * @param func [in] Wrapper around the function being analyzed.
+         * @param context [in] Shared analysis context.
+         */
         ProgramState(std::unique_ptr<Path> initialPath,
                      std::unique_ptr<ACSLFunction> func,
                      context::ACSLGContext &context);
+        /**
+         * @brief Construct an empty state with a function wrapper; paths are created on init().
+         * @param func [in] Target function wrapper.
+         * @param context [in] Shared analysis context.
+         */
         ProgramState(std::unique_ptr<ACSLFunction> func, context::ACSLGContext &context);
         ~ProgramState() = default;
         ProgramState(const ProgramState &);
         ProgramState(ProgramState &&) = default;
         ProgramState &operator=(ProgramState &&);
 
+        /// @brief Initialize the program state before stepping through statements.
         void init();
 
+        /**
+         * @brief Step through a statement for all active paths.
+         * @param stmt [in] Statement to execute symbolically.
+         */
         void step(const clang::Stmt *stmt);
+        /**
+         * @brief Symbolically evaluate an expression across paths.
+         * @param expr [in] Expression to handle.
+         */
         void stepExpr(const clang::Expr *expr);
 
+        /**
+         * @brief Allocate memory for newly declared variables in the given declaration statement.
+         * @param declStmt [in] Declaration statement containing variables.
+         */
         void addNewDecls(const clang::DeclStmt *declStmt);
 
+        /**
+         * @brief Update path states according to control-flow constructs.
+         * @param state [in] Path state to assign.
+         * @param stmt [in] Statement that triggered the transition.
+         */
         void setStates(Path::PathState state, const clang::Stmt *stmt);
 
+        /**
+         * @brief Set return expression for all active paths.
+         * @param expr [in] Expression representing return value.
+         */
         void setReturnExpr(const clang::Expr *expr);
+        /**
+         * @brief Update variable state for a binary assignment operator.
+         * @param binOp [in] Binary operator describing the assignment.
+         */
         void updateVarState(const clang::BinaryOperator *binOp);
 
+        /**
+         * @brief Split the current state into active and inactive subsets.
+         * @return Pair of unique_ptrs for active and inactive states.
+         */
         std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<ProgramState>> splitActiveInactive();
+        /**
+         * @brief Merge multiple program states into a single combined state.
+         * @param states [in] Collection of state pointers to merge.
+         * @return Combined ProgramState owning merged paths.
+         */
         static std::unique_ptr<ProgramState> merge(const std::vector<const ProgramState *> &states);
         static std::unique_ptr<ProgramState> merge(
             const std::vector<std::unique_ptr<ProgramState>> &states);
+        /**
+         * @brief Deep-copy the program state, optionally with or without paths.
+         * @param withPath [in] Whether to clone path data.
+         * @return Cloned ProgramState.
+         */
         std::unique_ptr<ProgramState> clone(bool withPath = true) const;
+        /**
+         * @brief Clone the state while replacing its paths with supplied ones.
+         * @param newPaths [in,out] Paths to attach to the cloned state.
+         * @return Newly allocated ProgramState with moved-in paths.
+         */
         std::unique_ptr<ProgramState> cloneWithPaths(
             std::vector<std::unique_ptr<Path>> &newPaths) const;
+        /// @brief True if all paths are inactive (terminated or returned).
         bool isInactive() const;
 
+        /// @brief Dump a human-readable rendering of the program state.
         std::string dump() const;
+        /// @brief Reset any break markers after finishing a loop.
         void resetBreakState();
+        /**
+         * @brief Recreate symbols in contained paths using a new start point.
+         * @param newStartPoint [in] Source point for new symbols.
+         */
         void resymbolize(symbolic::SourcePoint newStartPoint);
 
+        /// @brief Append a new path to the managed collection.
         void insertPath(utils::not_null<std::unique_ptr<Path>> path) {
             paths_.push_back(std::move(path));
         }
+        /// @brief Access all paths (const).
         auto getPaths() const -> const auto & { return paths_; }
+        /// @brief Access all paths (mutable).
         auto getPaths() -> auto & { return paths_; }
+        /// @brief Access the wrapped function.
         auto getFunction() const -> const auto & { return func_; }
+        /// @brief Access the shared context.
         auto getContext() const -> const auto & { return context_; }
+        /// @brief Access the starting source point.
         auto getStartPoint() const -> const auto & { return startPoint_; }
 
+        /**
+         * @brief Extract and remove a specific path by index.
+         * @param i [in] Index of the path to remove.
+         * @return Optional path if index valid.
+         */
         std::optional<utils::not_null<std::unique_ptr<Path>>> takePath(size_t i);
+        /**
+         * @brief Remove and return all tracked paths.
+         * @return Vector of moved-out paths.
+         */
         std::vector<utils::not_null<std::unique_ptr<Path>>> takeAllPaths();
 
       private:
@@ -755,12 +937,21 @@ namespace acslg::analyzer {
         const clang::Stmt *stmtCtx_ = nullptr;
     };
 
+    /**
+     * @struct VarManager
+     * @brief Tracks variables encountered across paths for invariant generation.
+     */
     struct VarManager {
         size_t numVars = 0;
         std::unordered_map<std::string, size_t> varIndexMap;
         std::vector<std::string> orderedVars;
         std::vector<const clang::VarDecl *> varDecls;
 
+        /**
+         * @brief Build a variable manager from a collection of paths.
+         * @param paths [in] Paths to scan for variable addresses.
+         * @return Populated VarManager instance.
+         */
         static VarManager fromPaths(
             const std::vector<utils::not_null<std::unique_ptr<Path>>> &paths) {
             VarManager vm;
@@ -798,6 +989,11 @@ namespace acslg::analyzer {
             return vm;
         }
 
+        /**
+         * @brief Helper to build a manager from a single path.
+         * @param path [in] Path to introspect.
+         * @return Populated VarManager.
+         */
         static VarManager fromPath(const Path &path) {
             std::vector<utils::not_null<std::unique_ptr<Path>>> single;
             single.emplace_back(path.clone());
@@ -805,6 +1001,10 @@ namespace acslg::analyzer {
         }
     };
 
+    /**
+     * @struct InvsAndPostStates
+     * @brief Holds generated invariants and corresponding post-states for loops.
+     */
     struct InvsAndPostStates {
         std::optional<std::string> invs;
         using MemoryMapAndPathConds = std::pair<
@@ -814,11 +1014,28 @@ namespace acslg::analyzer {
         std::vector<std::vector<MemoryMapAndPathConds>> interruptPostStates;
     };
 
+    /**
+     * @brief Build loop invariants from the condition and explored paths.
+     * @param loopCond [in] Symbolic loop condition.
+     * @param paths [in] Active execution paths to analyze.
+     * @param initState [in] Initial program state before the loop.
+     * @param generateBranches [in] Whether to enumerate branch-specific invariants.
+     * @return Invariants and post-states captured for the loop.
+     */
     InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
                                          const std::vector<std::unique_ptr<Path>> &paths,
                                          const ProgramState &initState,
                                          bool generateBranches = true);
 
+    /**
+     * @brief Build loop invariants from a single entry path and potential inactive paths.
+     * @param loopCond [in] Symbolic loop condition.
+     * @param entryPath [in] Path at loop entry.
+     * @param loopCurrent [in] Program state representing the loop body evaluation.
+     * @param inactivePaths [in] Range of inactive paths that may represent interrupts.
+     * @param generateBranches [in] Whether to enumerate branch-specific invariants.
+     * @return Invariants and post-states captured for the loop.
+     */
     InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
                                          const Path &entryPath,
                                          const ProgramState &loopCurrent,

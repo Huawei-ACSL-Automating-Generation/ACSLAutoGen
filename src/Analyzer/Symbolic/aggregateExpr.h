@@ -1,3 +1,7 @@
+/**
+ * @file aggregateExpr.h
+ * @brief Declares symbolic aggregate expressions such as range sums and quantified ranges.
+ */
 #ifndef __ACSLG_SRC_ANALYZER_SYMBOLIC_AGGREGATEEXPR_H__
 #define __ACSLG_SRC_ANALYZER_SYMBOLIC_AGGREGATEEXPR_H__
 
@@ -8,6 +12,10 @@
 #include "Utils/utils.h"
 
 namespace acslg::analyzer::symbolic {
+    /**
+     * @class SymbolAddress::RangeIndex
+     * @brief Placeholder representing the induction variable when reasoning over address ranges.
+     */
     class SymbolAddress::RangeIndex : public SymbolicExpr {
       public:
         RangeIndex(const RangeIndex &)            = default;
@@ -24,18 +32,39 @@ namespace acslg::analyzer::symbolic {
 
         // SymbolicExpr
       public:
+        /**
+         * @brief Clone the range index.
+         * @return Newly allocated RangeIndex.
+         */
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
+        /**
+         * @brief Dump a human-readable representation.
+         * @return Textual description.
+         */
         std::string dump() const override;
+        /**
+         * @brief Equality check ignoring the placeholder name (names do not affect semantics).
+         * @param other Expression to compare.
+         */
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override;
         bool isLinear() const override { return false; };
         int getMaxDegree() const override { return -1; };
+        /**
+         * @brief Substitute using path/point context; range indices are stable and just clone.
+         */
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &,
             const SourcePoint &) const override;
+        /**
+         * @brief Replace the range index with a concrete expression when range is instantiated.
+         */
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
+        /**
+         * @brief Substitute value expressions using a map keyed by expression hashes.
+         */
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
             const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
                 &hashToExprMap) const override;
@@ -53,6 +82,10 @@ namespace acslg::analyzer::symbolic {
         std::string name_;
     };
 
+    /**
+     * @class OverRangeExpr
+     * @brief Base class for expressions that quantify or aggregate over a symbolic address range.
+     */
     class OverRangeExpr : public SymbolicExpr {
       public:
         OverRangeExpr(const OverRangeExpr &);
@@ -106,21 +139,34 @@ namespace acslg::analyzer::symbolic {
                             deriveType(range->getPointeeType()),
                             std::move(range),
                             indexName),
-              Symbol(Kind::K_SumOverRange), fromPoint_(std::move(fromPoint)) {}
+             Symbol(Kind::K_SumOverRange), fromPoint_(std::move(fromPoint)) {}
 
         // SymbolicExpr
+        /**
+         * @brief Clone the sum-over-range expression.
+         */
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override {
             return std::make_unique<SumOverRange>(*this);
         };
+        /// @brief Dump a readable description of the sum.
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override;
+        /**
+         * @brief Substitute symbols using a path/point context and rebuild the range.
+         */
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
+        /**
+         * @brief Replace the range index with a concrete expression.
+         */
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
+        /**
+         * @brief Substitute nested value expressions by hash mapping.
+         */
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
             const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
                 &hashToExprMap) const override;
@@ -181,12 +227,14 @@ namespace acslg::analyzer::symbolic {
                             Type{ScalarKind::Bool, 8},
                             std::move(range),
                             indexName),
-              quant_(quant), pred_(std::move(pred)) {}
+             quant_(quant), pred_(std::move(pred)) {}
 
         // SymbolicExpr
+        /// @brief Clone the quantified expression.
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override {
             return std::make_unique<QuantifierOverRange>(*this);
         };
+        /// @brief Dump the quantifier, range, and predicate.
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override {

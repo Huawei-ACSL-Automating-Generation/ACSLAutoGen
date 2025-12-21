@@ -1,3 +1,7 @@
+/**
+ * @file aggregateExpr.cpp
+ * @brief Implements aggregate symbolic expressions such as sums and quantifiers over ranges.
+ */
 #include "aggregateExpr.h"
 
 #include <llvm/Support/Casting.h>
@@ -109,6 +113,7 @@ namespace acslg::analyzer::symbolic {
         const SourcePoint &pointToSub) const {
         if (fromPoint_ != pointToSub)
             return clone();
+        // Substitute only when the label matches; otherwise preserve the original expression.
         auto subedExpr  = range_->getSubstitutedExpr(pathSubTo, pointToSub);
         auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
@@ -149,6 +154,7 @@ namespace acslg::analyzer::symbolic {
         auto st = spec_generator::StringTemplate{
             "\\sum(integer ${i} = ${0}; ${i} < ${n}; ${i}++, ${prefix}${a}[${i}]${suffix})"};
 
+        // Lower bound of a range is always zero for now.
         auto zeroStr = callGetACSL(*range_->getOffset(), config, usedPoints, currentPoint,
                                    getPrecedence(Operator::Assign), true);
         if (!zeroStr)
@@ -170,6 +176,7 @@ namespace acslg::analyzer::symbolic {
             details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
         bool hasAt = !(prefix.empty() || suffix.empty());
 
+        // Build the pointer expression used inside the summation body.
         auto aStr =
             callGetACSLOfValueProxy(*range_->getFromAddr().value(), config, usedPoints, fromPoint_,
                                     hasAt ? 0 : getPrecedence(Operator::Subscript), false);
@@ -192,6 +199,7 @@ namespace acslg::analyzer::symbolic {
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
 
+        // Quantifier bodies need substitution as well so predicates refer to the new path labels.
         auto subedPred = pred_->getSubstitutedExpr(pathSubTo, pointToSub);
 
         auto newQOR    = std::make_unique<QuantifierOverRange>(*this);

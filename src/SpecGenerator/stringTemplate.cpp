@@ -1,11 +1,14 @@
-// src/SpecGenerator/stringTemplate.cpp
-
+/**
+ * @file stringTemplate.cpp
+ * @brief Implements placeholder parsing and substitution for StringTemplate.
+ */
 #include "stringTemplate.h"
 #include <string_view>
 
 namespace acslg::spec_generator {
     StringTemplate::StringTemplate(const char *str) {
         if (str == nullptr)
+            // Treat null input as empty template to avoid dereferencing later.
             rawText_ = "";
         else
             rawText_ = str;
@@ -28,16 +31,19 @@ namespace acslg::spec_generator {
             if (inBraces) {
                 ++curPh.len;
                 if (ch == '}') {
+                    // Closing brace ends the current placeholder; record it for substitution.
                     nameToPh_[curPh.name].insert(placeholders_.size());
                     placeholders_.push_back(curPh);
                     inBraces = false;
                 } else {
+                    // Accumulate placeholder name characters until '}'.
                     curPh.name += ch;
                 }
                 continue;
             }
 
             if (afterDollor && ch == '{') {
+                // Detected start of a placeholder sequence "${".
                 inBraces   = true;
                 curPh.name = "";
                 curPh.pos  = i - 1;
@@ -59,6 +65,7 @@ namespace acslg::spec_generator {
             if (auto nameToPh_it = nameToPh_.find(std::string{nameMap_it.first});
                 nameToPh_it != nameToPh_.end()) {
                 auto &phSet = nameToPh_it->second;
+                // Rewrite placeholder names and track how many substitutions occur.
                 for (auto &id : phSet) {
                     placeholders_.at(id).name = nameMap_it.second;
                     ++count;

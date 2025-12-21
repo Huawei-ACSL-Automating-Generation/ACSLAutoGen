@@ -1,4 +1,7 @@
-// src/SpecGenerator/loopInvTemplates.h
+/**
+ * @file loopInvTemplates.h
+ * @brief Provides reusable loop invariant templates for common patterns.
+ */
 
 #ifndef __ACSLG_SRC_SPECGENERATOR_LOOPINVTEMPLATES_H__
 #define __ACSLG_SRC_SPECGENERATOR_LOOPINVTEMPLATES_H__

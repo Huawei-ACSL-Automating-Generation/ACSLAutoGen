@@ -1,3 +1,7 @@
+/**
+ * @file state.cpp
+ * @brief Implements symbolic execution state management, path evaluation, and memory handling.
+ */
 #include "state.h"
 
 #include <clang/AST/Type.h>
@@ -23,6 +27,11 @@
 namespace acslg::analyzer {
     using std::literals::string_literals::operator""s;
 
+    /**
+     * @brief Copy-construct a path, optionally sharing symbolic expressions instead of cloning.
+     * @param other Path to copy from.
+     * @param shallowCopy When true, reuse symbolic objects to avoid deep duplication.
+     */
     Path::Path(const Path &other, bool shallowCopy)
         : context_(other.context_), startPoint_(other.startPoint_) {
         if (shallowCopy) {
@@ -39,6 +48,10 @@ namespace acslg::analyzer {
         }
     }
 
+    /**
+     * @brief Swap all internal members with another path instance.
+     * @param o Path whose contents will be exchanged.
+     */
     void Path::swap(Path &o) noexcept {
         using std::swap;
         swap(currentState_, o.currentState_);
@@ -49,6 +62,11 @@ namespace acslg::analyzer {
         swap(startPoint_, o.startPoint_);
     }
 
+    /**
+     * @brief Merge another compatible path into this one, reconciling memory, conditions, and
+     * return state.
+     * @param other Path to merge from; contexts and start points must match.
+     */
     void Path::mergeWith(const Path &other) {
         if (&context_ != &other.context_)
             ERROR("mergeWith: context mismatch.");
@@ -59,11 +77,11 @@ namespace acslg::analyzer {
         if (stmtCtx_ != other.stmtCtx_)
             ERROR("mergeWith: statement context mismatch.");
 
-        // Union variable addresses
+        // Union variable addresses so that both paths agree on storage locations.
         for (const auto &[var, addr] : other.varAddr_)
             varAddr_.emplace(var, std::make_unique<symbolic::VariableAddress>(*addr));
 
-        // Merge memory state
+        // Collect all addresses touched by either path to merge differing symbolic values.
         MemoryModel::KeySet addresses;
         for (auto &&[addr, value] : memoryState_.flat())
             addresses.insert(addr);
@@ -94,7 +112,7 @@ namespace acslg::analyzer {
             memoryState_.write(addrBox, symbolic::UnknownExpr::makeUnknown().into_underlying());
         }
 
-        // Intersect path conditions
+        // Intersect path conditions; a merged path must satisfy constraints from both sides.
         PathConditions intersected;
         intersected.reserve(std::min(pathConditions_.size(), other.pathConditions_.size()));
         for (const auto &cond : pathConditions_) {
@@ -113,6 +131,13 @@ namespace acslg::analyzer {
         }
     }
 
+    /**
+     * @brief Rebuild symbolic values with a different creation point.
+     * @param newStartPoint Source label to attribute to regenerated symbols.
+     *
+     * This clears memory and path conditions, then recreates each variable's symbolic value so
+     * downstream substitutions reference the new point.
+     */
     void Path::resymbolize(symbolic::SourcePoint newStartPoint) {
         memoryState_.clear();
         pathConditions_.clear();
@@ -126,6 +151,14 @@ namespace acslg::analyzer {
         }
     }
 
+    /**
+     * @brief Translate a left-hand side expression into a symbolic address.
+     * @param lhs Expression serving as an assignment target.
+     * @return Address box pointing to the storage location.
+     *
+     * The routine walks through decl references, array subscripts, pointer dereferences, and member
+     * accesses, allocating unknown symbols on demand when the memory model lacks entries.
+     */
     utils::not_null<std::unique_ptr<symbolic::Address>> Path::extractLValue(const clang::Expr *lhs) {
         auto lexpr = lhs->IgnoreParenImpCasts();
         if (auto declRef = dyn_cast<clang::DeclRefExpr>(lexpr)) {
@@ -233,6 +266,11 @@ namespace acslg::analyzer {
         UNIMPLEMENT("Unsupported LHS expression: " << lexpr->getStmtClassName());
     }
 
+    /**
+     * @brief Fetch the symbolic value currently stored for a variable.
+     * @param var Variable declaration to query.
+     * @return Newly cloned symbolic expression representing the variable's value.
+     */
     utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> Path::getVarState(
         const clang::VarDecl *var) const {
         auto canonicalVar = var->getCanonicalDecl();
@@ -247,8 +285,14 @@ namespace acslg::analyzer {
         return value.value()->clone();
     }
 
+    /// @brief Return a const reference to accumulated path conditions.
     const PathConditions &Path::getPathConditions() const { return pathConditions_; }
 
+    /**
+     * @brief Allocate memory for a variable if not yet present in the model.
+     * @param var Variable declaration to allocate.
+     * @return Pointer to the allocated symbolic variable address.
+     */
     utils::not_null<symbolic::VariableAddress *> Path::allocMemory(const clang::VarDecl *var) {
         auto canonicalVar = var->getCanonicalDecl();
         if (varAddr_.contains(canonicalVar)) {
@@ -264,11 +308,21 @@ namespace acslg::analyzer {
         return rawPtr;
     }
 
+    /**
+     * @brief Write a symbolic expression into memory at the provided address.
+     * @param addr Target address for the write.
+     * @param expr Symbolic value to store.
+     */
     void Path::updateMemory(const symbolic::Address &addr,
                             utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr) {
         memoryState_.write(addr, std::move(expr).into_underlying());
     }
 
+    /**
+     * @brief Update the symbolic value associated with a variable.
+     * @param var Variable declaration being written.
+     * @param expr New symbolic value.
+     */
     void Path::updateVarState(utils::not_null<const clang::VarDecl *> var,
                               utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr) {
         auto canonicalVar = var->getCanonicalDecl();
@@ -280,10 +334,18 @@ namespace acslg::analyzer {
         memoryState_.write(*addr, std::move(expr).into_underlying());
     }
 
+    /**
+     * @brief Insert a new predicate into the path condition set.
+     * @param cond Condition to add.
+     */
     void Path::insertPathCondition(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> cond) {
         pathConditions_.emplace(std::move(cond));
     }
 
+    /**
+     * @brief Create a deep copy of the path, duplicating memory and constraints.
+     * @return Newly allocated clone.
+     */
     std::unique_ptr<Path> Path::clone() const {
         auto cloned           = std::make_unique<Path>(context_, startPoint_);
         cloned->currentState_ = currentState_;
@@ -306,6 +368,12 @@ namespace acslg::analyzer {
         std::vector<std::unique_ptr<symbolic::SymbolicExpr>> args;
     };
 
+    /**
+     * @brief Bind call arguments to the callee's parameter slots within a fresh path.
+     * @param calleePath [in] Path representing the callee's activation.
+     * @param FD [in] Function declaration describing parameters.
+     * @param args [in] Symbolic argument values to bind.
+     */
     void bindParams(Path *calleePath,
                     const clang::FunctionDecl *FD,
                     const std::vector<std::unique_ptr<symbolic::SymbolicExpr>> &args) {
@@ -333,6 +401,12 @@ namespace acslg::analyzer {
         }
     }
 
+    /**
+     * @brief Evaluate call arguments, expanding paths when argument expressions branch.
+     * @param basePath [in] Path on which to start evaluation.
+     * @param call [in] Call expression containing arguments.
+     * @return Collection of path/argument bundles, one per feasible combination.
+     */
     static std::vector<CallArgs> evalCallArgs(Path *basePath, const clang::CallExpr *call) {
         std::vector<CallArgs> args;
         args.push_back({nullptr, {}});
@@ -358,6 +432,7 @@ namespace acslg::analyzer {
                     next.emplace_back(std::move(nc));
                 }
             }
+            // Carry forward all combinations produced so far so later arguments can branch again.
             args = std::move(next);
         }
         for (auto &c : args)
@@ -366,6 +441,15 @@ namespace acslg::analyzer {
         return args;
     }
 
+    /**
+     * @brief Symbolically evaluate an expression, potentially forking paths on control flow.
+     * @param expr [in] Expression node to evaluate.
+     * @return Pair of newly forked paths and symbolic results for each outcome.
+     *
+     * The evaluator handles literals, references, unary/binary operators, casts, conditionals, and
+     * calls. Branching expressions (e.g., logical operators) produce multiple results with cloned
+     * path states to keep constraints consistent.
+     */
     Path::EvalResult Path::evalExpr(const clang::Expr *expr) {
         if (!expr)
             ERROR("Fail to convert an empty clang::Expr");

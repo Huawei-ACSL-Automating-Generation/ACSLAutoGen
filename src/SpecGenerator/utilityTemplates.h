@@ -1,4 +1,7 @@
-// src/SpecGenerator/utilityTemplates.h
+/**
+ * @file utilityTemplates.h
+ * @brief Defines helper StringTemplates used as scaffolding for ACSL emission.
+ */
 
 #ifndef __ACSLG_SRC_SPECGENERATOR_UTILITYTEMPLATES_H__
 #define __ACSLG_SRC_SPECGENERATOR_UTILITYTEMPLATES_H__

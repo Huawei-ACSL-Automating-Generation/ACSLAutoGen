@@ -1,5 +1,7 @@
-// src/SpecGenerator/functionContractPlugins.cpp
-
+/**
+ * @file functionContractPlugins.cpp
+ * @brief Implements function-level ACSL contract plugins (assigns, behaviors, poststate).
+ */
 #include <iterator>
 #include <unordered_set>
 
@@ -18,10 +20,17 @@ namespace acslg::spec_generator {
         const std::string IND2 = "    ";
     } // namespace
 
+    /**
+     * @class TopAssignsPlugin
+     * @brief Emits a top-level `assigns` clause based on differences between pre and post states.
+     */
     class TopAssignsPlugin : public FunctionContractPlugin {
       public:
         TopAssignsPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
+        /**
+         * @brief Compute the set of modified addresses and render an assigns clause.
+         */
         GenResultType generate(const analyzer::ProgramState &pre,
                                const analyzer::ProgramState &post) const override {
             std::string spec;
@@ -52,6 +61,7 @@ namespace acslg::spec_generator {
                         if (is_symbol_addr(addr) && postPath->is_point_to_structure(addr))
                             continue;
 
+                        // Track the address only if the value differs between pre/post states.
                         if (!postPath->isUnchanged(addr, *pre.getPaths().front()))
                             auto [_, ok] = assignedAddrs.try_emplace(addr.hash(), std::move(addr));
                     }
@@ -87,6 +97,10 @@ namespace acslg::spec_generator {
     };
     REGISTER_ACSL_PLUGIN(TopAssignsPlugin, "assigns");
 
+    /**
+     * @class DetailBehaviorPlugin
+     * @brief Emits behavior blocks capturing path-specific assigns/ensures for return paths.
+     */
     class DetailBehaviorPlugin : public FunctionContractPlugin {
       public:
         DetailBehaviorPlugin(const std::string &ID) : id_(ID) {}
@@ -118,6 +132,8 @@ namespace acslg::spec_generator {
                     if (is_symbol_addr(a) && path.is_point_to_structure(a))
                         continue;
                     if (!path.isUnchanged(a, *pre.getPaths().front()))
+                        // The address was modified on this path; record it for the assigns
+                        // clause of this behavior.
                         (void)assignedAddrs.try_emplace(a.hash(), std::move(a));
                 }
 

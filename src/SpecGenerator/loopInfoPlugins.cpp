@@ -1,5 +1,7 @@
-// src/SpecGenerator/looopInfoPlugins.cpp
-
+/**
+ * @file loopInfoPlugins.cpp
+ * @brief Implements loop information plugins that analyze loop structure and variable patterns.
+ */
 #include "specGenerator.h"
 #include "macros.h"
 #include "state.h"
@@ -8,10 +10,17 @@
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
 
+    /**
+     * @class SetEntryAndCurrentPlugin
+     * @brief Computes symbolic loop entry/current states and inactive paths.
+     */
     class SetEntryAndCurrentPlugin : public LoopInfoPlugin {
       public:
         SetEntryAndCurrentPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
+        /**
+         * @brief Populate LoopInfo with resymbolized entry/current states.
+         */
         bool parse(const analyzer::ProgramState &,
                    const analyzer::ProgramState &loopEntry,
                    LoopInfo &loopInfo) const override {
@@ -21,6 +30,7 @@ namespace acslg::spec_generator {
                 loopInfo.loopStmt, symbolicState->getContext().getSourceManager(),
                 symbolicState->getContext().getLangOptions());
 
+            // Re-seed symbolic values so all labels originate from the loop entry point.
             symbolicState->resymbolize(std::move(loopEntryPoint));
 
             auto symbolicLoopEntry = symbolicState->clone();
@@ -44,11 +54,17 @@ namespace acslg::spec_generator {
     };
     REGISTER_ACSL_PLUGIN(SetEntryAndCurrentPlugin, "SetEntryAndCurrent");
 
-    // Preprocess simple patterns of regions.
+    /**
+     * @class SetPatternsPlugin
+     * @brief Preprocess variable evolution patterns between loop entry and current state.
+     */
     class SetPatternsPlugin : public LoopInfoPlugin {
       public:
         SetPatternsPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
+        /**
+         * @brief Detect linear patterns for addresses across loop iterations.
+         */
         bool parse(const analyzer::ProgramState &,
                    const analyzer::ProgramState &loopEntry,
                    LoopInfo &loopInfo) const override {
@@ -73,13 +89,13 @@ namespace acslg::spec_generator {
                 for (auto &&[addr, currentExpr] : currentEntry.getMemoryState().flat()) {
                     if (auto rootDecl = addr.get().getFromRoot();
                         rootDecl == std::nullopt || !preVA.contains(rootDecl.value()))
-                        continue; // from local variable
+                        continue; // skip locals that do not appear at loop entry
                     if (auto preValue = preMS.read(addr)) {
                         if (*preValue.value() == *currentExpr)
-                            continue; // unchanged
+                            continue; // unchanged relative to entry snapshot
                     } else {
                         if (currentEntry.isUnchanged(addr, *symbolicLoopEntry->getPaths().front()))
-                            continue; // unchanged
+                            continue; // unchanged relative to entry snapshot
                     }
                     std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> entryExpr;
                     if (auto preValue = preMS.read(addr)) {
@@ -91,7 +107,10 @@ namespace acslg::spec_generator {
                             patterns.emplace(addr, std::nullopt);
                             continue;
                         }
-                        if (isFrom(*hashAddrMap.begin()->second->toSymbolicExpr(), addr,
+                        // If the value is derived from the same address at loop entry, accept it as
+                        // the baseline; otherwise mark as too complex.
+                        if (isFrom(*hashAddrMap.begin()->second->toSymbolicExpr(),
+                                   addr,
                                    symbolicLoopEntry->getStartPoint())) {
                             entryExpr = hashAddrMap.begin()->second->toSymbolicExpr()->clone();
                         } else {
@@ -104,6 +123,8 @@ namespace acslg::spec_generator {
                         UNREACHABLE();
                     auto [_, hashIdMap] =
                         symb::SymbolicExpr::collectUsedSymbols(*currentExpr, *entryExpr.value());
+                    // Compute current - entry; if only a constant difference remains, we treat it as
+                    // a linear step (entry + k).
                     if (auto diff = currentExpr->toLinearExpr(hashIdMap) -
                                     entryExpr.value()->toLinearExpr(hashIdMap);
                         diff.all_homogeneous_terms_are_zero()) {
@@ -198,6 +219,10 @@ namespace acslg::spec_generator {
     };
     REGISTER_ACSL_PLUGIN(SetPatternsPlugin, "setPatterns");
 
+    /**
+     * @class SetSharedStatePlugin
+     * @brief Computes memory/path conditions shared across all active loop paths.
+     */
     class SetSharedStatePlugin : public LoopInfoPlugin {
       public:
         SetSharedStatePlugin(const std::string &ID) : id_(ID) {}
@@ -240,6 +265,10 @@ namespace acslg::spec_generator {
     };
     REGISTER_ACSL_PLUGIN(SetSharedStatePlugin, "setSharedState");
 
+    /**
+     * @class SetIndexPlugin
+     * @brief Identifies canonical loop index expression and its bounds/pattern.
+     */
     class SetIndexPlugin : public LoopInfoPlugin {
       public:
         SetIndexPlugin(const std::string &ID) : id_(ID) {}
@@ -300,6 +329,7 @@ namespace acslg::spec_generator {
                     if (valueVector.size() != 1)
                         ERROR("Do not support branch at here");
                     auto currentValue = std::move(valueVector[0]);
+                    // If the expression changes after one iteration, it is not a stable index.
                     if (*preValue != *currentValue)
                         return false;
                 }

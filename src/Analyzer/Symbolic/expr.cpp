@@ -1,3 +1,8 @@
+/**
+ * @file expr.cpp
+ * @brief Implements symbolic expression hierarchy utilities and helpers for cloning, comparison,
+ *        simplification, and ACSL conversion.
+ */
 #include "expr.h"
 
 #include <clang/AST/Type.h>
@@ -35,6 +40,7 @@ namespace acslg::analyzer::symbolic {
         }
 
         inline Type unify(Type a, Type b) {
+            // Choose the wider integer type so arithmetic results have a consistent bit width.
             if (!isIntLike(a.kind) || !isIntLike(b.kind))
                 return {ScalarKind::Void, 0};
             unsigned bw = std::max(a.bitWidth ? a.bitWidth : 1u, b.bitWidth ? b.bitWidth : 1u);
@@ -97,10 +103,21 @@ namespace acslg::analyzer::symbolic {
         inline bool literalAsBool(const LiteralExpr &L) { return L.getLiteralValue() != 0; }
     } // namespace
 
+    /**
+     * @brief Factory for creating an unknown symbolic value placeholder.
+     * @return Newly allocated UnknownExpr wrapped in not_null unique_ptr.
+     */
     utils::not_null<std::unique_ptr<UnknownExpr>> UnknownExpr::makeUnknown() {
         return std::make_unique<UnknownExpr>();
     }
 
+    /**
+     * @brief Construct a symbolic structure value with all fields initialized to Unknown.
+     * @param ty [in] Structure qualified type.
+     * @param baseAddr [in] Base address for the structure.
+     * @param fromPoint [in] Source point used to tag created symbols.
+     * @return Symbolic expression representing an unknown structure layout.
+     */
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeUnknownStructure(
         const clang::QualType &ty,
         utils::not_null<std::unique_ptr<const Address>> baseAddr,
@@ -119,6 +136,7 @@ namespace acslg::analyzer::symbolic {
         for (const clang::FieldDecl *FD : RD->fields()) {
             clang::QualType fty = FD->getType();
             if (fty->isStructureType()) {
+                // Recursively build unknown sub-structures so nested fields are initialized.
                 auto faddr = std::make_unique<FieldAddress>(
                     fty, RD, st->getFromAddr().value()->addressClone().into_underlying(), idx);
                 auto nested = makeUnknownStructure(fty, std::move(faddr), fromPoint);
@@ -135,6 +153,10 @@ namespace acslg::analyzer::symbolic {
             std::unique_ptr<SymbolicExpr>(std::move(st))};
     }
 
+    /**
+     * @brief Simplify a linear expression by rebuilding it as a minimal sum of terms.
+     * @return Simplified clone when expression is linear; otherwise a plain clone.
+     */
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolicExpr::simplifiedExprIfLinear() const {
         if (!isLinear())
             return clone();
@@ -152,6 +174,7 @@ namespace acslg::analyzer::symbolic {
                 continue;
 
             if (result == std::nullopt) {
+                // Seed the accumulator with the first non-zero term.
                 if (C == 1)
                     result = expr->clone();
                 else
@@ -165,6 +188,8 @@ namespace acslg::analyzer::symbolic {
                                                              Multiply, expr->clone());
                 else
                     varExpr = expr->clone().into_underlying();
+                // Combine the current polynomial with the new term using the sign of the
+                // coefficient.
                 result = std::make_unique<BinaryOpExpr>(
                     std::move(result.value()), (C > 0 ? Add : Subtract), std::move(varExpr));
             }
@@ -172,6 +197,7 @@ namespace acslg::analyzer::symbolic {
         if (auto inhomo = linearExpr.inhomogeneous_term().get_si();
             inhomo || result == std::nullopt) {
             if (result != std::nullopt) {
+                // Append the constant term to the linear combination.
                 result = std::make_unique<BinaryOpExpr>(
                     std::move(result.value()), (inhomo > 0 ? Add : Subtract),
                     std::make_unique<LiteralExpr>(std::abs(inhomo)));
