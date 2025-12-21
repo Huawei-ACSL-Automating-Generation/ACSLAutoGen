@@ -1,4 +1,7 @@
-// src/SpecGenerator/groups.h
+/**
+ * @file groups.h
+ * @brief Declares plugin group name constants used to configure ACSL generation.
+ */
 
 #ifndef __ACSLG_SRC_SPECGENERATOR_GROUPS_H__
 #define __ACSLG_SRC_SPECGENERATOR_GROUPS_H__

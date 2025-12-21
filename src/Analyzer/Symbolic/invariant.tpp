@@ -1,3 +1,7 @@
+/**
+ * @file invariant.tpp
+ * @brief Template implementations for building loop invariants using polyhedral analysis.
+ */
 #ifndef __ACSLG_SRC_ANALYZER_SYMBOLIC_INVARIANT_TPP__
 #define __ACSLG_SRC_ANALYZER_SYMBOLIC_INVARIANT_TPP__
 
@@ -45,6 +49,15 @@ namespace acslg::analyzer {
                                              const VarManager &vm);
     } // namespace details
 
+    /**
+     * @brief Build invariants and post-states for a loop using polyhedral abstraction.
+     * @param loopCond [in] Symbolic loop condition.
+     * @param entryPath [in] Path at loop entry to seed variable mapping.
+     * @param loopCurrent [in] Program state representing one loop iteration.
+     * @param inactivePaths [in] Collection of inactive/interrupt paths.
+     * @param generateBranches [in] Whether to enumerate branch-specific post-states.
+     * @return Invariants and synthesized post-states for normal and interrupt exits.
+     */
     InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
                                          const Path &entryPath,
                                          const ProgramState &loopCurrent,

@@ -1,4 +1,7 @@
-// src/SpecGenerator/specGenerators.h
+/**
+ * @file specGenerator.h
+ * @brief Declares ACSL specification generators, plugin interfaces, and loop information helpers.
+ */
 
 #ifndef __ACSLG_SRC_SPECGENERATOR_SPECGENERATOR_H__
 #define __ACSLG_SRC_SPECGENERATOR_SPECGENERATOR_H__
@@ -22,26 +25,54 @@ namespace aclsg::analyzer {
 }
 
 namespace acslg::spec_generator {
+    /**
+     * @brief Emit an ACSL function contract using registered plugins.
+     * @param pre [in] Program state before function execution.
+     * @param post [in] Program state after symbolic execution.
+     * @param groupName [in] Plugin group identifier controlling which generators run.
+     * @return Pair of ACSL text and set of SourcePoints used in the contract.
+     */
     std::pair<std::string, std::unordered_set<analyzer::symbolic::SourcePoint>> emitFunctionContract(
         const analyzer::ProgramState &pre,
         const analyzer::ProgramState &post,
         std::string_view groupName = DEFAULT_FUNC_CONTRACT_PLUGINS);
 
+    /**
+     * @struct LoopInfo
+     * @brief Captures parsed structural and symbolic information about a loop.
+     *
+     * LoopInfo acts as a scratchpad populated by loop info plugins and then consumed by invariant
+     * generators to emit ACSL loop annotations.
+     */
     struct LoopInfo {
         struct Pattern {
             utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>> initialValue;
             int64_t step;
+            /**
+             * @brief Construct a pattern with initial symbolic value and fixed step.
+             * @param init [in] Initial symbolic value for the pattern.
+             * @param st [in] Step amount applied each iteration.
+             */
             Pattern(utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>> init,
                     int64_t st)
                 : initialValue(std::move(init)), step(st) {}
+            /// @brief Copy-construct with deep-cloned symbolic value.
             Pattern(const Pattern &other)
                 : initialValue(other.initialValue->clone().into_underlying()), step(other.step) {}
             Pattern &operator=(const Pattern &other);
             Pattern(Pattern &&other)            = default;
             Pattern &operator=(Pattern &&other) = default;
+            /**
+             * @brief Dump the pattern to a human-readable string.
+             * @return String describing initial value and step.
+             */
             std::string dump() const;
         };
 
+        /**
+         * @brief Construct loop metadata from the underlying loop statement.
+         * @param ls [in] Loop statement (for/while/do-while) to analyze.
+         */
         LoopInfo(const clang::Stmt *ls);
 
         const clang::Stmt *loopStmt;
@@ -104,11 +135,26 @@ namespace acslg::spec_generator {
         // TODO(more info to be added)
     };
 
+    /**
+     * @brief Parse loop information using the configured loop info plugin group.
+     * @param preState [in] Program state before entering the loop.
+     * @param loopEntry [in] Program state at loop entry.
+     * @param loopStmt [in] Loop statement being analyzed.
+     * @param groupName [in] Plugin group identifier.
+     * @return Pair of populated LoopInfo and success flag (false when parsing aborts).
+     */
     std::pair<LoopInfo, bool> parseLoopInfo(const analyzer::ProgramState &preState,
                                             const analyzer::ProgramState &loopEntry,
                                             const clang::Stmt *loopStmt,
                                             std::string_view groupName = DEFAULT_LOOP_INFO_PLUGINS);
 
+    /**
+     * @brief Parse additional loop information for complex loops (no early abort).
+     * @param preState [in] Program state before the loop.
+     * @param loopEntry [in] Program state at loop entry.
+     * @param loopInfo [in,out] LoopInfo to be enriched by plugins.
+     * @param groupName [in] Plugin group identifier to run.
+     */
     void parseComplexLoopInfo(const analyzer::ProgramState &preState,
                               const analyzer::ProgramState &loopEntry,
                               LoopInfo &loopInfo,
@@ -119,6 +165,15 @@ namespace acslg::spec_generator {
         std::unordered_set<analyzer::symbolic::SourcePoint> usedPoints;
         std::unique_ptr<analyzer::ProgramState> postState;
     };
+    /**
+     * @brief Emit ACSL loop invariant/assigns/variant clauses using registered plugins.
+     * @param preState [in] State before entering the loop.
+     * @param loopEntry [in] State representing loop entry.
+     * @param loopInfo [in] Parsed loop metadata.
+     * @param piGroupName [in] Path-insensitive plugin group to run.
+     * @param psGroupName [in] Path-sensitive plugin group to run.
+     * @return Generated ACSL text, used labels, and a synthesized post-state.
+     */
     EmitLoopInvResult emitLoopInvariant(
         const analyzer::ProgramState &preState,
         const analyzer::ProgramState &loopEntry,
@@ -126,12 +181,25 @@ namespace acslg::spec_generator {
         std::string_view piGroupName = DEFAULT_PATH_INSENSITIVE_LOOP_INV_PLUGINS,
         std::string_view psGroupName = DEFAULT_PATH_SENSITIVE_LOOP_INV_PLUGINS);
 
+    /**
+     * @brief Emit inline ACSL annotations for the given program state.
+     * @param state [in] Program state to describe.
+     * @param groupName [in] Plugin group for inline contracts.
+     * @return Generated ACSL string.
+     */
     std::string emitInlineContract(const analyzer::ProgramState &state, std::string_view groupName);
 
     /*---------------------------------------*/
     /*-------Framework for ACSLPlugin--------*/
     /*---------------------------------------*/
 
+    /**
+     * @class ACSLPlugin
+     * @brief Base interface for all ACSL generation plugins.
+     *
+     * Plugins are grouped by kind and invoked by registries to produce contracts, loop info, or
+     * inline annotations.
+     */
     class ACSLPlugin {
       public:
         virtual ~ACSLPlugin()               = default;
@@ -153,6 +221,10 @@ namespace acslg::spec_generator {
         Kind kind_;
     };
 
+    /**
+     * @class FunctionContractPlugin
+     * @brief Plugin interface for generating function-level ACSL contracts.
+     */
     class FunctionContractPlugin : public ACSLPlugin {
       public:
         static bool classof(const ACSLPlugin *plugin) {
@@ -167,6 +239,10 @@ namespace acslg::spec_generator {
         FunctionContractPlugin() : ACSLPlugin(Kind::K_FuncPlugin) {};
     };
 
+    /**
+     * @class LoopInfoPlugin
+     * @brief Plugin interface for extracting structural and symbolic loop properties.
+     */
     class LoopInfoPlugin : public ACSLPlugin {
       public:
         static bool classof(const ACSLPlugin *plugin) {
@@ -216,6 +292,10 @@ namespace acslg::spec_generator {
         PostPIInfo()                       = default;
         PostPIInfo(PostPIInfo &&) noexcept = default;
     };
+    /**
+     * @class PathInsensitiveLoopInvPlugin
+     * @brief Plugin interface for generating loop invariants without path distinction.
+     */
     class PathInsensitiveLoopInvPlugin : public ACSLPlugin {
       public:
         static bool classof(const ACSLPlugin *plugin) {
@@ -273,6 +353,10 @@ namespace acslg::spec_generator {
         PostPSInfo()                       = default;
         PostPSInfo(PostPSInfo &&) noexcept = default;
     };
+    /**
+     * @class PathSensitiveLoopInvPlugin
+     * @brief Plugin interface for generating loop invariants that differentiate execution paths.
+     */
     class PathSensitiveLoopInvPlugin : public ACSLPlugin {
       public:
         static bool classof(const ACSLPlugin *plugin) {
@@ -296,6 +380,10 @@ namespace acslg::spec_generator {
         PathSensitiveLoopInvPlugin() : ACSLPlugin(Kind::K_PSLoopInvPlugin) {};
     };
 
+    /**
+     * @class InlinePlugin
+     * @brief Plugin interface for generating inline ACSL annotations at specific program points.
+     */
     class InlinePlugin : public ACSLPlugin {
         static bool classof(const ACSLPlugin *plugin) {
             return plugin->getKind() == Kind::K_InlinePlugin;
@@ -309,6 +397,10 @@ namespace acslg::spec_generator {
         InlinePlugin() : ACSLPlugin(Kind::K_InlinePlugin) {};
     };
 
+    /**
+     * @class ACSLPluginRegistry
+     * @brief Singleton registry that stores plugin instances by ID.
+     */
     class ACSLPluginRegistry {
       public:
         static ACSLPluginRegistry &instance() {
@@ -344,11 +436,19 @@ namespace acslg::spec_generator {
         } _##PluginType##Reg;                                                                      \
     }
 
+    /**
+     * @struct ACSLPluginGroup
+     * @brief Named collection of plugin IDs invoked together.
+     */
     struct ACSLPluginGroup {
         std::string name;
         std::vector<std::string> pluginIds;
     };
 
+    /**
+     * @class ACSLPluginGroupRegistry
+     * @brief Registry mapping group names to lists of plugin IDs.
+     */
     class ACSLPluginGroupRegistry {
       public:
         static ACSLPluginGroupRegistry &instance() {

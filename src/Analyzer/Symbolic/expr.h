@@ -1,5 +1,8 @@
-/// \file symbolic.h
-/// @brief Declarations for symbolic expression hierarchy and utilities.
+/**
+ * @file expr.h
+ * @brief Declares the symbolic expression hierarchy, symbolic addresses, and utilities for ACSL
+ *        generation.
+ */
 #ifndef __ACSLG_SRC_ANALYZER_SYMBOLIC_EXPR_H__
 #define __ACSLG_SRC_ANALYZER_SYMBOLIC_EXPR_H__
 
@@ -37,14 +40,10 @@ namespace acslg::analyzer::symbolic {
 
     /**
      * @class SourcePoint
-     * @brief Represents a unique source position in the source code.
+     * @brief Represents a concrete source location together with a label prefix for ACSL emission.
      *
-     * This class encapsulates a `clang::SourceLocation` together with its associated
-     * `SourceManager`, and provides utilities for constructing points relative to statements,
-     * comparing positions, generating hash values, and dumping human-readable information.
-     *
-     * This class is designed to express a program location in the source text, not a control flow
-     * node.
+     * SourcePoint keeps a `clang::SourceLocation` plus its owning SourceManager and produces
+     * stable labels used to tag synthesized symbols and inserted labels in the rewritten source.
      */
     class SourcePoint {
       public:
@@ -54,83 +53,74 @@ namespace acslg::analyzer::symbolic {
         SourcePoint &operator=(SourcePoint &&);
 
         /**
-         * @brief Construct a SourcePoint at the start of a given FunctionDecl's body.
-         *
-         * @param FD  The FunctionDecl to reference.
-         * @param SM The SourceManager providing context for the source file.
-         * @param LO The language options used for retrieving locations.
-         * @return A SourcePoint located at the start of the function body.
+         * @brief Build a source point at the start of a function body.
+         * @param FD [in] Function declaration owning the body.
+         * @param SM [in] Source manager for location resolution.
+         * @param LO [in] Language options for lexical queries.
+         * @return SourcePoint anchored before the first body token.
          */
         static SourcePoint fromFuncDecl(const clang::FunctionDecl *FD,
                                         const clang::SourceManager &SM,
                                         const clang::LangOptions &LO);
 
         /**
-         * @brief Construct a SourcePoint at the position just before a given statement.
-         *
-         * @param S  The statement to reference.
-         * @param SM The SourceManager providing context for the source file.
-         * @param LO The language options used for retrieving locations.
-         * @return A SourcePoint located before the given statement.
+         * @brief Build a source point immediately before a statement.
+         * @param S [in] Statement to reference.
+         * @param SM [in] Source manager for location resolution.
+         * @param LO [in] Language options for lexical queries.
+         * @return SourcePoint at the start token of the statement.
          */
         static SourcePoint fromStmtBefore(const clang::Stmt *S,
                                           const clang::SourceManager &SM,
                                           const clang::LangOptions &LO);
 
         /**
-         * @brief Construct a SourcePoint at the position just after a given statement.
-         *
-         * @param S  The statement to reference.
-         * @param SM The SourceManager providing context for the source file.
-         * @param LO The language options used for retrieving locations.
-         * @return A SourcePoint located after the given statement.
+         * @brief Build a source point immediately after a statement.
+         * @param S [in] Statement to reference.
+         * @param SM [in] Source manager for location resolution.
+         * @param LO [in] Language options for lexical queries.
+         * @return SourcePoint at the end of the statement token range.
          */
         static SourcePoint fromStmtAfter(const clang::Stmt *S,
                                          const clang::SourceManager &SM,
                                          const clang::LangOptions &LO);
 
         /**
-         * @brief Compare this SourcePoint with another.
-         *
-         * @param other The SourcePoint to compare against.
-         * @return True if this point is strictly before the other, false otherwise.
+         * @brief Strict weak ordering by underlying SourceLocation.
+         * @param other [in] SourcePoint to compare.
+         * @return True if this point precedes the other.
          */
         bool operator<(const SourcePoint &other) const;
 
         /**
-         * @brief Test equality between two SourcePoints.
-         *
-         * Two points are equal if their underlying `SourceLocation`s compare equal
-         * under the same SourceManager.
-         *
-         * @param other The SourcePoint to compare against.
-         * @return True if both points represent the same location, false otherwise.
+         * @brief Equality based on SourceLocation identity under the same SourceManager.
+         * @param other [in] SourcePoint to compare.
+         * @return True if both refer to the same location.
          */
         bool operator==(const SourcePoint &other) const;
 
         /**
-         * @brief Get the underlying `clang::SourceLocation` represented by this point.
-         *
-         * @return An `clang::SourceLocation`.
+         * @brief Access the underlying `clang::SourceLocation`.
+         * @return Location value.
          */
         clang::SourceLocation asSourceLocation() const { return loc_; }
 
         /**
-         * @brief Generate a hash value for this SourcePoint.
-         *
-         * Computed from the underlying `SourceLocation`'s hash value.
-         *
-         * @return Hash value suitable for use in unordered containers.
+         * @brief Hash based on the wrapped SourceLocation.
+         * @return Hash value.
          */
         size_t hash() const { return utils::hash_val(loc_.getHashValue()); }
 
         /**
-         * @brief Dump a human-readable string representation of the SourcePoint.
-         *
-         * @return A string representation of this SourcePoint.
+         * @brief Dump a human-readable string representation for diagnostics.
+         * @return Formatted description.
          */
         std::string dump() const;
 
+        /**
+         * @brief Produce a stable label for ACSL annotations, optionally suffixed with a hash.
+         * @return Label string.
+         */
         std::string getLabel() const {
             auto &config = GlobalConfig::instance();
             auto suffix =
@@ -168,12 +158,16 @@ namespace std {
 } // namespace std
 
 namespace acslg::analyzer::symbolic {
-    /// @class SymbolicExpr
-    /// @brief Base class for all symbolic expressions.
+    /**
+     * @class SymbolicExpr
+     * @brief Abstract base for all symbolic expressions and addresses used in analysis.
+     */
     class SymbolicExpr {
       public:
-        /// @class SymbolicExpr
-        /// @brief Base class for all symbolic expressions.
+        /**
+         * @enum ExprKind
+         * @brief Enumerates all concrete expression kinds, including address variants.
+         */
         enum class ExprKind : uint16_t {
             K_FirstAddr,
             K_SymbolAddress,
@@ -196,8 +190,10 @@ namespace acslg::analyzer::symbolic {
             K_LastOverRange
         };
 
-        /// @enum ScalarKind
-        /// @brief Scalar data types for expression values.
+        /**
+         * @enum ScalarKind
+         * @brief Scalar data types used to describe literal widths and signedness.
+         */
         enum class ScalarKind {
             Int,
             UInt,
@@ -206,11 +202,13 @@ namespace acslg::analyzer::symbolic {
             Structure
         };
 
-        /// @struct Type
-        /// @brief Represents a scalar type with bit width.
+        /**
+         * @struct Type
+         * @brief Represents a scalar type and its bit width for literal/value typing.
+         */
         struct Type {
-            ScalarKind kind;   ///< Base scalar kind
-            unsigned bitWidth; ///< Number of bits
+            ScalarKind kind;   ///< Base scalar category (int, uint, bool, etc.).
+            unsigned bitWidth; ///< Number of bits for the value (0 when unspecified).
         };
 
         virtual ~SymbolicExpr()                       = default;
@@ -234,19 +232,33 @@ namespace acslg::analyzer::symbolic {
         /// @return Human-readable representation.
         virtual std::string dump() const = 0;
 
+        /**
+         * @struct GetACSLConfig
+         * @brief Configuration for translating symbolic expressions into ACSL strings.
+         */
         struct GetACSLConfig {
-            bool noStateLabelFunctionAt{false};
-            std::unordered_map<SourcePoint, std::string> predefinedLabels{};
-            bool useDerefWithZeroOffset{true};
-            bool UnknownExprAsError{true};
+            bool noStateLabelFunctionAt{false}; ///< Avoid labeling '\at' when true.
+            std::unordered_map<SourcePoint, std::string> predefinedLabels{}; ///< Override labels.
+            bool useDerefWithZeroOffset{true}; ///< Prefer `*p` instead of `*(p + 0)`.
+            bool UnknownExprAsError{true};     ///< Treat UnknownExpr as fatal when true.
         };
 
+        /**
+         * @enum GetACSLError
+         * @brief Error categories reported during ACSL conversion.
+         */
         enum class GetACSLError {
             HeapAddress,
             PartiallyModifiedStruct,
             UnknownExpr,
         };
 
+        /**
+         * @brief Convert the expression into ACSL text, collecting any used SourcePoints.
+         * @param config [in] Conversion options controlling label and unknown handling.
+         * @param currentPoint [in] Optional substitution point for state labels.
+         * @return Expected pair of ACSL string and used points, or an error category.
+         */
         utils::expected<std::pair<std::string, std::unordered_set<SourcePoint>>, GetACSLError> getACSL(
             const GetACSLConfig &config,
             std::optional<SourcePoint> currentPoint = std::nullopt) const {
@@ -328,7 +340,10 @@ namespace acslg::analyzer::symbolic {
             return callTryEvalAsAddr(*simplifiedExpr());
         };
 
-        // May merge `tryEvalAsConstant` and `evalToConstExpr` into one.
+        /**
+         * @brief Attempt to evaluate the expression to a concrete integer constant.
+         * @return Constant value when expression is linear and homogeneous; nullopt otherwise.
+         */
         std::optional<int64_t> tryEvalAsConstant() const {
             // TODO: cache the result.
             if (!isLinear())
@@ -339,10 +354,16 @@ namespace acslg::analyzer::symbolic {
                 return linearExpr.inhomogeneous_term().get_si();
             return std::nullopt;
         };
+        /**
+         * @brief Evaluate to a LiteralExpr when the expression is fully constant.
+         * @return Newly allocated literal or nullptr if not constant.
+         */
         virtual std::unique_ptr<LiteralExpr> evalToConstExpr() const { return nullptr; }
 
-        /// @brief Is an unknown expression?
-        /// @return
+        /**
+         * @brief Identify whether this expression represents an unknown value.
+         * @return True if the expression is UnknownExpr-derived.
+         */
         virtual bool isUnknown() const { return false; };
 
         /**
@@ -789,6 +810,10 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
     };
 
+    /**
+     * @class Symbol
+     * @brief Mix-in for symbolic entities that carry provenance (address and source point).
+     */
     class Symbol {
       public:
         virtual ~Symbol()                 = default;
@@ -813,10 +838,14 @@ namespace acslg::analyzer::symbolic {
         static Symbol *toThis(SymbolicExpr *e);
         static const Symbol *toThis(const SymbolicExpr *e);
 
+        /// @brief Downcast to the SymbolicExpr base.
         utils::not_null<SymbolicExpr *> toSymbolicExpr();
+        /// @brief Const downcast to the SymbolicExpr base.
         utils::not_null<const SymbolicExpr *> toSymbolicExpr() const;
+        /// @brief Original allocation address if any (e.g., variable or field).
         virtual std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr()
-            const                                               = 0;
+            const = 0;
+        /// @brief Source point that created the symbol, if tracked.
         virtual std::optional<SourcePoint> getFromPoint() const = 0;
 
       protected:
@@ -962,6 +991,10 @@ namespace acslg::analyzer::symbolic {
         std::vector<utils::not_null<std::unique_ptr<SymbolicExpr>>> fields_;
     };
 
+    /**
+     * @class Address
+     * @brief Base class for symbolic memory addresses (variables, fields, pointer arithmetic).
+     */
     class Address : public SymbolicExpr {
       public:
         virtual ~Address()                  = default;
@@ -975,6 +1008,12 @@ namespace acslg::analyzer::symbolic {
             return (k > ExprKind::K_FirstAddr) && (k < ExprKind::K_LastAddr);
         }
 
+        /**
+         * @brief Convert the pointed-to value into ACSL text.
+         * @param config [in] Conversion configuration.
+         * @param currentPoint [in] Optional substitution point for labels.
+         * @return Expected ACSL string plus used points, or error category.
+         */
         utils::expected<std::pair<std::string, std::unordered_set<SourcePoint>>, GetACSLError> getACSLOfValue(
             const GetACSLConfig &config,
             std::optional<SourcePoint> currentPoint = std::nullopt) const {

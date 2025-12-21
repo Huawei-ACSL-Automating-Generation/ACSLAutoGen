@@ -9,6 +9,7 @@ build/
 test.c
 *_acsl.c
 *_with_acsl
+doxygen/
 
 benchmark_results.tsv
 benchmark_logs

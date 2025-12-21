@@ -1,5 +1,7 @@
-// src/SpecGenerator/loopInvariantPlugins.cpp
-
+/**
+ * @file loopInvariantPlugins.cpp
+ * @brief Implements path-sensitive and path-insensitive loop invariant plugins.
+ */
 #include <cstddef>
 #include <iterator>
 #include <llvm/Support/Casting.h>
@@ -63,10 +65,17 @@ namespace acslg::spec_generator {
         }
     } // namespace
 
+    /**
+     * @class CheckAndDumpLoopInfoPlugin
+     * @brief Debug plugin that prints parsed loop info without emitting ACSL clauses.
+     */
     class CheckAndDumpLoopInfoPlugin : public PathInsensitiveLoopInvPlugin {
       public:
         CheckAndDumpLoopInfoPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
+        /**
+         * @brief Log collected loop metadata for inspection.
+         */
         GenResultType generate(const analyzer::ProgramState &,
                                const analyzer::ProgramState &,
                                const LoopInfo &loopInfo) const override {
@@ -75,6 +84,7 @@ namespace acslg::spec_generator {
                 if (entryAndCurrentInfo.symbolicLoopEntry->getPaths().size() != 1) {
                     ERROR("`symbolicLoopEntry` is in an invalid state");
                 }
+                // Dump the symbolic entry state to help diagnose plugin ordering and data flow.
                 INFO("`loopEntryInfo_` is std::set.");
                 INFO(entryAndCurrentInfo.symbolicLoopEntry->dump());
             } else {
@@ -125,11 +135,18 @@ namespace acslg::spec_generator {
     };
     REGISTER_ACSL_PLUGIN(CheckAndDumpLoopInfoPlugin, "checkAndDumpLoopInfo");
 
+    /**
+     * @class LinearInvariantPlugin
+     * @brief Generates linear loop invariants based on index patterns and loop entry state.
+     */
     class LinearInvariantPlugin : public PathSensitiveLoopInvPlugin {
       public:
         LinearInvariantPlugin(const std::string &ID) : id_(ID) {}
         std::string_view id() const override { return id_; }
         size_t propose() const override { return 0; }
+        /**
+         * @brief Attempt to emit ACSL invariants assuming linear index progression.
+         */
         std::optional<GenResultType> tryGenerate(const analyzer::ProgramState &,
                                                  const analyzer::ProgramState &,
                                                  const LoopInfo &loopInfo) const override {
@@ -150,6 +167,7 @@ namespace acslg::spec_generator {
                 using enum clang::BinaryOperatorKind;
                 using enum symb::BinaryOpExpr::Operator;
                 case BO_LT: {
+                    // Normalize strict inequalities to non-strict to simplify invariant printing.
                     auto newRHS = std::make_unique<symb::BinaryOpExpr>(
                         rhs->clone(), Subtract, std::make_unique<symb::LiteralExpr>(1));
                     loopCond = std::make_unique<symb::BinaryOpExpr>(lhs->clone(), LessEqual,

@@ -1,4 +1,7 @@
-// src/SpecGenerator/stringTemplate.h
+/**
+ * @file stringTemplate.h
+ * @brief Declares a lightweight string templating utility for ACSL emission.
+ */
 
 #ifndef __ACSLG_SRC_SPECGENERATOR_STRINGTEMPLATE_H__
 #define __ACSLG_SRC_SPECGENERATOR_STRINGTEMPLATE_H__
@@ -14,10 +17,14 @@
 namespace acslg::spec_generator {
     using NameMap = std::unordered_map<std::string_view, std::string_view>;
 
-    /// Parse a std::string containing placeholders in the form of ${name} as a template, supporting
-    /// placeholder substitution and templates concatenation.
-    /// The current implementation handles only simple placeholders: any text from ${ up to the
-    /// first } is interpreted as the name, without special parsing.
+    /**
+     * @class StringTemplate
+     * @brief Parses strings containing ${name} placeholders and supports substitution/composition.
+     *
+     * The implementation treats any text between `${` and the first `}` as the placeholder name,
+     * enabling fast replacement without heavy parsing. Templates can be concatenated to build
+     * larger outputs while preserving placeholder metadata.
+     */
     class StringTemplate {
       private:
         std::string rawText_; ///< The raw input text, will never be modified.

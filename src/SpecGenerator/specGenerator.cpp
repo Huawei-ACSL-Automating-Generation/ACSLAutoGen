@@ -1,5 +1,7 @@
-// src/SpecGenerator/specGenerators.cpp
-
+/**
+ * @file specGenerator.cpp
+ * @brief Implements ACSL generation using plugin dispatch for functions and loops.
+ */
 #include <algorithm>
 #include <iterator>
 #include <llvm/Support/Casting.h>
@@ -18,6 +20,15 @@ namespace acslg::spec_generator {
 
     namespace {
         // auxiliary function
+        /**
+         * @brief Fetch plugins by group name and filter by desired interface type.
+         * @tparam T Target plugin subclass to collect.
+         * @param groupName Group identifier registered in ACSLPluginGroupRegistry.
+         * @return Vector of plugin pointers cast to the requested type.
+         *
+         * This helper resolves group membership, reports unknown groups early, and preserves the
+         * order defined in the group registration for deterministic generation.
+         */
         template <typename T> std::vector<const T *> getPlugins(std::string_view groupName) {
             const ACSLPluginGroup *group = ACSLPluginGroupRegistry::instance().getGroup(groupName);
             if (!group) {
@@ -54,6 +65,11 @@ namespace acslg::spec_generator {
         }
     } // namespace
 
+    /**
+     * @brief Deep-assign from another pattern by cloning its symbolic value.
+     * @param other Source pattern.
+     * @return Reference to this.
+     */
     LoopInfo::Pattern &LoopInfo::Pattern::operator=(const Pattern &other) {
         if (this == &other)
             return *this;
@@ -62,6 +78,10 @@ namespace acslg::spec_generator {
         return *this;
     }
 
+    /**
+     * @brief Render the pattern as a readable string for debugging.
+     * @return Textual dump.
+     */
     std::string LoopInfo::Pattern::dump() const {
         using namespace utils::dump_fmt;
 
@@ -94,8 +114,14 @@ namespace acslg::spec_generator {
         }
     }
 
-    [[nodiscard]]
-    std::pair<std::string, std::unordered_set<symb::SourcePoint>> emitFunctionContract(
+    /**
+     * @brief Generate an ACSL function contract by invoking the configured plugins.
+     * @param pre [in] Program state at function entry.
+     * @param post [in] Program state after symbolic execution.
+     * @param groupName [in] Plugin group controlling which contract clauses are produced.
+     * @return Pair of complete ACSL text and set of SourcePoints referenced.
+     */
+    [[nodiscard]] std::pair<std::string, std::unordered_set<symb::SourcePoint>> emitFunctionContract(
         const analyzer::ProgramState &pre,
         const analyzer::ProgramState &post,
         std::string_view groupName) {
@@ -109,6 +135,7 @@ namespace acslg::spec_generator {
             DEBUG("Plugin {" + std::string{plugin->id()} + "} is generating...");
             if (auto [s, usedPoints] = plugin->generate(pre, post); s) {
                 spec += *s;
+                // Accumulate labels so callers can emit the necessary marker statements once.
                 allUsedPoints.insert(std::make_move_iterator(usedPoints.begin()),
                                      std::make_move_iterator(usedPoints.end()));
             }
@@ -117,6 +144,14 @@ namespace acslg::spec_generator {
         return std::pair{spec, std::move(allUsedPoints)};
     }
 
+    /**
+     * @brief Run loop info plugins to populate LoopInfo for a loop statement.
+     * @param preState [in] State before the loop.
+     * @param loopEntry [in] State representing entry into the loop.
+     * @param loopStmt [in] Loop statement to analyze.
+     * @param groupName [in] Plugin group to execute.
+     * @return Pair of LoopInfo and success flag (false aborts generation).
+     */
     std::pair<LoopInfo, bool> parseLoopInfo(const analyzer::ProgramState &preState,
                                             const analyzer::ProgramState &loopEntry,
                                             const clang::Stmt *loopStmt,
@@ -134,6 +169,13 @@ namespace acslg::spec_generator {
         return std::pair{std::move(loopInfo), true};
     }
 
+    /**
+     * @brief Parse loop info for complex loops; does not abort on plugin failure.
+     * @param preState [in] State before the loop.
+     * @param loopEntry [in] State at loop entry.
+     * @param loopInfo [in,out] Loop information object to be filled.
+     * @param groupName [in] Plugin group to execute.
+     */
     void parseComplexLoopInfo(const analyzer::ProgramState &preState,
                               const analyzer::ProgramState &loopEntry,
                               LoopInfo &loopInfo,
@@ -150,12 +192,21 @@ namespace acslg::spec_generator {
         }
     }
 
-    [[nodiscard]]
-    EmitLoopInvResult emitLoopInvariant(const analyzer::ProgramState &preState,
-                                        const analyzer::ProgramState &loopEntry,
-                                        const LoopInfo &loopInfo,
-                                        std::string_view piGroupName,
-                                        std::string_view psGroupName) {
+    /**
+     * @brief Generate loop invariants, assigns, and variants using path-insensitive and
+     *        path-sensitive plugins.
+     * @param preState [in] State before entering the loop.
+     * @param loopEntry [in] State representing loop entry.
+     * @param loopInfo [in] Parsed loop metadata.
+     * @param piGroupName [in] Path-insensitive plugin group identifier.
+     * @param psGroupName [in] Path-sensitive plugin group identifier.
+     * @return ACSL clauses, used SourcePoints, and merged post-loop state.
+     */
+    [[nodiscard]] EmitLoopInvResult emitLoopInvariant(const analyzer::ProgramState &preState,
+                                                      const analyzer::ProgramState &loopEntry,
+                                                      const LoopInfo &loopInfo,
+                                                      std::string_view piGroupName,
+                                                      std::string_view psGroupName) {
         auto piPlugins = getPlugins<PathInsensitiveLoopInvPlugin>(piGroupName);
         auto psPlugins = getPlugins<PathSensitiveLoopInvPlugin>(psGroupName);
         std::vector<std::unique_ptr<analyzer::Path>> invariants;
@@ -196,6 +247,8 @@ namespace acslg::spec_generator {
             loopInfo.loopStmt, loopEntry.getContext().getSourceManager(),
             loopEntry.getContext().getLangOptions());
         if (preState.getPaths().size() != loopEntry.getPaths().size()) {
+            // The implementation assumes a 1:1 mapping of pre/entry paths; bail out if branching
+            // diverged earlier.
             ERROR("Branch is unsupported here.");
         }
 
@@ -227,8 +280,10 @@ namespace acslg::spec_generator {
                     if (exprEqual(*lhsIt->second, *rhsIt->second))
                         continue;
                 } else if (rhsIt != rhs.memoryMap.end()) {
+                    // If only rhs writes the address, prefer its value to preserve available info.
                     continue;
                 } else {
+                    // If lhs is the only writer, keep it; otherwise fall through to unknown.
                     continue;
                 }
 
@@ -297,6 +352,8 @@ namespace acslg::spec_generator {
             }
 
             for (auto &cond : info.pathConds) {
+                // Substitute conditions so they refer to the current path's viewpoint of the loop
+                // entry.
                 auto subedConds = cond->getSubstitutedExpr(currentPath, loopEntryPoint);
                 toUpdate.pathConds.push_back(std::move(subedConds));
                 // todo: may insert for each unmodified position:
@@ -525,12 +582,16 @@ namespace acslg::spec_generator {
                         auto root = addr.get().getFromRoot();
                         if (root == std::nullopt)
                             TODO();
+                        // Skip writes to symbols that were not visible in the pre-path to avoid
+                        // inventing new locals.
                         if (!postPath->getVarAddr().contains(root.value()))
                             continue;
                         postPath->updateMemory(addr, std::move(value));
                     }
+                    // Carry over path termination state and optional return expression.
                     postPath->setPathState(postBranchInfo.pathState);
                     postPath->setReturnExpr(std::move(postBranchInfo.returnExpr));
+                    // Reapply substituted path conditions produced by plugins.
                     for (auto &pathCond : postBranchInfo.pathConds)
                         postPath->insertPathCondition(std::move(pathCond));
                     postState->insertPath(std::move(postPath));

@@ -1,4 +1,7 @@
-// src/SpecGenerator/funcSpecTemplates.h
+/**
+ * @file funcSpecTemplates.h
+ * @brief Holds reusable StringTemplate snippets for common function specifications.
+ */
 
 #ifndef __ACSLG_SRC_SPECGENERATOR_FUNCSPECTEMPLATES_H__
 #define __ACSLG_SRC_SPECGENERATOR_FUNCSPECTEMPLATES_H__

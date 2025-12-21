@@ -1,3 +1,8 @@
+/**
+ * @file invariant.cpp
+ * @brief Implements linearity checks and linear-expression conversion utilities for symbolic
+ *        expressions.
+ */
 #include <iterator>
 #include <llvm/Support/Casting.h>
 #include <queue>
@@ -10,6 +15,10 @@
 #include "Stingx/LinTS.h"
 
 namespace acslg::analyzer::symbolic {
+    /**
+     * @brief Determine whether the unary operation preserves linearity.
+     * @return True for + or - over a linear operand; false otherwise.
+     */
     bool UnaryOpExpr::isLinear() const {
         switch (op_) {
             case Operator::Plus:
@@ -18,6 +27,10 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
+    /**
+     * @brief Compute the algebraic degree of the unary expression.
+     * @return Degree of operand for +/-; -1 when undefined.
+     */
     int UnaryOpExpr::getMaxDegree() const {
         switch (op_) {
             case Operator::Plus:
@@ -26,6 +39,12 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
+    /**
+     * @brief Test if a binary operation yields a linear expression.
+     *
+     * Multiplication is considered linear only when exactly one side is constant; shifts are
+     * treated as multiplication by powers of two when the shift amount is constant.
+     */
     bool BinaryOpExpr::isLinear() const {
         // Algebraic summaries of both sides.
         const int ldeg  = left_->getMaxDegree();
@@ -57,6 +76,10 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
+    /**
+     * @brief Compute algebraic degree assuming operands have known degrees.
+     * @return Non-negative degree or -1 if the operator/operands make it invalid.
+     */
     int BinaryOpExpr::getMaxDegree() const {
         const int ldeg = left_->getMaxDegree();
         const int rdeg = right_->getMaxDegree();
@@ -84,6 +107,10 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
+    /**
+     * @brief Convert literal to a PPL linear expression when possible.
+     * @return Linear expression or nullopt if unsupported type.
+     */
     std::optional<Parma_Polyhedra_Library::Linear_Expression> LiteralExpr::toLinearExpr(
         const std::unordered_map<std::string, size_t> &) const {
         using namespace Parma_Polyhedra_Library;
@@ -103,6 +130,10 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
+    /**
+     * @brief Convert a binary expression to a PPL linear expression if affine.
+     * @return Linear expression or nullopt when non-affine.
+     */
     std::optional<Parma_Polyhedra_Library::Linear_Expression> BinaryOpExpr::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
         auto L = left_->toLinearExpr(varIndexMap);
@@ -142,6 +173,9 @@ namespace acslg::analyzer::symbolic {
         ERROR("BinaryOpExpr: non-affine or unsupported operator");
     }
 
+    /**
+     * @brief Convert unary expression to linear form when operator is +/-.
+     */
     std::optional<Parma_Polyhedra_Library::Linear_Expression> UnaryOpExpr::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
         auto E = expr_->toLinearExpr(varIndexMap);
@@ -155,6 +189,9 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
+    /**
+     * @brief Convert variable-backed symbol to a linear expression using a variable index map.
+     */
     std::optional<Parma_Polyhedra_Library::Linear_Expression> symbolic::SymbolValue::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
         using namespace Parma_Polyhedra_Library;
@@ -173,6 +210,9 @@ namespace acslg::analyzer::symbolic {
         return e;
     }
 
+    /**
+     * @brief Convert literal to linear expression using hashed-variable map variant.
+     */
     Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr(
         const std::unordered_map<size_t, size_t> &) const {
         switch (type_) {
