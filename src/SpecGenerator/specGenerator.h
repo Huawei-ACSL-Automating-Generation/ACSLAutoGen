@@ -20,10 +20,6 @@
 #include "Analyzer/state.h"
 #include "Utils/utils.h"
 
-namespace aclsg::analyzer {
-    class programState;
-}
-
 namespace acslg::spec_generator {
     /**
      * @brief Emit an ACSL function contract using registered plugins.
