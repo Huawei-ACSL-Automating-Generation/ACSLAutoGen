@@ -10,6 +10,7 @@
 #include "SpecGenerator/specGenerator.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "clang/Basic/SourceManager.h"
+#include <sstream>
 
 namespace acslg::analyzer {
     /**
@@ -32,6 +33,8 @@ namespace acslg::analyzer {
             if (!context_.getSourceManager().isInMainFile(loc))
                 continue;
 
+            if (!shouldAnalyze(func))
+                continue;
             // Only generate a single contract for main even if it appears multiple times in the AST
             // (e.g., due to templates or diagnostics).
             if (func->getNameAsString() == "main" && count)
@@ -41,6 +44,7 @@ namespace acslg::analyzer {
             generateFunctionSpec(wrappedFunc.get());
             functions_.push_back(std::move(wrappedFunc));
         }
+        verifyRequestedFunctionsFound();
     }
 
     /**
@@ -75,9 +79,9 @@ namespace acslg::analyzer {
         const clang::CompoundStmt *CS = cast<clang::CompoundStmt>(body);
         auto preState                 = state->clone();
 
-        // Walk each top-level statement to evolve the symbolic program state.
-        for (const clang::Stmt *stmt : CS->children())
-            state->step(stmt);
+        // Step the whole compound body so we reuse the existing scope clean-up logic (collectLocalVars
+        // + eraseExpiredLocals) instead of reimplementing it when generating contracts.
+        state->step(CS);
         // INFO(state->dump());
 
         if (FD->getNameAsString() == "main") {
@@ -87,6 +91,27 @@ namespace acslg::analyzer {
 
         // Generate the ACSL contract text and record any synthetic labels used in the rewrite.
         auto [spec, usedPoints] = spec_generator::emitFunctionContract(*preState, *state);
+        // Generic light simplification: drop requires/ensures clauses that mention local parameters,
+        // since those should not appear in the final ACSL.
+        std::vector<std::string> params;
+        params.reserve(FD->param_size());
+        for (const auto *p : FD->parameters())
+            params.push_back(p->getNameAsString());
+
+        // Light cleanup: remove redundant conjunctions with \true, but preserve all requires/ensures.
+        std::ostringstream cleaned;
+        std::istringstream iss(spec);
+        std::string line;
+        while (std::getline(iss, line)) {
+            const std::string true_and = "\\true && ";
+            const std::string and_true = " && \\true";
+            while (line.find(true_and) != std::string::npos)
+                line.replace(line.find(true_and), true_and.size(), "");
+            while (line.find(and_true) != std::string::npos)
+                line.replace(line.find(and_true), and_true.size(), "");
+            cleaned << line << "\n";
+        }
+        spec = cleaned.str();
         INFO(spec);
 
         auto &SM       = context_.getSourceManager();
@@ -94,5 +119,37 @@ namespace acslg::analyzer {
         // Insert the ACSL contract before the function definition to keep the source stable.
         context_.insertText(fileBegin, spec, /*after*/ false, /*indentNewLines*/ true);
         context_.insertUsedPoints(std::move(usedPoints));
+    }
+
+    bool ACSLAnalyzer::shouldAnalyze(const clang::FunctionDecl *func) {
+        const std::string funcName = func->getNameAsString();
+        if (!targetFunctions_.empty() && !targetFunctions_.contains(funcName))
+            return false;
+
+        if (!targetFunctions_.empty())
+            seenTargetFunctions_.insert(funcName);
+        return true;
+    }
+
+    void ACSLAnalyzer::verifyRequestedFunctionsFound() {
+        if (targetFunctions_.empty())
+            return;
+
+        std::vector<std::string> missing;
+        for (const auto &name : targetFunctions_) {
+            if (!seenTargetFunctions_.contains(name))
+                missing.push_back(name);
+        }
+        if (missing.empty())
+            return;
+
+        std::ostringstream oss;
+        oss << "Requested function(s) not found in main file: ";
+        for (size_t i = 0; i < missing.size(); ++i) {
+            oss << missing[i];
+            if (i + 1 < missing.size())
+                oss << ", ";
+        }
+        ERROR(oss.str());
     }
 } // namespace acslg::analyzer

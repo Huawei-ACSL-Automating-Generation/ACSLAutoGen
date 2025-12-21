@@ -88,6 +88,35 @@ namespace acslg::analyzer::symbolic {
             }
         }
 
+        inline bool isBooleanExpr(const SymbolicExpr &e) {
+            if (auto *lit = llvm::dyn_cast<LiteralExpr>(&e))
+                return lit->getLiteralValue() == 0 || lit->getLiteralValue() == 1 ||
+                       e.getValType().kind == ScalarKind::Bool;
+
+            if (auto *bo = llvm::dyn_cast<BinaryOpExpr>(&e)) {
+                using BO = BinaryOpExpr::Operator;
+                switch (bo->getOperator()) {
+                    case BO::LogicalAnd:
+                    case BO::LogicalOr:
+                    case BO::LessThan:
+                    case BO::GreaterThan:
+                    case BO::LessEqual:
+                    case BO::GreaterEqual:
+                    case BO::Equal:
+                    case BO::NotEqual: return true;
+                    default: break;
+                }
+            }
+
+            if (auto *uo = llvm::dyn_cast<UnaryOpExpr>(&e)) {
+                using UO = UnaryOpExpr::Operator;
+                if (uo->getOperator() == UO::LogicalNot)
+                    return true;
+            }
+
+            return e.getValType().kind == ScalarKind::Bool;
+        }
+
         inline uint64_t literalRawU(const LiteralExpr &L) {
             switch (L.getLiteralType()) {
                 case LiteralExpr::LiteralType::Boolean: return L.getLiteralValue() != 0 ? 1u : 0u;
@@ -553,6 +582,39 @@ namespace acslg::analyzer::symbolic {
         std::optional<SourcePoint> currentPoint,
         unsigned parentPrec,
         bool isRightChild) const {
+        using Op = BinaryOpExpr::Operator;
+
+        auto emitBoolCmp = [&](const SymbolicExpr &boolExpr,
+                               bool expectTrue) -> utils::expected<std::string, GetACSLError> {
+            auto boolStr = callGetACSL(boolExpr, config, usedPoints, currentPoint, getPrecedence(op_), false);
+            if (!boolStr)
+                return boolStr.error();
+            if (expectTrue)
+                return boolStr.value();
+            return std::string("!(") + boolStr.value() + ")";
+        };
+
+        if (op_ == Op::Equal || op_ == Op::NotEqual) {
+            auto trySimplify = [&](const SymbolicExpr &lhs, const SymbolicExpr &rhs)
+                -> std::optional<utils::expected<std::string, GetACSLError>> {
+                auto lit = llvm::dyn_cast<LiteralExpr>(&rhs);
+                if (!lit)
+                    return std::nullopt;
+                auto v = lit->getLiteralValue();
+                if (v != 0 && v != 1)
+                    return std::nullopt;
+                if (!isBooleanExpr(lhs))
+                    return std::nullopt;
+                const bool expectTrue = (op_ == Op::Equal) ? (v == 1) : (v == 0);
+                return emitBoolCmp(lhs, expectTrue);
+            };
+
+            if (auto r = trySimplify(*left_, *right_))
+                return *r;
+            if (auto r = trySimplify(*right_, *left_))
+                return *r;
+        }
+
         std::ostringstream oss;
         std::string opStr;
         switch (op_) {
@@ -859,8 +921,73 @@ namespace acslg::analyzer::symbolic {
             return UnknownExpr::makeUnknown().into_underlying();
         if (isLinear())
             return simplifiedExprIfLinear();
+
+        // Try constant folding first.
+        if (auto c = evalToConstExpr())
+            return utils::not_null<std::unique_ptr<SymbolicExpr>>(
+                std::unique_ptr<SymbolicExpr>(std::move(c)));
+
         auto LHS = left_->simplifiedExpr();
         auto RHS = right_->simplifiedExpr();
+
+        using Op = BinaryOpExpr::Operator;
+        // Normalize comparisons against boolean literals to avoid chained equality like `x == 0 == 1`.
+        if (op_ == Op::Equal || op_ == Op::NotEqual) {
+            auto simplifyBoolCmp = [&](const SymbolicExpr &boolExpr,
+                                       const SymbolicExpr &litExpr)
+                -> std::unique_ptr<SymbolicExpr> {
+                auto lit = llvm::dyn_cast<LiteralExpr>(&litExpr);
+                if (!lit)
+                    return nullptr;
+                auto v = lit->getLiteralValue();
+                if (v != 0 && v != 1)
+                    return nullptr;
+                if (!isBooleanExpr(boolExpr))
+                    return nullptr;
+
+                const bool expectTrue = (op_ == Op::Equal) ? (v == 1) : (v == 0);
+                if (expectTrue)
+                    return boolExpr.clone().into_underlying();
+                return std::make_unique<UnaryOpExpr>(
+                    UnaryOpExpr::Operator::LogicalNot,
+                    utils::not_null<std::unique_ptr<SymbolicExpr>>(boolExpr.clone()));
+            };
+
+            if (auto simplified = simplifyBoolCmp(*LHS, *RHS))
+                return utils::not_null<std::unique_ptr<SymbolicExpr>>(std::move(simplified));
+            if (auto simplified = simplifyBoolCmp(*RHS, *LHS))
+                return utils::not_null<std::unique_ptr<SymbolicExpr>>(std::move(simplified));
+        }
+
+        // Simplify boolean short-circuit cases.
+        if (op_ == Op::LogicalAnd) {
+            if (auto lc = LHS->evalToConstExpr()) {
+                if (!literalAsBool(*lc))
+                    return utils::not_null<std::unique_ptr<SymbolicExpr>>(
+                        std::unique_ptr<SymbolicExpr>(std::move(lc)));
+                return RHS; // lhs is true
+            }
+            if (auto rc = RHS->evalToConstExpr()) {
+                if (!literalAsBool(*rc))
+                    return utils::not_null<std::unique_ptr<SymbolicExpr>>(
+                        std::unique_ptr<SymbolicExpr>(std::move(rc)));
+                return LHS; // rhs is true
+            }
+        } else if (op_ == Op::LogicalOr) {
+            if (auto lc = LHS->evalToConstExpr()) {
+                if (literalAsBool(*lc))
+                    return utils::not_null<std::unique_ptr<SymbolicExpr>>(
+                        std::unique_ptr<SymbolicExpr>(std::move(lc)));
+                return RHS; // lhs is false
+            }
+            if (auto rc = RHS->evalToConstExpr()) {
+                if (literalAsBool(*rc))
+                    return utils::not_null<std::unique_ptr<SymbolicExpr>>(
+                        std::unique_ptr<SymbolicExpr>(std::move(rc)));
+                return LHS; // rhs is false
+            }
+        }
+
         return std::make_unique<BinaryOpExpr>(std::move(LHS), op_, std::move(RHS));
     }
 

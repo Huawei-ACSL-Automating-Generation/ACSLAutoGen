@@ -27,6 +27,54 @@
 namespace acslg::analyzer {
     using std::literals::string_literals::operator""s;
 
+    namespace {
+        std::optional<const clang::VarDecl *>
+        getRootFromSymbol(const symbolic::Symbol &symbol) {
+            if (auto *sv = llvm::dyn_cast<const symbolic::SymbolValue>(&symbol))
+                return sv->getFromRoot();
+            if (auto *sa = llvm::dyn_cast<const symbolic::SymbolAddress>(&symbol))
+                return sa->getFromRoot();
+            return std::nullopt;
+        }
+
+        bool containsLocalVar(const symbolic::SymbolicExpr &expr,
+                              const std::unordered_set<const clang::VarDecl *> &locals) {
+            auto [usedSymbols, _] = symbolic::SymbolicExpr::collectUsedSymbols(expr);
+            for (const auto &[_, symbol] : usedSymbols) {
+                auto root = getRootFromSymbol(*symbol);
+                if (!root)
+                    continue;
+                if (locals.contains(root.value()->getCanonicalDecl()))
+                    return true;
+            }
+            return false;
+        }
+
+        std::unique_ptr<symbolic::SymbolicExpr>
+        dropLocalConjuncts(const symbolic::SymbolicExpr &expr,
+                           const std::unordered_set<const clang::VarDecl *> &locals) {
+            if (const auto *bin = llvm::dyn_cast<symbolic::BinaryOpExpr>(&expr);
+                bin && bin->getOperator() == symbolic::BinaryOpExpr::Operator::LogicalAnd) {
+                auto lhs = dropLocalConjuncts(*bin->getLeft(), locals);
+                auto rhs = dropLocalConjuncts(*bin->getRight(), locals);
+                if (!lhs && !rhs)
+                    return nullptr;
+                if (!lhs)
+                    return rhs;
+                if (!rhs)
+                    return lhs;
+                return std::make_unique<symbolic::BinaryOpExpr>(
+                    utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>(std::move(lhs)),
+                    symbolic::BinaryOpExpr::Operator::LogicalAnd,
+                    utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>(std::move(rhs)));
+            }
+
+            if (containsLocalVar(expr, locals))
+                return nullptr;
+            return expr.clone().into_underlying();
+        }
+    } // namespace
+
     /**
      * @brief Copy-construct a path, optionally sharing symbolic expressions instead of cloning.
      * @param other Path to copy from.
@@ -193,7 +241,7 @@ namespace acslg::analyzer {
                     memoryState_.write(*resultAddr, std::move(newSymbol));
                 }
                 return resultAddr;
-            } else {
+            } else { 
                 ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither pointer nor "
                       "array?");
             }
@@ -275,8 +323,17 @@ namespace acslg::analyzer {
         const clang::VarDecl *var) const {
         auto canonicalVar = var->getCanonicalDecl();
         auto varIt        = varAddr_.find(canonicalVar);
-        if (varIt == varAddr_.end())
+        if (varIt == varAddr_.end()) {
+            // Try to reuse an existing binding with the same identifier (e.g., merged paths with
+            // different VarDecl instances). Do not allocate new memory here.
+            for (const auto &[vd, addrPtr] : varAddr_) {
+                if (vd && vd->getName() == canonicalVar->getName()) {
+                    if (auto val = memoryState_.read(*addrPtr))
+                        return val.value()->clone();
+                }
+            }
             ERROR("SymbolValue '" + canonicalVar->getNameAsString() + "' has no allocated address");
+        }
         auto addr  = varIt->second.get().get();
         auto value = memoryState_.read(*addr);
         if (value == std::nullopt)
@@ -288,12 +345,8 @@ namespace acslg::analyzer {
     /// @brief Return a const reference to accumulated path conditions.
     const PathConditions &Path::getPathConditions() const { return pathConditions_; }
 
-    /**
-     * @brief Allocate memory for a variable if not yet present in the model.
-     * @param var Variable declaration to allocate.
-     * @return Pointer to the allocated symbolic variable address.
-     */
-    utils::not_null<symbolic::VariableAddress *> Path::allocMemory(const clang::VarDecl *var) {
+    utils::not_null<symbolic::VariableAddress *> Path::allocMemory(const clang::VarDecl *var,
+                                                                   bool initSymbolic) {
         auto canonicalVar = var->getCanonicalDecl();
         if (varAddr_.contains(canonicalVar)) {
             // All `symbolic::VariableAddress` built from same canonicalVar are same.
@@ -303,8 +356,15 @@ namespace acslg::analyzer {
         auto rawPtr  = newAddr.get();
         varAddr_.emplace(canonicalVar, std::move(newAddr));
 
-        // Prevent uninitialized variables.
-        memoryState_.write(*rawPtr, symbolic::UnknownExpr::makeUnknown().into_underlying());
+        if (initSymbolic) {
+            // Initialize with a symbolic value corresponding to the variable type.
+            auto initSym =
+                getSymbol(var->getType(), rawPtr->addressClone().into_underlying(), startPoint_);
+            memoryState_.write(*rawPtr, std::move(initSym));
+        } else {
+            // Prevent uninitialized variables.
+            memoryState_.write(*rawPtr, symbolic::UnknownExpr::makeUnknown().into_underlying());
+        }
         return rawPtr;
     }
 
@@ -384,7 +444,7 @@ namespace acslg::analyzer {
             const clang::ParmVarDecl *param = FD->getParamDecl(i);
             clang::QualType T               = param->getType();
 
-            auto slot = calleePath->allocMemory(param);
+            auto slot = calleePath->allocMemory(param, /*initSymbolic*/ true);
 
             if (T->isPointerType()) {
                 auto m = args[i]->tryEvalAsSymbolAddr();
@@ -547,6 +607,14 @@ namespace acslg::analyzer {
                     DEBUG("evaluating clang::DeclRefExpr...");
                     if (const auto *varDecl = dyn_cast<clang::VarDecl>(declRef->getDecl())) {
                         auto varExpr = getVarState(varDecl);
+                        // Ensure pointer-typed variables are represented as addresses.
+                        if (varDecl->getType()->isPointerType() && !varExpr->tryEvalAsSymbolAddr()) {
+                            WARN("DeclRefExpr to pointer '" << varDecl->getNameAsString()
+                                 << "' has non-address value; fabricating symbolic address.");
+                            auto addr = std::make_unique<symbolic::SymbolAddress>(
+                                varDecl->getType()->getPointeeType(), std::nullopt, startPoint_);
+                            varExpr   = std::move(addr);
+                        }
                         Formulas exprs;
                         exprs.push_back(std::move(varExpr));
                         return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
@@ -808,8 +876,9 @@ namespace acslg::analyzer {
                         UNIMPLEMENT("Calling a function with no visible body.");
                     }
 
-                    auto callArgs   = evalCallArgs(this, call);
-                    bool firstTaken = false;
+                    auto callArgs       = evalCallArgs(this, call);
+                    auto callerSnapshot = this->clone(); // keep caller locals/ctx intact across inline call
+                    bool firstTaken     = false;
                     for (size_t k = 0; k < callArgs.size(); ++k) {
                         auto initPath = std::move(callArgs[k].path);
                         bindParams(initPath.get(), callee, callArgs[k].args);
@@ -821,12 +890,25 @@ namespace acslg::analyzer {
                         auto produced = calleeState.takeAllPaths();
                         for (size_t i = 0; i < produced.size(); ++i) {
                             auto p = std::move(produced[i]);
+                            p->setPathState(PathState::Step);
+                            // Restore caller locals/params into callee return path.
+                            for (const auto &[vd, addrPtr] : callerSnapshot->varAddr_) {
+                                if (!p->varAddr_.contains(vd)) {
+                                    p->varAddr_.emplace(vd,
+                                                        std::make_unique<symbolic::VariableAddress>(
+                                                            *addrPtr));
+                                }
+                                if (auto val = callerSnapshot->memoryState_.read(*addrPtr)) {
+                                    auto &dstAddr = p->varAddr_.at(vd);
+                                    p->memoryState_.write(*dstAddr, val.value()->clone());
+                                }
+                            }
+                            // Merge path-level states (conditions/return expr/etc.).
+                            p->mergeWith(*callerSnapshot);
                             auto ret =
                                 (p->getReturnExpr()
                                      ? p->getReturnExpr().value()->clone()
                                      : symbolic::UnknownExpr::makeUnknown().into_underlying());
-
-                            p->setPathState(PathState::Step);
 
                             if (!firstTaken) {
                                 this->swap(*p);
@@ -1004,8 +1086,15 @@ namespace acslg::analyzer {
 
                     if (memberExpr->isArrow()) {
                         auto baseAddr = baseExpr->tryEvalAsSymbolAddr();
-                        if (baseAddr == std::nullopt)
-                            ERROR("LHS of '->' is not an address");
+                        if (baseAddr == std::nullopt) {
+                            WARN("LHS of '->' is not an address; fabricating symbolic pointer to continue.");
+                            auto newAddr = std::make_unique<symbolic::SymbolAddress>(
+                                memberExpr->getBase()->getType()->getPointeeType(), std::nullopt,
+                                startPoint_);
+                            baseAddr =
+                                utils::not_null<std::unique_ptr<symbolic::SymbolAddress>>{std::move(
+                                    newAddr)};
+                        }
                         auto val = memoryState_.read(*baseAddr.value());
                         if (val == std::nullopt) {
                             st = std::make_unique<symbolic::Structure>(
@@ -1753,14 +1842,8 @@ namespace acslg::analyzer {
     void ProgramState::init() {
         auto FD       = func_->getFunctionDecl();
         auto initPath = std::make_unique<Path>(context_, startPoint_);
-        for (const clang::ParmVarDecl *param : FD->parameters()) {
-            clang::QualType paramType = param->getType();
-
-            auto paramAddr = initPath->allocMemory(param);
-            auto value =
-                getSymbol(paramType, paramAddr->addressClone().into_underlying(), startPoint_);
-            initPath->updateMemory(*paramAddr, std::move(value));
-        }
+        for (const clang::ParmVarDecl *param : FD->parameters())
+            (void)initPath->allocMemory(param, /*initSymbolic*/ true);
         paths_.clear();
         paths_.push_back(std::move(initPath));
     }
@@ -1831,7 +1914,6 @@ namespace acslg::analyzer {
             .Case<clang::SwitchStmt>([this](const clang::SwitchStmt *switchStmt) {
                 DEBUG("stepping SwitchStmt...");
                 auto prevStmtCtx = this->stmtCtx_;
-                this->stmtCtx_   = switchStmt;
                 setStmtCtx(switchStmt);
 
                 if (switchStmt->hasInitStorage())
@@ -1904,6 +1986,18 @@ namespace acslg::analyzer {
         for (auto &path : paths_) {
             auto &memoryState = path->getMutMemoryState();
             std::erase_if(path->varAddr_, [&](auto &&kv) { return localVars.contains(kv.first); });
+            if (!localVars.empty()) {
+                PathConditions filtered;
+                filtered.reserve(path->pathConditions_.size());
+                for (auto &cond : path->pathConditions_) {
+                    auto stripped = dropLocalConjuncts(*cond, localVars);
+                    if (!stripped)
+                        continue;
+                    filtered.emplace(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>(
+                        std::move(stripped)));
+                }
+                path->pathConditions_ = std::move(filtered);
+            }
             memoryState.eraseExpiredLocals(localVars);
             memoryState.mergeRanges();
         }

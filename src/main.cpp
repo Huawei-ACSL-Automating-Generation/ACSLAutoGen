@@ -6,6 +6,8 @@
 #include "llvm/Support/CommandLine.h"
 #include <memory>
 #include <filesystem>
+#include <string>
+#include <vector>
 #include "Context/context.h"
 #include "Analyzer/analysis.h"
 #include "macros.h"
@@ -21,6 +23,10 @@ namespace acslg {
         llvm::cl::desc("Output only the entire AST (Decls) using Clang's pretty print"),
         llvm::cl::cat(ACSLGCategory));
 
+    static llvm::cl::list<std::string> TargetFunctions(
+        "func", llvm::cl::desc("Functions to analyze (analyze all when omitted)"),
+        llvm::cl::CommaSeparated, llvm::cl::ZeroOrMore, llvm::cl::cat(ACSLGCategory));
+
     class TUASTConsumer : public clang::ASTConsumer {
       public:
         void HandleTranslationUnit(clang::ASTContext &context) override {
@@ -29,7 +35,9 @@ namespace acslg {
                 TUDecl->dump();
             } else {
                 auto acslContext = context::ACSLGContext{context};
-                auto analyzer    = analyzer::ACSLAnalyzer{acslContext};
+                std::vector<std::string> targetFuncs(TargetFunctions.begin(),
+                                                     TargetFunctions.end());
+                auto analyzer = analyzer::ACSLAnalyzer{acslContext, std::move(targetFuncs)};
                 analyzer.analyzeFunctions();
                 auto &SM       = acslContext.getSourceManager();
                 auto &rewriter = acslContext.getRewriter();
@@ -38,8 +46,12 @@ namespace acslg {
                 // TODO: replace "with_acsl.c" with user-defined relative path.
                 auto path =
                     fs::path{SM.getFilename(SM.getLocForStartOfFile(SM.getMainFileID())).str()};
-                path.replace_filename(
-                    path.stem().concat(path.extension().string()).concat("_with_acsl"));
+                // Keep original extension and insert "_with_acsl" before it: foo.c -> foo_with_acsl.c
+                auto stem       = path.stem().string();
+                auto extension  = path.extension();
+                auto parentPath = path.parent_path();
+                auto outName    = stem + "_with_acsl" + extension.string();
+                path            = parentPath / outName;
                 llvm::raw_fd_ostream Out(path.string(), EC, llvm::sys::fs::OF_None);
                 if (EC)
                     ERROR("Error opening file " + path.string() + ": " + EC.message());

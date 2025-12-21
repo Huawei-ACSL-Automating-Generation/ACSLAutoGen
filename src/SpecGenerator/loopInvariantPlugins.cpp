@@ -1316,6 +1316,14 @@ namespace acslg::spec_generator {
                         indexInfo.indexBound->clone()));
                 }
 
+                // Safety guard: avoid constructing MaxMinOverRange with an invalid range.
+                if (!arrayRange || !arrayRange->getLength()) {
+                    WARN("ParadigmMaxMinPlugin: array range missing length, skip post-state.");
+                    return;
+                }
+                DEBUG("ParadigmMaxMinPlugin: range length dump -> " +
+                      arrayRange->getLength().value()->dump());
+
                 auto &entryPath = entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0);
                 auto maxAddrIt  = entryPath->getVarAddr().find(maxDecl);
                 if (maxAddrIt == entryPath->getVarAddr().end())
@@ -1325,6 +1333,7 @@ namespace acslg::spec_generator {
                     loopInfo.bodyStmt,
                     entryAndCurrentInfo.symbolicLoopEntry->getContext().getSourceManager(),
                     entryAndCurrentInfo.symbolicLoopEntry->getContext().getLangOptions());
+                DEBUG("ParadigmMaxMinPlugin: pointAfterLoop label -> " + pointAfterLoop.getLabel());
                 symb::AddressBox maxAddrBox{*maxAddrIt->second};
                 normalPostInfo.memoryMap.emplace(
                     maxAddrBox, std::make_unique<symb::MaxMinOverRange>(std::move(arrayRange), "k",

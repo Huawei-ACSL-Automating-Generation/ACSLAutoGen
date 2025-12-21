@@ -8,8 +8,10 @@
 
 #include "Context/context.h"
 #include "function.h"
-#include <vector>
 #include <memory>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
 namespace acslg::analyzer {
     /**
@@ -25,8 +27,10 @@ namespace acslg::analyzer {
         /**
          * @brief Construct an analyzer bound to a shared compilation context.
          * @param ctx [in] Shared context holding the AST, source manager, and rewriter.
+         * @param targetFunctions [in] Optional list of function names to restrict analysis to.
          */
-        ACSLAnalyzer(context::ACSLGContext &ctx) : context_(ctx) {}
+        ACSLAnalyzer(context::ACSLGContext &ctx, std::vector<std::string> targetFunctions = {})
+            : context_(ctx), targetFunctions_(targetFunctions.begin(), targetFunctions.end()) {}
 
         /**
          * @brief Entry point that iterates functions in the translation unit and generates ACSL
@@ -37,7 +41,11 @@ namespace acslg::analyzer {
       private:
         context::ACSLGContext &context_;
         std::vector<std::unique_ptr<ACSLFunction>> functions_;
+        std::unordered_set<std::string> targetFunctions_;
+        std::unordered_set<std::string> seenTargetFunctions_;
 
+        bool shouldAnalyze(const clang::FunctionDecl *func);
+        void verifyRequestedFunctionsFound();
         /**
          * @brief Build and insert the ACSL contract for a single function.
          * @param func [in] Wrapper around the Clang function declaration being processed.

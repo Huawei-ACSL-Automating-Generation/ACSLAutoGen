@@ -64,7 +64,7 @@ namespace acslg::utils {
                 return;
             for (clang::Decl *d : ds->decls()) {
                 if (auto *vd = dyn_cast<clang::VarDecl>(d)) {
-                    out.insert(vd);
+                    out.insert(vd->getCanonicalDecl());
                 }
             }
         }
@@ -96,7 +96,7 @@ namespace acslg::utils {
 
             if (const clang::FunctionDecl *FD = call->getDirectCallee()) {
                 for (const clang::ParmVarDecl *P : FD->parameters()) {
-                    out.insert(P);
+                    out.insert(P->getCanonicalDecl());
                 }
                 return;
             }
@@ -104,7 +104,7 @@ namespace acslg::utils {
                 if (const auto *DRE = dyn_cast<clang::DeclRefExpr>(Callee)) {
                     if (const auto *FD2 = dyn_cast<clang::FunctionDecl>(DRE->getDecl())) {
                         for (const clang::ParmVarDecl *P : FD2->parameters()) {
-                            out.insert(P);
+                            out.insert(P->getCanonicalDecl());
                         }
                     }
                 }

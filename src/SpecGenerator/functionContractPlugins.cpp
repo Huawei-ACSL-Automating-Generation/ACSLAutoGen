@@ -3,6 +3,8 @@
  * @brief Implements function-level ACSL contract plugins (assigns, behaviors, poststate).
  */
 #include <iterator>
+#include <memory>
+#include <optional>
 #include <unordered_set>
 
 #include "specGenerator.h"
@@ -11,6 +13,7 @@
 #include "utils.h"
 #include "Symbolic/expr.h"
 #include "Symbolic/aggregateExpr.h"
+#include <llvm/Support/Casting.h>
 
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
@@ -164,7 +167,7 @@ namespace acslg::spec_generator {
                         auto &[spec, usedPoints] = expected.value();
                         if (usedPoints.empty())
                             if (!llvm::isa<symb::OverRangeExpr>(*ret.value()))
-                                ensures.push_back("\\result == " + spec);
+                                ensures.push_back("\\result == (" + spec + ")");
                             else
                                 ensures.push_back(spec);
                         else {
@@ -174,7 +177,8 @@ namespace acslg::spec_generator {
                                 {.noStateLabelFunctionAt = true});
                             assert(wrongExpected);
                             if (!llvm::isa<symb::OverRangeExpr>(*ret.value()))
-                                ensures.push_back("\\result == " + wrongExpected.value().first);
+                                ensures.push_back("\\result == (" + wrongExpected.value().first +
+                                                  ")");
                             else
                                 ensures.push_back(wrongExpected.value().first);
                         }
@@ -203,7 +207,8 @@ namespace acslg::spec_generator {
                     if (!rhsOpt)
                         continue;
 
-                    ensures.push_back(lhsOpt.value().first + " == " + rhsOpt.value().first);
+                    // Wrap RHS to avoid precedence surprises in ACSL (e.g., bitwise ops vs ==).
+                    ensures.push_back(lhsOpt.value().first + " == (" + rhsOpt.value().first + ")");
                     allUsedPoints.insert(std::make_move_iterator(lhsOpt.value().second.begin()),
                                          std::make_move_iterator(lhsOpt.value().second.end()));
                     allUsedPoints.insert(std::make_move_iterator(rhsOpt.value().second.begin()),
