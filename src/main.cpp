@@ -10,6 +10,7 @@
 #include <vector>
 #include "Context/context.h"
 #include "Analyzer/analysis.h"
+#include "Analyzer/crossTU.h"
 #include "macros.h"
 
 namespace acslg {
@@ -24,8 +25,11 @@ namespace acslg {
         llvm::cl::cat(ACSLGCategory));
 
     static llvm::cl::list<std::string> TargetFunctions(
-        "func", llvm::cl::desc("Functions to analyze (analyze all when omitted)"),
-        llvm::cl::CommaSeparated, llvm::cl::ZeroOrMore, llvm::cl::cat(ACSLGCategory));
+        "func",
+        llvm::cl::desc("Functions to analyze (analyze all when omitted)"),
+        llvm::cl::CommaSeparated,
+        llvm::cl::ZeroOrMore,
+        llvm::cl::cat(ACSLGCategory));
 
     class TUASTConsumer : public clang::ASTConsumer {
       public:
@@ -153,6 +157,14 @@ namespace acslg {
 } // namespace acslg
 
 int main(int argc, const char **argv) {
+    bool enableFramacCompat = false;
+    for (int i = 0; i < argc; ++i) {
+        if (argv[i] && std::string_view{argv[i]}.find("__FRAMAC__") != std::string_view::npos) {
+            enableFramacCompat = true;
+            break;
+        }
+    }
+
     auto expectedParser =
         clang::tooling::CommonOptionsParser::create(argc, argv, acslg::ACSLGCategory);
     if (!expectedParser) {
@@ -160,6 +172,8 @@ int main(int argc, const char **argv) {
         return 1;
     }
     clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
+
+    acslg::analyzer::ctu::init(optionsParser.getCompilations(), enableFramacCompat);
 
     clang::tooling::ClangTool tool(optionsParser.getCompilations(),
                                    optionsParser.getSourcePathList());

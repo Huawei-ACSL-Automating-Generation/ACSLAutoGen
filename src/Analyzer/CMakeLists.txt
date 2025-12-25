@@ -2,8 +2,13 @@
 
 add_library(
   AnalyzerLib STATIC
-  analysis.cpp state.cpp Symbolic/expr.cpp Symbolic/aggregateExpr.cpp
-  Symbolic/invariant.cpp function.cpp)
+  analysis.cpp
+  state.cpp
+  crossTU.cpp
+  Symbolic/expr.cpp
+  Symbolic/aggregateExpr.cpp
+  Symbolic/invariant.cpp
+  function.cpp)
 
 target_include_directories(AnalyzerLib PUBLIC ${CMAKE_SOURCE_DIR}/src
                                               ${CMAKE_CURRENT_SOURCE_DIR})
@@ -172,7 +177,8 @@ foreach(a IN LISTS EMIT_STD EMIT_INCLUDES EMIT_SYS_INCLUDES EMIT_DEFS EMIT_OPTS)
   endif()
 endforeach()
 
-# clang tooling needs a valid resource dir so builtin headers (e.g., stddef.h) are found
+# clang tooling needs a valid resource dir so builtin headers (e.g., stddef.h)
+# are found
 find_program(CLANG_PROG clang)
 if(CLANG_PROG)
   execute_process(
