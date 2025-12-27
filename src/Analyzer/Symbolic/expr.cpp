@@ -157,23 +157,27 @@ namespace acslg::analyzer::symbolic {
         const auto *RD = RT->getDecl()->getDefinition();
         if (!RD || !RD->isCompleteDefinition())
             UNIMPLEMENT("Incomplete struct definition in makeUnknownStructure.");
-
         const auto &layout = RD->getASTContext().getASTRecordLayout(RD);
         auto st = std::make_unique<Structure>(RD, layout, std::move(baseAddr), fromPoint);
 
         size_t idx = 0;
         for (const clang::FieldDecl *FD : RD->fields()) {
             clang::QualType fty = FD->getType();
+            auto makeFieldAddr = [&]() {
+                return utils::not_null<std::unique_ptr<const Address>>{
+                    std::unique_ptr<const Address>(std::make_unique<FieldAddress>(
+                        fty, RD, st->getFromAddr().value()->addressClone().into_underlying(),
+                        idx))};
+            };
+
             if (fty->isStructureType()) {
                 // Recursively build unknown sub-structures so nested fields are initialized.
-                auto faddr = std::make_unique<FieldAddress>(
-                    fty, RD, st->getFromAddr().value()->addressClone().into_underlying(), idx);
-                auto nested = makeUnknownStructure(fty, std::move(faddr), fromPoint);
+                auto nested = makeUnknownStructure(fty, makeFieldAddr(), fromPoint);
                 st->setFieldValue(idx, std::move(nested));
             } else {
-                st->setFieldValue(
-                    idx, utils::not_null<std::unique_ptr<SymbolicExpr>>{
-                             std::unique_ptr<SymbolicExpr>(std::make_unique<UnknownExpr>())});
+                // Tie field values to their field address so later lookups can recover provenance.
+                auto fieldSym = getSymbol(fty, std::make_optional(makeFieldAddr()), fromPoint);
+                st->setFieldValue(idx, std::move(fieldSym));
             }
             ++idx;
         }
@@ -1090,8 +1094,14 @@ namespace acslg::analyzer::symbolic {
             return nullptr;
 
         auto tgt = unify(left_->getValType(), right_->getValType());
-        if (tgt.kind == ScalarKind::Void)
+        if (tgt.kind == ScalarKind::Void) {
+            if (op_ == BO::Equal || op_ == BO::NotEqual) {
+                auto emitBool = [](bool b) { return std::make_unique<LiteralExpr>(b); };
+                bool eq = (literalRawU(*Lc) == literalRawU(*Rc));
+                return emitBool(op_ == BO::Equal ? eq : !eq);
+            }
             return nullptr;
+        }
         unsigned bw = tgt.bitWidth ? tgt.bitWidth : 64;
 
         auto emitBool = [](bool b) { return std::make_unique<LiteralExpr>(b); };

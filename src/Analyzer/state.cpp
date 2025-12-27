@@ -20,6 +20,7 @@
 #include <clang/AST/ParentMapContext.h>
 
 #include "Symbolic/expr.h"
+#include "Symbolic/aggregateExpr.h"
 #include "macros.h"
 #include "Utils/utils.h"
 #include "SpecGenerator/specGenerator.h"
@@ -140,6 +141,24 @@ namespace acslg::analyzer {
             auto lhsVal = memoryState_.read(addrBox);
             auto rhsVal = other.memoryState_.read(addrBox);
 
+            if (auto *fieldAddr = llvm::dyn_cast<symbolic::FieldAddress>(&addrBox.get())) {
+                if (fieldAddr->getDefinition() &&
+                    fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
+                    fieldAddr->getFieldIndex() == 4) {
+                    DEBUG("mergeWith BigNum->data: lhs="
+                          << (lhsVal ? lhsVal.value()->dump() : "<none>")
+                          << " rhs=" << (rhsVal ? rhsVal.value()->dump() : "<none>")
+                          << " lhsFrom="
+                          << (lhsVal && symbolic::isFrom(*lhsVal.value(), addrBox, startPoint_)
+                                      ? "yes"
+                                      : "no")
+                          << " rhsFrom="
+                          << (rhsVal && symbolic::isFrom(*rhsVal.value(), addrBox, other.startPoint_)
+                                      ? "yes"
+                                      : "no"));
+                }
+            }
+
             if (lhsVal && llvm::isa<symbolic::Structure>(lhsVal.value().get().get()))
                 continue;
             if (rhsVal && llvm::isa<symbolic::Structure>(rhsVal.value().get().get()))
@@ -156,6 +175,13 @@ namespace acslg::analyzer {
                     continue;
             } else {
                 UNREACHABLE();
+            }
+            if (auto *fieldAddr = llvm::dyn_cast<symbolic::FieldAddress>(&addrBox.get())) {
+                if (fieldAddr->getDefinition() &&
+                    fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
+                    fieldAddr->getFieldIndex() == 4) {
+                    DEBUG("mergeWith BigNum->data: writing Unknown due to mismatch");
+                }
             }
             memoryState_.write(addrBox, symbolic::UnknownExpr::makeUnknown().into_underlying());
         }
@@ -375,6 +401,26 @@ namespace acslg::analyzer {
      */
     void Path::updateMemory(const symbolic::Address &addr,
                             utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr) {
+        if (expr->isUnknown()) {
+            if (auto *fieldAddr = llvm::dyn_cast<symbolic::FieldAddress>(&addr)) {
+                if (fieldAddr->getDefinition() &&
+                    fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
+                    fieldAddr->getFieldIndex() == 4) {
+                    if (stmtCtx_) {
+                        auto loc = stmtCtx_->getBeginLoc();
+                        auto &SM = context_.getSourceManager();
+                        auto presumed = SM.getPresumedLoc(loc);
+                        if (presumed.isValid()) {
+                            DEBUG("updateMemory Unknown BigNum->data at "
+                                  << presumed.getFilename() << ":" << presumed.getLine() << ":"
+                                  << presumed.getColumn());
+                        }
+                    } else {
+                        DEBUG("updateMemory Unknown BigNum->data (no stmtCtx)");
+                    }
+                }
+            }
+        }
         memoryState_.write(addr, std::move(expr).into_underlying());
     }
 
@@ -448,8 +494,18 @@ namespace acslg::analyzer {
 
             if (T->isPointerType()) {
                 auto m = args[i]->tryEvalAsSymbolAddr();
-                if (!m)
-                    ERROR("pointer parameter expects address-like argument");
+                if (!m) {
+                    auto &SM     = FD->getASTContext().getSourceManager();
+                    auto locStr  = FD->getLocation().isValid()
+                                      ? FD->getLocation().printToString(SM)
+                                      : "<unknown>";
+                    auto funcStr = FD->getQualifiedNameAsString();
+                    auto paramStr = param->getNameAsString();
+                    ERROR("pointer parameter expects address-like argument: func="
+                          << funcStr << " param=" << paramStr << " index=" << i
+                          << " type=" << T.getAsString() << " loc=" << locStr
+                          << " arg=" << args[i]->dump());
+                }
                 calleePath->updateMemory(*slot, m.value()->addressClone().into_underlying());
             } else if (T->isStructureType()) {
                 calleePath->updateMemory(*slot, args[i]->clone());
@@ -605,17 +661,38 @@ namespace acslg::analyzer {
                 })
                 .Case<clang::DeclRefExpr>([this](const clang::DeclRefExpr *declRef) -> EvalResult {
                     DEBUG("evaluating clang::DeclRefExpr...");
+                    auto loc = declRef->getExprLoc();
+                    if (loc.isValid()) {
+                        auto &SM = context_.getSourceManager();
+                        auto presumed = SM.getPresumedLoc(loc);
+                        if (presumed.isValid()) {
+                            DEBUG("DeclRefExpr location: " << presumed.getFilename() << ":"
+                                                           << presumed.getLine() << ":"
+                                                           << presumed.getColumn());
+                        }
+                    }
                     if (const auto *varDecl = dyn_cast<clang::VarDecl>(declRef->getDecl())) {
                         auto varExpr = getVarState(varDecl);
-                        // Ensure pointer-typed variables are represented as addresses.
+                        if (varDecl->getType()->isPointerType()) {
+                            DEBUG("DeclRefExpr pointer value: " << varExpr->dump());
+                        }
+                        // Ensure pointer-typed variables are represented as addresses, except for
+                        // the null pointer constant 0.
                         if (varDecl->getType()->isPointerType() &&
                             !varExpr->tryEvalAsSymbolAddr()) {
-                            WARN("DeclRefExpr to pointer '"
-                                 << varDecl->getNameAsString()
-                                 << "' has non-address value; fabricating symbolic address.");
-                            auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                varDecl->getType()->getPointeeType(), std::nullopt, startPoint_);
-                            varExpr = std::move(addr);
+                            if (auto *lit =
+                                    llvm::dyn_cast<symbolic::LiteralExpr>(varExpr.get().get());
+                                lit && lit->getLiteralValue() == 0) {
+                                // Keep NULL as Int(0) rather than fabricating a pointer.
+                            } else {
+                                WARN("DeclRefExpr to pointer '"
+                                     << varDecl->getNameAsString()
+                                     << "' has non-address value; fabricating symbolic address.");
+                                auto addr = std::make_unique<symbolic::SymbolAddress>(
+                                    varDecl->getType()->getPointeeType(), std::nullopt,
+                                    startPoint_);
+                                varExpr = std::move(addr);
+                            }
                         }
                         Formulas exprs;
                         exprs.push_back(std::move(varExpr));
@@ -699,6 +776,7 @@ namespace acslg::analyzer {
                         "llvm.dbg.declare", "llvm.lifetime.start", "llvm.lifetime.end", "printf",
                         "__assert_fail"};
                     std::string name = callee->getNameAsString();
+                    DEBUG("CallExpr callee name: " << name);
                     std::string lowerName(name);
                     std::transform(
                         lowerName.begin(), lowerName.end(), lowerName.begin(),
@@ -866,6 +944,92 @@ namespace acslg::analyzer {
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
 
+                    auto modelMemcpy = [&](const clang::Expr *destArg,
+                                           const clang::Expr *srcArg,
+                                           const clang::Expr *countArg) -> EvalResult {
+                        auto evalNoBranch = [this](const clang::Expr *e)
+                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                            auto ER = this->evalExpr(e);
+                            if (ER.second.size() != 1 || !ER.first.empty())
+                                ERROR("memcpy arguments must not branch or fork.");
+                            return ER.second[0]->clone();
+                        };
+
+                        auto destExpr  = evalNoBranch(destArg);
+                        auto srcExpr   = evalNoBranch(srcArg);
+                        auto countExpr = evalNoBranch(countArg);
+
+                        DEBUG("memcpy dest expr: " << destExpr->dump());
+
+                        auto destAddr = destExpr->tryEvalAsSymbolAddr();
+                        auto srcAddr  = srcExpr->tryEvalAsSymbolAddr();
+                        if (!srcAddr)
+                            UNIMPLEMENT("memcpy expects a pointer source argument.");
+
+                        clang::QualType elemTy = srcAddr.value()->getPointeeType();
+                        if (elemTy->isVoidType() || elemTy->isIncompleteType())
+                            UNIMPLEMENT("memcpy requires a non-void pointee type for modeling.");
+
+                        if (!destAddr)
+                            UNIMPLEMENT("memcpy expects a pointer destination argument.");
+
+                        auto &Ctx         = this->context_.getASTContext();
+                        const uint64_t sz = static_cast<uint64_t>(
+                            Ctx.getTypeSizeInChars(elemTy).getQuantity());
+                        if (sz == 0)
+                            UNIMPLEMENT("memcpy requires a non-zero element size.");
+
+                        auto lengthExpr = countExpr->clone();
+                        bool noCopy     = false;
+                        if (auto *lit = llvm::dyn_cast<symbolic::LiteralExpr>(
+                                lengthExpr.get().get())) {
+                            const auto raw = static_cast<uint64_t>(lit->getLiteralValue());
+                            if (raw == 0) {
+                                noCopy = true;
+                            } else if (sz > 1) {
+                                if (raw % sz != 0)
+                                    UNIMPLEMENT("memcpy size is not a multiple of element size.");
+                                lengthExpr = std::make_unique<symbolic::LiteralExpr>(raw / sz);
+                            }
+                        } else if (sz > 1) {
+                            lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
+                                std::move(lengthExpr), sz);
+                        }
+
+                        Formulas exprs;
+                        exprs.emplace_back(destExpr->clone());
+                        std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                        if (noCopy)
+                            return Path::EvalResult(std::move(empty), std::move(exprs));
+
+                        auto destRange = std::make_unique<symbolic::SymbolAddress>(
+                            *destAddr.value());
+                        destRange->setLength(std::move(lengthExpr));
+
+                        auto srcIndexed = std::make_unique<symbolic::SymbolAddress>(
+                            *srcAddr.value());
+                        srcIndexed->resetLength();
+                        srcIndexed->addOffset(
+                            std::make_unique<symbolic::SymbolAddress::RangeIndex>("i"));
+
+                        auto valueExpr = symbolic::getSymbol(
+                            elemTy, srcIndexed->addressClone().into_underlying(), startPoint_);
+                        memoryState_.write(*destRange, std::move(valueExpr));
+                        return Path::EvalResult(std::move(empty), std::move(exprs));
+                    };
+
+                    if (name == "memcpy" || name == "__builtin_memcpy") {
+                        if (call->getNumArgs() < 3)
+                            UNIMPLEMENT("memcpy expects three arguments.");
+                        return modelMemcpy(call->getArg(0), call->getArg(1), call->getArg(2));
+                    }
+
+                    if (name == "memcpy_s") {
+                        if (call->getNumArgs() < 4)
+                            UNIMPLEMENT("memcpy_s expects four arguments.");
+                        return modelMemcpy(call->getArg(0), call->getArg(2), call->getArg(3));
+                    }
+
                     std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                     Formulas outExprs;
 
@@ -918,10 +1082,9 @@ namespace acslg::analyzer {
                                     p->memoryState_.write(*dstAddr, val.value()->clone());
                                 }
                             }
-                            // Merge path-level states (conditions/return expr/etc.).
-                            // Restore statement context back to the caller so we can merge safely.
+                            // Restore statement context back to the caller.
+                            // Do not merge with callerSnapshot here; keep callee state as-is.
                             p->stmtCtx_ = callerSnapshot->stmtCtx_;
-                            p->mergeWith(*callerSnapshot);
                             auto ret =
                                 (p->getReturnExpr()
                                      ? p->getReturnExpr().value()->clone()
@@ -1097,10 +1260,12 @@ namespace acslg::analyzer {
                     if (base.second.size() != 1)
                         ERROR("No control flow branching permitted within a pointer-to-member "
                               "expression.");
+                    if (memberExpr->isArrow()) {
+                        DEBUG("MemberExpr base value: " << base.second[0]->dump());
+                    }
 
                     std::unique_ptr<symbolic::Structure> st;
                     auto baseExpr = std::move(base.second[0]).into_underlying();
-
                     if (memberExpr->isArrow()) {
                         auto baseAddr = baseExpr->tryEvalAsSymbolAddr();
                         if (baseAddr == std::nullopt) {
@@ -1113,6 +1278,7 @@ namespace acslg::analyzer {
                                 std::move(newAddr)};
                         }
                         auto val = memoryState_.read(*baseAddr.value());
+                        DEBUG("MemberExpr base in memory: " << (val ? "yes" : "no"));
                         if (val == std::nullopt) {
                             st = std::make_unique<symbolic::Structure>(
                                 RD, layout, baseAddr.value()->addressClone().into_underlying(),
@@ -1136,6 +1302,8 @@ namespace acslg::analyzer {
                     if (idx >= slots.size())
                         UNREACHABLE();
                     auto fieldValue = slots[idx]->clone();
+                    DEBUG("MemberExpr field " << FD->getNameAsString() << " idx=" << idx
+                                              << " value: " << fieldValue->dump());
                     EvalResult result{};
                     result.second.push_back(std::move(fieldValue));
                     return result;
@@ -1537,6 +1705,10 @@ namespace acslg::analyzer {
         } else if (auto fieldAddr = llvm::dyn_cast<const symbolic::FieldAddress>(&addr)) {
             auto &baseAddr = fieldAddr->getBaseAddr();
             auto &index    = fieldAddr->getFieldIndex();
+            if (fieldAddr->getDefinition() &&
+                fieldAddr->getDefinition()->getNameAsString() == "BigNum" && index == 4) {
+                DEBUG("write BigNum->data with: " << value->dump());
+            }
             auto baseValue = read(*baseAddr);
             if (baseValue == std::nullopt)
                 ERROR("Structure isn't existed in MemoryModel, insert it first.");
@@ -2195,6 +2367,7 @@ namespace acslg::analyzer {
             return;
         }
         expr = expr->IgnoreParenImpCasts();
+        DEBUG("ReturnStmt expr: " << expr->getStmtClassName());
 
         std::vector<utils::not_null<std::unique_ptr<Path>>> updatedPaths;
 
@@ -2212,6 +2385,7 @@ namespace acslg::analyzer {
             for (size_t i = 0; i < n; ++i) {
                 auto newPath = i == 0 ? std::move(pathPtr) : std::move(generatedPaths[i - 1]);
 
+                DEBUG("ReturnStmt value: " << results[i]->dump());
                 newPath->setReturnExpr(std::move(results[i]));
                 updatedPaths.emplace_back(std::move(newPath));
             }
@@ -2263,6 +2437,39 @@ namespace acslg::analyzer {
                 auto newPath  = (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
                 auto newValue = std::move(eval.second.at(i));
                 auto dstAddr  = newPath->extractLValue(binOp->getLHS());
+                if (auto *mem = llvm::dyn_cast<clang::MemberExpr>(
+                        binOp->getLHS()->IgnoreParenImpCasts())) {
+                    if (auto *FD = llvm::dyn_cast<clang::FieldDecl>(mem->getMemberDecl())) {
+                        if (FD->getNameAsString() == "data") {
+                            auto loc = binOp->getExprLoc();
+                            auto &SM = context_.getSourceManager();
+                            auto presumed = SM.getPresumedLoc(loc);
+                            if (presumed.isValid()) {
+                                DEBUG("assign to *.data at " << presumed.getFilename() << ":"
+                                                             << presumed.getLine() << ":"
+                                                             << presumed.getColumn()
+                                                             << " value=" << newValue->dump());
+                            }
+                        }
+                    }
+                }
+                if (newValue->isUnknown()) {
+                    if (auto *fieldAddr =
+                            llvm::dyn_cast<symbolic::FieldAddress>(dstAddr.get().get())) {
+                        if (fieldAddr->getDefinition() &&
+                            fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
+                            fieldAddr->getFieldIndex() == 4) {
+                            auto loc = binOp->getExprLoc();
+                            auto &SM = context_.getSourceManager();
+                            auto presumed = SM.getPresumedLoc(loc);
+                            if (presumed.isValid()) {
+                                DEBUG("assign Unknown to BigNum->data at "
+                                      << presumed.getFilename() << ":" << presumed.getLine()
+                                      << ":" << presumed.getColumn());
+                            }
+                        }
+                    }
+                }
                 newPath->updateMemory(*dstAddr, std::move(newValue));
                 updatedPaths.push_back(std::move(newPath));
             }

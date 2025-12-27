@@ -3,7 +3,6 @@ build/
 build-*/
 .DS_STORE
 *.list
-*.sh
 .cache/
 .clangd
 **/_*/

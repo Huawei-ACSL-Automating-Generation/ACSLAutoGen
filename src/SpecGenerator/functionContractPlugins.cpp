@@ -116,6 +116,7 @@ namespace acslg::spec_generator {
             std::unordered_set<symb::SourcePoint> allUsedPoints{};
 
             std::vector<std::string> behaviors;
+            std::unordered_set<std::string> seenBehaviors;
             int idx = 0;
 
             for (auto &pathPtr : post.getPaths()) {
@@ -123,15 +124,75 @@ namespace acslg::spec_generator {
                 if (path.getPathState() != analyzer::Path::PathState::Return)
                     continue;
 
+                std::optional<symb::SymbolAddrBaseInfo> retBase;
+                if (auto &ret = path.getReturnExpr()) {
+                    if (auto *retAddr =
+                            llvm::dyn_cast<symb::SymbolAddress>(ret.value().get().get())) {
+                        retBase = retAddr->getBaseInfo();
+                    }
+                }
+
+                auto isRetBaseAddr = [&](const symb::AddressBox &addr) -> bool {
+                    if (!retBase)
+                        return false;
+                    auto *sa = dynamic_cast<const symb::SymbolAddress *>(&addr.get());
+                    if (!sa)
+                        return false;
+                    return sa->getBaseInfo() == retBase.value();
+                };
+
+                auto getResultBaseACSL =
+                    [&](const symb::AddressBox &addr,
+                        const symb::SymbolicExpr::GetACSLConfig &config,
+                        std::optional<symb::SourcePoint> currentPoint)
+                    -> std::optional<std::pair<std::string, std::unordered_set<symb::SourcePoint>>> {
+                    if (!isRetBaseAddr(addr))
+                        return std::nullopt;
+                    auto *sa = dynamic_cast<const symb::SymbolAddress *>(&addr.get());
+                    if (!sa)
+                        return std::nullopt;
+
+                    std::unordered_set<symb::SourcePoint> usedPoints;
+                    auto offsetExpected = sa->getOffset()->getACSL(config, currentPoint);
+                    if (!offsetExpected)
+                        return std::nullopt;
+                    auto [offsetStr, offsetPts] = offsetExpected.value();
+                    usedPoints.insert(std::make_move_iterator(offsetPts.begin()),
+                                      std::make_move_iterator(offsetPts.end()));
+
+                    if (sa->getLength() == std::nullopt) {
+                        std::string addrStr;
+                        if (offsetStr == "0" && config.useDerefWithZeroOffset)
+                            addrStr = "*\\result";
+                        else
+                            addrStr = "\\result[" + offsetStr + "]";
+                        return std::pair{std::move(addrStr), std::move(usedPoints)};
+                    }
+
+                    auto lenExpected =
+                        sa->getLength().value()->getACSL(config, currentPoint);
+                    if (!lenExpected)
+                        return std::nullopt;
+                    auto [lenStr, lenPts] = lenExpected.value();
+                    usedPoints.insert(std::make_move_iterator(lenPts.begin()),
+                                      std::make_move_iterator(lenPts.end()));
+
+                    std::string rightBound = "(" + offsetStr + " + " + lenStr + " - 1)";
+                    std::string addrStr = "\\result[" + offsetStr + " .. " + rightBound + "]";
+                    return std::pair{std::move(addrStr), std::move(usedPoints)};
+                };
+
                 std::unordered_map<size_t, const symb::AddressBox> assignedAddrs;
                 for (auto &&[a, v] : path.getMemoryState().flat()) {
                     auto fromRoot = a.get().getFromRoot();
-                    if (fromRoot == std::nullopt)
+                    if (fromRoot != std::nullopt) {
+                        if (!prePath->getVarAddr().contains(fromRoot.value()))
+                            continue;
+                        if (!is_symbol_addr(a))
+                            continue;
+                    } else if (!isRetBaseAddr(a)) {
                         continue;
-                    if (!prePath->getVarAddr().contains(fromRoot.value()))
-                        continue;
-                    if (!is_symbol_addr(a))
-                        continue;
+                    }
                     if (is_symbol_addr(a) && path.is_point_to_structure(a))
                         continue;
                     if (!path.isUnchanged(a, *pre.getPaths().front()))
@@ -142,9 +203,18 @@ namespace acslg::spec_generator {
 
                 std::string assignsSpec;
                 for (auto &[_, a] : assignedAddrs) {
-                    auto acslExpected =
-                        a.get().getACSLOfValue({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
+                    symb::SymbolicExpr::GetACSLConfig cfg{.predefinedLabels = {{oldPoint, "Old"}}};
+                    auto acslExpected = a.get().getACSLOfValue(cfg, oldPoint);
                     if (!acslExpected) {
+                        if (acslExpected.error() == symb::SymbolicExpr::GetACSLError::HeapAddress) {
+                            if (auto fallback = getResultBaseACSL(a, cfg, oldPoint)) {
+                                assignsSpec += fallback.value().first + ", ";
+                                allUsedPoints.insert(
+                                    std::make_move_iterator(fallback.value().second.begin()),
+                                    std::make_move_iterator(fallback.value().second.end()));
+                                continue;
+                            }
+                        }
                         WARN("Value of {" + a.get().dump() + "} getACSL failed.");
                         continue;
                     }
@@ -188,22 +258,65 @@ namespace acslg::spec_generator {
                 // Memory equations
                 for (auto &&[addr, value] : path.getMemoryState().flat()) {
                     auto fromRoot = addr.get().getFromRoot();
-                    if (fromRoot == std::nullopt)
+                    if (fromRoot != std::nullopt) {
+                        if (!prePath->getVarAddr().contains(fromRoot.value()))
+                            continue;
+                        if (!is_symbol_addr(addr))
+                            continue;
+                    } else if (!isRetBaseAddr(addr)) {
                         continue;
-                    if (!prePath->getVarAddr().contains(fromRoot.value()))
-                        continue;
-                    if (!is_symbol_addr(addr))
-                        continue;
-                    if (is_symbol_addr(addr) && llvm::isa<symb::Structure>(value.get()))
-                        continue;
+                    }
+                    if (is_symbol_addr(addr) && llvm::isa<symb::Structure>(value.get())) {
+                        if (isRetBaseAddr(addr)) {
+                            auto *st = llvm::dyn_cast<symb::Structure>(value.get());
+                            auto &info = st->getInfo();
+                            size_t idxField = 0;
+                            for (auto field : info.definition_->fields()) {
+                                std::string fieldName = field->getNameAsString();
+                                auto fieldExpr = st->getFieldValue(idxField)->clone();
+                                ++idxField;
+                                if (fieldName.empty())
+                                    continue;
 
-                    auto lhsOpt =
-                        addr.get().getACSLOfValue({.predefinedLabels = {{oldPoint, "Old"}}});
-                    if (!lhsOpt)
+                                symb::SymbolicExpr::GetACSLConfig cfg{
+                                    .predefinedLabels = {{oldPoint, "Old"}}};
+                                auto rhsOpt = fieldExpr->simplifiedExpr()->getACSL(cfg);
+                                if (!rhsOpt)
+                                    continue;
+                                ensures.push_back("\\result->" + fieldName + " == (" +
+                                                  rhsOpt.value().first + ")");
+                                allUsedPoints.insert(
+                                    std::make_move_iterator(rhsOpt.value().second.begin()),
+                                    std::make_move_iterator(rhsOpt.value().second.end()));
+                            }
+                        }
                         continue;
+                    }
+
+                    symb::SymbolicExpr::GetACSLConfig cfg{.predefinedLabels = {{oldPoint, "Old"}}};
+                    auto lhsOpt = addr.get().getACSLOfValue(cfg);
+                    if (!lhsOpt) {
+                        if (lhsOpt.error() == symb::SymbolicExpr::GetACSLError::HeapAddress) {
+                            if (auto fallback = getResultBaseACSL(addr, cfg, oldPoint)) {
+                                auto rhsOpt = value->simplifiedExpr()->getACSL(cfg);
+                                if (!rhsOpt)
+                                    continue;
+                                ensures.push_back(fallback.value().first + " == (" +
+                                                  rhsOpt.value().first + ")");
+                                allUsedPoints.insert(
+                                    std::make_move_iterator(fallback.value().second.begin()),
+                                    std::make_move_iterator(fallback.value().second.end()));
+                                allUsedPoints.insert(
+                                    std::make_move_iterator(rhsOpt.value().second.begin()),
+                                    std::make_move_iterator(rhsOpt.value().second.end()));
+                                continue;
+                            }
+                        }
+                        continue;
+                    }
 
                     auto rhsOpt =
-                        value->simplifiedExpr()->getACSL({.predefinedLabels = {{oldPoint, "Old"}}});
+                        value->simplifiedExpr()->getACSL(cfg);
                     if (!rhsOpt)
                         continue;
 
@@ -215,23 +328,54 @@ namespace acslg::spec_generator {
                                          std::make_move_iterator(rhsOpt.value().second.end()));
                 }
 
+                if (auto &ret = path.getReturnExpr()) {
+                    if (auto *retSt = llvm::dyn_cast<symb::Structure>(ret.value().get().get())) {
+                        auto &info = retSt->getInfo();
+                        size_t idxField = 0;
+                        for (auto field : info.definition_->fields()) {
+                            std::string fieldName = field->getNameAsString();
+                            if (fieldName.empty()) {
+                                ++idxField;
+                                continue;
+                            }
+                            auto fieldExpr = retSt->getFieldValue(idxField)->clone();
+                            auto fieldExpected =
+                                fieldExpr->simplifiedExpr()->getACSL({.predefinedLabels = {}});
+                            if (!fieldExpected) {
+                                ++idxField;
+                                continue;
+                            }
+                            ensures.push_back("\\result." + fieldName + " == (" +
+                                              fieldExpected.value().first + ")");
+                            allUsedPoints.insert(
+                                std::make_move_iterator(fieldExpected.value().second.begin()),
+                                std::make_move_iterator(fieldExpected.value().second.end()));
+                            ++idxField;
+                        }
+                    }
+                }
+
                 auto [assumesSpec, requiresSpec] = joinConj(path.getPathConditions(), oldPoint);
                 if (ensures.empty() && assumesSpec.empty() && requiresSpec.empty() &&
                     assignsSpec == "\\nothing")
                     continue;
 
-                std::string bname = "b" + std::to_string(idx++);
-                std::string block;
-                block += IND1 + "behavior " + bname + ":\n";
+                std::string body;
                 if (!assumesSpec.empty())
-                    block += IND2 + "assumes " + assumesSpec + ";\n";
+                    body += IND2 + "assumes " + assumesSpec + ";\n";
                 if (!requiresSpec.empty())
-                    block += IND2 + "requires " + requiresSpec + ";\n";
-                block += IND2 + "assigns " + assignsSpec + ";\n";
+                    body += IND2 + "requires " + requiresSpec + ";\n";
+                body += IND2 + "assigns " + assignsSpec + ";\n";
                 for (auto &e : ensures)
-                    block += IND2 + "ensures " + e + ";\n";
+                    body += IND2 + "ensures " + e + ";\n";
 
-                behaviors.push_back(std::move(block));
+                if (seenBehaviors.emplace(body).second) {
+                    std::string bname = "b" + std::to_string(idx++);
+                    std::string block;
+                    block += IND1 + "behavior " + bname + ":\n";
+                    block += body;
+                    behaviors.push_back(std::move(block));
+                }
             }
 
             if (behaviors.empty())
@@ -262,6 +406,8 @@ namespace acslg::spec_generator {
                 auto rf = simplified->getACSL({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
                 if (!rf || rf.value().first.empty())
                     continue;
+                // TODO: Conditions involving heap-allocated pointers may require SourcePoint
+                // labels; we currently drop them because we cannot express usedPoints in requires.
                 if (!rf.value().second.empty())
                     continue;
                 auto &target =
