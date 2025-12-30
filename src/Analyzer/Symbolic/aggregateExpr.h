@@ -134,12 +134,7 @@ namespace acslg::analyzer::symbolic {
 
         SumOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
                      std::string_view indexName,
-                     SourcePoint fromPoint)
-            : OverRangeExpr(ExprKind::K_SumOverRange,
-                            deriveType(range->getPointeeType()),
-                            std::move(range),
-                            indexName),
-             Symbol(Kind::K_SumOverRange), fromPoint_(std::move(fromPoint)) {}
+                     SourcePoint fromPoint);
 
         // SymbolicExpr
         /**
@@ -192,6 +187,14 @@ namespace acslg::analyzer::symbolic {
 
       private:
         SourcePoint fromPoint_;
+
+      private:
+        struct Init {
+            Type type;
+            utils::not_null<std::unique_ptr<const SymbolAddress>> range;
+        };
+        static Init makeInit(utils::not_null<std::unique_ptr<const SymbolAddress>> range);
+        SumOverRange(Init init, std::string_view indexName, SourcePoint fromPoint);
     };
 
     template <class F>
@@ -346,6 +349,17 @@ namespace acslg::analyzer::symbolic {
 
         static utils::not_null<std::unique_ptr<const SymbolicExpr>> makeDefaultExpr(
             const SymbolAddress &range, std::string_view indexName, const SourcePoint &fromPoint);
+
+      private:
+        struct Init {
+            Type type;
+            utils::not_null<std::unique_ptr<const SymbolAddress>> range;
+        };
+        static Init makeInit(utils::not_null<std::unique_ptr<const SymbolAddress>> range);
+        MaxMinOverRange(Init init,
+                        std::string_view indexName,
+                        Extremum extremum,
+                        SourcePoint fromPoint);
     };
 } // namespace acslg::analyzer::symbolic
 

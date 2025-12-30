@@ -16,6 +16,24 @@
 #include "Analyzer/state.h"
 
 namespace acslg::analyzer::symbolic {
+    SumOverRange::Init SumOverRange::makeInit(
+        utils::not_null<std::unique_ptr<const SymbolAddress>> range) {
+        return Init{deriveType(range->getPointeeType()), std::move(range)};
+    }
+
+    SumOverRange::SumOverRange(Init init, std::string_view indexName, SourcePoint fromPoint)
+        : OverRangeExpr(ExprKind::K_SumOverRange,
+                        init.type,
+                        std::move(init.range),
+                        indexName),
+          Symbol(Kind::K_SumOverRange),
+          fromPoint_(std::move(fromPoint)) {}
+
+    SumOverRange::SumOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
+                               std::string_view indexName,
+                               SourcePoint fromPoint)
+        : SumOverRange(makeInit(std::move(range)), indexName, std::move(fromPoint)) {}
+
     OverRangeExpr::OverRangeExpr(const OverRangeExpr &other)
         : SymbolicExpr(other), range_(std::make_unique<SymbolAddress>(*other.range_)),
           indexName_(other.indexName_) {}
@@ -380,17 +398,29 @@ namespace acslg::analyzer::symbolic {
         return *this;
     }
 
-    MaxMinOverRange::MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
+    MaxMinOverRange::Init MaxMinOverRange::makeInit(
+        utils::not_null<std::unique_ptr<const SymbolAddress>> range) {
+        return Init{deriveType(range->getPointeeType()), std::move(range)};
+    }
+
+    MaxMinOverRange::MaxMinOverRange(Init init,
                                      std::string_view indexName,
                                      Extremum extremum,
                                      SourcePoint fromPoint)
         : OverRangeExpr(ExprKind::K_MaxMinOverRange,
-                        deriveType(range->getPointeeType()),
-                        std::move(range),
+                        init.type,
+                        std::move(init.range),
                         indexName),
-          Symbol(Kind::K_MaxMinOverRange), extremum_(extremum),
+          Symbol(Kind::K_MaxMinOverRange),
+          extremum_(extremum),
           expr_(makeDefaultExpr(*range_, indexName, fromPoint).into_underlying()),
           fromPoint_(std::move(fromPoint)) {}
+
+    MaxMinOverRange::MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
+                                     std::string_view indexName,
+                                     Extremum extremum,
+                                     SourcePoint fromPoint)
+        : MaxMinOverRange(makeInit(std::move(range)), indexName, extremum, std::move(fromPoint)) {}
 
     utils::not_null<std::unique_ptr<const SymbolicExpr>> MaxMinOverRange::makeDefaultExpr(
         const SymbolAddress &range,
