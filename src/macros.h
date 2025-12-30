@@ -5,8 +5,48 @@
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
+#include <atomic>
 
 namespace acslg {
+
+    namespace logging {
+        enum class Level : int {
+            Off  = -1,
+            Error = 0,
+            Warn  = 1,
+            Info  = 2,
+            Debug = 3,
+        };
+
+        inline std::atomic<int> g_level{static_cast<int>(Level::Info)};
+
+        inline void setLevel(Level level) { g_level.store(static_cast<int>(level)); }
+        inline Level getLevel() { return static_cast<Level>(g_level.load()); }
+        inline bool enabled(Level level) {
+            return static_cast<int>(level) <= g_level.load(std::memory_order_relaxed);
+        }
+
+        inline Level parseLevel(std::string_view s) {
+            auto lower = [](unsigned char c) { return static_cast<char>(std::tolower(c)); };
+            std::string tmp;
+            tmp.reserve(s.size());
+            for (auto ch : s)
+                tmp.push_back(lower(static_cast<unsigned char>(ch)));
+
+            if (tmp == "off" || tmp == "none" || tmp == "silent")
+                return Level::Off;
+            if (tmp == "error" || tmp == "err")
+                return Level::Error;
+            if (tmp == "warn" || tmp == "warning")
+                return Level::Warn;
+            if (tmp == "info")
+                return Level::Info;
+            if (tmp == "debug")
+                return Level::Debug;
+            return Level::Info;
+        }
+    } // namespace logging
+
 #define ANSI_RESET "\033[0m"
 #define ANSI_CUSTOM_BLUE "\033[38;2;120;220;232m"
 #define ANSI_BRIGHT_YELLOW "\033[0;33m"
@@ -61,6 +101,8 @@ namespace acslg {
 
 #define PROCESS(info)                                                                              \
     do {                                                                                           \
+        if (!::acslg::logging::enabled(::acslg::logging::Level::Info))                              \
+            break;                                                                                 \
         std::ostringstream oss;                                                                    \
         oss << info;                                                                               \
         std::string s              = oss.str();                                                    \
@@ -75,6 +117,8 @@ namespace acslg {
 
 #define INFO(info)                                                                                 \
     do {                                                                                           \
+        if (!::acslg::logging::enabled(::acslg::logging::Level::Info))                              \
+            break;                                                                                 \
         std::string file = __FILE__;                                                               \
         size_t pos       = file.rfind("src/");                                                     \
         if (pos != std::string::npos) {                                                            \
@@ -87,6 +131,8 @@ namespace acslg {
 
 #define WARN(info)                                                                                 \
     do {                                                                                           \
+        if (!::acslg::logging::enabled(::acslg::logging::Level::Warn))                              \
+            break;                                                                                 \
         std::string file = __FILE__;                                                               \
         size_t pos       = file.rfind("src/");                                                     \
         if (pos != std::string::npos) {                                                            \
@@ -111,6 +157,8 @@ namespace acslg {
 #ifdef DEBUG_MODE
 #define DEBUG(info)                                                                                \
     do {                                                                                           \
+        if (!::acslg::logging::enabled(::acslg::logging::Level::Debug))                             \
+            break;                                                                                 \
         std::string file = __FILE__;                                                               \
         size_t pos       = file.rfind("src/");                                                     \
         if (pos != std::string::npos) {                                                            \

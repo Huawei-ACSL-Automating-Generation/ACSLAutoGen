@@ -24,6 +24,23 @@ namespace acslg {
         llvm::cl::desc("Output only the entire AST (Decls) using Clang's pretty print"),
         llvm::cl::cat(ACSLGCategory));
 
+    static llvm::cl::opt<std::string> LogLevel(
+        "log-level",
+        llvm::cl::desc("Log level: off, error, warn, info, debug"),
+        llvm::cl::cat(ACSLGCategory),
+        llvm::cl::init("info"));
+
+    static llvm::cl::opt<bool> NoOutput(
+        "no-output",
+        llvm::cl::desc("Do not write *_with_acsl output file (analysis still runs)"),
+        llvm::cl::cat(ACSLGCategory));
+
+    static llvm::cl::opt<std::string> OutDir(
+        "out-dir",
+        llvm::cl::desc("Write output file into this directory instead of next to the source"),
+        llvm::cl::cat(ACSLGCategory),
+        llvm::cl::init(""));
+
     static llvm::cl::list<std::string> TargetFunctions(
         "func",
         llvm::cl::desc("Functions to analyze (analyze all when omitted)"),
@@ -43,6 +60,10 @@ namespace acslg {
                                                      TargetFunctions.end());
                 auto analyzer = analyzer::ACSLAnalyzer{acslContext, std::move(targetFuncs)};
                 analyzer.analyzeFunctions();
+
+                if (NoOutput)
+                    return;
+
                 auto &SM       = acslContext.getSourceManager();
                 auto &rewriter = acslContext.getRewriter();
                 std::error_code EC;
@@ -53,7 +74,10 @@ namespace acslg {
                 // Keep original extension and insert "_with_acsl" before it: foo.c -> foo_with_acsl.c
                 auto stem       = path.stem().string();
                 auto extension  = path.extension();
-                auto parentPath = path.parent_path();
+                const std::string outDirValue = OutDir.getValue();
+                auto parentPath = outDirValue.empty() ? path.parent_path() : fs::path{outDirValue};
+                if (!outDirValue.empty())
+                    fs::create_directories(parentPath);
                 auto outName    = stem + "_with_acsl" + extension.string();
                 path            = parentPath / outName;
                 llvm::raw_fd_ostream Out(path.string(), EC, llvm::sys::fs::OF_None);
@@ -172,6 +196,8 @@ int main(int argc, const char **argv) {
         return 1;
     }
     clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
+
+    acslg::logging::setLevel(acslg::logging::parseLevel(acslg::LogLevel.getValue()));
 
     acslg::analyzer::ctu::init(optionsParser.getCompilations(), enableFramacCompat);
 
