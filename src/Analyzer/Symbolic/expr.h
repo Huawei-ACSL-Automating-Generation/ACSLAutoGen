@@ -241,6 +241,18 @@ namespace acslg::analyzer::symbolic {
             std::unordered_map<SourcePoint, std::string> predefinedLabels{}; ///< Override labels.
             bool useDerefWithZeroOffset{true}; ///< Prefer `*p` instead of `*(p + 0)`.
             bool UnknownExprAsError{true};     ///< Treat UnknownExpr as fatal when true.
+
+            /**
+             * @brief Optional filtering for SourcePoint-dependent output (e.g. `\\at(..., L)`).
+             *
+             * When `whitelist` is set, SourcePoints not contained in it are treated as if they
+             * were the current point: they will not produce `\\at(...)` wrappers and will not be
+             * collected into the returned `usedPoints` set.
+             */
+            struct SourcePointOutputFilter {
+                std::optional<std::unordered_set<SourcePoint>> whitelist{std::nullopt};
+            };
+            SourcePointOutputFilter sourcePointOutputFilter{};
         };
 
         /**
@@ -1723,6 +1735,12 @@ namespace acslg::analyzer::symbolic::details {
         std::optional<SourcePoint> currentPoint,
         const SourcePoint &myPoint) {
         if (!config.noStateLabelFunctionAt && myPoint != currentPoint) {
+            if (config.sourcePointOutputFilter.whitelist) {
+                const auto &wl = *config.sourcePointOutputFilter.whitelist;
+                if (!wl.contains(myPoint))
+                    return {};
+            }
+
             if (auto it = config.predefinedLabels.find(myPoint);
                 it != config.predefinedLabels.end()) {
                 return std::pair{"\\at(", ", " + it->second + ")"};

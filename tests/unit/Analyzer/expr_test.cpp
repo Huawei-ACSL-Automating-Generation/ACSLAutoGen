@@ -461,4 +461,39 @@ namespace acslg::test::unit::analyzer {
         ASSERT_TRUE(resVal);
         EXPECT_EQ(resVal.value().first, "\\at(" + baseName + ", Old)[2]");
     }
+
+    // Test filtering out SourcePoints from ACSL output and usedPoints.
+    TEST_F(GetACSLTest, SymbolAddress_SourcePointWhitelistFiltersAt) {
+        SymbolicExpr::GetACSLConfig config;
+
+        const FunctionDecl *F0 = getFuncDecl(0);
+        ASSERT_NE(F0, nullptr);
+        const FunctionDecl *F1 = getFuncDecl(1);
+        ASSERT_NE(F1, nullptr);
+
+        SourcePoint allowed =
+            SourcePoint::fromFuncDecl(F0, e.getSourceManager(), e.getLangOptions());
+        SourcePoint filtered =
+            SourcePoint::fromFuncDecl(F1, e.getSourceManager(), e.getLangOptions());
+
+        config.predefinedLabels                   = {{filtered, "Old"}};
+        config.sourcePointOutputFilter.whitelist  = std::unordered_set<SourcePoint>{allowed};
+
+        auto baseVar = getVarDecl(0);
+        ASSERT_NE(baseVar, nullptr);
+        std::string baseName = baseVar->getNameAsString();
+
+        auto offset2 = std::make_unique<LiteralExpr>(2);
+        auto addr    = makeRangeAddr(0, std::move(offset2), nullptr, filtered);
+
+        auto resACSL = addr.getACSL(config);
+        ASSERT_TRUE(resACSL);
+        EXPECT_EQ(resACSL.value().first, baseName + " + 2");
+        EXPECT_TRUE(resACSL.value().second.empty());
+
+        auto resVal = addr.getACSLOfValue(config);
+        ASSERT_TRUE(resVal);
+        EXPECT_EQ(resVal.value().first, baseName + "[2]");
+        EXPECT_TRUE(resVal.value().second.empty());
+    }
 } // namespace acslg::test::unit::analyzer
