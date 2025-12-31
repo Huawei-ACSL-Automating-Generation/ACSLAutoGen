@@ -77,7 +77,7 @@ WP_TIMEOUT="${WP_TIMEOUT:-60}"
 KEEP_GENERATED="${KEEP_GENERATED:-success}"
 
 # Allow overriding which suites to run:
-#   SUITES_OVERRIDE="basic bincal noasm" ./example.sh
+#   SUITES_OVERRIDE="basic bincal noasm" ./experiment.sh
 SUITES_OVERRIDE="${SUITES_OVERRIDE:-basic bincal noasm}"
 read -r -a SUITES <<<"$SUITES_OVERRIDE"
 
@@ -89,6 +89,7 @@ LOG_DIR="${LOG_DIR_OVERRIDE:-$RUN_DIR/logs}"
 GEN_DIR_BASE="${GEN_DIR_OVERRIDE:-$RUN_DIR/generated}"
 RESULT_FILE="${RESULT_FILE_OVERRIDE:-$RUN_DIR/results.csv}"
 REPORT_FILE="${REPORT_FILE_OVERRIDE:-$RUN_DIR/report.md}"
+RESULT_TABLE_FILE="${RESULT_TABLE_FILE_OVERRIDE:-$RUN_DIR/bn_wp_results.txt}"
 
 mkdir -p "$LOG_DIR" "$GEN_DIR_BASE"
 
@@ -129,9 +130,9 @@ BASIC_FUNCS_LIST=(
 )
 
 # Optional per-suite overrides:
-#   BASIC_FUNCS_OVERRIDE="BN_Create BN_Destroy" ./example.sh
-#   BINCAL_FUNCS_OVERRIDE="BinInc BinDec" ./example.sh
-#   NOASM_BINCAL_FUNCS_OVERRIDE="BinAdd" ./example.sh
+#   BASIC_FUNCS_OVERRIDE="BN_Create BN_Destroy" ./experiment.sh
+#   BINCAL_FUNCS_OVERRIDE="BinInc BinDec" ./experiment.sh
+#   NOASM_BINCAL_FUNCS_OVERRIDE="BinAdd" ./experiment.sh
 BASIC_FUNCS_OVERRIDE="${BASIC_FUNCS_OVERRIDE:-}"
 BINCAL_FUNCS_OVERRIDE="${BINCAL_FUNCS_OVERRIDE:-}"
 NOASM_BINCAL_FUNCS_OVERRIDE="${NOASM_BINCAL_FUNCS_OVERRIDE:-}"
@@ -373,6 +374,7 @@ suite_funcs() {
 echo "[INFO] Run dir:        $RUN_DIR"
 echo "[INFO] Result CSV:     $RESULT_FILE"
 echo "[INFO] Report:         $REPORT_FILE"
+echo "[INFO] Result table:   $RESULT_TABLE_FILE"
 echo "[INFO] Suites:         ${SUITES[*]}"
 echo
 
@@ -476,5 +478,88 @@ for suite, srows in sorted(by_suite.items()):
 with open(out_path, "w", encoding="utf-8") as f:
     f.write("\n".join(lines).rstrip() + "\n")
 PY
+
+# Summarize CSV into a readable text table.
+awk -F, '
+  function trim_quotes(s) {
+    gsub(/^"/, "", s);
+    gsub(/"$/, "", s);
+    return s;
+  }
+  function add_width(i, v) {
+    if (length(v) > w[i]) w[i] = length(v);
+  }
+  BEGIN {
+    h[1]="module"; h[2]="function"; h[3]="acslg_time_sec";
+    h[4]="acslg_error"; h[5]="wp_proved"; h[6]="wp_total"; h[7]="wp_result";
+    for (i=1; i<=7; i++) w[i]=length(h[i]);
+  }
+  NR==1 { next }
+  {
+    source = trim_quotes($2);
+    func   = trim_quotes($3);
+    acslg_time = trim_quotes($4);
+    acslg_error = trim_quotes($6);
+    wp_proved = trim_quotes($8);
+    wp_total  = trim_quotes($9);
+    wp_result = trim_quotes($10);
+
+    module = source;
+    sub(/.*\//, "", module);
+    sub(/\.[^.]+$/, "", module);
+
+    n++;
+    data[n,1]=module;
+    data[n,2]=func;
+    data[n,3]=acslg_time;
+    data[n,4]=acslg_error;
+    data[n,5]=wp_proved;
+    data[n,6]=wp_total;
+    data[n,7]=wp_result;
+
+    for (i=1; i<=7; i++) add_width(i, data[n,i]);
+
+    total++;
+    if (acslg_error=="yes") acslg_err++;
+    if (wp_result=="all") wp_all++;
+    else if (wp_result=="partial") wp_partial++;
+    else if (wp_result=="none" || wp_result=="timeout") wp_none++;
+    if (acslg_time ~ /^[0-9.]+$/) { sum+=acslg_time; ntime++; }
+  }
+  END {
+    sep="+";
+    for (i=1; i<=7; i++) {
+      for (j=0; j<w[i]+2; j++) sep=sep"-";
+      sep=sep"+";
+    }
+    print sep;
+    printf "|";
+    for (i=1; i<=7; i++) printf " %-*s |", w[i], h[i];
+    printf "\n";
+    print sep;
+    for (r=1; r<=n; r++) {
+      printf "|";
+      for (i=1; i<=7; i++) printf " %-*s |", w[i], data[r,i];
+      printf "\n";
+    }
+    print sep;
+    print "";
+    print "Summary:";
+    sumsep="+------------------------------+--------+";
+    print sumsep;
+    printf "| %-28s | %-6s |\n", "Total functions", total+0;
+    printf "| %-28s | %-6s |\n", "ACSLG errors", acslg_err+0;
+    printf "| %-28s | %-6s |\n", "WP all proved", wp_all+0;
+    printf "| %-28s | %-6s |\n", "WP partial proved", wp_partial+0;
+    printf "| %-28s | %-6s |\n", "WP none/parse-error", wp_none+0;
+    if (ntime>0) {
+      avg = sum/ntime;
+      printf "| %-28s | %-6.4f |\n", "Avg ACSLG time (sec)", avg;
+    } else {
+      printf "| %-28s | %-6s |\n", "Avg ACSLG time (sec)", "NA";
+    }
+    print sumsep;
+  }
+' "$RESULT_FILE" >"$RESULT_TABLE_FILE"
 
 echo "[INFO] Done."

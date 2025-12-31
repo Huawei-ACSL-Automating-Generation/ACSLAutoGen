@@ -53,7 +53,8 @@
   ```
 
 ## Project Structure & Architecture
-To be added; will link to the dedicated design document later.
+The detailed architecture and dataflow are documented in `docs/projectArchitecture.md`.
+For loop-specific invariants and plugin behavior, see `docs/loopInvariantPlugins.md`.
 
 ## Citation & Credits
 To be added.
