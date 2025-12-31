@@ -27,10 +27,11 @@ src_base=$(basename "$SRC_PATH")
 src_stem="${src_base%.*}"
 src_ext="${src_base##*.}"
 
-# ACSLG output names: the tool actually emits "<stem>_with_acsl.<ext>"
-# Keep a fallback for older naming "<stem>.<ext>_with_acsl".
-RAW_ACSL_PATH_NEW="${src_dir}/${src_stem}_with_acsl.${src_ext}"
-RAW_ACSL_PATH_OLD="${src_dir}/${src_stem}.${src_ext}_with_acsl"
+# ACSLG output names: the tool emits "<stem>_acsl.<ext>"
+# Keep fallbacks for older naming "<stem>_with_acsl.<ext>" and "<stem>.<ext>_with_acsl".
+RAW_ACSL_PATH_NEW="${src_dir}/${src_stem}_acsl.${src_ext}"
+RAW_ACSL_PATH_OLD1="${src_dir}/${src_stem}_with_acsl.${src_ext}"
+RAW_ACSL_PATH_OLD2="${src_dir}/${src_stem}.${src_ext}_with_acsl"
 WITH_ACSL_PATH="${RAW_ACSL_PATH_NEW}"
 
 LOG_DIR="$ROOT_DIR/wp_logs_single"
@@ -40,7 +41,7 @@ ACSLG_LOG="${LOG_DIR}/acslg_${FUNC}.log"
 WP_LOG="${LOG_DIR}/wp_${FUNC}.log"
 
 echo "[INFO] Source:          $SRC_PATH"
-echo "[INFO] Raw ACSL file:   ${RAW_ACSL_PATH_NEW} (or ${RAW_ACSL_PATH_OLD})"
+echo "[INFO] Raw ACSL file:   ${RAW_ACSL_PATH_NEW} (or ${RAW_ACSL_PATH_OLD1}/${RAW_ACSL_PATH_OLD2})"
 echo "[INFO] Frama-C input:   $WITH_ACSL_PATH"
 echo "[INFO] Logs:            $ACSLG_LOG , $WP_LOG"
 echo
@@ -71,7 +72,7 @@ echo "       $CPP_CMD"
 echo
 
 # Clean previous generated files
-rm -f "$RAW_ACSL_PATH_NEW" "$RAW_ACSL_PATH_OLD" "$WITH_ACSL_PATH"
+rm -f "$RAW_ACSL_PATH_NEW" "$RAW_ACSL_PATH_OLD1" "$RAW_ACSL_PATH_OLD2" "$WITH_ACSL_PATH"
 
 # 1) Run ACSLG for the specific function
 set +e
@@ -89,8 +90,10 @@ set -e
 GEN_FILE=""
 if [ -f "$RAW_ACSL_PATH_NEW" ]; then
     GEN_FILE="$RAW_ACSL_PATH_NEW"
-elif [ -f "$RAW_ACSL_PATH_OLD" ]; then
-    GEN_FILE="$RAW_ACSL_PATH_OLD"
+elif [ -f "$RAW_ACSL_PATH_OLD1" ]; then
+    GEN_FILE="$RAW_ACSL_PATH_OLD1"
+elif [ -f "$RAW_ACSL_PATH_OLD2" ]; then
+    GEN_FILE="$RAW_ACSL_PATH_OLD2"
 fi
 
 if [ $acslg_rc -ne 0 ] || [ -z "$GEN_FILE" ]; then

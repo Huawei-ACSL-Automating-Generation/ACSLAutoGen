@@ -68,17 +68,17 @@ namespace acslg {
                 auto &rewriter = acslContext.getRewriter();
                 std::error_code EC;
 
-                // TODO: replace "with_acsl.c" with user-defined relative path.
+                // TODO: allow user-defined output path.
                 auto path =
                     fs::path{SM.getFilename(SM.getLocForStartOfFile(SM.getMainFileID())).str()};
-                // Keep original extension and insert "_with_acsl" before it: foo.c -> foo_with_acsl.c
+                // Keep original extension and insert "_acsl" before it: foo.c -> foo_acsl.c
                 auto stem       = path.stem().string();
                 auto extension  = path.extension();
                 const std::string outDirValue = OutDir.getValue();
                 auto parentPath = outDirValue.empty() ? path.parent_path() : fs::path{outDirValue};
                 if (!outDirValue.empty())
                     fs::create_directories(parentPath);
-                auto outName    = stem + "_with_acsl" + extension.string();
+                auto outName    = stem + "_acsl" + extension.string();
                 path            = parentPath / outName;
                 llvm::raw_fd_ostream Out(path.string(), EC, llvm::sys::fs::OF_None);
                 if (EC)

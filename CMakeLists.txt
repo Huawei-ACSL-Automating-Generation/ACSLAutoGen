@@ -51,7 +51,7 @@ target_compile_options(
     $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Wdeprecated
     -Wimplicit-fallthrough>
     $<$<CXX_COMPILER_ID:MSVC>:/W4>
-    -Wno-c++26-extensions)
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++26-extensions>)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE

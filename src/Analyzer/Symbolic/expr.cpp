@@ -158,6 +158,8 @@ namespace acslg::analyzer::symbolic {
         if (!RD || !RD->isCompleteDefinition())
             UNIMPLEMENT("Incomplete struct definition in makeUnknownStructure.");
         const auto &layout = RD->getASTContext().getASTRecordLayout(RD);
+        // Preserve a clone for field-address construction before moving baseAddr into Structure.
+        auto baseAddrSeed = baseAddr->addressClone().into_underlying();
         auto st = std::make_unique<Structure>(RD, layout, std::move(baseAddr), fromPoint);
 
         size_t idx = 0;
@@ -166,7 +168,7 @@ namespace acslg::analyzer::symbolic {
             auto makeFieldAddr = [&]() {
                 return utils::not_null<std::unique_ptr<const Address>>{
                     std::unique_ptr<const Address>(std::make_unique<FieldAddress>(
-                        fty, RD, st->getFromAddr().value()->addressClone().into_underlying(),
+                        fty, RD, baseAddrSeed->addressClone().into_underlying(),
                         idx))};
             };
 

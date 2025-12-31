@@ -3,7 +3,7 @@
 ## Overview
 - ACSLGen is a Clang-based CLI tool that automatically generates ACSL specifications and annotations for C code.
 - It consumes the project's compilation database (`compile_commands.json`) to mirror the original build flags and include paths.
-- The tool writes annotated outputs next to the input source, using names like `foo.c_with_acsl`.
+- The tool writes annotated outputs next to the input source, using names like `foo_acsl.c`.
 - A Docker environment is recommended; it bundles LLVM/Clang 19, Z3, GMP, PPL, and other dependencies to keep builds reproducible.
 
 ## Getting Started
@@ -43,7 +43,7 @@
   ./build/src/ACSLG -p build path/to/source.c
   ```
   - Append extra compiler flags after `--`, e.g. `-- -I/path/to/include -DDEBUG`.
-  - Output is written alongside the source, named like `source.c_with_acsl`.
+  - Output is written alongside the source, named like `source_acsl.c`.
   - `-ast-only`: print the full AST for debugging instead of generating ACSL.
 - Existing ACSL comments that are not top-level `requires` clauses are removed during rewrite to avoid conflicts with generated specs.
 - Build and preview API docs:

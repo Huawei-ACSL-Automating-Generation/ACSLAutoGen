@@ -89,6 +89,58 @@ namespace acslg::spec_generator {
                    stmtHasArrayOrPointer(loopInfo.incStmt) ||
                    stmtHasArrayOrPointer(loopInfo.initStmt);
         }
+
+        bool stmtHasNonAffineOps(const clang::Stmt *stmt) {
+            if (!stmt)
+                return false;
+            struct NonAffineVisitor : clang::RecursiveASTVisitor<NonAffineVisitor> {
+                bool found = false;
+
+                bool TraverseStmt(clang::Stmt *S) {
+                    if (found || !S)
+                        return true;
+                    return clang::RecursiveASTVisitor<NonAffineVisitor>::TraverseStmt(S);
+                }
+
+                bool VisitBinaryOperator(clang::BinaryOperator *BO) {
+                    if (!BO)
+                        return true;
+                    using enum clang::BinaryOperatorKind;
+                    switch (BO->getOpcode()) {
+                        case BO_Shl:
+                        case BO_Shr:
+                        case BO_And:
+                        case BO_Or:
+                        case BO_Xor:
+                        case BO_Rem:
+                            found = true;
+                            break;
+                        default:
+                            break;
+                    }
+                    return true;
+                }
+
+                bool VisitUnaryOperator(clang::UnaryOperator *UO) {
+                    if (!UO)
+                        return true;
+                    if (UO->getOpcode() == clang::UnaryOperatorKind::UO_Not)
+                        found = true;
+                    return true;
+                }
+            };
+
+            NonAffineVisitor visitor;
+            visitor.TraverseStmt(const_cast<clang::Stmt *>(stmt));
+            return visitor.found;
+        }
+
+        bool loopHasNonAffineOps(const LoopInfo &loopInfo) {
+            return stmtHasNonAffineOps(loopInfo.bodyStmt) ||
+                   stmtHasNonAffineOps(loopInfo.condExpr) ||
+                   stmtHasNonAffineOps(loopInfo.incStmt) ||
+                   stmtHasNonAffineOps(loopInfo.initStmt);
+        }
     } // namespace
 
     /**
@@ -279,6 +331,9 @@ namespace acslg::spec_generator {
                     ERROR("Unexpected operator, check `setIndexPlugin` may solve this problem.");
             }
 
+            if (loopHasNonAffineOps(loopInfo))
+                return std::nullopt;
+
             // Clone the single loop-entry path for analyzer::buildLoopInvariant.
             // We may also apply a small "constant write-back" from sharedMemoryMap to reduce
             // Unknowns and make expressions easier to simplify.
@@ -386,6 +441,9 @@ namespace acslg::spec_generator {
                 ERROR("Dependencies are not met.");
 
             auto &entryAndCurrentInfo = loopInfo.entryAndCurrentInfo.value();
+
+            if (loopHasNonAffineOps(loopInfo))
+                return std::nullopt;
 
             if (entryAndCurrentInfo.symbolicLoopEntry->getPaths().size() != 1) {
                 ERROR("symbolicLoopEntry has something wrong, check the SetLoopEntryPlugin?");

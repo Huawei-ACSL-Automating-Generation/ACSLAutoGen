@@ -13,8 +13,6 @@ doxygen/
 
 benchmark_results.tsv
 benchmark_logs
-benchmark_summary.txt
-bn_basic_wp_results.txt
-wp_logs_bn_basic/
-wp_logs_single/
+*.txt
+wp_logs*/
 runlogs

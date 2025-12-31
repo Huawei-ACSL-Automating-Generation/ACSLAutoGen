@@ -35,8 +35,13 @@ namespace acslg::spec_generator {
 
             auto symbolicLoopEntry = symbolicState->clone();
 
-            symbolicState->step(loopInfo.condExpr);
-            symbolicState->step(loopInfo.bodyStmt);
+            if (llvm::isa<clang::DoStmt>(loopInfo.loopStmt)) {
+                symbolicState->step(loopInfo.bodyStmt);
+                symbolicState->step(loopInfo.condExpr);
+            } else {
+                symbolicState->step(loopInfo.condExpr);
+                symbolicState->step(loopInfo.bodyStmt);
+            }
             symbolicState->step(loopInfo.incStmt);
 
             auto [loopCurrent, inactiveState] = symbolicState->splitActiveInactive();
@@ -123,6 +128,11 @@ namespace acslg::spec_generator {
                         UNREACHABLE();
                     auto [_, hashIdMap] =
                         symb::SymbolicExpr::collectUsedSymbols(*currentExpr, *entryExpr.value());
+                    if (currentExpr->getMaxDegree() < 0 ||
+                        entryExpr.value()->getMaxDegree() < 0) {
+                        patterns.emplace(addr, std::nullopt);
+                        continue;
+                    }
                     // Compute current - entry; if only a constant difference remains, we treat it as
                     // a linear step (entry + k).
                     if (auto diff = currentExpr->toLinearExpr(hashIdMap) -

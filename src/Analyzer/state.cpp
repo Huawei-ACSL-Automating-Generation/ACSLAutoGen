@@ -40,9 +40,11 @@ namespace acslg::analyzer {
 
         bool containsLocalVar(const symbolic::SymbolicExpr &expr,
                               const std::unordered_set<const clang::VarDecl *> &locals) {
-            auto [usedSymbols, _] = symbolic::SymbolicExpr::collectUsedSymbols(expr);
-            for (const auto &[_, symbol] : usedSymbols) {
-                auto root = getRootFromSymbol(*symbol);
+            auto [usedSymbols, unusedSymbols] = symbolic::SymbolicExpr::collectUsedSymbols(expr);
+            (void)unusedSymbols;
+            for (const auto &entry : usedSymbols) {
+                const auto &symbol = entry.second;
+                auto root          = getRootFromSymbol(*symbol);
                 if (!root)
                     continue;
                 if (locals.contains(root.value()->getCanonicalDecl()))
@@ -145,17 +147,17 @@ namespace acslg::analyzer {
                 if (fieldAddr->getDefinition() &&
                     fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
                     fieldAddr->getFieldIndex() == 4) {
-                    DEBUG("mergeWith BigNum->data: lhs="
-                          << (lhsVal ? lhsVal.value()->dump() : "<none>")
-                          << " rhs=" << (rhsVal ? rhsVal.value()->dump() : "<none>")
-                          << " lhsFrom="
-                          << (lhsVal && symbolic::isFrom(*lhsVal.value(), addrBox, startPoint_)
-                                      ? "yes"
-                                      : "no")
-                          << " rhsFrom="
-                          << (rhsVal && symbolic::isFrom(*rhsVal.value(), addrBox, other.startPoint_)
-                                      ? "yes"
-                                      : "no"));
+                    DEBUG(
+                        "mergeWith BigNum->data: lhs="
+                        << (lhsVal ? lhsVal.value()->dump() : "<none>")
+                        << " rhs=" << (rhsVal ? rhsVal.value()->dump() : "<none>") << " lhsFrom="
+                        << (lhsVal && symbolic::isFrom(*lhsVal.value(), addrBox, startPoint_)
+                                ? "yes"
+                                : "no")
+                        << " rhsFrom="
+                        << (rhsVal && symbolic::isFrom(*rhsVal.value(), addrBox, other.startPoint_)
+                                ? "yes"
+                                : "no"));
                 }
             }
 
@@ -407,8 +409,8 @@ namespace acslg::analyzer {
                     fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
                     fieldAddr->getFieldIndex() == 4) {
                     if (stmtCtx_) {
-                        auto loc = stmtCtx_->getBeginLoc();
-                        auto &SM = context_.getSourceManager();
+                        auto loc      = stmtCtx_->getBeginLoc();
+                        auto &SM      = context_.getSourceManager();
                         auto presumed = SM.getPresumedLoc(loc);
                         if (presumed.isValid()) {
                             DEBUG("updateMemory Unknown BigNum->data at "
@@ -496,15 +498,13 @@ namespace acslg::analyzer {
                 auto m = args[i]->tryEvalAsSymbolAddr();
                 if (!m) {
                     auto &SM     = FD->getASTContext().getSourceManager();
-                    auto locStr  = FD->getLocation().isValid()
-                                      ? FD->getLocation().printToString(SM)
-                                      : "<unknown>";
+                    auto locStr  = FD->getLocation().isValid() ? FD->getLocation().printToString(SM)
+                                                               : "<unknown>";
                     auto funcStr = FD->getQualifiedNameAsString();
                     auto paramStr = param->getNameAsString();
                     ERROR("pointer parameter expects address-like argument: func="
-                          << funcStr << " param=" << paramStr << " index=" << i
-                          << " type=" << T.getAsString() << " loc=" << locStr
-                          << " arg=" << args[i]->dump());
+                          << funcStr << " param=" << paramStr << " index=" << i << " type="
+                          << T.getAsString() << " loc=" << locStr << " arg=" << args[i]->dump());
                 }
                 calleePath->updateMemory(*slot, m.value()->addressClone().into_underlying());
             } else if (T->isStructureType()) {
@@ -663,7 +663,7 @@ namespace acslg::analyzer {
                     DEBUG("evaluating clang::DeclRefExpr...");
                     auto loc = declRef->getExprLoc();
                     if (loc.isValid()) {
-                        auto &SM = context_.getSourceManager();
+                        auto &SM      = context_.getSourceManager();
                         auto presumed = SM.getPresumedLoc(loc);
                         if (presumed.isValid()) {
                             DEBUG("DeclRefExpr location: " << presumed.getFilename() << ":"
@@ -792,6 +792,7 @@ namespace acslg::analyzer {
 
                     // @WindOctober TODO: wrapped in specific function.
                     if (name == "BSL_SAL_Calloc") {
+                        DEBUG("BSL_SAL_Calloc: enter, argc=" << call->getNumArgs());
                         // Extract element type T from any argument that syntactically contains
                         // `sizeof(T)`.
 
@@ -806,6 +807,7 @@ namespace acslg::analyzer {
                             UNIMPLEMENT("BSL_SAL_Calloc expects a sizeof(T) in its arguments.");
                         }
                         clang::QualType elemTy = *elemTyOpt;
+                        DEBUG("BSL_SAL_Calloc: elemTy=" << elemTy.getAsString());
                         auto pointAfterCall    = symbolic::SourcePoint::fromStmtAfter(
                             call, context_.getSourceManager(), context_.getLangOptions());
 
@@ -814,6 +816,7 @@ namespace acslg::analyzer {
                             // Sanity check: exactly one syntactic occurrence of sizeof(T) is
                             // expected.
                             const size_t nSizeofs = acslg::utils::countSizeofInCall(call);
+                            DEBUG("BSL_SAL_Calloc: builtin scalar, nSizeofs=" << nSizeofs);
                             if (nSizeofs != 1)
                                 UNIMPLEMENT(
                                     "BSL_SAL_Calloc expects exactly one sizeof(T) for builtin T.");
@@ -835,6 +838,8 @@ namespace acslg::analyzer {
                             };
                             auto a0 = evalNoBranch(call->getArg(0));
                             auto a1 = evalNoBranch(call->getArg(1));
+                            DEBUG("BSL_SAL_Calloc: arg0=" << a0->dump());
+                            DEBUG("BSL_SAL_Calloc: arg1=" << a1->dump());
 
                             // Form the total-size expression by multiplying the two arguments.
                             using Op = symbolic::BinaryOpExpr::Operator;
@@ -848,6 +853,7 @@ namespace acslg::analyzer {
                             // "bytes = elems * sizeof(T)".
                             auto lengthInElems = acslg::analyzer::symbolic::strip_sizeof_factor(
                                 std::move(totalSizeBytes), sz);
+                            DEBUG("BSL_SAL_Calloc: lengthInElems=" << lengthInElems->dump());
 
                             // Allocate a fresh symbolic address anchored at the current allocation
                             // site.
@@ -869,12 +875,14 @@ namespace acslg::analyzer {
                             Formulas exprs;
                             exprs.emplace_back(std::move(addr));
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                            DEBUG("BSL_SAL_Calloc: return (builtin scalar)");
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
 
                         // Handle structure pointees consistent with the existing symbolic memory
                         // layout.
                         if (elemTy->isStructureType()) {
+                            DEBUG("BSL_SAL_Calloc: structure type");
                             auto addr = std::make_unique<symbolic::SymbolAddress>(
                                 elemTy, std::nullopt, pointAfterCall,
                                 std::make_unique<symbolic::LiteralExpr>(0));
@@ -888,6 +896,7 @@ namespace acslg::analyzer {
                             Formulas exprs;
                             exprs.emplace_back(std::move(addr));
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                            DEBUG("BSL_SAL_Calloc: return (structure)");
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
 
@@ -944,8 +953,7 @@ namespace acslg::analyzer {
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
 
-                    auto modelMemcpy = [&](const clang::Expr *destArg,
-                                           const clang::Expr *srcArg,
+                    auto modelMemcpy = [&](const clang::Expr *destArg, const clang::Expr *srcArg,
                                            const clang::Expr *countArg) -> EvalResult {
                         auto evalNoBranch = [this](const clang::Expr *e)
                             -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
@@ -973,16 +981,16 @@ namespace acslg::analyzer {
                         if (!destAddr)
                             UNIMPLEMENT("memcpy expects a pointer destination argument.");
 
-                        auto &Ctx         = this->context_.getASTContext();
-                        const uint64_t sz = static_cast<uint64_t>(
-                            Ctx.getTypeSizeInChars(elemTy).getQuantity());
+                        auto &Ctx = this->context_.getASTContext();
+                        const uint64_t sz =
+                            static_cast<uint64_t>(Ctx.getTypeSizeInChars(elemTy).getQuantity());
                         if (sz == 0)
                             UNIMPLEMENT("memcpy requires a non-zero element size.");
 
                         auto lengthExpr = countExpr->clone();
                         bool noCopy     = false;
-                        if (auto *lit = llvm::dyn_cast<symbolic::LiteralExpr>(
-                                lengthExpr.get().get())) {
+                        if (auto *lit =
+                                llvm::dyn_cast<symbolic::LiteralExpr>(lengthExpr.get().get())) {
                             const auto raw = static_cast<uint64_t>(lit->getLiteralValue());
                             if (raw == 0) {
                                 noCopy = true;
@@ -1002,12 +1010,12 @@ namespace acslg::analyzer {
                         if (noCopy)
                             return Path::EvalResult(std::move(empty), std::move(exprs));
 
-                        auto destRange = std::make_unique<symbolic::SymbolAddress>(
-                            *destAddr.value());
+                        auto destRange =
+                            std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
                         destRange->setLength(std::move(lengthExpr));
 
-                        auto srcIndexed = std::make_unique<symbolic::SymbolAddress>(
-                            *srcAddr.value());
+                        auto srcIndexed =
+                            std::make_unique<symbolic::SymbolAddress>(*srcAddr.value());
                         srcIndexed->resetLength();
                         srcIndexed->addOffset(
                             std::make_unique<symbolic::SymbolAddress::RangeIndex>("i"));
@@ -2321,7 +2329,6 @@ namespace acslg::analyzer {
                 step(body);
                 return;
             }
-            UNIMPLEMENT("Loop type not supported yet: " << loopStmt->getStmtClassName());
         }
 
         auto [loopInfo, ok] = spec_generator::parseLoopInfo(*preState, *loopEntry, loopStmt);
@@ -2437,18 +2444,17 @@ namespace acslg::analyzer {
                 auto newPath  = (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
                 auto newValue = std::move(eval.second.at(i));
                 auto dstAddr  = newPath->extractLValue(binOp->getLHS());
-                if (auto *mem = llvm::dyn_cast<clang::MemberExpr>(
-                        binOp->getLHS()->IgnoreParenImpCasts())) {
+                if (auto *mem =
+                        llvm::dyn_cast<clang::MemberExpr>(binOp->getLHS()->IgnoreParenImpCasts())) {
                     if (auto *FD = llvm::dyn_cast<clang::FieldDecl>(mem->getMemberDecl())) {
                         if (FD->getNameAsString() == "data") {
-                            auto loc = binOp->getExprLoc();
-                            auto &SM = context_.getSourceManager();
+                            auto loc      = binOp->getExprLoc();
+                            auto &SM      = context_.getSourceManager();
                             auto presumed = SM.getPresumedLoc(loc);
                             if (presumed.isValid()) {
-                                DEBUG("assign to *.data at " << presumed.getFilename() << ":"
-                                                             << presumed.getLine() << ":"
-                                                             << presumed.getColumn()
-                                                             << " value=" << newValue->dump());
+                                DEBUG("assign to *.data at "
+                                      << presumed.getFilename() << ":" << presumed.getLine() << ":"
+                                      << presumed.getColumn() << " value=" << newValue->dump());
                             }
                         }
                     }
@@ -2459,13 +2465,13 @@ namespace acslg::analyzer {
                         if (fieldAddr->getDefinition() &&
                             fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
                             fieldAddr->getFieldIndex() == 4) {
-                            auto loc = binOp->getExprLoc();
-                            auto &SM = context_.getSourceManager();
+                            auto loc      = binOp->getExprLoc();
+                            auto &SM      = context_.getSourceManager();
                             auto presumed = SM.getPresumedLoc(loc);
                             if (presumed.isValid()) {
                                 DEBUG("assign Unknown to BigNum->data at "
-                                      << presumed.getFilename() << ":" << presumed.getLine()
-                                      << ":" << presumed.getColumn());
+                                      << presumed.getFilename() << ":" << presumed.getLine() << ":"
+                                      << presumed.getColumn());
                             }
                         }
                     }

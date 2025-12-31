@@ -74,8 +74,9 @@ namespace acslg::spec_generator {
             auto oldPoint = pre.getStartPoint();
             std::unordered_set<symb::SourcePoint> allUsedPoints;
             for (auto &[_, addr] : assignedAddrs) {
-                auto acslExpected =
-                    addr.get().getACSLOfValue({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
+                auto acslExpected = addr.get().getACSLOfValue(
+                    {.noStateLabelFunctionAt = true, .predefinedLabels = {{oldPoint, "Old"}}},
+                    oldPoint);
                 if (!acslExpected) {
                     WARN("Value of {" + addr.get().dump() + "} getACSL failed.");
                     continue;
@@ -203,7 +204,8 @@ namespace acslg::spec_generator {
 
                 std::string assignsSpec;
                 for (auto &[_, a] : assignedAddrs) {
-                    symb::SymbolicExpr::GetACSLConfig cfg{.predefinedLabels = {{oldPoint, "Old"}}};
+                    symb::SymbolicExpr::GetACSLConfig cfg{
+                        .noStateLabelFunctionAt = true, .predefinedLabels = {{oldPoint, "Old"}}};
                     auto acslExpected = a.get().getACSLOfValue(cfg, oldPoint);
                     if (!acslExpected) {
                         if (acslExpected.error() == symb::SymbolicExpr::GetACSLError::HeapAddress) {
@@ -233,7 +235,8 @@ namespace acslg::spec_generator {
                 // result
                 if (auto &ret = path.getReturnExpr()) {
                     if (auto expected = ret.value()->simplifiedExpr()->getACSL(
-                            {.predefinedLabels = {{oldPoint, "Old"}}})) {
+                            {.noStateLabelFunctionAt = true,
+                             .predefinedLabels = {{oldPoint, "Old"}}})) {
                         auto &[spec, usedPoints] = expected.value();
                         if (usedPoints.empty())
                             if (!llvm::isa<symb::OverRangeExpr>(*ret.value()))
@@ -279,6 +282,7 @@ namespace acslg::spec_generator {
                                     continue;
 
                                 symb::SymbolicExpr::GetACSLConfig cfg{
+                                    .noStateLabelFunctionAt = true,
                                     .predefinedLabels = {{oldPoint, "Old"}}};
                                 auto rhsOpt = fieldExpr->simplifiedExpr()->getACSL(cfg);
                                 if (!rhsOpt)
@@ -293,7 +297,8 @@ namespace acslg::spec_generator {
                         continue;
                     }
 
-                    symb::SymbolicExpr::GetACSLConfig cfg{.predefinedLabels = {{oldPoint, "Old"}}};
+                    symb::SymbolicExpr::GetACSLConfig cfg{
+                        .noStateLabelFunctionAt = true, .predefinedLabels = {{oldPoint, "Old"}}};
                     auto lhsOpt = addr.get().getACSLOfValue(cfg);
                     if (!lhsOpt) {
                         if (lhsOpt.error() == symb::SymbolicExpr::GetACSLError::HeapAddress) {
@@ -339,8 +344,8 @@ namespace acslg::spec_generator {
                                 continue;
                             }
                             auto fieldExpr = retSt->getFieldValue(idxField)->clone();
-                            auto fieldExpected =
-                                fieldExpr->simplifiedExpr()->getACSL({.predefinedLabels = {}});
+                            auto fieldExpected = fieldExpr->simplifiedExpr()->getACSL(
+                                {.noStateLabelFunctionAt = true, .predefinedLabels = {}});
                             if (!fieldExpected) {
                                 ++idxField;
                                 continue;

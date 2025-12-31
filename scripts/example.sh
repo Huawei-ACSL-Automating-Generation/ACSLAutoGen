@@ -5,6 +5,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Make Ctrl+C stop the whole benchmark (including child processes).
+trap 'echo "[INFO] Interrupted, exiting..."; kill -- -$$ 2>/dev/null; exit 130' INT TERM
+
 # 1. 先编译 ACSLG
 if [ "${SKIP_BUILD:-0}" != "1" ]; then
   "$SCRIPT_DIR/compile.sh"
@@ -202,14 +205,17 @@ run_one() {
   src_ext="${src_base##*.}"
 
   local gen_dir="$GEN_DIR_BASE/$suite/$func"
-  local with_acsl="$gen_dir/${src_stem}_with_acsl.${src_ext}"
+  local with_acsl_new="$gen_dir/${src_stem}_acsl.${src_ext}"
+  local with_acsl_old1="$gen_dir/${src_stem}_with_acsl.${src_ext}"
+  local with_acsl_old2="$gen_dir/${src_stem}.${src_ext}_with_acsl"
+  local with_acsl="$with_acsl_new"
   local acslg_log="$LOG_DIR/acslg_${suite}__${func}.log"
   local wp_log="$LOG_DIR/wp_${suite}__${func}.log"
   local time_file
   time_file="$(mktemp)"
 
   mkdir -p "$gen_dir"
-  rm -f "$with_acsl"
+  rm -f "$with_acsl_new" "$with_acsl_old1" "$with_acsl_old2"
 
   set +e
   timeout --signal=TERM --kill-after=5 "$ACSLG_TIMEOUT" \
@@ -243,6 +249,13 @@ run_one() {
 
   local wp_rc=0 wp_proved="NA" wp_total="NA" wp_result="none"
   local wp_issue=""
+  if [ ! -f "$with_acsl" ]; then
+    if [ -f "$with_acsl_old1" ]; then
+      mv -f "$with_acsl_old1" "$with_acsl"
+    elif [ -f "$with_acsl_old2" ]; then
+      mv -f "$with_acsl_old2" "$with_acsl"
+    fi
+  fi
   if [ "$acslg_error" = "yes" ] || [ ! -f "$with_acsl" ]; then
     echo "[WARN] Skip WP: ACSLG failed or output missing (rc=$acslg_rc, file=$with_acsl)" >"$wp_log"
     wp_rc=2
