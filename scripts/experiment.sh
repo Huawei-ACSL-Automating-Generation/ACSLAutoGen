@@ -8,7 +8,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Make Ctrl+C stop the whole benchmark (including child processes).
 trap 'echo "[INFO] Interrupted, exiting..."; kill -- -$$ 2>/dev/null; exit 130' INT TERM
 
-# 1. 先编译 ACSLG
+# 1. Build ACSLG first
 if [ "${SKIP_BUILD:-0}" != "1" ]; then
   "$SCRIPT_DIR/compile.sh"
 fi
@@ -40,12 +40,11 @@ echo "[INFO] OpenHiTLS root:  $OPENHITLS_ROOT"
 echo "[INFO] Comp DB dir:     $COMP_DB_DIR"
 echo
 
-# 2. Frama-C 使用的预处理命令（与你现在手动跑成功的版本一致）
-CPP_CMD="gcc -C -E \
-  -D__FRAMAC__ \
-  -DHITLS_CRYPTO_BN \
-  -DHITLS_SIXTY_FOUR_BITS \
-  -DOPENHITLSDIR=\\\"/usr/local/\\\" \
+# 2. Frama-C preprocessing command (matches the known-good manual setup)
+COMMON_CPP_DEFINES="-D__FRAMAC__ -DHITLS_SIXTY_FOUR_BITS -DOPENHITLSDIR=\\\"/usr/local/\\\""
+CPP_CMD_BASE="gcc -C -E \
+  $COMMON_CPP_DEFINES \
+  -include $OPENHITLS_ROOT/include/crypto/crypt_types.h \
   -I$OPENHITLS_ROOT/config/macro_config \
   -I$OPENHITLS_ROOT/include \
   -I$OPENHITLS_ROOT/include/bsl \
@@ -53,8 +52,21 @@ CPP_CMD="gcc -C -E \
   -I$OPENHITLS_ROOT/crypto/include \
   -I$OPENHITLS_ROOT/crypto/bn/src \
   -I$OPENHITLS_ROOT/crypto/bn/include \
+  -I$OPENHITLS_ROOT/crypto/mlkem/include \
+  -I$OPENHITLS_ROOT/crypto/mlkem/src \
+  -I$OPENHITLS_ROOT/crypto/mldsa/include \
+  -I$OPENHITLS_ROOT/crypto/mldsa/src \
+  -I$OPENHITLS_ROOT/crypto/slh_dsa/include \
+  -I$OPENHITLS_ROOT/crypto/slh_dsa/src \
+  -I$OPENHITLS_ROOT/crypto/frodokem/include \
+  -I$OPENHITLS_ROOT/crypto/frodokem/src \
+  -I$OPENHITLS_ROOT/crypto/xmss/include \
+  -I$OPENHITLS_ROOT/crypto/xmss/src \
+  -I$OPENHITLS_ROOT/crypto/eal/include \
+  -I$OPENHITLS_ROOT/crypto/eal/src \
   -I$OPENHITLS_ROOT/platform/Secure_C/include \
   -I$OPENHITLS_ROOT/bsl/include \
+  -I$OPENHITLS_ROOT/bsl/obj/include \
   -I$OPENHITLS_ROOT/bsl/err/include \
   -I$OPENHITLS_ROOT/bsl/asn1/include \
   -I$OPENHITLS_ROOT/tls/include \
@@ -62,8 +74,8 @@ CPP_CMD="gcc -C -E \
   -I$OPENHITLS_ROOT/include/pki \
   -I$OPENHITLS_ROOT/include/auth"
 
-echo "[INFO] Frama-C will use cpp-command:"
-echo "       $CPP_CMD"
+echo "[INFO] Frama-C will use cpp-command base:"
+echo "       $CPP_CMD_BASE"
 echo
 
 # Resource limits (to avoid WSL2/Docker disk/CPU stalls).
@@ -78,7 +90,7 @@ KEEP_GENERATED="${KEEP_GENERATED:-success}"
 
 # Allow overriding which suites to run:
 #   SUITES_OVERRIDE="basic bincal noasm" ./experiment.sh
-SUITES_OVERRIDE="${SUITES_OVERRIDE:-basic bincal noasm}"
+SUITES_OVERRIDE="${SUITES_OVERRIDE:-basic bincal noasm mlkem mldsa slh_dsa frodokem quantum}"
 read -r -a SUITES <<<"$SUITES_OVERRIDE"
 
 # Run output locations.
@@ -93,7 +105,7 @@ RESULT_TABLE_FILE="${RESULT_TABLE_FILE_OVERRIDE:-$RUN_DIR/bn_wp_results.txt}"
 
 mkdir -p "$LOG_DIR" "$GEN_DIR_BASE"
 
-# 3. bn_basic.c 中所有需要跑的函数名（默认使用固定白名单，避免全文件过大）
+# 3. Functions to run in bn_basic.c (default whitelist to avoid oversized files)
 BASIC_FUNCS_MODE="${BASIC_FUNCS_MODE:-list}" # list | all
 BASIC_FUNCS_LIST=(
   BN_Create
@@ -129,6 +141,64 @@ BASIC_FUNCS_LIST=(
   BN_SecBits
 )
 
+MLKEM_FUNCS_LIST=(
+  CRYPT_ML_KEM_NewCtx
+  CRYPT_ML_KEM_NewCtxEx
+  CRYPT_ML_KEM_FreeCtx
+  CRYPT_ML_KEM_GetSecBits
+)
+
+MLDSA_FUNCS_LIST=(
+  CRYPT_ML_DSA_GetInfo
+  CRYPT_ML_DSA_NewCtx
+  CRYPT_ML_DSA_NewCtxEx
+  CRYPT_ML_DSA_FreeCtx
+  CRYPT_ML_DSA_DupCtx
+)
+
+SLH_DSA_FUNCS_LIST=(
+  CRYPT_SLH_DSA_NewCtx
+  CRYPT_SLH_DSA_FreeCtx
+  CRYPT_SLH_DSA_DupCtx
+  CRYPT_SLH_DSA_GetPubKey
+  CRYPT_SLH_DSA_SetPubKey
+)
+
+FRODOKEM_FUNCS_LIST=(
+  CRYPT_FRODOKEM_NewCtx
+  CRYPT_FRODOKEM_NewCtxEx
+  CRYPT_FRODOKEM_FreeCtx
+  CRYPT_FRODOKEM_EncapsInit
+  CRYPT_FRODOKEM_DecapsInit
+)
+
+QUANTUM_MLKEM_FUNCS_LIST=(
+)
+
+QUANTUM_MLDSA_FUNCS_LIST=(
+)
+
+QUANTUM_SLH_DSA_FUNCS_LIST=(
+  UCAdrsGetAdrsLen
+  CAdrsGetAdrsLen
+)
+
+QUANTUM_FRODOKEM_FUNCS_LIST=(
+  CRYPT_FRODOKEM_EncapsInit
+  CRYPT_FRODOKEM_DecapsInit
+)
+
+QUANTUM_FRODOKEM_UTIL_FUNCS_LIST=(
+)
+
+QUANTUM_FRODOKEM_PARAMS_FUNCS_LIST=(
+)
+
+QUANTUM_XMSS_FUNCS_LIST=(
+  XAdrsGetAdrsLen
+  CheckNotXmssAlgId
+)
+
 # Optional per-suite overrides:
 #   BASIC_FUNCS_OVERRIDE="BN_Create BN_Destroy" ./experiment.sh
 #   BINCAL_FUNCS_OVERRIDE="BinInc BinDec" ./experiment.sh
@@ -136,6 +206,10 @@ BASIC_FUNCS_LIST=(
 BASIC_FUNCS_OVERRIDE="${BASIC_FUNCS_OVERRIDE:-}"
 BINCAL_FUNCS_OVERRIDE="${BINCAL_FUNCS_OVERRIDE:-}"
 NOASM_BINCAL_FUNCS_OVERRIDE="${NOASM_BINCAL_FUNCS_OVERRIDE:-}"
+MLKEM_FUNCS_OVERRIDE="${MLKEM_FUNCS_OVERRIDE:-}"
+MLDSA_FUNCS_OVERRIDE="${MLDSA_FUNCS_OVERRIDE:-}"
+SLH_DSA_FUNCS_OVERRIDE="${SLH_DSA_FUNCS_OVERRIDE:-}"
+FRODOKEM_FUNCS_OVERRIDE="${FRODOKEM_FUNCS_OVERRIDE:-}"
 
 extract_funcs() {
   local file="$1"
@@ -161,6 +235,19 @@ extract_funcs() {
       }
     }
   ' "$file" | sort -u
+}
+
+suite_defines() {
+  local suite="$1"
+  case "$suite" in
+    basic|bincal|noasm) echo "-DHITLS_CRYPTO_BN" ;;
+    mlkem) echo "-DHITLS_CRYPTO_MLKEM" ;;
+    mldsa) echo "-DHITLS_CRYPTO_MLDSA" ;;
+    slh_dsa) echo "-DHITLS_CRYPTO_SLH_DSA" ;;
+    frodokem) echo "-DHITLS_CRYPTO_FRODOKEM" ;;
+    quantum) echo "-DHITLS_CRYPTO_MLKEM -DHITLS_CRYPTO_MLDSA -DHITLS_CRYPTO_SLH_DSA -DHITLS_CRYPTO_FRODOKEM -DHITLS_CRYPTO_XMSS" ;;
+    *) echo "" ;;
+  esac
 }
 
 first_issue_line() {
@@ -218,10 +305,35 @@ run_one() {
   mkdir -p "$gen_dir"
   rm -f "$with_acsl_new" "$with_acsl_old1" "$with_acsl_old2"
 
+  local suite_defs
+  local acslg_extra_args
+  local cpp_cmd
+  local acslg_extra_arg_str
+
+  suite_defs="$(suite_defines "$suite")"
+  cpp_cmd="$CPP_CMD_BASE"
+  if [ -n "$suite_defs" ]; then
+    cpp_cmd="$cpp_cmd $suite_defs"
+  fi
+
+  acslg_extra_args=(
+    --extra-arg=-D__FRAMAC__
+    --extra-arg=-DHITLS_SIXTY_FOUR_BITS
+    --extra-arg=-Wno-unknown-warning-option
+    --extra-arg=-Wno-error=unknown-warning-option
+  )
+  if [ -n "$suite_defs" ]; then
+    read -r -a suite_def_arr <<<"$suite_defs"
+    for def in "${suite_def_arr[@]}"; do
+      acslg_extra_args+=(--extra-arg="$def")
+    done
+  fi
+  acslg_extra_arg_str="${acslg_extra_args[*]}"
+
   set +e
   timeout --signal=TERM --kill-after=5 "$ACSLG_TIMEOUT" \
     /usr/bin/time -f "%e" -o "$time_file" \
-      bash -lc "ulimit -c 0; exec nice -n 10 \"$ROOT_DIR/build/src/ACSLG\" -p \"$COMP_DB_DIR\" \"$src\" --func \"$func\" --out-dir \"$gen_dir\" --log-level warn --extra-arg=-D__FRAMAC__ --extra-arg=-DHITLS_CRYPTO_BN --extra-arg=-DHITLS_SIXTY_FOUR_BITS --extra-arg=-Wno-unknown-warning-option --extra-arg=-Wno-error=unknown-warning-option" \
+      bash -lc "ulimit -c 0; exec nice -n 10 \"$ROOT_DIR/build/src/ACSLG\" -p \"$COMP_DB_DIR\" \"$src\" --func \"$func\" --out-dir \"$gen_dir\" --log-level warn $acslg_extra_arg_str" \
         >"$acslg_log" 2>&1
   local acslg_rc=$?
   set -e
@@ -264,7 +376,7 @@ run_one() {
   else
     set +e
     timeout --signal=TERM --kill-after=5 "$WP_TIMEOUT" \
-      bash -lc "ulimit -c 0; exec nice -n 10 frama-c -wp -wp-prover Qed -cpp-command \"$CPP_CMD\" \"$with_acsl\"" \
+      bash -lc "ulimit -c 0; exec nice -n 10 frama-c -wp -wp-prover Qed -cpp-command \"$cpp_cmd\" \"$with_acsl\"" \
         >"$wp_log" 2>&1
     wp_rc=$?
     set -e
@@ -326,6 +438,10 @@ suite_src() {
     basic) echo "$OPENHITLS_ROOT/crypto/bn/src/bn_basic.c" ;;
     bincal) echo "$OPENHITLS_ROOT/crypto/bn/src/bn_bincal.c" ;;
     noasm) echo "$OPENHITLS_ROOT/crypto/bn/src/noasm_bn_bincal.c" ;;
+    mlkem) echo "$OPENHITLS_ROOT/crypto/mlkem/src/ml_kem.c" ;;
+    mldsa) echo "$OPENHITLS_ROOT/crypto/mldsa/src/ml_dsa.c" ;;
+    slh_dsa) echo "$OPENHITLS_ROOT/crypto/slh_dsa/src/slh_dsa.c" ;;
+    frodokem) echo "$OPENHITLS_ROOT/crypto/frodokem/src/frodokem.c" ;;
     *)
       echo ""
       return 1
@@ -365,10 +481,68 @@ suite_funcs() {
       extract_funcs "$src" | tr '\n' ' '
       return 0
       ;;
+    mlkem)
+      if [ -n "$MLKEM_FUNCS_OVERRIDE" ]; then
+        echo "$MLKEM_FUNCS_OVERRIDE"
+        return 0
+      fi
+      printf "%s " "${MLKEM_FUNCS_LIST[@]}"
+      return 0
+      ;;
+    mldsa)
+      if [ -n "$MLDSA_FUNCS_OVERRIDE" ]; then
+        echo "$MLDSA_FUNCS_OVERRIDE"
+        return 0
+      fi
+      printf "%s " "${MLDSA_FUNCS_LIST[@]}"
+      return 0
+      ;;
+    slh_dsa)
+      if [ -n "$SLH_DSA_FUNCS_OVERRIDE" ]; then
+        echo "$SLH_DSA_FUNCS_OVERRIDE"
+        return 0
+      fi
+      printf "%s " "${SLH_DSA_FUNCS_LIST[@]}"
+      return 0
+      ;;
+    frodokem)
+      if [ -n "$FRODOKEM_FUNCS_OVERRIDE" ]; then
+        echo "$FRODOKEM_FUNCS_OVERRIDE"
+        return 0
+      fi
+      printf "%s " "${FRODOKEM_FUNCS_LIST[@]}"
+      return 0
+      ;;
     *)
       return 1
       ;;
   esac
+}
+
+quantum_entries() {
+  local entries=()
+  if [ ${#QUANTUM_MLKEM_FUNCS_LIST[@]} -gt 0 ]; then
+    entries+=("$OPENHITLS_ROOT/crypto/mlkem/src/ml_kem.c|${QUANTUM_MLKEM_FUNCS_LIST[*]}")
+  fi
+  if [ ${#QUANTUM_MLDSA_FUNCS_LIST[@]} -gt 0 ]; then
+    entries+=("$OPENHITLS_ROOT/crypto/mldsa/src/ml_dsa.c|${QUANTUM_MLDSA_FUNCS_LIST[*]}")
+  fi
+  if [ ${#QUANTUM_SLH_DSA_FUNCS_LIST[@]} -gt 0 ]; then
+    entries+=("$OPENHITLS_ROOT/crypto/slh_dsa/src/slh_dsa.c|${QUANTUM_SLH_DSA_FUNCS_LIST[*]}")
+  fi
+  if [ ${#QUANTUM_FRODOKEM_FUNCS_LIST[@]} -gt 0 ]; then
+    entries+=("$OPENHITLS_ROOT/crypto/frodokem/src/frodokem.c|${QUANTUM_FRODOKEM_FUNCS_LIST[*]}")
+  fi
+  if [ ${#QUANTUM_FRODOKEM_UTIL_FUNCS_LIST[@]} -gt 0 ]; then
+    entries+=("$OPENHITLS_ROOT/crypto/frodokem/src/frodo_util.c|${QUANTUM_FRODOKEM_UTIL_FUNCS_LIST[*]}")
+  fi
+  if [ ${#QUANTUM_FRODOKEM_PARAMS_FUNCS_LIST[@]} -gt 0 ]; then
+    entries+=("$OPENHITLS_ROOT/crypto/frodokem/src/frodo_params.c|${QUANTUM_FRODOKEM_PARAMS_FUNCS_LIST[*]}")
+  fi
+  if [ ${#QUANTUM_XMSS_FUNCS_LIST[@]} -gt 0 ]; then
+    entries+=("$OPENHITLS_ROOT/crypto/xmss/src/xmss.c|${QUANTUM_XMSS_FUNCS_LIST[*]}")
+  fi
+  printf "%s\n" "${entries[@]}"
 }
 
 echo "[INFO] Run dir:        $RUN_DIR"
@@ -379,6 +553,29 @@ echo "[INFO] Suites:         ${SUITES[*]}"
 echo
 
 for suite in "${SUITES[@]}"; do
+  if [ "$suite" = "quantum" ]; then
+    echo "=== Suite: $suite ==="
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      src="${entry%%|*}"
+      funcs_str="${entry#*|}"
+      if [ -z "$src" ] || [ ! -f "$src" ]; then
+        echo "[WARN] Skip quantum entry: source not found ($src)" >&2
+        continue
+      fi
+      read -r -a funcs <<<"$funcs_str"
+      echo "[INFO] Source: $src"
+      echo "[INFO] Funcs:  ${#funcs[@]}"
+      for func in "${funcs[@]}"; do
+        [ -z "$func" ] && continue
+        echo "  -> $func"
+        run_one "$suite" "$src" "$func"
+      done
+      echo
+    done < <(quantum_entries)
+    continue
+  fi
+
   src="$(suite_src "$suite")"
   if [ -z "$src" ] || [ ! -f "$src" ]; then
     echo "[WARN] Skip suite '$suite': source not found ($src)" >&2
@@ -402,164 +599,10 @@ done
 # Clean empty generated directories (including failed cases).
 find "$GEN_DIR_BASE" -mindepth 1 -type d -empty -delete 2>/dev/null || true
 
-python3 - <<'PY' "$RESULT_FILE" "$REPORT_FILE"
-import csv
-import sys
-from collections import defaultdict
-import os
-import re
+# Generate the Markdown report from results.csv (suite summary + failure lists).
+# Note: This also writes the plain-text table to RESULT_TABLE_FILE for quick scanning.
+python3 "$SCRIPT_DIR/report_summary.py" "$RESULT_FILE" "$REPORT_FILE" "$RESULT_TABLE_FILE"
 
-csv_path, out_path = sys.argv[1], sys.argv[2]
-rows = []
-with open(csv_path, newline="") as f:
-    r = csv.DictReader(f)
-    for row in r:
-        rows.append(row)
-
-by_suite = defaultdict(list)
-for row in rows:
-    by_suite[row["suite"]].append(row)
-
-ansi_re = re.compile(r"\x1b\[[0-9;]*m")
-def strip_ansi(s: str) -> str:
-    return ansi_re.sub("", s or "")
-
-def to_int(x):
-    try:
-        return int(x)
-    except Exception:
-        return None
-
-lines = []
-lines.append("# ACSLG + Frama-C WP Report")
-lines.append("")
-lines.append(f"- CSV: `{csv_path}`")
-lines.append(f"- Total rows: {len(rows)}")
-lines.append(f"- ACSLG timeout: {os.environ.get('ACSLG_TIMEOUT','') or 'NA'}s")
-lines.append(f"- WP timeout: {os.environ.get('WP_TIMEOUT','') or 'NA'}s")
-lines.append(f"- KEEP_GENERATED: {os.environ.get('KEEP_GENERATED','success')}")
-lines.append("")
-
-for suite, srows in sorted(by_suite.items()):
-    total = len(srows)
-    acslg_err = sum(1 for r in srows if r["acslg_error"] == "yes")
-    wp_all = sum(1 for r in srows if r["wp_result"] == "all")
-    wp_partial = sum(1 for r in srows if r["wp_result"] == "partial")
-    wp_none = sum(1 for r in srows if r["wp_result"] in ("none", "timeout"))
-    lines.append(f"## {suite}")
-    lines.append(f"- Total functions: {total}")
-    lines.append(f"- ACSLG failures:  {acslg_err}")
-    lines.append(f"- WP all proved:   {wp_all}")
-    lines.append(f"- WP partial:      {wp_partial}")
-    lines.append(f"- WP none/timeout: {wp_none}")
-    lines.append("")
-
-    # Failure list
-    fails = [r for r in srows if r["acslg_error"] == "yes"]
-    if fails:
-        lines.append("### ACSLG Failures")
-        for r in fails:
-            issue = strip_ansi((r.get("acslg_issue") or "").strip())
-            if not issue:
-                issue = "(no issue line)"
-            lines.append(f"- `{r['function']}`: {issue}")
-        lines.append("")
-
-    # WP none list (excluding ACSLG failures)
-    wp_bad = [r for r in srows if r["acslg_error"] == "no" and r["wp_result"] in ("none", "timeout")]
-    if wp_bad:
-        lines.append("### WP Missing/Timeout (ACSLG OK)")
-        for r in wp_bad:
-            wp_issue = strip_ansi((r.get("wp_issue") or "").strip())
-            suffix = f" ({wp_issue})" if wp_issue else ""
-            lines.append(f"- `{r['function']}`: wp_result={r['wp_result']}{suffix}")
-        lines.append("")
-
-with open(out_path, "w", encoding="utf-8") as f:
-    f.write("\n".join(lines).rstrip() + "\n")
-PY
-
-# Summarize CSV into a readable text table.
-awk -F, '
-  function trim_quotes(s) {
-    gsub(/^"/, "", s);
-    gsub(/"$/, "", s);
-    return s;
-  }
-  function add_width(i, v) {
-    if (length(v) > w[i]) w[i] = length(v);
-  }
-  BEGIN {
-    h[1]="module"; h[2]="function"; h[3]="acslg_time_sec";
-    h[4]="acslg_error"; h[5]="wp_proved"; h[6]="wp_total"; h[7]="wp_result";
-    for (i=1; i<=7; i++) w[i]=length(h[i]);
-  }
-  NR==1 { next }
-  {
-    source = trim_quotes($2);
-    func   = trim_quotes($3);
-    acslg_time = trim_quotes($4);
-    acslg_error = trim_quotes($6);
-    wp_proved = trim_quotes($8);
-    wp_total  = trim_quotes($9);
-    wp_result = trim_quotes($10);
-
-    module = source;
-    sub(/.*\//, "", module);
-    sub(/\.[^.]+$/, "", module);
-
-    n++;
-    data[n,1]=module;
-    data[n,2]=func;
-    data[n,3]=acslg_time;
-    data[n,4]=acslg_error;
-    data[n,5]=wp_proved;
-    data[n,6]=wp_total;
-    data[n,7]=wp_result;
-
-    for (i=1; i<=7; i++) add_width(i, data[n,i]);
-
-    total++;
-    if (acslg_error=="yes") acslg_err++;
-    if (wp_result=="all") wp_all++;
-    else if (wp_result=="partial") wp_partial++;
-    else if (wp_result=="none" || wp_result=="timeout") wp_none++;
-    if (acslg_time ~ /^[0-9.]+$/) { sum+=acslg_time; ntime++; }
-  }
-  END {
-    sep="+";
-    for (i=1; i<=7; i++) {
-      for (j=0; j<w[i]+2; j++) sep=sep"-";
-      sep=sep"+";
-    }
-    print sep;
-    printf "|";
-    for (i=1; i<=7; i++) printf " %-*s |", w[i], h[i];
-    printf "\n";
-    print sep;
-    for (r=1; r<=n; r++) {
-      printf "|";
-      for (i=1; i<=7; i++) printf " %-*s |", w[i], data[r,i];
-      printf "\n";
-    }
-    print sep;
-    print "";
-    print "Summary:";
-    sumsep="+------------------------------+--------+";
-    print sumsep;
-    printf "| %-28s | %-6s |\n", "Total functions", total+0;
-    printf "| %-28s | %-6s |\n", "ACSLG errors", acslg_err+0;
-    printf "| %-28s | %-6s |\n", "WP all proved", wp_all+0;
-    printf "| %-28s | %-6s |\n", "WP partial proved", wp_partial+0;
-    printf "| %-28s | %-6s |\n", "WP none/parse-error", wp_none+0;
-    if (ntime>0) {
-      avg = sum/ntime;
-      printf "| %-28s | %-6.4f |\n", "Avg ACSLG time (sec)", avg;
-    } else {
-      printf "| %-28s | %-6s |\n", "Avg ACSLG time (sec)", "NA";
-    }
-    print sumsep;
-  }
-' "$RESULT_FILE" >"$RESULT_TABLE_FILE"
-
+# The report generator above now replaces the old awk table build.
+# RESULT_TABLE_FILE is produced alongside REPORT_FILE.
 echo "[INFO] Done."

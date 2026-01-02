@@ -1,6 +1,6 @@
 # Project Architecture（整体框架概览）
 
-本文档覆盖 ACSLGen 的架构与数据流，帮助读者从编译数据库一路理解到 ACSL 输出。
+本文档覆盖 ACSLGen 的架构与数据流，帮助读者理解从 `compile_commands.json` 到 ACSL 输出的完整流程。
 
 ---
 
