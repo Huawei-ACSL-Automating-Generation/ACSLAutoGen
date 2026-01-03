@@ -790,6 +790,85 @@ namespace acslg::analyzer {
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
 
+                    if (name == "__builtin_expect") {
+                        if (call->getNumArgs() < 1)
+                            UNIMPLEMENT("__builtin_expect expects at least one argument.");
+                        auto evalNoBranch = [this](const clang::Expr *e)
+                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                            auto ER = this->evalExpr(e);
+                            if (ER.second.size() != 1 || !ER.first.empty())
+                                ERROR("__builtin_expect argument must not branch or fork.");
+                            return ER.second[0]->clone();
+                        };
+                        Formulas exprs;
+                        exprs.emplace_back(evalNoBranch(call->getArg(0)));
+                        std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                        return Path::EvalResult(std::move(empty), std::move(exprs));
+                    }
+
+                    /*
+                    if (name == "__builtin___memset_chk") {
+                        // Treat like memset: returns the destination pointer.
+                        if (call->getNumArgs() < 3)
+                            UNIMPLEMENT("__builtin___memset_chk expects at least 3 arguments.");
+                        auto evalNoBranch = [this](const clang::Expr *e)
+                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                            auto ER = this->evalExpr(e);
+                            if (ER.second.size() != 1 || !ER.first.empty())
+                                ERROR("__builtin___memset_chk arguments must not branch or fork.");
+                            return ER.second[0]->clone();
+                        };
+                        auto destExpr = evalNoBranch(call->getArg(0));
+                        Formulas exprs;
+                        exprs.emplace_back(std::move(destExpr));
+                        std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                        return Path::EvalResult(std::move(empty), std::move(exprs));
+                    }
+                    */
+
+                    if (name == "BSL_SAL_Malloc") {
+                        // Minimal model: malloc(size) returns a fresh symbolic address, unless
+                        // size is a known-zero constant (treated as NULL).
+                        if (call->getNumArgs() != 1)
+                            UNIMPLEMENT("BSL_SAL_Malloc expects exactly one size argument.");
+
+                        auto evalNoBranch = [this](const clang::Expr *e)
+                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                            auto ER = this->evalExpr(e);
+                            if (ER.second.size() != 1 || !ER.first.empty())
+                                ERROR("BSL_SAL_Malloc argument must not branch or fork.");
+                            return ER.second[0]->clone();
+                        };
+
+                        auto sizeExpr = evalNoBranch(call->getArg(0));
+                        if (auto c = sizeExpr->tryEvalAsConstant(); c && *c == 0) {
+                            Formulas exprs;
+                            exprs.emplace_back(std::make_unique<symbolic::LiteralExpr>(0));
+                            std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                            return Path::EvalResult(std::move(empty), std::move(exprs));
+                        }
+
+                        auto retTy = call->getType();
+                        if (!retTy->isPointerType()) {
+                            Formulas exprs;
+                            exprs.emplace_back(
+                                symbolic::UnknownExpr::makeUnknown().into_underlying());
+                            std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                            return Path::EvalResult(std::move(empty), std::move(exprs));
+                        }
+
+                        auto pointAfterCall = symbolic::SourcePoint::fromStmtAfter(
+                            call, context_.getSourceManager(), context_.getLangOptions());
+                        auto pointeeTy = retTy->getPointeeType();
+                        auto addr = std::make_unique<symbolic::SymbolAddress>(
+                            pointeeTy, std::nullopt, pointAfterCall);
+
+                        Formulas exprs;
+                        exprs.emplace_back(std::move(addr));
+                        std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                        return Path::EvalResult(std::move(empty), std::move(exprs));
+                    }
+
                     // @WindOctober TODO: wrapped in specific function.
                     if (name == "BSL_SAL_Calloc") {
                         DEBUG("BSL_SAL_Calloc: enter, argc=" << call->getNumArgs());
@@ -1038,6 +1117,89 @@ namespace acslg::analyzer {
                         return modelMemcpy(call->getArg(0), call->getArg(2), call->getArg(3));
                     }
 
+                    if (name == "memset_s") {
+                        if (call->getNumArgs() < 4)
+                            UNIMPLEMENT("memset_s expects four arguments.");
+                        auto evalNoBranch = [this](const clang::Expr *e)
+                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                            auto ER = this->evalExpr(e);
+                            if (ER.second.size() != 1 || !ER.first.empty())
+                                ERROR("memset_s arguments must not branch or fork.");
+                            return ER.second[0]->clone();
+                        };
+
+                        auto destExpr  = evalNoBranch(call->getArg(0));
+                        auto countExpr = evalNoBranch(call->getArg(3));
+                        auto pointAfterCall = symbolic::SourcePoint::fromStmtAfter(
+                            call, context_.getSourceManager(), context_.getLangOptions());
+
+                        // If dest is NULL or count is 0, just return dest.
+                        if (auto c = destExpr->tryEvalAsConstant(); c && *c == 0) {
+                            Formulas exprs;
+                            exprs.emplace_back(std::move(destExpr));
+                            std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                            return Path::EvalResult(std::move(empty), std::move(exprs));
+                        }
+
+                        auto destAddr = destExpr->tryEvalAsSymbolAddr();
+                        if (!destAddr)
+                            UNIMPLEMENT("memset_s expects a pointer destination argument.");
+
+                        clang::QualType elemTy = destAddr.value()->getPointeeType();
+                        if (auto argTy = call->getArg(0)->IgnoreParenImpCasts()->getType();
+                            argTy->isPointerType()) {
+                            elemTy = argTy->getPointeeType();
+                        }
+                        if (elemTy->isVoidType() || elemTy->isIncompleteType())
+                            elemTy = this->context_.getASTContext().UnsignedCharTy;
+
+                        auto &Ctx = this->context_.getASTContext();
+                        const uint64_t sz =
+                            static_cast<uint64_t>(Ctx.getTypeSizeInChars(elemTy).getQuantity());
+                        if (sz == 0)
+                            UNIMPLEMENT("memset_s requires a non-zero element size.");
+
+                        auto lengthExpr = countExpr->clone();
+                        bool noSet      = false;
+                        if (auto *lit =
+                                llvm::dyn_cast<symbolic::LiteralExpr>(lengthExpr.get().get())) {
+                            const auto raw = static_cast<uint64_t>(lit->getLiteralValue());
+                            if (raw == 0) {
+                                noSet = true;
+                            } else if (sz > 1) {
+                                if (raw % sz != 0)
+                                    UNIMPLEMENT("memset_s size is not a multiple of element size.");
+                                lengthExpr = std::make_unique<symbolic::LiteralExpr>(raw / sz);
+                            }
+                        } else if (sz > 1) {
+                            lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
+                                std::move(lengthExpr), sz);
+                        }
+
+                        Formulas exprs;
+                        exprs.emplace_back(destExpr->clone());
+                        std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                        if (noSet)
+                            return Path::EvalResult(std::move(empty), std::move(exprs));
+
+                        if (elemTy->isStructureType()) {
+                            auto destBase =
+                                std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
+                            destBase->resetLength();
+                            auto structVal = symbolic::makeUnknownStructure(
+                                elemTy, destBase->addressClone().into_underlying(), pointAfterCall);
+                            memoryState_.write(*destBase, std::move(structVal));
+                            return Path::EvalResult(std::move(empty), std::move(exprs));
+                        }
+
+                        auto destRange =
+                            std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
+                        destRange->setLength(std::move(lengthExpr));
+                        memoryState_.write(
+                            *destRange, symbolic::UnknownExpr::makeUnknown().into_underlying());
+                        return Path::EvalResult(std::move(empty), std::move(exprs));
+                    }
+
                     std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                     Formulas outExprs;
 
@@ -1230,9 +1392,11 @@ namespace acslg::analyzer {
                                 } else {
                                     outExprs.emplace_back(value.value()->clone());
                                 }
-                            } else if (op == AddrOf)
-                                TODO();
-                            else
+                            } else if (op == AddrOf) {
+                                // &x
+                                auto addr = path->extractLValue(uop->getSubExpr());
+                                outExprs.emplace_back(addr->addressClone().into_underlying());
+                            } else
                                 outExprs.emplace_back(
                                     std::make_unique<symbolic::UnaryOpExpr>(op, std::move(unExpr)));
                         }();

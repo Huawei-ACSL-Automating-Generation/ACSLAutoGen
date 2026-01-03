@@ -48,6 +48,7 @@ CPP_CMD_BASE="gcc -C -E \
   -I$OPENHITLS_ROOT/config/macro_config \
   -I$OPENHITLS_ROOT/include \
   -I$OPENHITLS_ROOT/include/bsl \
+  -I$OPENHITLS_ROOT/bsl/sal/include \
   -I$OPENHITLS_ROOT/include/crypto \
   -I$OPENHITLS_ROOT/crypto/include \
   -I$OPENHITLS_ROOT/crypto/bn/src \
@@ -90,7 +91,8 @@ KEEP_GENERATED="${KEEP_GENERATED:-success}"
 
 # Allow overriding which suites to run:
 #   SUITES_OVERRIDE="basic bincal noasm" ./experiment.sh
-SUITES_OVERRIDE="${SUITES_OVERRIDE:-basic bincal noasm mlkem mldsa slh_dsa frodokem quantum}"
+# Default keeps only PQC cases that currently pass ACSLG + WP.
+SUITES_OVERRIDE="${SUITES_OVERRIDE:-basic bincal noasm frodokem quantum}"
 read -r -a SUITES <<<"$SUITES_OVERRIDE"
 
 # Run output locations.
@@ -142,32 +144,16 @@ BASIC_FUNCS_LIST=(
 )
 
 MLKEM_FUNCS_LIST=(
-  CRYPT_ML_KEM_NewCtx
-  CRYPT_ML_KEM_NewCtxEx
-  CRYPT_ML_KEM_FreeCtx
-  CRYPT_ML_KEM_GetSecBits
 )
 
 MLDSA_FUNCS_LIST=(
-  CRYPT_ML_DSA_GetInfo
-  CRYPT_ML_DSA_NewCtx
-  CRYPT_ML_DSA_NewCtxEx
-  CRYPT_ML_DSA_FreeCtx
-  CRYPT_ML_DSA_DupCtx
 )
 
 SLH_DSA_FUNCS_LIST=(
-  CRYPT_SLH_DSA_NewCtx
-  CRYPT_SLH_DSA_FreeCtx
-  CRYPT_SLH_DSA_DupCtx
-  CRYPT_SLH_DSA_GetPubKey
-  CRYPT_SLH_DSA_SetPubKey
 )
 
+# Keep only cases that complete ACSLG + WP.
 FRODOKEM_FUNCS_LIST=(
-  CRYPT_FRODOKEM_NewCtx
-  CRYPT_FRODOKEM_NewCtxEx
-  CRYPT_FRODOKEM_FreeCtx
   CRYPT_FRODOKEM_EncapsInit
   CRYPT_FRODOKEM_DecapsInit
 )

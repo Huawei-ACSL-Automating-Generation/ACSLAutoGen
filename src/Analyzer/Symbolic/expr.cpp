@@ -1891,7 +1891,15 @@ namespace acslg::analyzer::symbolic {
                 auto addr = std::make_unique<SymbolAddress>(fty, std::move(fieldAddr), fromPoint);
                 fields_.emplace_back(std::move(addr));
             } else if (fty->isArrayType()) {
-                TODO();
+                auto arrayType = llvm::cast<clang::ArrayType>(fty);
+                auto elemTy    = arrayType->getElementType();
+                auto addr = std::make_unique<SymbolAddress>(elemTy, std::move(fieldAddr), fromPoint);
+                if (auto *cat = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr())) {
+                    auto len =
+                        std::make_unique<LiteralExpr>(cat->getSize().getZExtValue());
+                    addr->setLength(std::move(len));
+                }
+                fields_.emplace_back(std::move(addr));
             } else {
                 auto vty = deriveType(fty);
                 auto symbolValue =
@@ -2171,6 +2179,8 @@ namespace acslg::analyzer::symbolic {
     }
 
     SymbolicExpr::Type deriveType(clang::QualType type) {
+        if (auto atomic = type->getAs<clang::AtomicType>())
+            return deriveType(atomic->getValueType());
         if (auto ptr = type->getAs<clang::PointerType>())
             return deriveType(ptr->getPointeeType());
         return llvm::TypeSwitch<clang::QualType, SymbolicExpr::Type>(type.getCanonicalType())
@@ -2203,6 +2213,9 @@ namespace acslg::analyzer::symbolic {
                         clang::PrintingPolicy pp(langOpts);
                         UNIMPLEMENT("Unsupported builtin type: " << BT->getName(pp).str());
                 }
+            })
+            .Case([](const clang::EnumType * /*ET*/) -> SymbolicExpr::Type {
+                return {SymbolicExpr::ScalarKind::Int, 32};
             })
             .Default([&](clang::QualType QT) -> SymbolicExpr::Type {
                 if (QT->isStructureType()) {
