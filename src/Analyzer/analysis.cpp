@@ -79,7 +79,8 @@ namespace acslg::analyzer {
         const clang::CompoundStmt *CS = cast<clang::CompoundStmt>(body);
         auto preState                 = state->clone();
 
-        // Step the whole compound body so we reuse the existing scope clean-up logic (collectLocalVars
+        // Step the whole compound body so we reuse the existing scope clean-up logic
+        // (collectLocalVars
         // + eraseExpiredLocals) instead of reimplementing it when generating contracts.
         state->step(CS);
         // INFO(state->dump());
@@ -91,8 +92,8 @@ namespace acslg::analyzer {
 
         // Generate the ACSL contract text and record any synthetic labels used in the rewrite.
         auto [spec, usedPoints] = spec_generator::emitFunctionContract(*preState, *state);
-        // Generic light simplification: drop requires/ensures clauses that mention local parameters,
-        // since those should not appear in the final ACSL.
+        // Generic light simplification: drop requires/ensures clauses that mention local
+        // parameters, since those should not appear in the final ACSL.
         std::vector<std::string> params;
         params.reserve(FD->param_size());
         for (const auto *p : FD->parameters())

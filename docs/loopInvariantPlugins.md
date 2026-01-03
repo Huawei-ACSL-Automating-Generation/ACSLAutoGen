@@ -1,4 +1,4 @@
-# loopInvariantPlugins.cpp 插件说明（面向新读者）
+# loopInvariantPlugins.cpp 插件说明
 
 本文档介绍 `src/SpecGenerator/loopInvariantPlugins.cpp` 中的各个“循环规格”插件：它们如何从符号执行状态与 `LoopInfo` 中提取信息，并生成 ACSL 的 `loop invariant` / `loop assigns` / `loop variant` 子句，以及用于后续合成 post-state 的辅助信息。
 
