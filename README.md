@@ -2,23 +2,28 @@
 
 ## 📦 Installation
 
-ACSLGen is distributed as a pre-built Docker image. To install and use it:
+ACSLGen is installed and built via the repository `Dockerfile`.
 
-1. **Obtain the image archive** (e.g., `acslg-env.tar.gz`).
-
-2. **Extract the archive**:
+1. **Clone the repository**:
 
    ```bash
-   tar -xzf acslg-env.tar.gz
+   git clone <your-repo-url> ACSLAutoGen
+   cd ACSLAutoGen
    ```
 
-3. **Load the image into Docker**:
+2. **Build the Docker image from `Dockerfile`**:
 
    ```bash
-   docker load -i acslg-env.tar
+   docker build -t acslgen:latest .
    ```
 
-The environment is now ready for use. 
+3. **Start an interactive container**:
+
+   ```bash
+   docker run --rm -it -v "$(pwd)":/app acslgen:latest
+   ```
+
+After the container starts, the project is available at `/app`, and ACSLGen is built at `/app/build/src/ACSLG`.
 
 ---
 
@@ -31,6 +36,15 @@ To invoke the ACSLGen tool on a C source file, run the following command inside 
 ```
 
 This performs ACSL annotation inference on the target C program using Clang's frontend.
+
+---
+
+### 📚 Documentation in `docs/`
+
+The `docs/` directory contains project documentation, including:
+
+- `docs/projectArchitecture.md`: a full architecture and data-flow overview, from Clang tooling input and symbolic execution to plugin-based ACSL generation and final rewrite output.
+- `docs/loopInvariantPlugins.md`: a detailed guide to `loopInvariantPlugins.cpp`, including PI/PS plugin categories, default groups, each plugin's dependencies/outputs, and how loop post-state information is merged.
 
 ---
 
