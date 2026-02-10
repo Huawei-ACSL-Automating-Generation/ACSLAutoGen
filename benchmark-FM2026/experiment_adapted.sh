@@ -109,7 +109,7 @@ SUITES_OVERRIDE="${SUITES_OVERRIDE:-basic bincal noasm frodokem quantum}"
 read -r -a SUITES <<<"$SUITES_OVERRIDE"
 
 RUN_TAG="${RUN_TAG:-$(date +%Y%m%d_%H%M%S)}"
-RUN_DIR_DEFAULT="$ROOT_DIR/runlogs/example_bn_adapted_${RUN_TAG}"
+RUN_DIR_DEFAULT="$SCRIPT_DIR/runlogs/example_bn_adapted_${RUN_TAG}"
 RUN_DIR="${RUN_DIR_OVERRIDE:-$RUN_DIR_DEFAULT}"
 LOG_DIR="${LOG_DIR_OVERRIDE:-$RUN_DIR/logs}"
 GEN_DIR_BASE="${GEN_DIR_OVERRIDE:-$RUN_DIR/generated}"
@@ -204,6 +204,36 @@ parse_wp_summary() {
   return 1
 }
 
+find_generated_acsl_file() {
+  local src="$1"
+  local src_base src_dir candidate
+  src_base="$(basename "$src")"
+  src_dir="$(dirname "$src")"
+
+  # Primary expected location: next to the source path.
+  candidate="${src}_with_acsl"
+  if [ -f "$candidate" ]; then
+    echo "$candidate"
+    return 0
+  fi
+
+  # Some ACSLG invocations emit to current working directory.
+  candidate="$PWD/${src_base}_with_acsl"
+  if [ -f "$candidate" ]; then
+    echo "$candidate"
+    return 0
+  fi
+
+  # Defensive fallback if ACSLG resolves via source directory basename.
+  candidate="$src_dir/${src_base}_with_acsl"
+  if [ -f "$candidate" ]; then
+    echo "$candidate"
+    return 0
+  fi
+
+  return 1
+}
+
 run_one() {
   local suite="$1"
   local src="$2"
@@ -259,7 +289,8 @@ run_one() {
   fi
 
   local src_with_acsl="${src}_with_acsl"
-  rm -f "$src_with_acsl"
+  local cwd_with_acsl="${PWD}/${src_base}_with_acsl"
+  rm -f "$src_with_acsl" "$cwd_with_acsl"
 
   set +e
   timeout --signal=TERM --kill-after=5 "$ACSLG_TIMEOUT" \
@@ -292,18 +323,22 @@ run_one() {
   fi
 
   local wp_rc=0 wp_proved="NA" wp_total="NA" wp_result="none" wp_issue=""
-  if [ -f "$src_with_acsl" ]; then
-    cp "$src_with_acsl" "$with_acsl"
-    rm -f "$src_with_acsl"
+  local generated_acsl=""
+  generated_acsl="$(find_generated_acsl_file "$src" || true)"
+  if [ -n "$generated_acsl" ] && [ -f "$generated_acsl" ]; then
+    cp -f "$generated_acsl" "$with_acsl"
+    rm -f "$generated_acsl"
   fi
   if [ "$acslg_error" = "yes" ] || [ ! -f "$with_acsl" ]; then
     echo "[WARN] Skip WP: ACSLG failed or output missing (rc=$acslg_rc, file=$with_acsl)" >"$wp_log"
     wp_rc=2
     wp_issue="skip (acslg_error=$acslg_error; file_missing=$([ -f "$with_acsl" ] && echo no || echo yes))"
   else
+    local with_acsl_real
+    with_acsl_real="$(realpath "$with_acsl" 2>/dev/null || echo "$with_acsl")"
     set +e
     timeout --signal=TERM --kill-after=5 "$WP_TIMEOUT" \
-      frama-c -wp -wp-prover Qed -cpp-command "$cpp_cmd" "$with_acsl" \
+      frama-c -wp -wp-prover Qed -cpp-command "$cpp_cmd" "$with_acsl_real" \
       >"$wp_log" 2>&1
     wp_rc=$?
     set -e

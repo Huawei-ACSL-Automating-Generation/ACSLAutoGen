@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 RUN_TAG="${RUN_TAG:-$(date +%Y%m%d_%H%M%S)}"
-RUN_ROOT="${RUN_ROOT:-$ROOT_DIR/runlogs/full_test_${RUN_TAG}}"
+RUN_ROOT="${RUN_ROOT:-$SCRIPT_DIR/runlogs/full_test_${RUN_TAG}}"
 
 OPENHITLS_ROOT="${OPENHITLS_ROOT:-$SCRIPT_DIR/openhitls}"
 OPENHITLS_SUITES="${OPENHITLS_SUITES:-basic}"
@@ -113,7 +113,7 @@ mkdir -p "$OPENHITLS_RUN_DIR"
 
 echo "[INFO] Step 3/3: Running openHiTLS function-level experiments ..."
 (
-  cd "$ROOT_DIR"
+  cd "$SCRIPT_DIR"
   SKIP_BUILD="$SKIP_BUILD" \
   OPENHITLS_ROOT="$OPENHITLS_ROOT" \
   SUITES_OVERRIDE="$OPENHITLS_SUITES" \

@@ -35,7 +35,7 @@ This repository snapshot is tailored for the FM2026 submission. To reproduce the
 bash run_all_tests.sh
 ```
 
-The script runs both parts and writes unified English results under `runlogs/full_test_<timestamp>/summary.md`.
+The script runs both parts and writes unified English results under `benchmark-FM2026/runlogs/full_test_<timestamp>/summary.md`.
 
 ---
 
