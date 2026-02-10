@@ -20,10 +20,10 @@ ACSLGen is installed and built via the repository `Dockerfile`.
 3. **Start an interactive container**:
 
    ```bash
-   docker run --rm -it -v "$(pwd)":/app acslgen:latest
+   docker run --rm -it --workdir /app/benchmark-FM2026 acslgen:latest bash
    ```
 
-After the container starts, the project is available at `/app`, and ACSLGen is built at `/app/build/src/ACSLG`.
+After the container starts, you are directly in `/app/benchmark-FM2026`, and ACSLGen is built at `/app/build/src/ACSLG`.
 
 ---
 
@@ -32,7 +32,7 @@ After the container starts, the project is available at `/app`, and ACSLGen is b
 This repository snapshot is tailored for the FM2026 submission. To reproduce the full packaged experiment (original benchmark + openHiTLS tests), run:
 
 ```bash
-bash benchmark-FM2026/run_all_tests.sh
+bash run_all_tests.sh
 ```
 
 The script runs both parts and writes unified English results under `runlogs/full_test_<timestamp>/summary.md`.
@@ -44,7 +44,7 @@ The script runs both parts and writes unified English results under `runlogs/ful
 To invoke the ACSLGen tool on a C source file, run the following command inside the container:
 
 ```bash
-./build/src/ACSLG -extra-arg=-x -extra-arg=c -p build path/to/c-program
+../build/src/ACSLG -extra-arg=-x -extra-arg=c -p ../build path/to/c-program
 ```
 
 This performs ACSL annotation inference on the target C program using Clang's frontend.

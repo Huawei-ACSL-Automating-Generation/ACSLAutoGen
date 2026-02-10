@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Run the benchmark suite
 # - Iterate by group (subdirectory)
@@ -8,13 +8,20 @@
 # - Summary is printed to console and summary.txt
 #
 
+set -u
+set -o pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # --- Configuration ---
-BENCHMARK_BASE=./benchmark       # Root directory containing all benchmark groups
-BINARY=../build/src/ACSLG         # Target executable
-TIME_LIMIT=30s                   # Timeout per file
-RESULTS_FILE=./benchmark_results.tsv # Detailed TSV results
-LOG_DIR=./benchmark_logs         # Logs for each run (stdout/stderr)
-SUMMARY_FILE=./benchmark_summary.txt # Final summary report
+BENCHMARK_BASE="${BENCHMARK_BASE:-$SCRIPT_DIR/benchmark}"        # Root directory containing all benchmark groups
+BINARY="${BINARY:-$ROOT_DIR/build/src/ACSLG}"                    # Target executable
+COMP_DB_DIR="${COMP_DB_DIR:-$ROOT_DIR/build}"                    # compile_commands.json directory
+TIME_LIMIT="${TIME_LIMIT:-30s}"                                  # Timeout per file
+RESULTS_FILE="${RESULTS_FILE:-$SCRIPT_DIR/benchmark_results.tsv}"# Detailed TSV results
+LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/benchmark_logs}"                 # Logs for each run (stdout/stderr)
+SUMMARY_FILE="${SUMMARY_FILE:-$SCRIPT_DIR/benchmark_summary.txt}"# Final summary report
 
 # --- Initialize counters ---
 mkdir -p "$LOG_DIR"
@@ -69,7 +76,7 @@ for group_dir in $(find "$BENCHMARK_BASE" -mindepth 1 -maxdepth 1 -type d); do
 
         # Run
         timeout "$TIME_LIMIT" "$BINARY" \
-            -p build \
+            -p "$COMP_DB_DIR" \
             --extra-arg=-x \
             --extra-arg=c \
             "$filepath" \

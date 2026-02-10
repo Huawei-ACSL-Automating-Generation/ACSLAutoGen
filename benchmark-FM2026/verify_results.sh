@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Run the verification suite
 # - Use frama-c WP on every function that has a body
@@ -6,15 +6,20 @@
 # - Success/failure is determined by frama-c exit code (0 = success)
 #
 
+set -u
+set -o pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # --- Configuration ---
-BENCHMARK_BASE=./benchmark_with_acsl # Root directory containing all benchmark groups
-FRAMAC_BIN=frama-c                   # frama-c executable
-FRAMAC_ARGS_HEAD=(-wp)               # -wp must be first
-FRAMAC_ARGS_TAIL=(-wp-prover alt-ergo) # Remaining WP options
-TIME_LIMIT=10s                       # Timeout per file
-RESULTS_FILE=./verify_results.tsv # Detailed TSV results
-LOG_DIR=./verify_logs             # Per-run stdout/stderr logs
-SUMMARY_FILE=./verify_summary.txt # Final summary report
+BENCHMARK_BASE="${BENCHMARK_BASE:-$SCRIPT_DIR/benchmark_with_acsl}" # Root directory containing all benchmark groups
+FRAMAC_BIN="${FRAMAC_BIN:-frama-c}"                                  # frama-c executable
+FRAMAC_ARGS_HEAD=(-wp)                                                # -wp must be first
+FRAMAC_ARGS_TAIL=(-wp-prover alt-ergo)                               # Remaining WP options
+TIME_LIMIT="${TIME_LIMIT:-10s}"                                      # Timeout per file
+RESULTS_FILE="${RESULTS_FILE:-$SCRIPT_DIR/verify_results.tsv}"       # Detailed TSV results
+LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/verify_logs}"                        # Per-run stdout/stderr logs
+SUMMARY_FILE="${SUMMARY_FILE:-$SCRIPT_DIR/verify_summary.txt}"       # Final summary report
 
 # --- Initialize counters ---
 mkdir -p "$LOG_DIR"
