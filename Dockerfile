@@ -144,4 +144,11 @@ RUN git clone https://gitcode.com/openHiTLS/openhitls.git /app/benchmark-FM2026/
       -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .. && \
     cmake --build . -j$(nproc)
 
+# -------------------------------------------------------------------
+# Stage 8: Late install of ripgrep (keep earlier layers cache-friendly)
+# -------------------------------------------------------------------
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ripgrep && \
+    rm -rf /var/lib/apt/lists/*
+
 CMD ["/bin/bash"]

@@ -19,9 +19,9 @@ BENCHMARK_BASE="${BENCHMARK_BASE:-$SCRIPT_DIR/benchmark}"        # Root director
 BINARY="${BINARY:-$ROOT_DIR/build/src/ACSLG}"                    # Target executable
 COMP_DB_DIR="${COMP_DB_DIR:-$ROOT_DIR/build}"                    # compile_commands.json directory
 TIME_LIMIT="${TIME_LIMIT:-30s}"                                  # Timeout per file
-RESULTS_FILE="${RESULTS_FILE:-$SCRIPT_DIR/benchmark_results.tsv}"# Detailed TSV results
+RESULTS_FILE="${RESULTS_FILE:-$SCRIPT_DIR/benchmark_results.tsv}" # Detailed TSV results
 LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/benchmark_logs}"                 # Logs for each run (stdout/stderr)
-SUMMARY_FILE="${SUMMARY_FILE:-$SCRIPT_DIR/benchmark_summary.txt}"# Final summary report
+SUMMARY_FILE="${SUMMARY_FILE:-$SCRIPT_DIR/benchmark_summary.txt}" # Final summary report
 
 # --- Initialize counters ---
 mkdir -p "$LOG_DIR"
@@ -53,6 +53,10 @@ echo "================================================="
 # --- Main loop: iterate over each group ---
 for group_dir in $(find "$BENCHMARK_BASE" -mindepth 1 -maxdepth 1 -type d); do
     group_name=$(basename "$group_dir")
+    : "${group_total[$group_name]:=0}"
+    : "${group_success[$group_name]:=0}"
+    : "${group_timeout[$group_name]:=0}"
+    : "${group_fail[$group_name]:=0}"
     echo
     echo "Processing Group: $group_name"
     echo "-------------------------------------------------"

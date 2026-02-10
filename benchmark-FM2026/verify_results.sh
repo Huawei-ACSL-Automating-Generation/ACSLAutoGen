@@ -252,6 +252,10 @@ EOF
 # --- Main loop: iterate over each group ---
 for group_dir in $(find "$BENCHMARK_BASE" -mindepth 1 -maxdepth 1 -type d); do
     group_name=$(basename "$group_dir")
+    : "${group_total[$group_name]:=0}"
+    : "${group_success[$group_name]:=0}"
+    : "${group_timeout[$group_name]:=0}"
+    : "${group_fail[$group_name]:=0}"
     echo
     echo "Processing Group: $group_name"
     echo "-------------------------------------------------"
