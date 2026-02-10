@@ -53,10 +53,10 @@ This performs ACSL annotation inference on the target C program using Clang's fr
 
 ### 📚 Documentation in `docs/`
 
-The `docs/` directory contains project documentation, including:
+The `/app/docs/` directory contains project documentation, including:
 
-- `docs/projectArchitecture.md`: a full architecture and data-flow overview, from Clang tooling input and symbolic execution to plugin-based ACSL generation and final rewrite output.
-- `docs/loopInvariantPlugins.md`: a detailed guide to `loopInvariantPlugins.cpp`, including PI/PS plugin categories, default groups, each plugin's dependencies/outputs, and how loop post-state information is merged.
+- `/app/docs/projectArchitecture.md`: a full architecture and data-flow overview, from Clang tooling input and symbolic execution to plugin-based ACSL generation and final rewrite output.
+- `/app/docs/loopInvariantPlugins.md`: a detailed guide to `loopInvariantPlugins.cpp`, including PI/PS plugin categories, default groups, each plugin's dependencies/outputs, and how loop post-state information is merged.
 
 ---
 
