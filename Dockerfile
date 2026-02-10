@@ -124,4 +124,21 @@ RUN rm -rf /app/build && \
     cmake --build /app/build -j$(nproc)
 
 RUN echo 'eval $(opam env)' >> /root/.bashrc
+
+# -------------------------------------------------------------------
+# Stage 7: Prepare openHiTLS 0.2.1 (clone + build) for benchmark-FM2026
+# -------------------------------------------------------------------
+RUN git clone https://gitcode.com/openHiTLS/openhitls.git /app/benchmark-FM2026/openhitls && \
+    git -C /app/benchmark-FM2026/openhitls checkout -f tags/openhitls-0.2.1 && \
+    git -C /app/benchmark-FM2026/openhitls submodule update --init --recursive && \
+    mkdir -p /app/benchmark-FM2026/openhitls/build && \
+    cd /app/benchmark-FM2026/openhitls/build && \
+    python3 ../configure.py \
+      --enable hitls_bsl hitls_crypto hitls_tls hitls_pki hitls_auth \
+      --lib_type static \
+      --bits=64 \
+      --system=linux && \
+    cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .. && \
+    cmake --build . -j$(nproc)
+
 CMD ["/bin/bash"]

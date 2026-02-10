@@ -27,6 +27,18 @@ After the container starts, the project is available at `/app`, and ACSLGen is b
 
 ---
 
+### 📁 Reproducing the experiment
+
+This repository snapshot is tailored for the FM2026 submission. To reproduce the full packaged experiment (original benchmark + openHiTLS tests), run:
+
+```bash
+bash benchmark-FM2026/run_all_tests.sh
+```
+
+The script runs both parts and writes unified English results under `runlogs/full_test_<timestamp>/summary.md`.
+
+---
+
 ### 🚀 Running ACSLGen
 
 To invoke the ACSLGen tool on a C source file, run the following command inside the container:
@@ -45,18 +57,6 @@ The `docs/` directory contains project documentation, including:
 
 - `docs/projectArchitecture.md`: a full architecture and data-flow overview, from Clang tooling input and symbolic execution to plugin-based ACSL generation and final rewrite output.
 - `docs/loopInvariantPlugins.md`: a detailed guide to `loopInvariantPlugins.cpp`, including PI/PS plugin categories, default groups, each plugin's dependencies/outputs, and how loop post-state information is merged.
-
----
-
-### 📁 Reproducing the experiment
-
-This repository snapshot is tailored for the FM2026 submission. To reproduce the packaged experiment, run the benchmark driver:
-
-```bash
-bash benchmark-FM2026/do_all.sh
-```
-
-The script generates ACSL annotations, preprocesses them, runs verification, and collects the successful goals used in the FM2026 results.
 
 ---
 
