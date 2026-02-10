@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-Collect source files whose verification logs proved every goal.
+Collect source files by verification-goal status (fully or partially proved).
 
 The script scans every *.log file inside a log directory. For each log that
-contains a line like "Proved goals:   X / Y" with X == Y > 0, the script copies
-the referenced source file into a destination directory while preserving the
-source tree layout.
+contains a line like "Proved goals:   X / Y", it classifies status as:
+  - full: X == Y > 0
+  - partial: 0 <= X < Y and Y > 0 (with no full match in the same log)
+Then it copies matching source files into a destination directory while
+preserving the source tree layout.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ PARSING_RE = re.compile(r"\[kernel\]\s+Parsing\s+(.+?)(?:\s*\(.*\))?\s*$")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Copy sources whose logs show all goals proved."
+        description="Copy sources whose logs match a proof-status filter."
     )
     parser.add_argument(
         "log_dir", type=Path, help="Directory that contains log files (.log)."
@@ -53,6 +55,16 @@ def parse_args() -> argparse.Namespace:
             "<destination>/successful_counts.tsv)."
         ),
     )
+    parser.add_argument(
+        "--goal-status",
+        choices=("full", "partial", "full_or_partial"),
+        default="full",
+        help=(
+            "Which verification status to collect: "
+            "'full' (X==Y>0), 'partial' (0<=X<Y, Y>0), "
+            "or 'full_or_partial' (either). Default: full."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -72,15 +84,24 @@ def extract_source_path(lines: Sequence[str]) -> Optional[str]:
     return None
 
 
-def log_proved_all(lines: Sequence[str]) -> bool:
-    proved = False
+def classify_log_status(lines: Sequence[str]) -> str:
+    saw_full = False
+    saw_partial = False
     for line in lines:
         match = PROVED_RE.search(line)
         if match:
             lhs, rhs = int(match.group(1)), int(match.group(2))
-            if rhs > 0 and lhs == rhs:
-                proved = True
-    return proved
+            if rhs <= 0:
+                continue
+            if lhs == rhs:
+                saw_full = True
+            elif 0 <= lhs < rhs:
+                saw_partial = True
+    if saw_full:
+        return "full"
+    if saw_partial:
+        return "partial"
+    return "none"
 
 
 def resolve_paths(source_str: str, source_root: Path) -> Tuple[Path, Path]:
@@ -142,7 +163,12 @@ def main() -> None:
         except UnicodeDecodeError:
             content = log_path.read_text(encoding="utf-8", errors="ignore")
         lines = content.splitlines()
-        if not log_proved_all(lines):
+        status = classify_log_status(lines)
+        if args.goal_status == "full" and status != "full":
+            continue
+        if args.goal_status == "partial" and status != "partial":
+            continue
+        if args.goal_status == "full_or_partial" and status == "none":
             continue
         source_str = extract_source_path(lines)
         if not source_str:
@@ -154,7 +180,7 @@ def main() -> None:
         successful[abs_path] = rel_path
 
     if not successful:
-        print("No logs with fully proved goals were found.")
+        print(f"No logs matching status '{args.goal_status}' were found.")
         return
 
     destination.mkdir(parents=True, exist_ok=True)
@@ -173,7 +199,7 @@ def main() -> None:
         print(f"Copied {abs_path} -> {target}")
 
     write_stats(counts, destination, args.stats_file, args.dry_run)
-    print(f"Done. Sources copied: {len(successful)}")
+    print(f"Done. Status={args.goal_status}. Sources copied: {len(successful)}")
 
 
 if __name__ == "__main__":

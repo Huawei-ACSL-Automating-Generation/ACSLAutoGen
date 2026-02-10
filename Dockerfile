@@ -133,12 +133,15 @@ RUN git clone https://gitcode.com/openHiTLS/openhitls.git /app/benchmark-FM2026/
     git -C /app/benchmark-FM2026/openhitls submodule update --init --recursive && \
     mkdir -p /app/benchmark-FM2026/openhitls/build && \
     cd /app/benchmark-FM2026/openhitls/build && \
-    python3 ../configure.py \
+    CC=/usr/bin/cc CXX=/usr/bin/c++ python3 ../configure.py \
       --enable hitls_bsl hitls_crypto hitls_tls hitls_pki hitls_auth \
       --lib_type static \
       --bits=64 \
       --system=linux && \
-    cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .. && \
+    CC=/usr/bin/cc CXX=/usr/bin/c++ cmake \
+      -DCMAKE_C_COMPILER=/usr/bin/cc \
+      -DCMAKE_CXX_COMPILER=/usr/bin/c++ \
+      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .. && \
     cmake --build . -j$(nproc)
 
 CMD ["/bin/bash"]

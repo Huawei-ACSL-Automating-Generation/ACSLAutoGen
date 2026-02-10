@@ -48,8 +48,27 @@ if [ ! -f "$ERR_PUSH_IGNORE_HEADER" ]; then
   echo "[ERROR] Missing override header: $ERR_PUSH_IGNORE_HEADER" >&2
   exit 5
 fi
-CPP_CMD_BASE="gcc -C -E \
+
+# Force system preprocessor in container to avoid conda cross-toolchain header
+# issues (e.g., missing stdbool.h from x86_64-conda-linux-gnu-* sysroot).
+CPP_CC="${CPP_CC:-/usr/bin/gcc}"
+if [ ! -x "$CPP_CC" ]; then
+  CPP_CC="$(command -v gcc || true)"
+fi
+if [ -z "$CPP_CC" ] || [ ! -x "$CPP_CC" ]; then
+  echo "[ERROR] Cannot find a usable gcc for Frama-C preprocessing" >&2
+  exit 6
+fi
+
+CPP_GCC_INTERNAL_INCLUDE="$($CPP_CC -print-file-name=include 2>/dev/null || true)"
+CPP_STD_INCLUDE_FLAGS="-isystem /usr/include -isystem /usr/include/x86_64-linux-gnu"
+if [ -n "$CPP_GCC_INTERNAL_INCLUDE" ] && [ -d "$CPP_GCC_INTERNAL_INCLUDE" ]; then
+  CPP_STD_INCLUDE_FLAGS="$CPP_STD_INCLUDE_FLAGS -isystem $CPP_GCC_INTERNAL_INCLUDE"
+fi
+
+CPP_CMD_BASE="$CPP_CC -C -E \
   $COMMON_CPP_DEFINES \
+  $CPP_STD_INCLUDE_FLAGS \
   -include $ERR_PUSH_IGNORE_HEADER \
   -include $OPENHITLS_ROOT/include/crypto/crypt_types.h \
   -I$OPENHITLS_ROOT/config/macro_config \
@@ -220,6 +239,14 @@ run_one() {
 
   acslg_extra_args+=(--extra-arg=-D__FRAMAC__)
   acslg_extra_args+=(--extra-arg=-DHITLS_SIXTY_FOUR_BITS)
+  acslg_extra_args+=(--extra-arg=-isystem)
+  acslg_extra_args+=(--extra-arg=/usr/include)
+  acslg_extra_args+=(--extra-arg=-isystem)
+  acslg_extra_args+=(--extra-arg=/usr/include/x86_64-linux-gnu)
+  if [ -n "$CPP_GCC_INTERNAL_INCLUDE" ] && [ -d "$CPP_GCC_INTERNAL_INCLUDE" ]; then
+    acslg_extra_args+=(--extra-arg=-isystem)
+    acslg_extra_args+=(--extra-arg="$CPP_GCC_INTERNAL_INCLUDE")
+  fi
   acslg_extra_args+=(--extra-arg=-include)
   acslg_extra_args+=(--extra-arg="$ERR_PUSH_IGNORE_HEADER")
   acslg_extra_args+=(--extra-arg=-Wno-unknown-warning-option)
