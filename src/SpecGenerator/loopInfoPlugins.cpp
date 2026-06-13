@@ -256,7 +256,7 @@ namespace acslg::spec_generator {
                 utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
                 sharedMemory;
             for (auto &&[addr, value] : merged->getMemoryState().flat()) {
-                if (llvm::isa<analyzer::symbolic::UnknownExpr>(value.get()))
+                if (analyzer::symbolic::isa<analyzer::symbolic::UnknownExpr>(value.get()))
                     continue;
                 sharedMemory.emplace(addr, value->clone());
             }

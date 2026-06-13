@@ -344,7 +344,7 @@ namespace acslg::spec_generator {
                 // - avoid injecting complex expressions that may worsen aliasing/structure
                 // - avoid unsound overrides on non-variable addresses (e.g. SymbolAddress)
                 for (const auto &[addr, val] : *loopInfo.sharedMemoryMap) {
-                    if (!llvm::isa<symb::VariableAddress>(addr.get()))
+                    if (!symb::isa<symb::VariableAddress>(addr.get()))
                         continue;
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
@@ -453,7 +453,7 @@ namespace acslg::spec_generator {
                 // Same as LinearInvariantPlugin: only write back constant-evaluable VariableAddress
                 // entries.
                 for (const auto &[addr, val] : *loopInfo.sharedMemoryMap) {
-                    if (!llvm::isa<symb::VariableAddress>(addr.get()))
+                    if (!symb::isa<symb::VariableAddress>(addr.get()))
                         continue;
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
@@ -587,7 +587,7 @@ namespace acslg::spec_generator {
                 [&](const symb::Address &addr) -> std::optional<symb::SymbolAddress> {
                 // If `addr` is not a SymbolAddress (e.g. a plain variable address), we cannot lift
                 // it to a range form.
-                auto symbolAddr = llvm::dyn_cast<const symb::SymbolAddress>(&addr);
+                auto symbolAddr = symb::dyn_cast<const symb::SymbolAddress>(&addr);
                 if (symbolAddr == nullptr)
                     return std::nullopt;
 
@@ -615,7 +615,7 @@ namespace acslg::spec_generator {
 
                 auto offset = symbolAddr->getOffset();
                 // Is offset x-step?
-                if (auto symbolValue = llvm::dyn_cast<const symb::SymbolValue>(offset.get())) {
+                if (auto symbolValue = symb::dyn_cast<const symb::SymbolValue>(offset.get())) {
                     auto symbolValueFrom = symbolValue->getFromAddr();
                     if (symbolValueFrom == std::nullopt)
                         TODO();
@@ -815,7 +815,7 @@ namespace acslg::spec_generator {
                 for (auto &path : loopEntry.getPaths()) {
                     auto concreteAddrExpr = addr.get().getSubstitutedExpr(*path, loopEntryPoint);
                     auto concreteAddr =
-                        llvm::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
+                        symb::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
                     if (concreteAddr == nullptr)
                         UNREACHABLE();
 
@@ -966,7 +966,7 @@ namespace acslg::spec_generator {
                 for (auto &path : loopEntry.getPaths()) {
                     auto concreteAddrExpr = addr.get().getSubstitutedExpr(*path, loopEntryPoint);
                     auto concreteAddr =
-                        llvm::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
+                        symb::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
                     if (concreteAddr == nullptr)
                         UNREACHABLE();
 
@@ -1141,7 +1141,7 @@ namespace acslg::spec_generator {
                                     {.noStateLabelFunctionAt = true})) {
                                 param_array = acslExpected.value().first;
                                 if (auto *symbolAddr =
-                                        llvm::dyn_cast<symb::Address>(addr.value().get().get()))
+                                        symb::dyn_cast<symb::Address>(addr.value().get().get()))
                                     arrayAddr = std::make_unique<symb::SymbolAddress>(
                                         arraySub->getType(),
                                         symbolAddr->addressClone().into_underlying(),
@@ -1167,7 +1167,7 @@ namespace acslg::spec_generator {
                                         {.noStateLabelFunctionAt = true})) {
                                     param_array = acslExpected.value().first;
                                     if (auto *symbolAddr =
-                                            llvm::dyn_cast<symb::Address>(addr.value().get().get()))
+                                            symb::dyn_cast<symb::Address>(addr.value().get().get()))
                                         arrayAddr = std::make_unique<symb::SymbolAddress>(
                                             unary->getType(),
                                             symbolAddr->addressClone().into_underlying(),
@@ -1191,7 +1191,7 @@ namespace acslg::spec_generator {
                                     {.noStateLabelFunctionAt = true})) {
                                 param_array = acslExpected.value().first;
                                 if (auto *symbolAddr =
-                                        llvm::dyn_cast<symb::Address>(addr.value().get().get()))
+                                        symb::dyn_cast<symb::Address>(addr.value().get().get()))
                                     arrayAddr = std::make_unique<symb::SymbolAddress>(
                                         declRef->getType(),
                                         symbolAddr->addressClone().into_underlying(),
@@ -1246,7 +1246,7 @@ namespace acslg::spec_generator {
                     switch (bin->getOpcode()) {
                         case BO_LE:
                         case BO_LT:
-                            if (llvm::isa<symb::SymbolValue>(*indexInfo.indexBound))
+                            if (symb::isa<symb::SymbolValue>(*indexInfo.indexBound))
                                 specTemplate = maxOnLeft ? FIND_MAX_LOOP_WITH_VAR_BOUND
                                                          : FIND_MIN_LOOP_WITH_VAR_BOUND;
                             else
@@ -1257,7 +1257,7 @@ namespace acslg::spec_generator {
                             break;
                         case BO_GE:
                         case BO_GT:
-                            if (llvm::isa<symb::SymbolValue>(*indexInfo.indexBound))
+                            if (symb::isa<symb::SymbolValue>(*indexInfo.indexBound))
                                 specTemplate = maxOnLeft ? FIND_MIN_LOOP_WITH_VAR_BOUND
                                                          : FIND_MAX_LOOP_WITH_VAR_BOUND;
                             else
@@ -1303,9 +1303,9 @@ namespace acslg::spec_generator {
                     for (auto &path : symbolState->getPaths()) {
                         std::unique_ptr<symb::SymbolValue> maxVar{nullptr};
                         if (auto maxValue = path->getVarState(maxDecl);
-                            llvm::isa<symb::SymbolValue>(*maxValue)) {
+                            symb::isa<symb::SymbolValue>(*maxValue)) {
                             maxVar = std::unique_ptr<symb::SymbolValue>(
-                                llvm::dyn_cast<symb::SymbolValue>(
+                                symb::dyn_cast<symb::SymbolValue>(
                                     std::move(maxValue).into_underlying().release()));
                         } else {
                             return;
@@ -1609,7 +1609,7 @@ namespace acslg::spec_generator {
                 // deref), we also need to substitute symbols used in its offset; meanwhile we keep
                 // a copy of the base SymbolAddress to build the quantified range later.
                 if (auto fromSymbolAddr =
-                        llvm::dyn_cast<const symb::SymbolAddress>(fromAddr.value().get().get())) {
+                        symb::dyn_cast<const symb::SymbolAddress>(fromAddr.value().get().get())) {
                     if (arrayInCond == nullptr)
                         arrayInCond = std::make_unique<symb::SymbolAddress>(*fromSymbolAddr);
                     auto offset = fromSymbolAddr->getOffset();

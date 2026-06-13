@@ -569,7 +569,7 @@ namespace acslg::analyzer {
             /// Advance iterator, diving into Structure fields if needed
             void advance() {
                 auto &&[addr, value] = (*this).operator*();
-                auto st              = llvm::dyn_cast<const symbolic::Structure>(value.get());
+                auto st              = symbolic::dyn_cast<const symbolic::Structure>(value.get());
                 if (st == nullptr) {
                     advance_without_check();
                     return;

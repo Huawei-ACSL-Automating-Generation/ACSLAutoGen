@@ -199,8 +199,7 @@ namespace acslg::analyzer::symbolic {
 
     template <class F>
     concept CallableFromIndexToExpr =
-        std::invocable<F, utils::not_null<std::unique_ptr<SymbolicExpr>>> &&
-        std::convertible_to<
+        std::invocable<F, utils::not_null<std::unique_ptr<SymbolicExpr>>> && std::convertible_to<
             std::invoke_result_t<F, utils::not_null<std::unique_ptr<SymbolAddress::RangeIndex>>>,
             utils::not_null<std::unique_ptr<const SymbolicExpr>>>;
 
@@ -230,7 +229,7 @@ namespace acslg::analyzer::symbolic {
                             Type{ScalarKind::Bool, 8},
                             std::move(range),
                             indexName),
-             quant_(quant), pred_(std::move(pred)) {}
+              quant_(quant), pred_(std::move(pred)) {}
 
         // SymbolicExpr
         /// @brief Clone the quantified expression.
@@ -348,7 +347,9 @@ namespace acslg::analyzer::symbolic {
         SourcePoint fromPoint_;
 
         static utils::not_null<std::unique_ptr<const SymbolicExpr>> makeDefaultExpr(
-            const SymbolAddress &range, std::string_view indexName, const SourcePoint &fromPoint);
+            const SymbolAddress &range,
+            std::string_view indexName,
+            const SourcePoint &fromPoint);
 
       private:
         struct Init {

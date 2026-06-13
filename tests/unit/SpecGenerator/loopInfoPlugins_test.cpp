@@ -101,7 +101,7 @@ namespace acslg::test::unit::spec_generator {
                 EXPECT_EQ(pattern.value().step, 1);
             } else {
                 DEBUG("too complex");
-                if (!llvm::isa<SymbolAddress>(addr.get()))
+                if (!isa<SymbolAddress>(addr.get()))
                     FAIL();
             }
         }
@@ -127,7 +127,7 @@ namespace acslg::test::unit::spec_generator {
             ASSERT_NE(pattern, nullopt);
             DEBUG(pattern.value().initialValue->dump() +
                   ", step: " + to_string(pattern.value().step));
-            if (llvm::isa<SymbolAddress>(addr.get()))
+            if (isa<SymbolAddress>(addr.get()))
                 EXPECT_EQ(pattern.value().step, -1);
             else
                 EXPECT_EQ(pattern.value().step, 1);
@@ -214,7 +214,7 @@ namespace acslg::test::unit::spec_generator {
         auto &indexInfo = loopInfo.indexInfo.value();
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue));
+        EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
         EXPECT_OK_AND_FIRST_EQ(
             indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
         EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_LT);
@@ -241,7 +241,7 @@ namespace acslg::test::unit::spec_generator {
         auto &indexInfo = loopInfo.indexInfo.value();
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue));
+        EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
         EXPECT_OK_AND_FIRST_EQ(
             indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
         EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_NE);
@@ -270,7 +270,7 @@ namespace acslg::test::unit::spec_generator {
         auto &indexInfo = loopInfo.indexInfo.value();
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue));
+        EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
         EXPECT_OK_AND_FIRST_EQ(
             indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
         EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_GE);
@@ -296,7 +296,7 @@ namespace acslg::test::unit::spec_generator {
         auto &indexInfo = loopInfo.indexInfo.value();
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "pt");
-        EXPECT_TRUE(llvm::isa<Address>(*indexInfo.indexSymbolicValue));
+        EXPECT_TRUE(isa<Address>(*indexInfo.indexSymbolicValue));
         EXPECT_OK_AND_FIRST_EQ(
             indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "pt");
         EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_LT);
@@ -361,7 +361,7 @@ namespace acslg::test::unit::spec_generator {
         auto &indexInfo = loopInfo.indexInfo.value();
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(llvm::isa<SymbolValue>(*indexInfo.indexSymbolicValue));
+        EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
         EXPECT_OK_AND_FIRST_EQ(
             indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
         EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_LT);

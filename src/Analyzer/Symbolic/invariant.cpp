@@ -197,7 +197,7 @@ namespace acslg::analyzer::symbolic {
         using namespace Parma_Polyhedra_Library;
         Linear_Expression e(0);
 
-        auto varAddr = llvm::dyn_cast<const VariableAddress>(fromAddr_.get().get());
+        auto varAddr = dyn_cast<const VariableAddress>(fromAddr_.get().get());
         if (varAddr == nullptr)
             return std::nullopt;
 
@@ -554,7 +554,7 @@ namespace acslg::analyzer {
                 bool expanded = false;
 
                 for (size_t i = startIdx; i < current.size(); ++i) {
-                    auto *bin = llvm::dyn_cast<symbolic::BinaryOpExpr>(current[i].get().get());
+                    auto *bin = symbolic::dyn_cast<symbolic::BinaryOpExpr>(current[i].get().get());
                     if (!bin) {
                         ERROR("negateFormulas: input[" + to_string(i) + "] is not a BinaryOpExpr");
                     }
@@ -638,7 +638,7 @@ namespace acslg::analyzer {
         Formulas preprocessConjConds(const Formulas &conjConds) {
             Formulas result;
             for (auto &cond : conjConds) {
-                if (auto bin = llvm::dyn_cast<symbolic::BinaryOpExpr>(cond.get().get())) {
+                if (auto bin = symbolic::dyn_cast<symbolic::BinaryOpExpr>(cond.get().get())) {
                     using enum symbolic::BinaryOpExpr::Operator;
                     const auto &lhs = bin->getLeft();
                     const auto &rhs = bin->getRight();
@@ -680,7 +680,7 @@ namespace acslg::analyzer {
                         }
                         default: continue;
                     }
-                } else if (auto unary = llvm::dyn_cast<symbolic::UnaryOpExpr>(cond.get().get())) {
+                } else if (auto unary = symbolic::dyn_cast<symbolic::UnaryOpExpr>(cond.get().get())) {
                     if (unary->getOperator() != symbolic::UnaryOpExpr::Operator::LogicalNot)
                         continue;
                     Formulas oneExpr;
@@ -689,7 +689,7 @@ namespace acslg::analyzer {
                     if (reOneExpr.size() != 1)
                         continue;
                     auto uneqExpr =
-                        llvm::dyn_cast<const symbolic::BinaryOpExpr>(reOneExpr.front().get().get());
+                        symbolic::dyn_cast<const symbolic::BinaryOpExpr>(reOneExpr.front().get().get());
                     assert(uneqExpr);
                     switch (uneqExpr->getOperator()) {
                         using enum symbolic::BinaryOpExpr::Operator;
@@ -797,7 +797,7 @@ namespace acslg::analyzer {
         std::optional<Parma_Polyhedra_Library::Constraint> toConstraint(
             const symbolic::SymbolicExpr *expr,
             const VarManager &vm) {
-            auto bin = llvm::dyn_cast_if_present<const symbolic::BinaryOpExpr>(expr);
+            auto bin = symbolic::dyn_cast_if_present<const symbolic::BinaryOpExpr>(expr);
             if (bin == nullptr) {
                 WARN("toConstraint: expression must be a BinaryOpExpr.");
                 return std::nullopt;

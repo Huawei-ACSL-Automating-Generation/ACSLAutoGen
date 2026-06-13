@@ -444,7 +444,7 @@ namespace acslg::test::unit::analyzer {
 
         auto val = pathA->getMemoryState().read(*addr0A);
         ASSERT_TRUE(val);
-        EXPECT_NE(llvm::dyn_cast<symbolic::UnknownExpr>(val->get().get()), nullptr);
+        EXPECT_NE(symbolic::dyn_cast<symbolic::UnknownExpr>(val->get().get()), nullptr);
     }
 
     TEST_F(MergeWithTest, PathConditionsIntersect) {
@@ -459,7 +459,7 @@ namespace acslg::test::unit::analyzer {
 
         ASSERT_EQ(pathA->getPathConditions().size(), 1u);
         const auto &onlyCond = *pathA->getPathConditions().begin();
-        auto lit             = llvm::dyn_cast<symbolic::LiteralExpr>(onlyCond.get().get());
+        auto lit             = symbolic::dyn_cast<symbolic::LiteralExpr>(onlyCond.get().get());
         ASSERT_NE(lit, nullptr);
         EXPECT_EQ(*lit, *condShared);
     }
@@ -479,7 +479,7 @@ namespace acslg::test::unit::analyzer {
 
         ASSERT_TRUE(pathA->getReturnExpr());
         EXPECT_NE(
-            llvm::dyn_cast<const symbolic::UnknownExpr>(pathA->getReturnExpr().value().get().get()),
+            symbolic::dyn_cast<const symbolic::UnknownExpr>(pathA->getReturnExpr().value().get().get()),
             nullptr);
     }
 
@@ -727,7 +727,7 @@ namespace acslg::test::unit::analyzer {
         for (auto &&[addr, value] : mm.flat()) {
             if (*value != *svA && *value != *svB)
                 continue;
-            auto symbolAddr = llvm::dyn_cast<symbolic::SymbolAddress>(&addr.get());
+            auto symbolAddr = symbolic::dyn_cast<symbolic::SymbolAddress>(&addr.get());
             ASSERT_NE(symbolAddr, nullptr);
             if (symbolAddr->getBaseInfo() == a0A.getBaseInfo())
                 ++cntA;
@@ -761,7 +761,7 @@ namespace acslg::test::unit::analyzer {
         // Approximate check: there should be exactly one entry (start at X, total length = 1 + 3 = 4)
         EXPECT_EQ(mm.sizeWithoutFields(), 1);
         for (auto &&[addr, value] : mm.flat()) {
-            auto symbolAddr = llvm::dyn_cast<symbolic::SymbolAddress>(&addr.get());
+            auto symbolAddr = symbolic::dyn_cast<symbolic::SymbolAddress>(&addr.get());
             ASSERT_NE(symbolAddr, nullptr);
             if (symbolAddr->getBaseInfo() == a0.getBaseInfo() && *value == *sv) {
                 // If length is accessible and constant, also assert == 4

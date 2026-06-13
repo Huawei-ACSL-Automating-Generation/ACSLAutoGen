@@ -46,20 +46,20 @@ namespace acslg::spec_generator {
             using symb::UnaryOpExpr;
             using symb::VariableAddress;
 
-            if (auto *lit = llvm::dyn_cast<LiteralExpr>(&expr)) {
+            if (auto *lit = symb::dyn_cast<LiteralExpr>(&expr)) {
                 (void)lit;
                 return;
             }
-            if (auto *sv = llvm::dyn_cast<SymbolValue>(&expr)) {
+            if (auto *sv = symb::dyn_cast<SymbolValue>(&expr)) {
                 if (auto from = sv->getFromRoot())
                     out.insert(from.value().get());
                 return;
             }
-            if (auto *va = llvm::dyn_cast<VariableAddress>(&expr)) {
+            if (auto *va = symb::dyn_cast<VariableAddress>(&expr)) {
                 out.insert(va->getFrom().get());
                 return;
             }
-            if (auto *sa = llvm::dyn_cast<SymbolAddress>(&expr)) {
+            if (auto *sa = symb::dyn_cast<SymbolAddress>(&expr)) {
                 if (auto from = sa->getFromRoot())
                     out.insert(from.value().get());
                 collectReferencedVarDecls(*sa->getOffset(), out);
@@ -67,17 +67,17 @@ namespace acslg::spec_generator {
                     collectReferencedVarDecls(*sa->getLength().value(), out);
                 return;
             }
-            if (auto *fa = llvm::dyn_cast<FieldAddress>(&expr)) {
+            if (auto *fa = symb::dyn_cast<FieldAddress>(&expr)) {
                 if (auto from = fa->getFromRoot())
                     out.insert(from.value().get());
                 return;
             }
-            if (auto *bin = llvm::dyn_cast<BinaryOpExpr>(&expr)) {
+            if (auto *bin = symb::dyn_cast<BinaryOpExpr>(&expr)) {
                 collectReferencedVarDecls(*bin->getLeft(), out);
                 collectReferencedVarDecls(*bin->getRight(), out);
                 return;
             }
-            if (auto *un = llvm::dyn_cast<UnaryOpExpr>(&expr)) {
+            if (auto *un = symb::dyn_cast<UnaryOpExpr>(&expr)) {
                 collectReferencedVarDecls(*un->getSub(), out);
                 return;
             }
@@ -223,7 +223,7 @@ namespace acslg::spec_generator {
                 std::optional<symb::SymbolAddrBaseInfo> retBase;
                 if (auto &ret = path.getReturnExpr()) {
                     if (auto *retAddr =
-                            llvm::dyn_cast<symb::SymbolAddress>(ret.value().get().get())) {
+                            symb::dyn_cast<symb::SymbolAddress>(ret.value().get().get())) {
                         retBase = retAddr->getBaseInfo();
                     }
                 }
@@ -352,7 +352,7 @@ namespace acslg::spec_generator {
                              .predefinedLabels = {{oldPoint, "Old"}}})) {
                         auto &[spec, usedPoints] = expected.value();
                         if (usedPoints.empty())
-                            if (!llvm::isa<symb::OverRangeExpr>(*ret.value()))
+                            if (!symb::isa<symb::OverRangeExpr>(*ret.value()))
                                 ensures.push_back("\\result == (" + spec + ")");
                             else
                                 ensures.push_back(spec);
@@ -362,7 +362,7 @@ namespace acslg::spec_generator {
                             auto wrongExpected =
                                 simplifiedRet->getACSL({.noStateLabelFunctionAt = true});
                             assert(wrongExpected);
-                            if (!llvm::isa<symb::OverRangeExpr>(*ret.value()))
+                            if (!symb::isa<symb::OverRangeExpr>(*ret.value()))
                                 ensures.push_back("\\result == (" + wrongExpected.value().first +
                                                   ")");
                             else
@@ -382,9 +382,9 @@ namespace acslg::spec_generator {
                     } else if (!isRetBaseAddr(addr)) {
                         continue;
                     }
-                    if (is_symbol_addr(addr) && llvm::isa<symb::Structure>(value.get())) {
+                    if (is_symbol_addr(addr) && symb::isa<symb::Structure>(value.get())) {
                         if (isRetBaseAddr(addr)) {
-                            auto *st = llvm::dyn_cast<symb::Structure>(value.get());
+                            auto *st = symb::dyn_cast<symb::Structure>(value.get());
                             auto &info = st->getInfo();
                             size_t idxField = 0;
                             for (auto field : info.definition_->fields()) {
@@ -454,7 +454,7 @@ namespace acslg::spec_generator {
                 }
 
                 if (auto &ret = path.getReturnExpr()) {
-                    if (auto *retSt = llvm::dyn_cast<symb::Structure>(ret.value().get().get())) {
+                    if (auto *retSt = symb::dyn_cast<symb::Structure>(ret.value().get().get())) {
                         auto &info = retSt->getInfo();
                         size_t idxField = 0;
                         for (auto field : info.definition_->fields()) {
@@ -544,7 +544,7 @@ namespace acslg::spec_generator {
                 if (!rf.value().second.empty())
                     continue;
                 auto &target =
-                    llvm::isa<symb::OverRangeExpr>(simplified.get()) ? assumeStr : requireStr;
+                    symb::isa<symb::OverRangeExpr>(simplified.get()) ? assumeStr : requireStr;
                 if (!target.empty())
                     target += " && ";
                 target += rf.value().first;

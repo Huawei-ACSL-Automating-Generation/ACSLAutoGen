@@ -10,6 +10,7 @@
 #include <string>
 #include <memory>
 #include <span>
+#include <vector>
 #include <ranges>
 #include <algorithm>
 #include <type_traits>
@@ -158,6 +159,60 @@ namespace std {
 } // namespace std
 
 namespace acslg::analyzer::symbolic {
+    template <typename To, typename From> To *dyn_cast(From *from) {
+        return dynamic_cast<To *>(from);
+    }
+
+    template <typename To, typename From> const To *dyn_cast(const From *from) {
+        return dynamic_cast<const To *>(from);
+    }
+
+    template <typename To, typename From> std::unique_ptr<To> dyn_cast(std::unique_ptr<From> &from) {
+        if (auto *casted = dynamic_cast<To *>(from.get())) {
+            from.release();
+            return std::unique_ptr<To>(casted);
+        }
+        return nullptr;
+    }
+
+    template <typename To, typename From> To *dyn_cast_if_present(From *from) {
+        return from == nullptr ? nullptr : dynamic_cast<To *>(from);
+    }
+
+    template <typename To, typename From> const To *dyn_cast_if_present(const From *from) {
+        return from == nullptr ? nullptr : dynamic_cast<const To *>(from);
+    }
+
+    template <typename To, typename From> bool isa(const From *from) {
+        if (from == nullptr)
+            return false;
+        return dyn_cast<To>(from) != nullptr;
+    }
+
+    template <typename To, typename From> bool isa(const std::unique_ptr<From> &from) {
+        return isa<To>(from.get());
+    }
+
+    template <typename To, typename From>
+        requires(!std::is_pointer_v<From>)
+    bool isa(const From &from) {
+        return dyn_cast<To>(&from) != nullptr;
+    }
+
+    template <typename To, typename From> To *cast(From *from) {
+        auto *result = dyn_cast<To>(from);
+        if (result == nullptr)
+            ERROR("Invalid symbolic cast.");
+        return result;
+    }
+
+    template <typename To, typename From> const To *cast(const From *from) {
+        auto *result = dyn_cast<To>(from);
+        if (result == nullptr)
+            ERROR("Invalid symbolic cast.");
+        return result;
+    }
+
     /**
      * @class SymbolicExpr
      * @brief Abstract base for all symbolic expressions and addresses used in analysis.
@@ -306,6 +361,12 @@ namespace acslg::analyzer::symbolic {
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const {
             return clone();
         };
+
+        utils::not_null<std::unique_ptr<SymbolicExpr>> withValType(Type newType) const {
+            auto result = clone();
+            result->setValType(newType);
+            return result;
+        }
 
         using UsedMap   = std::unordered_map<size_t, utils::not_null<const Symbol *>>;
         using HashIdMap = std::unordered_map<size_t, size_t>;
@@ -846,7 +907,6 @@ namespace acslg::analyzer::symbolic {
         static bool classof(const SymbolicExpr *e);
         static bool classof(const Symbol *) { return true; }
 
-        // For LLVM RTTI.
         static Symbol *toThis(SymbolicExpr *e);
         static const Symbol *toThis(const SymbolicExpr *e);
 
@@ -940,6 +1000,9 @@ namespace acslg::analyzer::symbolic {
 
         size_t getNumFields() const { return info_.getNumFields(); }
         void setFieldValue(size_t index, utils::not_null<std::unique_ptr<SymbolicExpr>> expr);
+        utils::not_null<std::unique_ptr<Structure>> withFieldValue(
+            size_t index,
+            utils::not_null<std::unique_ptr<SymbolicExpr>> expr) const;
         utils::not_null<const SymbolicExpr *> getFieldValue(size_t index) const {
             if (index >= fields_.size())
                 ERROR("Out-of-bounds access");
@@ -1125,6 +1188,75 @@ namespace acslg::analyzer::symbolic {
     template <class T>
     using AddressBoxMap = std::unordered_map<AddressBox, T, AddressBoxHash, AddressBoxEq>;
 
+    class ExprHandle {
+      public:
+        explicit ExprHandle(const SymbolicExpr *ptr) : ptr_(ptr) {
+            if (ptr_ == nullptr)
+                ERROR("ExprHandle cannot wrap null.");
+        }
+
+        const SymbolicExpr &operator*() const { return *ptr_; }
+        const SymbolicExpr *operator->() const { return ptr_; }
+        utils::not_null<const SymbolicExpr *> get() const { return ptr_; }
+
+        friend bool operator==(ExprHandle lhs, ExprHandle rhs) {
+            return lhs.ptr_ == rhs.ptr_;
+        }
+
+      private:
+        const SymbolicExpr *ptr_;
+    };
+
+    class AddrHandle {
+      public:
+        explicit AddrHandle(const Address *ptr) : ptr_(ptr) {
+            if (ptr_ == nullptr)
+                ERROR("AddrHandle cannot wrap null.");
+        }
+
+        const Address &operator*() const { return *ptr_; }
+        const Address *operator->() const { return ptr_; }
+        utils::not_null<const Address *> get() const { return ptr_; }
+        ExprHandle asExpr() const { return ExprHandle{ptr_}; }
+
+        friend bool operator==(AddrHandle lhs, AddrHandle rhs) {
+            return lhs.ptr_ == rhs.ptr_;
+        }
+
+      private:
+        const Address *ptr_;
+    };
+
+    class ExprFactory {
+      public:
+        ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node) {
+            const auto hash = node->hash();
+            auto &bucket    = interned_[hash];
+            for (const auto *existing : bucket) {
+                if (*existing == *node)
+                    return ExprHandle{existing};
+            }
+
+            auto *raw = node.get().get();
+            owned_.push_back(std::move(node).into_underlying());
+            bucket.push_back(raw);
+            return ExprHandle{raw};
+        }
+
+        AddrHandle internAddress(utils::not_null<std::unique_ptr<Address>> node) {
+            std::unique_ptr<SymbolicExpr> exprNode = std::move(node).into_underlying();
+            auto handle = intern(utils::not_null<std::unique_ptr<SymbolicExpr>>{
+                std::move(exprNode)});
+            return AddrHandle{cast<const Address>(handle.get().get())};
+        }
+
+        size_t size() const { return owned_.size(); }
+
+      private:
+        std::vector<std::unique_ptr<SymbolicExpr>> owned_;
+        std::unordered_map<size_t, std::vector<const SymbolicExpr *>> interned_;
+    };
+
     /// @class SymbolAddress
     /// @brief Symbolic address with fromAddr, fromPoint, offset and length. Maybe a symbol value
     /// of pointer variable or an address of heap.
@@ -1164,10 +1296,24 @@ namespace acslg::analyzer::symbolic {
         void subOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
         void resetOffset() { offset_ = std::make_unique<LiteralExpr>(ZERO_OFFSET); }
 
+        utils::not_null<std::unique_ptr<SymbolAddress>> withOffset(
+            utils::not_null<std::unique_ptr<SymbolicExpr>> offset) const;
+        utils::not_null<std::unique_ptr<SymbolAddress>> withAddedOffset(
+            utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const;
+        utils::not_null<std::unique_ptr<SymbolAddress>> withSubtractedOffset(
+            utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const;
+        utils::not_null<std::unique_ptr<SymbolAddress>> withResetOffset() const;
+
         void setLength(utils::not_null<std::unique_ptr<SymbolicExpr>> len);
         void addLength(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
         auto getLength() const -> const auto & { return length_; }
         void resetLength() { length_ = std::nullopt; }
+
+        utils::not_null<std::unique_ptr<SymbolAddress>> withLength(
+            utils::not_null<std::unique_ptr<SymbolicExpr>> len) const;
+        utils::not_null<std::unique_ptr<SymbolAddress>> withAddedLength(
+            utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const;
+        utils::not_null<std::unique_ptr<SymbolAddress>> withoutLength() const;
 
         std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> getRightBound() const;
         SymbolAddrBaseInfo getBaseInfo() const;
@@ -1622,57 +1768,6 @@ namespace std {
     };
 } // namespace std
 
-namespace llvm {
-    namespace symb = acslg::analyzer::symbolic;
-
-    template <typename T>
-    concept NotDerivedFromSymbolicExpr = !std::is_base_of_v<symb::SymbolicExpr, T>;
-
-    template <NotDerivedFromSymbolicExpr To>
-    struct CastInfo<To, symb::SymbolicExpr *>
-        : CastIsPossible<To, symb::SymbolicExpr *>,
-          NullableValueCastFailed<To *>,
-          DefaultDoCastIfPossible<To *, symb::SymbolicExpr *, CastInfo<To, symb::SymbolicExpr *>> {
-        static To *doCast(symb::SymbolicExpr *e) { return To::toThis(e); }
-    };
-
-    template <NotDerivedFromSymbolicExpr To>
-    struct CastInfo<const To, const symb::SymbolicExpr *>
-        : CastIsPossible<const To, const symb::SymbolicExpr *>,
-          NullableValueCastFailed<const To *>,
-          DefaultDoCastIfPossible<const To *,
-                                  const symb::SymbolicExpr *,
-                                  CastInfo<const To, const symb::SymbolicExpr *>> {
-        static const To *doCast(const symb::SymbolicExpr *e) { return To::toThis(e); }
-    };
-
-    template <NotDerivedFromSymbolicExpr From>
-    struct CastInfo<symb::SymbolicExpr, From *>
-        : CastIsPossible<symb::SymbolicExpr, From *>,
-          NullableValueCastFailed<symb::SymbolicExpr *>,
-          DefaultDoCastIfPossible<symb::SymbolicExpr *, From *, CastInfo<symb::SymbolicExpr, From *>> {
-        static symb::SymbolicExpr *doCast(From *e) {
-            if (e == nullptr)
-                return nullptr;
-            return e->toSymbolicExpr();
-        }
-    };
-
-    template <NotDerivedFromSymbolicExpr From>
-    struct CastInfo<const symb::SymbolicExpr, const From *>
-        : CastIsPossible<const symb::SymbolicExpr, const From *>,
-          NullableValueCastFailed<const symb::SymbolicExpr *>,
-          DefaultDoCastIfPossible<const symb::SymbolicExpr *,
-                                  const From *,
-                                  CastInfo<const symb::SymbolicExpr, const From *>> {
-        static const symb::SymbolicExpr *doCast(const From *e) {
-            if (e == nullptr)
-                return nullptr;
-            return e->toSymbolicExpr();
-        }
-    };
-} // namespace llvm
-
 namespace acslg::analyzer::symbolic {
     // @WindOctober: TODO Split define and declaration.
     // @WindOctober: TODO process more complicate expr case.
@@ -1691,7 +1786,7 @@ namespace acslg::analyzer::symbolic {
         using ::acslg::analyzer::symbolic::SymbolicExpr;
 
         // Literal equals sizeofBytes -> return 1
-        if (auto *lit = llvm::dyn_cast<LiteralExpr>(in.get().get())) {
+        if (auto *lit = dyn_cast<LiteralExpr>(in.get().get())) {
             const auto v = static_cast<std::uint64_t>(lit->getLiteralValue());
             if (v == sizeofBytes) {
                 return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{
@@ -1701,18 +1796,18 @@ namespace acslg::analyzer::symbolic {
         }
 
         // Multiply(sizeofBytes, X) or Multiply(X, sizeofBytes) -> return X
-        if (auto *bin = llvm::dyn_cast<BinaryOpExpr>(in.get().get())) {
+        if (auto *bin = dyn_cast<BinaryOpExpr>(in.get().get())) {
             using Op = BinaryOpExpr::Operator;
             if (bin->getOperator() == Op::Multiply) {
                 auto &L = bin->getLeft();
                 auto &R = bin->getRight();
 
-                if (auto *lLit = llvm::dyn_cast<LiteralExpr>(L.get().get())) {
+                if (auto *lLit = dyn_cast<LiteralExpr>(L.get().get())) {
                     if (static_cast<std::uint64_t>(lLit->getLiteralValue()) == sizeofBytes) {
                         return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{R->clone()};
                     }
                 }
-                if (auto *rLit = llvm::dyn_cast<LiteralExpr>(R.get().get())) {
+                if (auto *rLit = dyn_cast<LiteralExpr>(R.get().get())) {
                     if (static_cast<std::uint64_t>(rLit->getLiteralValue()) == sizeofBytes) {
                         return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{L->clone()};
                     }

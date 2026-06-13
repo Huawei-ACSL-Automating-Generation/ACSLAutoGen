@@ -89,11 +89,11 @@ namespace acslg::analyzer::symbolic {
         }
 
         inline bool isBooleanExpr(const SymbolicExpr &e) {
-            if (auto *lit = llvm::dyn_cast<LiteralExpr>(&e))
+            if (auto *lit = dyn_cast<LiteralExpr>(&e))
                 return lit->getLiteralValue() == 0 || lit->getLiteralValue() == 1 ||
                        e.getValType().kind == ScalarKind::Bool;
 
-            if (auto *bo = llvm::dyn_cast<BinaryOpExpr>(&e)) {
+            if (auto *bo = dyn_cast<BinaryOpExpr>(&e)) {
                 using BO = BinaryOpExpr::Operator;
                 switch (bo->getOperator()) {
                     case BO::LogicalAnd:
@@ -108,7 +108,7 @@ namespace acslg::analyzer::symbolic {
                 }
             }
 
-            if (auto *uo = llvm::dyn_cast<UnaryOpExpr>(&e)) {
+            if (auto *uo = dyn_cast<UnaryOpExpr>(&e)) {
                 using UO = UnaryOpExpr::Operator;
                 if (uo->getOperator() == UO::LogicalNot)
                     return true;
@@ -202,7 +202,7 @@ namespace acslg::analyzer::symbolic {
 
         using enum BinaryOpExpr::Operator;
         for (auto [hash, symbol] : hashPtrMap) {
-            auto expr = llvm::dyn_cast<const SymbolicExpr>(symbol.get());
+            auto expr = dyn_cast<const SymbolicExpr>(symbol.get());
             auto C = linearExpr.coefficient(Parma_Polyhedra_Library::Variable{hashIdMap.at(hash)})
                          .get_si();
             if (C == 0)
@@ -603,7 +603,7 @@ namespace acslg::analyzer::symbolic {
         if (op_ == Op::Equal || op_ == Op::NotEqual) {
             auto trySimplify = [&](const SymbolicExpr &lhs, const SymbolicExpr &rhs)
                 -> std::optional<utils::expected<std::string, GetACSLError>> {
-                auto lit = llvm::dyn_cast<LiteralExpr>(&rhs);
+                auto lit = dyn_cast<LiteralExpr>(&rhs);
                 if (!lit)
                     return std::nullopt;
                 auto v = lit->getLiteralValue();
@@ -942,7 +942,7 @@ namespace acslg::analyzer::symbolic {
             auto simplifyBoolCmp = [&](const SymbolicExpr &boolExpr,
                                        const SymbolicExpr &litExpr)
                 -> std::unique_ptr<SymbolicExpr> {
-                auto lit = llvm::dyn_cast<LiteralExpr>(&litExpr);
+                auto lit = dyn_cast<LiteralExpr>(&litExpr);
                 if (!lit)
                     return nullptr;
                 auto v = lit->getLiteralValue();
@@ -1195,7 +1195,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     bool LiteralExpr::equal(const SymbolicExpr &expr) const {
-        const auto liter = llvm::dyn_cast<const LiteralExpr>(&expr);
+        const auto liter = dyn_cast<const LiteralExpr>(&expr);
         if (!liter)
             return false;
 
@@ -1203,7 +1203,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     bool BinaryOpExpr::equal(const SymbolicExpr &expr) const {
-        const auto binary = llvm::dyn_cast<const BinaryOpExpr>(&expr);
+        const auto binary = dyn_cast<const BinaryOpExpr>(&expr);
         if (!binary)
             return false;
 
@@ -1211,7 +1211,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     bool UnaryOpExpr::equal(const SymbolicExpr &expr) const {
-        const auto unary = llvm::dyn_cast<const UnaryOpExpr>(&expr);
+        const auto unary = dyn_cast<const UnaryOpExpr>(&expr);
         if (!unary)
             return false;
 
@@ -1221,7 +1221,7 @@ namespace acslg::analyzer::symbolic {
     bool UnknownExpr::equal(const SymbolicExpr &expr) const { return expr.isUnknown(); }
 
     bool SymbolValue::equal(const SymbolicExpr &expr) const {
-        const auto symbolValue = llvm::dyn_cast<const SymbolValue>(&expr);
+        const auto symbolValue = dyn_cast<const SymbolValue>(&expr);
         if (!symbolValue)
             return false;
 
@@ -1232,7 +1232,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     bool SymbolAddress::equal(const SymbolicExpr &expr) const {
-        auto other = llvm::dyn_cast<const SymbolAddress>(&expr);
+        auto other = dyn_cast<const SymbolAddress>(&expr);
         if (!other)
             return false;
 
@@ -1264,7 +1264,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     bool VariableAddress::equal(const SymbolicExpr &expr) const {
-        auto other = llvm::dyn_cast<const VariableAddress>(&expr);
+        auto other = dyn_cast<const VariableAddress>(&expr);
         if (!other)
             return false;
 
@@ -1272,7 +1272,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     bool FieldAddress::equal(const SymbolicExpr &expr) const {
-        auto other = llvm::dyn_cast<const FieldAddress>(&expr);
+        auto other = dyn_cast<const FieldAddress>(&expr);
         if (!other)
             return false;
 
@@ -1312,7 +1312,7 @@ namespace acslg::analyzer::symbolic {
     bool Structure::Info::operator==(const Info &other) const { return equal(other); }
 
     bool Structure::equal(const SymbolicExpr &expr) const {
-        const auto st = llvm::dyn_cast<const Structure>(&expr);
+        const auto st = dyn_cast<const Structure>(&expr);
         if (!st)
             return false;
         if (!info_.equal(st->info_))
@@ -1350,7 +1350,7 @@ namespace acslg::analyzer::symbolic {
             return clone();
 
         auto subedExpr    = fromAddr_->getSubstitutedExpr(pathSubTo, pointToSub);
-        auto realFromAddr = llvm::dyn_cast<const Address>(subedExpr.get().get());
+        auto realFromAddr = dyn_cast<const Address>(subedExpr.get().get());
         if (realFromAddr == nullptr)
             UNREACHABLE();
 
@@ -1382,7 +1382,7 @@ namespace acslg::analyzer::symbolic {
         }
 
         auto subedExpr    = fromAddr_.value()->getSubstitutedExpr(pathSubTo, pointToSub);
-        auto realFromAddr = llvm::dyn_cast<const Address>(subedExpr.get().get());
+        auto realFromAddr = dyn_cast<const Address>(subedExpr.get().get());
         if (realFromAddr == nullptr)
             UNREACHABLE();
 
@@ -1431,7 +1431,7 @@ namespace acslg::analyzer::symbolic {
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
         auto subedExpr    = baseAddr_->getSubstitutedExpr(pathSubTo, pointToSub);
-        auto realBaseAddr = llvm::dyn_cast<const Address>(subedExpr.get().get());
+        auto realBaseAddr = dyn_cast<const Address>(subedExpr.get().get());
         if (realBaseAddr == nullptr)
             UNREACHABLE();
         return std::make_unique<FieldAddress>(
@@ -1486,7 +1486,7 @@ namespace acslg::analyzer::symbolic {
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
         auto expr = fromAddr_->getRangeIndexSubstituted(rangeBase, indexExpr);
-        auto addr = llvm::dyn_cast<Address>(expr.get().get());
+        auto addr = dyn_cast<Address>(expr.get().get());
         if (addr == nullptr)
             UNREACHABLE();
         return std::make_unique<SymbolValue>(getValType(), addr->addressClone().into_underlying(),
@@ -1498,7 +1498,7 @@ namespace acslg::analyzer::symbolic {
         const SymbolicExpr &indexExpr) const {
         if (fromAddr_) {
             auto subedExpr = fromAddr_.value()->getRangeIndexSubstituted(rangeBase, indexExpr);
-            auto addr      = llvm::dyn_cast<Address>(subedExpr.get().get());
+            auto addr      = dyn_cast<Address>(subedExpr.get().get());
             if (addr == nullptr)
                 UNREACHABLE();
 
@@ -1525,7 +1525,7 @@ namespace acslg::analyzer::symbolic {
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
         auto subedExpr    = baseAddr_->getRangeIndexSubstituted(rangeBase, indexExpr);
-        auto realBaseAddr = llvm::dyn_cast<const Address>(subedExpr.get().get());
+        auto realBaseAddr = dyn_cast<const Address>(subedExpr.get().get());
         if (realBaseAddr == nullptr)
             UNREACHABLE();
         return std::make_unique<FieldAddress>(
@@ -1583,7 +1583,7 @@ namespace acslg::analyzer::symbolic {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return it->second->clone();
         auto expr = fromAddr_->getSubstitutedValueExpr(hashExprMap);
-        auto addr = llvm::dyn_cast<Address>(expr.get().get());
+        auto addr = dyn_cast<Address>(expr.get().get());
         if (addr == nullptr)
             UNREACHABLE();
         return std::make_unique<SymbolValue>(getValType(), addr->addressClone().into_underlying(),
@@ -1596,7 +1596,7 @@ namespace acslg::analyzer::symbolic {
             return it->second->clone();
         if (fromAddr_) {
             auto subedExpr = fromAddr_.value()->getSubstitutedValueExpr(hashExprMap);
-            auto addr      = llvm::dyn_cast<Address>(subedExpr.get().get());
+            auto addr      = dyn_cast<Address>(subedExpr.get().get());
             if (addr == nullptr)
                 UNREACHABLE();
 
@@ -1620,7 +1620,7 @@ namespace acslg::analyzer::symbolic {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return it->second->clone();
         auto subedExpr    = baseAddr_->getSubstitutedValueExpr(hashExprMap);
-        auto realBaseAddr = llvm::dyn_cast<const Address>(subedExpr.get().get());
+        auto realBaseAddr = dyn_cast<const Address>(subedExpr.get().get());
         if (realBaseAddr == nullptr)
             UNREACHABLE();
         return std::make_unique<FieldAddress>(
@@ -1755,6 +1755,13 @@ namespace acslg::analyzer::symbolic {
         offset_ = std::move(offset).into_underlying();
     }
 
+    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withOffset(
+        utils::not_null<std::unique_ptr<SymbolicExpr>> offset) const {
+        auto result = std::make_unique<SymbolAddress>(*this);
+        result->setOffset(std::move(offset));
+        return result;
+    }
+
     void SymbolAddress::addOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra) {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
@@ -1762,6 +1769,13 @@ namespace acslg::analyzer::symbolic {
                                                  BinaryOpExpr::Operator::Add, std::move(extra))
                       ->simplifiedExpr()
                       .into_underlying();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withAddedOffset(
+        utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
+        auto result = std::make_unique<SymbolAddress>(*this);
+        result->addOffset(std::move(extra));
+        return result;
     }
 
     void SymbolAddress::subOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra) {
@@ -1773,10 +1787,30 @@ namespace acslg::analyzer::symbolic {
                       .into_underlying();
     }
 
+    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withSubtractedOffset(
+        utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
+        auto result = std::make_unique<SymbolAddress>(*this);
+        result->subOffset(std::move(extra));
+        return result;
+    }
+
+    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withResetOffset() const {
+        auto result = std::make_unique<SymbolAddress>(*this);
+        result->resetOffset();
+        return result;
+    }
+
     void SymbolAddress::setLength(utils::not_null<std::unique_ptr<SymbolicExpr>> len) {
         if (!isValidOffsetOrLength(*len))
             ERROR("Invalid Length.");
         length_.emplace(std::move(len).into_underlying());
+    }
+
+    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withLength(
+        utils::not_null<std::unique_ptr<SymbolicExpr>> len) const {
+        auto result = std::make_unique<SymbolAddress>(*this);
+        result->setLength(std::move(len));
+        return result;
     }
 
     void SymbolAddress::addLength(utils::not_null<std::unique_ptr<SymbolicExpr>> extra) {
@@ -1794,6 +1828,19 @@ namespace acslg::analyzer::symbolic {
                                                  BinaryOpExpr::Operator::Add, std::move(extra))
                       ->simplifiedExpr()
                       .into_underlying();
+    }
+
+    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withAddedLength(
+        utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
+        auto result = std::make_unique<SymbolAddress>(*this);
+        result->addLength(std::move(extra));
+        return result;
+    }
+
+    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withoutLength() const {
+        auto result = std::make_unique<SymbolAddress>(*this);
+        result->resetLength();
+        return result;
     }
 
     size_t SymbolAddrBaseInfo::hash() const {
@@ -1859,6 +1906,14 @@ namespace acslg::analyzer::symbolic {
         if (index >= fields_.size())
             ERROR("Out-of-bounds access");
         fields_[index] = std::move(expr);
+    }
+
+    utils::not_null<std::unique_ptr<Structure>> Structure::withFieldValue(
+        size_t index,
+        utils::not_null<std::unique_ptr<SymbolicExpr>> expr) const {
+        auto result = std::make_unique<Structure>(*this);
+        result->setFieldValue(index, std::move(expr));
+        return result;
     }
 
     Structure::Structure(const clang::RecordDecl *RD,
@@ -1940,13 +1995,13 @@ namespace acslg::analyzer::symbolic {
         std::optional<SourcePoint> commonFromPoint{};
         for (size_t index = 0; index < fields_.size(); ++index) {
             auto &field = fields_.at(index);
-            auto symbol = llvm::dyn_cast<const Symbol>(field.get().get());
+            auto symbol = dyn_cast<const Symbol>(field.get().get());
             if (symbol == nullptr)
                 return std::nullopt;
             auto fromAddr = symbol->getFromAddr();
             if (fromAddr == std::nullopt)
                 return std::nullopt;
-            auto fieldAddr = llvm::dyn_cast<const FieldAddress>(fromAddr.value().get().get());
+            auto fieldAddr = dyn_cast<const FieldAddress>(fromAddr.value().get().get());
             if (fieldAddr == nullptr)
                 return std::nullopt;
 
@@ -2233,10 +2288,10 @@ namespace acslg::analyzer::symbolic {
         return true;
     }
 
-    bool is_symbol_addr(const Address &a) noexcept { return llvm::isa<SymbolAddress>(a); }
+    bool is_symbol_addr(const Address &a) noexcept { return isa<SymbolAddress>(a); }
 
     bool isFrom(const SymbolicExpr &expr, const Address &fromAddr, SourcePoint fromPoint) {
-        auto symbol = llvm::dyn_cast<const Symbol>(&expr);
+        auto symbol = dyn_cast<const Symbol>(&expr);
         if (symbol == nullptr)
             return false;
 
@@ -2287,24 +2342,11 @@ namespace acslg::analyzer::symbolic {
     }
 
     bool Symbol::classof(const SymbolicExpr *e) {
-        return
-#define SUBCLASS(NAME) llvm::isa<NAME>(e) ||
-#include "subclassesOfSymbol.inc"
-#undef SUBCLASS
-            0;
+        return dynamic_cast<const Symbol *>(e) != nullptr;
     }
 
     Symbol *Symbol::toThis(SymbolicExpr *e) {
-        if (!Symbol::classof(e))
-            return nullptr;
-        return llvm::TypeSwitch<SymbolicExpr *, Symbol *>(e)
-#define SUBCLASS(NAME) .Case<NAME>([](NAME *sub) { return static_cast<NAME *>(sub); })
-#include "subclassesOfSymbol.inc"
-#undef SUBCLASS
-            .Default([](SymbolicExpr *) {
-                UNREACHABLE();
-                return nullptr;
-            });
+        return dynamic_cast<Symbol *>(e);
     }
 
     const Symbol *Symbol::toThis(const SymbolicExpr *e) {
@@ -2323,14 +2365,10 @@ namespace acslg::analyzer::symbolic {
     }
 
     utils::not_null<SymbolicExpr *> Symbol::toSymbolicExpr() {
-        return llvm::TypeSwitch<Symbol *, SymbolicExpr *>(this)
-#define SUBCLASS(NAME) .Case<NAME>([](NAME *sub) { return static_cast<NAME *>(sub); })
-#include "subclassesOfSymbol.inc"
-#undef SUBCLASS
-            .Default([](Symbol *) {
-                UNREACHABLE();
-                return nullptr;
-            });
+        auto *result = dynamic_cast<SymbolicExpr *>(this);
+        if (result == nullptr)
+            UNREACHABLE();
+        return result;
     }
     utils::not_null<const SymbolicExpr *> Symbol::toSymbolicExpr() const {
         return const_cast<Symbol *>(this)->toSymbolicExpr();

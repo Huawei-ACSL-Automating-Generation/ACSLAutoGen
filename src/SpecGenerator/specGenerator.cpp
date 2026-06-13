@@ -337,7 +337,7 @@ namespace acslg::spec_generator {
                                                           PostPSInfo &toUpdate, auto &&info) {
             for (auto &[addr, value] : info.memoryMap) {
                 auto subedAddrExpr = addr.get().getSubstitutedExpr(currentPath, loopEntryPoint);
-                auto subedAddr     = llvm::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
+                auto subedAddr     = symb::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
                 if (subedAddr == nullptr)
                     UNREACHABLE();
                 auto subedValue = value->getSubstitutedExpr(currentPath, loopEntryPoint);

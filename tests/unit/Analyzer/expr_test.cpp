@@ -496,4 +496,72 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(resVal.value().first, baseName + "[2]");
         EXPECT_TRUE(resVal.value().second.empty());
     }
+
+    namespace {
+        class CollisionExpr final : public symbolic::SymbolicExpr {
+          public:
+            explicit CollisionExpr(int id)
+                : SymbolicExpr(ExprKind::K_UnknownExpr, Type{ScalarKind::Void, 0}), id_(id) {}
+
+            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> clone()
+                const override {
+                return std::make_unique<CollisionExpr>(id_);
+            }
+
+            std::string dump() const override { return "collision:" + std::to_string(id_); }
+
+            bool equal(const symbolic::SymbolicExpr &other) const override {
+                auto *rhs = symbolic::dyn_cast<const CollisionExpr>(&other);
+                return rhs != nullptr && rhs->id_ == id_;
+            }
+
+            std::size_t hash() const override { return 42; }
+
+            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> getSubstitutedExpr(
+                const Path &,
+                const symbolic::SourcePoint &) const override {
+                return clone();
+            }
+
+            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+            getRangeIndexSubstituted(
+                const symbolic::SymbolAddrBaseInfo &,
+                const symbolic::SymbolicExpr &) const override {
+                return clone();
+            }
+
+            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+            getSubstitutedValueExpr(
+                const symbolic::SymbolicExpr::HashExprMap &) const override {
+                return clone();
+            }
+
+            bool isLinear() const override { return false; }
+            int getMaxDegree() const override { return -1; }
+
+          private:
+            ::acslg::utils::expected<std::string, GetACSLError> doGetACSL(
+                const GetACSLConfig &,
+                std::unordered_set<symbolic::SourcePoint> &,
+                std::optional<symbolic::SourcePoint>,
+                unsigned,
+                bool) const override {
+                return dump();
+            }
+
+            int id_;
+        };
+    } // namespace
+
+    TEST(ExprFactoryTest, ReusesEqualNodesButSeparatesHashCollisions) {
+        symbolic::ExprFactory factory;
+
+        auto a = factory.intern(std::make_unique<CollisionExpr>(1));
+        auto b = factory.intern(std::make_unique<CollisionExpr>(1));
+        auto c = factory.intern(std::make_unique<CollisionExpr>(2));
+
+        EXPECT_EQ(a, b);
+        EXPECT_NE(a, c);
+        EXPECT_EQ(factory.size(), 2u);
+    }
 } // namespace acslg::test::unit::analyzer
