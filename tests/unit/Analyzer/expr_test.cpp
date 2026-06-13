@@ -665,6 +665,39 @@ namespace acslg::test::unit::analyzer {
         ASSERT_DEATH({ (void)(left + right); }, "");
     }
 
+    TEST(ExprFacadeTest, PredicateHelpersUseCurrentFactory) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        symbolic::Literal one{1};
+        symbolic::Literal two{2};
+
+        auto equalA = one.equalTo(two);
+        auto equalB = symbolic::Literal{1}.equalTo(symbolic::Literal{2});
+        auto less = one.lessThan(two);
+        auto greaterEqual = two.greaterEqual(one);
+        auto conjunction = equalA.logicalAnd(less);
+        auto disjunction = less.logicalOr(greaterEqual);
+        auto negated = equalA.logicalNot();
+        auto negatedAgain = equalB.logicalNot();
+
+        EXPECT_EQ(equalA, equalB);
+        EXPECT_EQ(negated, negatedAgain);
+
+        EXPECT_EQ(equalA.cast<symbolic::BinaryOpExpr>().getOperator(),
+                  symbolic::BinaryOpExpr::Operator::Equal);
+        EXPECT_EQ(less.cast<symbolic::BinaryOpExpr>().getOperator(),
+                  symbolic::BinaryOpExpr::Operator::LessThan);
+        EXPECT_EQ(greaterEqual.cast<symbolic::BinaryOpExpr>().getOperator(),
+                  symbolic::BinaryOpExpr::Operator::GreaterEqual);
+        EXPECT_EQ(conjunction.cast<symbolic::BinaryOpExpr>().getOperator(),
+                  symbolic::BinaryOpExpr::Operator::LogicalAnd);
+        EXPECT_EQ(disjunction.cast<symbolic::BinaryOpExpr>().getOperator(),
+                  symbolic::BinaryOpExpr::Operator::LogicalOr);
+        EXPECT_EQ(negated.cast<symbolic::UnaryOpExpr>().getOperator(),
+                  symbolic::UnaryOpExpr::Operator::LogicalNot);
+    }
+
     TEST(ExprFactoryTest, AddressBuildersReuseEqualAddressNodes) {
         ASTExtractor e;
         e.init(R"c(

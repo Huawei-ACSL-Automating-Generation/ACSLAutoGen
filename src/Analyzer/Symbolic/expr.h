@@ -1374,6 +1374,38 @@ namespace acslg::analyzer::symbolic {
             return Expr{factory(), factory().binary(handle_, op, rhs.handle_)};
         }
 
+        Expr unary(UnaryOpExpr::Operator op) const {
+            return Expr{factory(), factory().unary(op, handle_)};
+        }
+
+        Expr equalTo(const Expr &rhs) const {
+            return binary(BinaryOpExpr::Operator::Equal, rhs);
+        }
+        Expr notEqualTo(const Expr &rhs) const {
+            return binary(BinaryOpExpr::Operator::NotEqual, rhs);
+        }
+        Expr lessThan(const Expr &rhs) const {
+            return binary(BinaryOpExpr::Operator::LessThan, rhs);
+        }
+        Expr lessEqual(const Expr &rhs) const {
+            return binary(BinaryOpExpr::Operator::LessEqual, rhs);
+        }
+        Expr greaterThan(const Expr &rhs) const {
+            return binary(BinaryOpExpr::Operator::GreaterThan, rhs);
+        }
+        Expr greaterEqual(const Expr &rhs) const {
+            return binary(BinaryOpExpr::Operator::GreaterEqual, rhs);
+        }
+        Expr logicalAnd(const Expr &rhs) const {
+            return binary(BinaryOpExpr::Operator::LogicalAnd, rhs);
+        }
+        Expr logicalOr(const Expr &rhs) const {
+            return binary(BinaryOpExpr::Operator::LogicalOr, rhs);
+        }
+        Expr logicalNot() const {
+            return unary(UnaryOpExpr::Operator::LogicalNot);
+        }
+
         friend bool operator==(const Expr &lhs, const Expr &rhs) {
             return lhs.factory_ == rhs.factory_ && lhs.handle_ == rhs.handle_;
         }
