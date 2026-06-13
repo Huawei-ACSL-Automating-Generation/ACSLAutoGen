@@ -622,6 +622,24 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(negA.cast<symbolic::UnaryOpExpr>().getSub().get(), oneA.get().get());
     }
 
+    TEST(ExprFactoryTest, CloneOfFactoryBuiltOperationsPreservesChildHandles) {
+        symbolic::ExprFactory factory;
+
+        auto one = factory.literal(1);
+        auto two = factory.literal(2);
+        auto sum = factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
+        auto neg = factory.unary(symbolic::UnaryOpExpr::Operator::Minus, one);
+
+        auto sumClone = sum->clone();
+        auto *sumNode = symbolic::cast<symbolic::BinaryOpExpr>(sumClone.get().get());
+        EXPECT_EQ(sumNode->getLeft().get(), one.get().get());
+        EXPECT_EQ(sumNode->getRight().get(), two.get().get());
+
+        auto negClone = neg->clone();
+        auto *negNode = symbolic::cast<symbolic::UnaryOpExpr>(negClone.get().get());
+        EXPECT_EQ(negNode->getSub().get(), one.get().get());
+    }
+
     TEST(ExprFactoryTest, UnknownBuilderReusesUnknownNode) {
         symbolic::ExprFactory factory;
 

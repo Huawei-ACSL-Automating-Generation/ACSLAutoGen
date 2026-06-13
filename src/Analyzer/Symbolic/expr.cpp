@@ -324,10 +324,18 @@ namespace acslg::analyzer::symbolic {
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> BinaryOpExpr::clone() const {
+        auto leftHandle  = left_.handle();
+        auto rightHandle = right_.handle();
+        if (leftHandle && rightHandle)
+            return std::make_unique<BinaryOpExpr>(*leftHandle, op_, *rightHandle);
+
         return std::make_unique<BinaryOpExpr>(left_->clone(), op_, right_->clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> UnaryOpExpr::clone() const {
+        if (auto handle = expr_.handle())
+            return std::make_unique<UnaryOpExpr>(op_, *handle);
+
         return std::make_unique<UnaryOpExpr>(op_, expr_->clone());
     }
 
