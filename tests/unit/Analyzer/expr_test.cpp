@@ -588,4 +588,44 @@ namespace acslg::test::unit::analyzer {
         EXPECT_NE(a, c);
         EXPECT_EQ(factory.size(), 2u);
     }
+
+    TEST(ExprFactoryTest, TypedBuildersReuseEqualLiteralAndOperationNodes) {
+        symbolic::ExprFactory factory;
+
+        auto oneA = factory.literal(1);
+        auto oneB = factory.literal(1);
+        auto two  = factory.literal(2);
+
+        EXPECT_EQ(oneA, oneB);
+        EXPECT_NE(oneA, two);
+        EXPECT_TRUE(oneA.isa<symbolic::LiteralExpr>());
+        EXPECT_EQ(oneA.cast<symbolic::LiteralExpr>().getLiteralValue(), 1);
+
+        auto sumA =
+            factory.binary(oneA, symbolic::BinaryOpExpr::Operator::Add, two);
+        auto sumB =
+            factory.binary(oneB, symbolic::BinaryOpExpr::Operator::Add, factory.literal(2));
+        auto diff = factory.binary(oneA, symbolic::BinaryOpExpr::Operator::Subtract, two);
+
+        EXPECT_EQ(sumA, sumB);
+        EXPECT_NE(sumA, diff);
+        ASSERT_NE(sumA.dyn_cast<symbolic::BinaryOpExpr>(), nullptr);
+        EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getOperator(),
+                  symbolic::BinaryOpExpr::Operator::Add);
+
+        auto negA = factory.unary(symbolic::UnaryOpExpr::Operator::Minus, oneA);
+        auto negB = factory.unary(symbolic::UnaryOpExpr::Operator::Minus, oneB);
+        EXPECT_EQ(negA, negB);
+        EXPECT_TRUE(negA.isa<symbolic::UnaryOpExpr>());
+    }
+
+    TEST(ExprFactoryTest, UnknownBuilderReusesUnknownNode) {
+        symbolic::ExprFactory factory;
+
+        auto a = factory.unknown();
+        auto b = factory.unknown();
+
+        EXPECT_EQ(a, b);
+        EXPECT_TRUE(a.isa<symbolic::UnknownExpr>());
+    }
 } // namespace acslg::test::unit::analyzer

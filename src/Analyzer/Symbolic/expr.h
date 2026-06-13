@@ -1199,6 +1199,18 @@ namespace acslg::analyzer::symbolic {
         const SymbolicExpr *operator->() const { return ptr_; }
         utils::not_null<const SymbolicExpr *> get() const { return ptr_; }
 
+        template <typename T> bool isa() const {
+            return ::acslg::analyzer::symbolic::isa<T>(ptr_);
+        }
+
+        template <typename T> const T *dyn_cast() const {
+            return ::acslg::analyzer::symbolic::dyn_cast<T>(ptr_);
+        }
+
+        template <typename T> const T &cast() const {
+            return *::acslg::analyzer::symbolic::cast<T>(ptr_);
+        }
+
         friend bool operator==(ExprHandle lhs, ExprHandle rhs) {
             return lhs.ptr_ == rhs.ptr_;
         }
@@ -1229,6 +1241,28 @@ namespace acslg::analyzer::symbolic {
 
     class ExprFactory {
       public:
+        ExprHandle literal(bool value) { return intern(std::make_unique<LiteralExpr>(value)); }
+        ExprHandle literal(int value) { return intern(std::make_unique<LiteralExpr>(value)); }
+        ExprHandle literal(unsigned int value) {
+            return intern(std::make_unique<LiteralExpr>(value));
+        }
+        ExprHandle literal(short value) { return intern(std::make_unique<LiteralExpr>(value)); }
+        ExprHandle literal(unsigned short value) {
+            return intern(std::make_unique<LiteralExpr>(value));
+        }
+        ExprHandle literal(int64_t value) { return intern(std::make_unique<LiteralExpr>(value)); }
+        ExprHandle literal(uint64_t value) { return intern(std::make_unique<LiteralExpr>(value)); }
+
+        ExprHandle unknown() { return intern(std::make_unique<UnknownExpr>()); }
+
+        ExprHandle unary(UnaryOpExpr::Operator op, ExprHandle expr) {
+            return intern(std::make_unique<UnaryOpExpr>(op, expr->clone()));
+        }
+
+        ExprHandle binary(ExprHandle left, BinaryOpExpr::Operator op, ExprHandle right) {
+            return intern(std::make_unique<BinaryOpExpr>(left->clone(), op, right->clone()));
+        }
+
         ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node) {
             const auto hash = node->hash();
             auto &bucket    = interned_[hash];
