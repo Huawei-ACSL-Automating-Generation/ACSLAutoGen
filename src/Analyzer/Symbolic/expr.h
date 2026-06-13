@@ -1257,6 +1257,24 @@ namespace acslg::analyzer::symbolic {
         std::unordered_map<size_t, std::vector<const SymbolicExpr *>> interned_;
     };
 
+    class ExprFactoryScope {
+      public:
+        explicit ExprFactoryScope(ExprFactory &factory);
+        ~ExprFactoryScope();
+
+        ExprFactoryScope(const ExprFactoryScope &)            = delete;
+        ExprFactoryScope(ExprFactoryScope &&)                 = delete;
+        ExprFactoryScope &operator=(const ExprFactoryScope &) = delete;
+        ExprFactoryScope &operator=(ExprFactoryScope &&)      = delete;
+
+        static ExprFactory &current();
+        static bool hasCurrent();
+
+      private:
+        ExprFactory *previous_;
+        static thread_local ExprFactory *current_;
+    };
+
     /// @class SymbolAddress
     /// @brief Symbolic address with fromAddr, fromPoint, offset and length. Maybe a symbol value
     /// of pointer variable or an address of heap.

@@ -21,6 +21,27 @@
 #include "Analyzer/state.h"
 
 namespace acslg::analyzer::symbolic {
+    thread_local ExprFactory *ExprFactoryScope::current_ = nullptr;
+
+    ExprFactoryScope::ExprFactoryScope(ExprFactory &factory)
+        : previous_(current_) {
+        current_ = &factory;
+    }
+
+    ExprFactoryScope::~ExprFactoryScope() {
+        current_ = previous_;
+    }
+
+    ExprFactory &ExprFactoryScope::current() {
+        if (current_ == nullptr)
+            ERROR("No active ExprFactory.");
+        return *current_;
+    }
+
+    bool ExprFactoryScope::hasCurrent() {
+        return current_ != nullptr;
+    }
+
     namespace {
         template <class... Ts> struct overloaded : Ts... {
             using Ts::operator()...;

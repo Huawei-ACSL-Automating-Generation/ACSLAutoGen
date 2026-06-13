@@ -10,6 +10,7 @@ build-*/
 test.c
 *_acsl.c
 doxygen/
+docs/refactor-plans/
 
 benchmark_results.tsv
 benchmark_logs

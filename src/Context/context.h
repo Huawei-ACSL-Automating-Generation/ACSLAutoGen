@@ -73,6 +73,10 @@ namespace acslg::context {
         auto getInsertedStrings() -> const auto & { return insertedStrs_; }
         /// @brief Access the underlying ASTContext.
         auto getASTContext() -> auto & { return context_; }
+        /// @brief Access the expression factory owned by this analysis context.
+        auto getExprFactory() -> auto & { return exprFactory_; }
+        /// @brief Access the expression factory owned by this analysis context.
+        auto getExprFactory() const -> const auto & { return exprFactory_; }
 
         /**
          * @brief Retrieve basic source information for a declaration.
@@ -125,6 +129,7 @@ namespace acslg::context {
         clang::Rewriter rewriter_{};
         std::vector<std::string> insertedStrs_{};
         std::unordered_set<analyzer::symbolic::SourcePoint> usedPoints_{};
+        analyzer::symbolic::ExprFactory exprFactory_{};
     };
 } // namespace acslg::context
 

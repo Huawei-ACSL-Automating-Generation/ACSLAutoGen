@@ -6,6 +6,7 @@
 #include <clang/AST/Decl.h>
 
 #include "ASTExtractor.h"
+#include "Context/context.h"
 #include "Symbolic/expr.h"
 #include "testHelper.h"
 
@@ -100,6 +101,29 @@ namespace acslg::test::unit::analyzer {
         auto before0_again =
             symbolic::SourcePoint::fromStmtBefore(s0, e.getSourceManager(), e.getLangOptions());
         EXPECT_TRUE(before0 == before0_again);
+    }
+
+    TEST(ExprFactoryScopeTest, CurrentRequiresActiveScope) {
+        ASSERT_FALSE(symbolic::ExprFactoryScope::hasCurrent());
+        ASSERT_DEATH({ (void)symbolic::ExprFactoryScope::current(); }, "");
+    }
+
+    TEST(ExprFactoryScopeTest, UsesFactoryOwnedByACSLGContext) {
+        ASTExtractor e;
+        e.init("int f(void) { return 0; }");
+        context::ACSLGContext acslContext(e.getASTContext());
+
+        symbolic::ExprFactoryScope outer(acslContext.getExprFactory());
+        EXPECT_TRUE(symbolic::ExprFactoryScope::hasCurrent());
+        EXPECT_EQ(&symbolic::ExprFactoryScope::current(), &acslContext.getExprFactory());
+
+        symbolic::ExprFactory nestedFactory;
+        {
+            symbolic::ExprFactoryScope nested(nestedFactory);
+            EXPECT_EQ(&symbolic::ExprFactoryScope::current(), &nestedFactory);
+        }
+
+        EXPECT_EQ(&symbolic::ExprFactoryScope::current(), &acslContext.getExprFactory());
     }
 
     TEST_F(SourcePointTest, HashConsistentWithEquality) {
