@@ -1199,6 +1199,15 @@ namespace acslg::analyzer::symbolic {
         const SymbolicExpr *operator->() const { return ptr_; }
         utils::not_null<const SymbolicExpr *> get() const { return ptr_; }
 
+        std::size_t hash() const { return ptr_->hash(); }
+        std::string dump() const { return ptr_->dump(); }
+        SymbolicExpr::Type getValType() const { return ptr_->getValType(); }
+        auto getACSL(
+            const SymbolicExpr::GetACSLConfig &config,
+            std::optional<SourcePoint> currentPoint = std::nullopt) const {
+            return ptr_->getACSL(config, currentPoint);
+        }
+
         template <typename T> bool isa() const {
             return ::acslg::analyzer::symbolic::isa<T>(ptr_);
         }
@@ -1307,6 +1316,78 @@ namespace acslg::analyzer::symbolic {
       private:
         ExprFactory *previous_;
         static thread_local ExprFactory *current_;
+    };
+
+    class Expr {
+      public:
+        Expr(ExprFactory &factory, ExprHandle handle) : factory_(&factory), handle_(handle) {}
+        explicit Expr(ExprHandle handle) : Expr(ExprFactoryScope::current(), handle) {}
+
+        const SymbolicExpr &operator*() const { return *handle_; }
+        const SymbolicExpr *operator->() const { return handle_.get().get(); }
+        ExprHandle handle() const { return handle_; }
+        ExprFactory &factory() const { return *factory_; }
+
+        std::size_t hash() const { return handle_.hash(); }
+        std::string dump() const { return handle_.dump(); }
+        SymbolicExpr::Type getValType() const { return handle_.getValType(); }
+        auto getACSL(
+            const SymbolicExpr::GetACSLConfig &config,
+            std::optional<SourcePoint> currentPoint = std::nullopt) const {
+            return handle_.getACSL(config, currentPoint);
+        }
+
+        template <typename T> bool isa() const { return handle_.isa<T>(); }
+        template <typename T> const T *dyn_cast() const { return handle_.dyn_cast<T>(); }
+        template <typename T> const T &cast() const { return handle_.cast<T>(); }
+
+        Expr binary(BinaryOpExpr::Operator op, const Expr &rhs) const {
+            ensureSameFactory(rhs);
+            return Expr{factory(), factory().binary(handle_, op, rhs.handle_)};
+        }
+
+        friend bool operator==(const Expr &lhs, const Expr &rhs) {
+            return lhs.factory_ == rhs.factory_ && lhs.handle_ == rhs.handle_;
+        }
+
+        friend Expr operator+(const Expr &lhs, const Expr &rhs) {
+            return lhs.binary(BinaryOpExpr::Operator::Add, rhs);
+        }
+        friend Expr operator-(const Expr &lhs, const Expr &rhs) {
+            return lhs.binary(BinaryOpExpr::Operator::Subtract, rhs);
+        }
+        friend Expr operator*(const Expr &lhs, const Expr &rhs) {
+            return lhs.binary(BinaryOpExpr::Operator::Multiply, rhs);
+        }
+        friend Expr operator/(const Expr &lhs, const Expr &rhs) {
+            return lhs.binary(BinaryOpExpr::Operator::Divide, rhs);
+        }
+
+      private:
+        void ensureSameFactory(const Expr &rhs) const {
+            if (factory_ != rhs.factory_)
+                ERROR("Cannot combine expressions from different factories.");
+        }
+
+        ExprFactory *factory_;
+        ExprHandle handle_;
+    };
+
+    class Literal : public Expr {
+      public:
+        explicit Literal(bool value) : Expr(make(value)) {}
+        explicit Literal(int value) : Expr(make(value)) {}
+        explicit Literal(unsigned int value) : Expr(make(value)) {}
+        explicit Literal(short value) : Expr(make(value)) {}
+        explicit Literal(unsigned short value) : Expr(make(value)) {}
+        explicit Literal(int64_t value) : Expr(make(value)) {}
+        explicit Literal(uint64_t value) : Expr(make(value)) {}
+
+      private:
+        template <typename T> static Expr make(T value) {
+            auto &factory = ExprFactoryScope::current();
+            return Expr{factory, factory.literal(value)};
+        }
     };
 
     /// @class SymbolAddress

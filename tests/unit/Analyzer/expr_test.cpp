@@ -628,4 +628,40 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(a, b);
         EXPECT_TRUE(a.isa<symbolic::UnknownExpr>());
     }
+
+    TEST(ExprFacadeTest, LiteralAndOperatorsUseCurrentFactory) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        symbolic::Literal x{10};
+        symbolic::Literal y{20};
+
+        symbolic::Expr sum = x + y;
+        symbolic::Expr sameSum = symbolic::Literal{10} + symbolic::Literal{20};
+        symbolic::Expr product = x * y;
+
+        EXPECT_EQ(sum, sameSum);
+        EXPECT_NE(sum, product);
+        EXPECT_EQ(sum.cast<symbolic::BinaryOpExpr>().getOperator(),
+                  symbolic::BinaryOpExpr::Operator::Add);
+        EXPECT_EQ(product.cast<symbolic::BinaryOpExpr>().getOperator(),
+                  symbolic::BinaryOpExpr::Operator::Multiply);
+        EXPECT_EQ(x.cast<symbolic::LiteralExpr>().getLiteralValue(), 10);
+    }
+
+    TEST(ExprFacadeTest, OperatorsRejectDifferentFactories) {
+        symbolic::ExprFactory leftFactory;
+        symbolic::ExprFactory rightFactory;
+
+        symbolic::Expr left = [&] {
+            symbolic::ExprFactoryScope scope(leftFactory);
+            return symbolic::Expr{symbolic::Literal{1}};
+        }();
+        symbolic::Expr right = [&] {
+            symbolic::ExprFactoryScope scope(rightFactory);
+            return symbolic::Expr{symbolic::Literal{2}};
+        }();
+
+        ASSERT_DEATH({ (void)(left + right); }, "");
+    }
 } // namespace acslg::test::unit::analyzer
