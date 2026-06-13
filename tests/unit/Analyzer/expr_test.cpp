@@ -612,11 +612,14 @@ namespace acslg::test::unit::analyzer {
         ASSERT_NE(sumA.dyn_cast<symbolic::BinaryOpExpr>(), nullptr);
         EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getOperator(),
                   symbolic::BinaryOpExpr::Operator::Add);
+        EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getLeft().get(), oneA.get().get());
+        EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getRight().get(), two.get().get());
 
         auto negA = factory.unary(symbolic::UnaryOpExpr::Operator::Minus, oneA);
         auto negB = factory.unary(symbolic::UnaryOpExpr::Operator::Minus, oneB);
         EXPECT_EQ(negA, negB);
         EXPECT_TRUE(negA.isa<symbolic::UnaryOpExpr>());
+        EXPECT_EQ(negA.cast<symbolic::UnaryOpExpr>().getSub().get(), oneA.get().get());
     }
 
     TEST(ExprFactoryTest, UnknownBuilderReusesUnknownNode) {

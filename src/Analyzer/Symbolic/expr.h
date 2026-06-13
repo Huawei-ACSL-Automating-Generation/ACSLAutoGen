@@ -9,6 +9,7 @@
 #include <clang/AST/Type.h>
 #include <string>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 #include <ranges>
@@ -550,6 +551,62 @@ namespace acslg::analyzer::symbolic {
 
     std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprKind t);
 
+    class ExprHandle {
+      public:
+        explicit ExprHandle(const SymbolicExpr *expr)
+            : ExprHandle(utils::not_null<const SymbolicExpr *>{expr}) {}
+        explicit ExprHandle(utils::not_null<const SymbolicExpr *> expr) : expr_(expr) {}
+
+        utils::not_null<const SymbolicExpr *> get() const { return expr_; }
+        const SymbolicExpr &operator*() const { return *expr_; }
+        const SymbolicExpr *operator->() const { return expr_.get(); }
+
+        std::size_t hash() const { return expr_->hash(); }
+        std::string dump() const { return expr_->dump(); }
+        SymbolicExpr::Type getValType() const { return expr_->getValType(); }
+        auto getACSL(
+            const SymbolicExpr::GetACSLConfig &config,
+            std::optional<SourcePoint> currentPoint = std::nullopt) const {
+            return expr_->getACSL(config, currentPoint);
+        }
+
+        template <typename T> bool isa() const { return symbolic::isa<T>(expr_.get()); }
+        template <typename T> const T *dyn_cast() const {
+            return symbolic::dyn_cast<T>(expr_.get());
+        }
+        template <typename T> const T &cast() const { return *symbolic::cast<T>(expr_.get()); }
+
+        friend bool operator==(ExprHandle lhs, ExprHandle rhs) {
+            return lhs.expr_.get() == rhs.expr_.get();
+        }
+
+      private:
+        utils::not_null<const SymbolicExpr *> expr_;
+    };
+
+    class ExprChild {
+      public:
+        explicit ExprChild(ExprHandle handle) : handle_(handle) {}
+        explicit ExprChild(utils::not_null<std::unique_ptr<SymbolicExpr>> owned)
+            : owned_(std::move(owned)) {}
+
+        utils::not_null<const SymbolicExpr *> get() const {
+            if (handle_)
+                return handle_->get();
+            return owned_->get().get();
+        }
+
+        const SymbolicExpr &operator*() const { return *get(); }
+        const SymbolicExpr *operator->() const { return get().get(); }
+        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const { return get()->clone(); }
+
+        std::optional<ExprHandle> handle() const { return handle_; }
+
+      private:
+        std::optional<ExprHandle> handle_;
+        std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> owned_;
+    };
+
     /// @class LiteralExpr
     /// @brief Represents a literal constant value.
     class LiteralExpr : public SymbolicExpr {
@@ -704,14 +761,16 @@ namespace acslg::analyzer::symbolic {
               left_(std::unique_ptr<SymbolicExpr>{left}), op_(op),
               right_(std::unique_ptr<SymbolicExpr>{right}) {}
 
+        BinaryOpExpr(ExprHandle left, Operator op, ExprHandle right)
+            : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()), left_(left), op_(op),
+              right_(right) {}
+
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_BinaryOpExpr;
         }
 
-        utils::not_null<const SymbolicExpr *> getLeft() const { return left_.get().get(); }
-        utils::not_null<const SymbolicExpr *> getRight() const { return right_.get().get(); }
-        auto getLeft() -> auto & { return left_; }
-        auto getRight() -> auto & { return right_; }
+        utils::not_null<const SymbolicExpr *> getLeft() const { return left_.get(); }
+        utils::not_null<const SymbolicExpr *> getRight() const { return right_.get(); }
         Operator getOperator() const { return op_; }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
@@ -755,9 +814,9 @@ namespace acslg::analyzer::symbolic {
             const override;
 
       private:
-        utils::not_null<std::unique_ptr<SymbolicExpr>> left_;
+        ExprChild left_;
         Operator op_;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> right_;
+        ExprChild right_;
     };
 
     /// @class UnaryOpExpr
@@ -791,12 +850,14 @@ namespace acslg::analyzer::symbolic {
             : SymbolicExpr(ExprKind::K_UnaryOpExpr, expr->getValType()), op_(op),
               expr_(std::move(expr)) {}
 
+        UnaryOpExpr(Operator op, ExprHandle expr)
+            : SymbolicExpr(ExprKind::K_UnaryOpExpr, expr->getValType()), op_(op), expr_(expr) {}
+
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_UnaryOpExpr;
         }
 
-        utils::not_null<const SymbolicExpr *> getSub() const { return expr_.get().get(); }
-        auto getSub() -> auto & { return expr_; }
+        utils::not_null<const SymbolicExpr *> getSub() const { return expr_.get(); }
         Operator getOperator() const { return op_; }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
@@ -836,7 +897,7 @@ namespace acslg::analyzer::symbolic {
 
       private:
         Operator op_;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> expr_;
+        ExprChild expr_;
     };
 
     /// @class UnknownExpr
@@ -1188,46 +1249,6 @@ namespace acslg::analyzer::symbolic {
     template <class T>
     using AddressBoxMap = std::unordered_map<AddressBox, T, AddressBoxHash, AddressBoxEq>;
 
-    class ExprHandle {
-      public:
-        explicit ExprHandle(const SymbolicExpr *ptr) : ptr_(ptr) {
-            if (ptr_ == nullptr)
-                ERROR("ExprHandle cannot wrap null.");
-        }
-
-        const SymbolicExpr &operator*() const { return *ptr_; }
-        const SymbolicExpr *operator->() const { return ptr_; }
-        utils::not_null<const SymbolicExpr *> get() const { return ptr_; }
-
-        std::size_t hash() const { return ptr_->hash(); }
-        std::string dump() const { return ptr_->dump(); }
-        SymbolicExpr::Type getValType() const { return ptr_->getValType(); }
-        auto getACSL(
-            const SymbolicExpr::GetACSLConfig &config,
-            std::optional<SourcePoint> currentPoint = std::nullopt) const {
-            return ptr_->getACSL(config, currentPoint);
-        }
-
-        template <typename T> bool isa() const {
-            return ::acslg::analyzer::symbolic::isa<T>(ptr_);
-        }
-
-        template <typename T> const T *dyn_cast() const {
-            return ::acslg::analyzer::symbolic::dyn_cast<T>(ptr_);
-        }
-
-        template <typename T> const T &cast() const {
-            return *::acslg::analyzer::symbolic::cast<T>(ptr_);
-        }
-
-        friend bool operator==(ExprHandle lhs, ExprHandle rhs) {
-            return lhs.ptr_ == rhs.ptr_;
-        }
-
-      private:
-        const SymbolicExpr *ptr_;
-    };
-
     class AddrHandle {
       public:
         explicit AddrHandle(const Address *ptr) : ptr_(ptr) {
@@ -1281,11 +1302,11 @@ namespace acslg::analyzer::symbolic {
         ExprHandle unknown() { return intern(std::make_unique<UnknownExpr>()); }
 
         ExprHandle unary(UnaryOpExpr::Operator op, ExprHandle expr) {
-            return intern(std::make_unique<UnaryOpExpr>(op, expr->clone()));
+            return intern(std::make_unique<UnaryOpExpr>(op, expr));
         }
 
         ExprHandle binary(ExprHandle left, BinaryOpExpr::Operator op, ExprHandle right) {
-            return intern(std::make_unique<BinaryOpExpr>(left->clone(), op, right->clone()));
+            return intern(std::make_unique<BinaryOpExpr>(left, op, right));
         }
 
         AddrHandle variableAddress(utils::not_null<const clang::VarDecl *> from);
@@ -1992,15 +2013,15 @@ namespace acslg::analyzer::symbolic {
         if (auto *bin = dyn_cast<BinaryOpExpr>(in.get().get())) {
             using Op = BinaryOpExpr::Operator;
             if (bin->getOperator() == Op::Multiply) {
-                auto &L = bin->getLeft();
-                auto &R = bin->getRight();
+                auto L = bin->getLeft();
+                auto R = bin->getRight();
 
-                if (auto *lLit = dyn_cast<LiteralExpr>(L.get().get())) {
+                if (auto *lLit = dyn_cast<LiteralExpr>(L.get())) {
                     if (static_cast<std::uint64_t>(lLit->getLiteralValue()) == sizeofBytes) {
                         return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{R->clone()};
                     }
                 }
-                if (auto *rLit = dyn_cast<LiteralExpr>(R.get().get())) {
+                if (auto *rLit = dyn_cast<LiteralExpr>(R.get())) {
                     if (static_cast<std::uint64_t>(rLit->getLiteralValue()) == sizeofBytes) {
                         return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{L->clone()};
                     }
