@@ -664,4 +664,57 @@ namespace acslg::test::unit::analyzer {
 
         ASSERT_DEATH({ (void)(left + right); }, "");
     }
+
+    TEST(ExprFactoryTest, AddressBuildersReuseEqualAddressNodes) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct S {
+                int a;
+                int b;
+            };
+
+            void f(void) {
+                struct S s;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto *record = e.findFirstDecl<RecordDecl>();
+        ASSERT_NE(record, nullptr);
+        ASSERT_TRUE(record->isCompleteDefinition());
+        record = record->getDefinition();
+        ASSERT_FALSE(record->fields().empty());
+        auto *firstField = *record->field_begin();
+
+        symbolic::ExprFactory factory;
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        auto varAddrA = factory.variableAddress(var);
+        auto varAddrB = factory.variableAddress(var);
+        EXPECT_EQ(varAddrA, varAddrB);
+        EXPECT_TRUE(varAddrA.isa<symbolic::VariableAddress>());
+
+        auto offset = factory.literal(4);
+        auto length = factory.literal(2);
+        auto symAddrA = factory.symbolAddress(
+            firstField->getType(), std::optional<symbolic::AddrHandle>{varAddrA}, point,
+            std::optional<symbolic::ExprHandle>{offset},
+            std::optional<symbolic::ExprHandle>{length});
+        auto symAddrB = factory.symbolAddress(
+            firstField->getType(), std::optional<symbolic::AddrHandle>{varAddrB}, point,
+            std::optional<symbolic::ExprHandle>{factory.literal(4)},
+            std::optional<symbolic::ExprHandle>{factory.literal(2)});
+        EXPECT_EQ(symAddrA, symAddrB);
+        EXPECT_TRUE(symAddrA.isa<symbolic::SymbolAddress>());
+
+        auto fieldAddrA = factory.fieldAddress(firstField->getType(), record, varAddrA, 0);
+        auto fieldAddrB = factory.fieldAddress(firstField->getType(), record, varAddrB, 0);
+        EXPECT_EQ(fieldAddrA, fieldAddrB);
+        EXPECT_TRUE(fieldAddrA.isa<symbolic::FieldAddress>());
+        EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
+    }
 } // namespace acslg::test::unit::analyzer

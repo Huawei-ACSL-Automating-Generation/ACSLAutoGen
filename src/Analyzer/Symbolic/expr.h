@@ -1240,6 +1240,22 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<const Address *> get() const { return ptr_; }
         ExprHandle asExpr() const { return ExprHandle{ptr_}; }
 
+        std::size_t hash() const { return ptr_->hash(); }
+        std::string dump() const { return ptr_->dump(); }
+        SymbolicExpr::Type getValType() const { return ptr_->getValType(); }
+
+        template <typename T> bool isa() const {
+            return ::acslg::analyzer::symbolic::isa<T>(ptr_);
+        }
+
+        template <typename T> const T *dyn_cast() const {
+            return ::acslg::analyzer::symbolic::dyn_cast<T>(ptr_);
+        }
+
+        template <typename T> const T &cast() const {
+            return *::acslg::analyzer::symbolic::cast<T>(ptr_);
+        }
+
         friend bool operator==(AddrHandle lhs, AddrHandle rhs) {
             return lhs.ptr_ == rhs.ptr_;
         }
@@ -1271,6 +1287,18 @@ namespace acslg::analyzer::symbolic {
         ExprHandle binary(ExprHandle left, BinaryOpExpr::Operator op, ExprHandle right) {
             return intern(std::make_unique<BinaryOpExpr>(left->clone(), op, right->clone()));
         }
+
+        AddrHandle variableAddress(utils::not_null<const clang::VarDecl *> from);
+        AddrHandle symbolAddress(
+            clang::QualType pointeeType,
+            std::optional<AddrHandle> from,
+            SourcePoint fromPoint,
+            std::optional<ExprHandle> offset = std::nullopt,
+            std::optional<ExprHandle> length = std::nullopt);
+        AddrHandle fieldAddress(clang::QualType pointeeType,
+                                const clang::RecordDecl *record,
+                                AddrHandle baseAddr,
+                                size_t fieldIndex);
 
         ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node) {
             const auto hash = node->hash();

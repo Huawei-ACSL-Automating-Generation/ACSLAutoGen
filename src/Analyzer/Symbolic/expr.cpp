@@ -43,6 +43,23 @@ namespace acslg::analyzer::symbolic {
     }
 
     namespace {
+        std::optional<utils::not_null<std::unique_ptr<const Address>>> cloneAddress(
+            std::optional<AddrHandle> handle) {
+            if (!handle)
+                return std::nullopt;
+            std::unique_ptr<const Address> cloned =
+                handle.value()->addressClone().into_underlying();
+            return utils::not_null<std::unique_ptr<const Address>>{std::move(cloned)};
+        }
+
+        std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> cloneExpr(
+            std::optional<ExprHandle> handle) {
+            if (!handle)
+                return std::nullopt;
+            std::unique_ptr<const SymbolicExpr> cloned = handle.value()->clone().into_underlying();
+            return utils::not_null<std::unique_ptr<const SymbolicExpr>>{std::move(cloned)};
+        }
+
         template <class... Ts> struct overloaded : Ts... {
             using Ts::operator()...;
         };
@@ -152,6 +169,31 @@ namespace acslg::analyzer::symbolic {
         }
         inline bool literalAsBool(const LiteralExpr &L) { return L.getLiteralValue() != 0; }
     } // namespace
+
+    AddrHandle ExprFactory::variableAddress(utils::not_null<const clang::VarDecl *> from) {
+        return internAddress(std::make_unique<VariableAddress>(from));
+    }
+
+    AddrHandle ExprFactory::symbolAddress(
+        clang::QualType pointeeType,
+        std::optional<AddrHandle> from,
+        SourcePoint fromPoint,
+        std::optional<ExprHandle> offset,
+        std::optional<ExprHandle> length) {
+        return internAddress(std::make_unique<SymbolAddress>(
+            pointeeType, cloneAddress(from), std::move(fromPoint), cloneExpr(offset),
+            cloneExpr(length)));
+    }
+
+    AddrHandle ExprFactory::fieldAddress(clang::QualType pointeeType,
+                                         const clang::RecordDecl *record,
+                                         AddrHandle baseAddr,
+                                         size_t fieldIndex) {
+        std::unique_ptr<const Address> base = baseAddr->addressClone().into_underlying();
+        return internAddress(std::make_unique<FieldAddress>(
+            pointeeType, record, utils::not_null<std::unique_ptr<const Address>>{std::move(base)},
+            fieldIndex));
+    }
 
     /**
      * @brief Factory for creating an unknown symbolic value placeholder.
