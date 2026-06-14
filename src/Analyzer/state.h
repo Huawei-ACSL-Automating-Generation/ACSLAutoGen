@@ -266,12 +266,12 @@ namespace acslg::analyzer {
             else if (len == 1)
                 return std::make_unique<symbolic::SymbolAddress>(
                     base.pointeeType_, std::move(base.fromAddr_), base.fromPoint_,
-                    std::make_unique<symbolic::LiteralExpr>(off));
+                    std::make_unique<symbolic::detail::LiteralExprNode>(off));
             else
                 return make_unique<symbolic::SymbolAddress>(
                     base.pointeeType_, std::move(base.fromAddr_), base.fromPoint_,
-                    std::make_unique<symbolic::LiteralExpr>(off),
-                    std::make_unique<symbolic::LiteralExpr>(len));
+                    std::make_unique<symbolic::detail::LiteralExprNode>(off),
+                    std::make_unique<symbolic::detail::LiteralExprNode>(len));
         }
 
         /// Helper to access variable address map from owner

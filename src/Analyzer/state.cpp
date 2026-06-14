@@ -579,36 +579,36 @@ namespace acslg::analyzer {
                     std::unique_ptr<symbolic::SymbolicExpr> result;
 
                     if (litType->isBooleanType()) {
-                        result = std::make_unique<symbolic::LiteralExpr>(
+                        result = std::make_unique<symbolic::detail::LiteralExprNode>(
                             static_cast<bool>(ap.getZExtValue()));
                     } else if (litType->isUnsignedIntegerType()) {
                         if (ap.getBitWidth() <= 8)
-                            result = std::make_unique<symbolic::LiteralExpr>(
+                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
                                 static_cast<unsigned char>(ap.getZExtValue()));
                         else if (ap.getBitWidth() <= 16)
-                            result = std::make_unique<symbolic::LiteralExpr>(
+                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
                                 static_cast<unsigned short>(ap.getZExtValue()));
                         else if (ap.getBitWidth() <= 32)
-                            result = std::make_unique<symbolic::LiteralExpr>(
+                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
                                 static_cast<unsigned int>(ap.getZExtValue()));
                         else if (ap.getBitWidth() <= 64)
-                            result = std::make_unique<symbolic::LiteralExpr>(
+                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
                                 static_cast<uint64_t>(ap.getZExtValue()));
                         else
                             UNIMPLEMENT("Unsupported unsigned integer literal with bit width > 64: "
                                         << ap.getBitWidth());
                     } else {
                         if (ap.getBitWidth() <= 8)
-                            result = std::make_unique<symbolic::LiteralExpr>(
+                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
                                 static_cast<char>(ap.getSExtValue()));
                         else if (ap.getBitWidth() <= 16)
-                            result = std::make_unique<symbolic::LiteralExpr>(
+                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
                                 static_cast<short>(ap.getSExtValue()));
                         else if (ap.getBitWidth() <= 32)
-                            result = std::make_unique<symbolic::LiteralExpr>(
+                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
                                 static_cast<int>(ap.getSExtValue()));
                         else if (ap.getBitWidth() <= 64)
-                            result = std::make_unique<symbolic::LiteralExpr>(
+                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
                                 static_cast<int64_t>(ap.getSExtValue()));
                         else
                             UNIMPLEMENT("Unsupported signed integer literal with bit width > 64: "
@@ -681,7 +681,7 @@ namespace acslg::analyzer {
                         if (varDecl->getType()->isPointerType() &&
                             !varExpr->tryEvalAsSymbolAddr()) {
                             if (auto *lit =
-                                    symbolic::dyn_cast<symbolic::LiteralExpr>(varExpr.get().get());
+                                    symbolic::dyn_cast<symbolic::detail::LiteralExprNode>(varExpr.get().get());
                                 lit && lit->getLiteralValue() == 0) {
                                 // Keep NULL as Int(0) rather than fabricating a pointer.
                             } else {
@@ -703,7 +703,7 @@ namespace acslg::analyzer {
                     if (const auto *enumDecl =
                             dyn_cast<clang::EnumConstantDecl>(declRef->getDecl())) {
                         llvm::APSInt value = enumDecl->getInitVal();
-                        auto litExpr       = std::make_unique<symbolic::LiteralExpr>(
+                        auto litExpr       = std::make_unique<symbolic::detail::LiteralExprNode>(
                             static_cast<int>(value.getSExtValue()));
                         Formulas exprs;
                         exprs.push_back(std::move(litExpr));
@@ -843,7 +843,7 @@ namespace acslg::analyzer {
                         auto sizeExpr = evalNoBranch(call->getArg(0));
                         if (auto c = sizeExpr->tryEvalAsConstant(); c && *c == 0) {
                             Formulas exprs;
-                            exprs.emplace_back(std::make_unique<symbolic::LiteralExpr>(0));
+                            exprs.emplace_back(std::make_unique<symbolic::detail::LiteralExprNode>(0));
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
@@ -964,7 +964,7 @@ namespace acslg::analyzer {
                             DEBUG("BSL_SAL_Calloc: structure type");
                             auto addr = std::make_unique<symbolic::SymbolAddress>(
                                 elemTy, std::nullopt, pointAfterCall,
-                                std::make_unique<symbolic::LiteralExpr>(0));
+                                std::make_unique<symbolic::detail::LiteralExprNode>(0));
 
                             // Build a Structure whose fields (and nested structs) are Unknown, then
                             // write it.
@@ -1069,14 +1069,14 @@ namespace acslg::analyzer {
                         auto lengthExpr = countExpr->clone();
                         bool noCopy     = false;
                         if (auto *lit =
-                                symbolic::dyn_cast<symbolic::LiteralExpr>(lengthExpr.get().get())) {
+                                symbolic::dyn_cast<symbolic::detail::LiteralExprNode>(lengthExpr.get().get())) {
                             const auto raw = static_cast<uint64_t>(lit->getLiteralValue());
                             if (raw == 0) {
                                 noCopy = true;
                             } else if (sz > 1) {
                                 if (raw % sz != 0)
                                     UNIMPLEMENT("memcpy size is not a multiple of element size.");
-                                lengthExpr = std::make_unique<symbolic::LiteralExpr>(raw / sz);
+                                lengthExpr = std::make_unique<symbolic::detail::LiteralExprNode>(raw / sz);
                             }
                         } else if (sz > 1) {
                             lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
@@ -1162,14 +1162,14 @@ namespace acslg::analyzer {
                         auto lengthExpr = countExpr->clone();
                         bool noSet      = false;
                         if (auto *lit =
-                                symbolic::dyn_cast<symbolic::LiteralExpr>(lengthExpr.get().get())) {
+                                symbolic::dyn_cast<symbolic::detail::LiteralExprNode>(lengthExpr.get().get())) {
                             const auto raw = static_cast<uint64_t>(lit->getLiteralValue());
                             if (raw == 0) {
                                 noSet = true;
                             } else if (sz > 1) {
                                 if (raw % sz != 0)
                                     UNIMPLEMENT("memset_s size is not a multiple of element size.");
-                                lengthExpr = std::make_unique<symbolic::LiteralExpr>(raw / sz);
+                                lengthExpr = std::make_unique<symbolic::detail::LiteralExprNode>(raw / sz);
                             }
                         } else if (sz > 1) {
                             lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
@@ -1361,7 +1361,7 @@ namespace acslg::analyzer {
                                 if (oldVal == std::nullopt)
                                     ERROR("memoryState_ doesn't contain addr.");
                                 // compute new = old +/- 1
-                                auto one    = std::make_unique<symbolic::LiteralExpr>(1);
+                                auto one    = std::make_unique<symbolic::detail::LiteralExprNode>(1);
                                 auto binOp  = (op == PreInc || op == PostInc)
                                                   ? symbolic::BinaryOpExpr::Operator::Add
                                                   : symbolic::BinaryOpExpr::Operator::Subtract;
@@ -1498,7 +1498,7 @@ namespace acslg::analyzer {
                         return {std::move(sub.first), std::move(sub.second)};
                     }
                     auto resultTy = symbolic::deriveType(ce->getType());
-                    auto lit      = std::make_unique<symbolic::LiteralExpr>(
+                    auto lit      = std::make_unique<symbolic::detail::LiteralExprNode>(
                         v.isSigned() ? static_cast<int64_t>(v.getSExtValue())
                                      : static_cast<uint64_t>(v.getZExtValue()));
                     lit->setValType(resultTy);
@@ -1540,7 +1540,7 @@ namespace acslg::analyzer {
 
                         // Materialize a literal of the expression’s result type (typically size_t).
                         auto resultTy = symbolic::deriveType(uett->getType());
-                        auto lit      = std::make_unique<symbolic::LiteralExpr>(value);
+                        auto lit      = std::make_unique<symbolic::detail::LiteralExprNode>(value);
                         lit->setValType(resultTy);
 
                         EvalResult r;
@@ -2045,7 +2045,7 @@ namespace acslg::analyzer {
                 if (auto &len = it.key.getLength()) {
                     it.rightHash = addedHash(*it.key.getOffset(), *len.value());
                 } else {
-                    it.rightHash = addedHash(*it.key.getOffset(), symbolic::LiteralExpr{1});
+                    it.rightHash = addedHash(*it.key.getOffset(), symbolic::detail::LiteralExprNode{1});
                 }
 
                 items.emplace_back(std::move(it));
@@ -2118,7 +2118,7 @@ namespace acslg::analyzer {
                         if (auto &len = itemToBeMerged.key.getLength()) {
                             mergedKey.addLength(len.value()->clone());
                         } else {
-                            mergedKey.addLength(std::make_unique<symbolic::LiteralExpr>(1));
+                            mergedKey.addLength(std::make_unique<symbolic::detail::LiteralExprNode>(1));
                         }
 
                         // Advance to successor

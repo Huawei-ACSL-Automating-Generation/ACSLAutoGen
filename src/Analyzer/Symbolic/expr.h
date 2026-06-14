@@ -45,7 +45,6 @@ namespace acslg::analyzer::symbolic {
         class BinaryOpExprNode;
     }
 
-    using LiteralExpr = detail::LiteralExprNode;
     using UnaryOpExpr = detail::UnaryOpExprNode;
     using BinaryOpExpr = detail::BinaryOpExprNode;
 
@@ -438,10 +437,10 @@ namespace acslg::analyzer::symbolic {
             return std::nullopt;
         };
         /**
-         * @brief Evaluate to a LiteralExpr when the expression is fully constant.
+         * @brief Evaluate to a literal node when the expression is fully constant.
          * @return Newly allocated literal or nullptr if not constant.
          */
-        virtual std::unique_ptr<LiteralExpr> evalToConstExpr() const { return nullptr; }
+        virtual std::unique_ptr<detail::LiteralExprNode> evalToConstExpr() const { return nullptr; }
 
         /**
          * @brief Identify whether this expression represents an unknown value.
@@ -684,7 +683,7 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
-        std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
+        std::unique_ptr<detail::LiteralExprNode> evalToConstExpr() const override;
 
         virtual bool equal(const SymbolicExpr &expr) const override;
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
@@ -792,7 +791,7 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
-        std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
+        std::unique_ptr<detail::LiteralExprNode> evalToConstExpr() const override;
 
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override {
@@ -883,7 +882,7 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
-        std::unique_ptr<LiteralExpr> evalToConstExpr() const override;
+        std::unique_ptr<detail::LiteralExprNode> evalToConstExpr() const override;
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
@@ -1495,15 +1494,15 @@ namespace acslg::analyzer::symbolic {
         ExprHandle handle_;
     };
 
-    class Literal : public Expr {
+    class LiteralExpr : public Expr {
       public:
-        explicit Literal(bool value) : Expr(make(value)) {}
-        explicit Literal(int value) : Expr(make(value)) {}
-        explicit Literal(unsigned int value) : Expr(make(value)) {}
-        explicit Literal(short value) : Expr(make(value)) {}
-        explicit Literal(unsigned short value) : Expr(make(value)) {}
-        explicit Literal(int64_t value) : Expr(make(value)) {}
-        explicit Literal(uint64_t value) : Expr(make(value)) {}
+        explicit LiteralExpr(bool value) : Expr(make(value)) {}
+        explicit LiteralExpr(int value) : Expr(make(value)) {}
+        explicit LiteralExpr(unsigned int value) : Expr(make(value)) {}
+        explicit LiteralExpr(short value) : Expr(make(value)) {}
+        explicit LiteralExpr(unsigned short value) : Expr(make(value)) {}
+        explicit LiteralExpr(int64_t value) : Expr(make(value)) {}
+        explicit LiteralExpr(uint64_t value) : Expr(make(value)) {}
 
       private:
         template <typename T> static Expr make(T value) {
@@ -1520,7 +1519,7 @@ namespace acslg::analyzer::symbolic {
         inline static constexpr signed long ZERO_OFFSET =
             0; ///< Unify the type of zero under zero offset. This type should be the same as the
                ///< type of the zero value in SymbolicExpr::simplifiedExprIfLinear, or relax the
-               ///< type comparison in LiteralExpr's equal method.
+               ///< type comparison in LiteralExprNode's equal method.
         struct BaseInfo;
         class RangeIndex; // todo: Separate `SymbolAddress` into `SymbolAddress` and `RangeExpr`,
                           // making `RangeIndex` a nested type within `RangeExpr`.
@@ -1549,7 +1548,7 @@ namespace acslg::analyzer::symbolic {
         void setOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> offset);
         void addOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
         void subOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
-        void resetOffset() { offset_ = std::make_unique<LiteralExpr>(ZERO_OFFSET); }
+        void resetOffset() { offset_ = std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET); }
 
         utils::not_null<std::unique_ptr<SymbolAddress>> withOffset(
             utils::not_null<std::unique_ptr<SymbolicExpr>> offset) const;
@@ -2037,15 +2036,15 @@ namespace acslg::analyzer::symbolic {
         ::acslg::utils::not_null<std::unique_ptr<::acslg::analyzer::symbolic::SymbolicExpr>> in,
         std::uint64_t sizeofBytes) {
         using ::acslg::analyzer::symbolic::BinaryOpExpr;
-        using ::acslg::analyzer::symbolic::LiteralExpr;
+        using ::acslg::analyzer::symbolic::detail::LiteralExprNode;
         using ::acslg::analyzer::symbolic::SymbolicExpr;
 
         // Literal equals sizeofBytes -> return 1
-        if (auto *lit = dyn_cast<LiteralExpr>(in.get().get())) {
+        if (auto *lit = dyn_cast<LiteralExprNode>(in.get().get())) {
             const auto v = static_cast<std::uint64_t>(lit->getLiteralValue());
             if (v == sizeofBytes) {
                 return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{
-                    std::make_unique<LiteralExpr>(std::uint64_t{1})};
+                    std::make_unique<LiteralExprNode>(std::uint64_t{1})};
             }
             return in;
         }
@@ -2057,12 +2056,12 @@ namespace acslg::analyzer::symbolic {
                 auto L = bin->getLeft();
                 auto R = bin->getRight();
 
-                if (auto *lLit = dyn_cast<LiteralExpr>(L.get())) {
+                if (auto *lLit = dyn_cast<LiteralExprNode>(L.get())) {
                     if (static_cast<std::uint64_t>(lLit->getLiteralValue()) == sizeofBytes) {
                         return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{R->clone()};
                     }
                 }
-                if (auto *rLit = dyn_cast<LiteralExpr>(R.get())) {
+                if (auto *rLit = dyn_cast<LiteralExprNode>(R.get())) {
                     if (static_cast<std::uint64_t>(rLit->getLiteralValue()) == sizeofBytes) {
                         return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{L->clone()};
                     }

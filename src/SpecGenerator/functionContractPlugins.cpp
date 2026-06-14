@@ -40,13 +40,13 @@ namespace acslg::spec_generator {
                                        std::unordered_set<const clang::VarDecl *> &out) {
             using symb::BinaryOpExpr;
             using symb::FieldAddress;
-            using symb::LiteralExpr;
+            using symb::detail::LiteralExprNode;
             using symb::SymbolAddress;
             using symb::SymbolValue;
             using symb::UnaryOpExpr;
             using symb::VariableAddress;
 
-            if (auto *lit = symb::dyn_cast<LiteralExpr>(&expr)) {
+            if (auto *lit = symb::dyn_cast<LiteralExprNode>(&expr)) {
                 (void)lit;
                 return;
             }

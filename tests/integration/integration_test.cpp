@@ -175,7 +175,7 @@ namespace acslg::test::integration {
             ::testing::ExitedWithCode(0), "");
         auto postState = execOnFirstFunc(code);
         ASSERT_EQ(*getReturnExprOfFirstPath(*postState)->simplifiedExpr(),
-                  *analyzer::symbolic::LiteralExpr{0}.simplifiedExpr());
+                  *analyzer::symbolic::detail::LiteralExprNode{0}.simplifiedExpr());
     }
 
     TEST(IntegrationTest, CorrectPostStateOfLoop_1) {

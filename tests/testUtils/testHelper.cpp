@@ -310,7 +310,7 @@ namespace acslg::test::utils {
     }
 
     symbolic::SymbolAddress FixtureWithCode::makePointAddr(unsigned int id, uint64_t off) {
-        return makeRangeAddr(id, make_unique<symbolic::LiteralExpr>(static_cast<uint64_t>(off)),
+        return makeRangeAddr(id, make_unique<symbolic::detail::LiteralExprNode>(static_cast<uint64_t>(off)),
                              nullptr);
     }
 

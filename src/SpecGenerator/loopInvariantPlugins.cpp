@@ -286,14 +286,14 @@ namespace acslg::spec_generator {
                 case BO_LT: {
                     // Normalize strict inequalities to non-strict to simplify invariant printing.
                     auto newRHS = std::make_unique<symb::BinaryOpExpr>(
-                        rhs->clone(), Subtract, std::make_unique<symb::LiteralExpr>(1));
+                        rhs->clone(), Subtract, std::make_unique<symb::detail::LiteralExprNode>(1));
                     loopCond = std::make_unique<symb::BinaryOpExpr>(lhs->clone(), LessEqual,
                                                                     std::move(newRHS));
                     break;
                 }
                 case BO_GT: {
                     auto newRHS = std::make_unique<symb::BinaryOpExpr>(
-                        rhs->clone(), Add, std::make_unique<symb::LiteralExpr>(1));
+                        rhs->clone(), Add, std::make_unique<symb::detail::LiteralExprNode>(1));
                     loopCond = std::make_unique<symb::BinaryOpExpr>(lhs->clone(), GreaterEqual,
                                                                     std::move(newRHS));
                     break;
@@ -312,13 +312,13 @@ namespace acslg::spec_generator {
                     // - step > 0 (increasing): i != bound is normalized as i <= bound-1
                     if (indexInfo.indexPattern.step < 0) {
                         auto rhsPlus1 = std::make_unique<symb::BinaryOpExpr>(
-                            rhs->clone(), Add, std::make_unique<symb::LiteralExpr>(1));
+                            rhs->clone(), Add, std::make_unique<symb::detail::LiteralExprNode>(1));
                         auto geExpr = std::make_unique<symb::BinaryOpExpr>(
                             lhs->clone(), GreaterEqual, std::move(rhsPlus1));
                         loopCond = std::move(geExpr);
                     } else if (indexInfo.indexPattern.step > 0) {
                         auto rhsMinus1 = std::make_unique<symb::BinaryOpExpr>(
-                            rhs->clone(), Subtract, std::make_unique<symb::LiteralExpr>(1));
+                            rhs->clone(), Subtract, std::make_unique<symb::detail::LiteralExprNode>(1));
                         auto leExpr = std::make_unique<symb::BinaryOpExpr>(lhs->clone(), LessEqual,
                                                                            std::move(rhsMinus1));
                         loopCond    = std::move(leExpr);
@@ -350,7 +350,7 @@ namespace acslg::spec_generator {
                     if (constVal == std::nullopt)
                         continue;
                     symbolEntry->getMutMemoryState().write(
-                        addr, std::make_unique<symb::LiteralExpr>(constVal.value()));
+                        addr, std::make_unique<symb::detail::LiteralExprNode>(constVal.value()));
                 }
             }
             auto loopCurrent = entryAndCurrentInfo.symbolicLoopCurrent->clone();
@@ -459,7 +459,7 @@ namespace acslg::spec_generator {
                     if (constVal == std::nullopt)
                         continue;
                     symbolEntry->getMutMemoryState().write(
-                        addr, std::make_unique<symb::LiteralExpr>(constVal.value()));
+                        addr, std::make_unique<symb::detail::LiteralExprNode>(constVal.value()));
                 }
             }
 
@@ -605,7 +605,7 @@ namespace acslg::spec_generator {
                     // zero and set length to loopCount to represent a contiguous writable range.
                     auto result = *symbolAddr;
                     result.setOffset(
-                        std::make_unique<symb::LiteralExpr>(symb::SymbolAddress::ZERO_OFFSET));
+                        std::make_unique<symb::detail::LiteralExprNode>(symb::SymbolAddress::ZERO_OFFSET));
                     if (!indexInfo.preciseLoopCount->isUnknown())
                         result.setLength(indexInfo.preciseLoopCount->simplifiedExpr());
                     else
@@ -659,7 +659,7 @@ namespace acslg::spec_generator {
                         // todo
                         // std::make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(),
                         // Add,
-                        //                           std::make_unique<LiteralExpr>(pattern.value().step_)));
+                        //                           std::make_unique<detail::LiteralExprNode>(pattern.value().step_)));
 
                         // Deal with loops like
                         // {
@@ -707,7 +707,7 @@ namespace acslg::spec_generator {
                                 std::make_unique<symb::BinaryOpExpr>(
                                     pattern.value().initialValue->clone(), Add,
                                     std::make_unique<symb::BinaryOpExpr>(
-                                        std::make_unique<symb::LiteralExpr>(pattern.value().step),
+                                        std::make_unique<symb::detail::LiteralExprNode>(pattern.value().step),
                                         Multiply, indexInfo.preciseLoopCount->clone())));
                             if (!ok)
                                 UNREACHABLE();
@@ -758,13 +758,13 @@ namespace acslg::spec_generator {
                                            indexValueAfterLoop->clone(), LessThan,
                                            std::make_unique<symb::BinaryOpExpr>(
                                                indexInfo.indexBound->clone(), Add,
-                                               std::make_unique<symb::LiteralExpr>(
+                                               std::make_unique<symb::detail::LiteralExprNode>(
                                                    indexInfo.indexPattern.step)))
                                      : std::make_unique<symb::BinaryOpExpr>(
                                            indexValueAfterLoop->clone(), GreaterThan,
                                            std::make_unique<symb::BinaryOpExpr>(
                                                indexInfo.indexBound->clone(), Add,
-                                               std::make_unique<symb::LiteralExpr>(
+                                               std::make_unique<symb::detail::LiteralExprNode>(
                                                    indexInfo.indexPattern.step))));
 
                             condsForInsert.emplace(firstIndexCond->hash(), firstIndexCond->clone());
@@ -1567,7 +1567,7 @@ namespace acslg::spec_generator {
                     return std::make_unique<symb::BinaryOpExpr>(
                         initValue->clone(), Add,
                         std::make_unique<symb::BinaryOpExpr>(
-                            std::make_unique<symb::LiteralExpr>(step), Multiply,
+                            std::make_unique<symb::detail::LiteralExprNode>(step), Multiply,
                             std::make_unique<symb::BinaryOpExpr>(
                                 std::make_unique<symb::SymbolAddress::RangeIndex>("k"), Subtract,
                                 indexInfo.indexSymbolicValue->clone())));
@@ -1575,7 +1575,7 @@ namespace acslg::spec_generator {
                 return std::make_unique<symb::BinaryOpExpr>(
                     initValue->clone(), Add,
                     std::make_unique<symb::BinaryOpExpr>(
-                        std::make_unique<symb::LiteralExpr>(step), Multiply,
+                        std::make_unique<symb::detail::LiteralExprNode>(step), Multiply,
                         std::make_unique<symb::BinaryOpExpr>(
                             indexInfo.indexSymbolicValue->clone(), Subtract,
                             std::make_unique<symb::SymbolAddress::RangeIndex>("k"))));

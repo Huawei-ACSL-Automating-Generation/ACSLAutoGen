@@ -169,7 +169,7 @@ namespace acslg::test::unit::analyzer {
 
     namespace {
         using namespace symbolic;
-        unique_ptr<SymbolicExpr> makeConstU64(uint64_t v) { return make_unique<LiteralExpr>(v); }
+        unique_ptr<SymbolicExpr> makeConstU64(uint64_t v) { return make_unique<detail::LiteralExprNode>(v); }
 
         unique_ptr<SymbolicExpr> makeAdd(unique_ptr<SymbolicExpr> a, unique_ptr<SymbolicExpr> b) {
             return make_unique<BinaryOpExpr>(std::move(a), BinaryOpExpr::Operator::Add,
@@ -309,14 +309,14 @@ namespace acslg::test::unit::analyzer {
         config.noStateLabelFunctionAt = true;
 
         // Boolean literal
-        auto litTrue = std::make_unique<LiteralExpr>(true);
+        auto litTrue = std::make_unique<detail::LiteralExprNode>(true);
         auto resTrue = litTrue->getACSL(config);
         ASSERT_TRUE(resTrue);
         EXPECT_EQ(resTrue.value().first, "true");
         EXPECT_TRUE(resTrue.value().second.empty());
 
         // Integer literal
-        auto litInt = std::make_unique<LiteralExpr>(123);
+        auto litInt = std::make_unique<detail::LiteralExprNode>(123);
         auto resInt = litInt->getACSL(config);
         ASSERT_TRUE(resInt);
         EXPECT_EQ(resInt.value().first, "123");
@@ -329,29 +329,29 @@ namespace acslg::test::unit::analyzer {
         config.noStateLabelFunctionAt = true;
 
         // Simple addition: 5 + 3
-        auto exprSimple = std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(5),
+        auto exprSimple = std::make_unique<BinaryOpExpr>(std::make_unique<detail::LiteralExprNode>(5),
                                                          BinaryOpExpr::Operator::Add,
-                                                         std::make_unique<LiteralExpr>(3));
+                                                         std::make_unique<detail::LiteralExprNode>(3));
         auto resSimple  = exprSimple->getACSL(config);
         ASSERT_TRUE(resSimple);
         EXPECT_EQ(resSimple.value().first, "5 + 3");
 
         // Nested addition (left-child nested): (1 + 2) + 3 -> "1 + 2 + 3"
-        auto innerLeft = std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(1),
+        auto innerLeft = std::make_unique<BinaryOpExpr>(std::make_unique<detail::LiteralExprNode>(1),
                                                         BinaryOpExpr::Operator::Add,
-                                                        std::make_unique<LiteralExpr>(2));
+                                                        std::make_unique<detail::LiteralExprNode>(2));
         auto exprLeft  = std::make_unique<BinaryOpExpr>(
-            std::move(innerLeft), BinaryOpExpr::Operator::Add, std::make_unique<LiteralExpr>(3));
+            std::move(innerLeft), BinaryOpExpr::Operator::Add, std::make_unique<detail::LiteralExprNode>(3));
         auto resLeft = exprLeft->getACSL(config);
         ASSERT_TRUE(resLeft);
         EXPECT_EQ(resLeft.value().first, "1 + 2 + 3");
 
         // Nested addition (right-child nested): 1 + (2 + 3) -> "1 + (2 + 3)"
-        auto innerRight = std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(2),
+        auto innerRight = std::make_unique<BinaryOpExpr>(std::make_unique<detail::LiteralExprNode>(2),
                                                          BinaryOpExpr::Operator::Add,
-                                                         std::make_unique<LiteralExpr>(3));
+                                                         std::make_unique<detail::LiteralExprNode>(3));
         auto exprRight  = std::make_unique<BinaryOpExpr>(
-            std::make_unique<LiteralExpr>(1), BinaryOpExpr::Operator::Add, std::move(innerRight));
+            std::make_unique<detail::LiteralExprNode>(1), BinaryOpExpr::Operator::Add, std::move(innerRight));
         auto resRight = exprRight->getACSL(config);
         ASSERT_TRUE(resRight);
         EXPECT_EQ(resRight.value().first, "1 + (2 + 3)");
@@ -414,7 +414,7 @@ namespace acslg::test::unit::analyzer {
         std::string baseName = baseVar->getNameAsString();
 
         // Case 1: offset = 2
-        auto offset2 = std::make_unique<LiteralExpr>(2);
+        auto offset2 = std::make_unique<detail::LiteralExprNode>(2);
         auto addr2   = makeRangeAddr(0, std::move(offset2), nullptr);
         // ACSL should be "baseName + 2"
         auto resACSL = addr2.getACSL(config);
@@ -428,7 +428,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(resVal.value().second.empty());
 
         // Case 2: offset = 0 (no offset effectively)
-        auto offset0 = std::make_unique<LiteralExpr>(0);
+        auto offset0 = std::make_unique<detail::LiteralExprNode>(0);
         auto addr0   = makeRangeAddr(0, std::move(offset0), nullptr);
         // ACSL should be just "baseName"
         auto resACSL0 = addr0.getACSL(config);
@@ -452,8 +452,8 @@ namespace acslg::test::unit::analyzer {
         std::string baseName = baseVar->getNameAsString();
 
         // offset = 5, length = 3 => [5 .. 7]
-        auto offset5   = std::make_unique<LiteralExpr>(5);
-        auto length3   = std::make_unique<LiteralExpr>(3);
+        auto offset5   = std::make_unique<detail::LiteralExprNode>(5);
+        auto length3   = std::make_unique<detail::LiteralExprNode>(3);
         auto addrRange = makeRangeAddr(0, std::move(offset5), std::move(length3));
         auto resRange  = addrRange.getACSLOfValue(config);
         ASSERT_TRUE(resRange);
@@ -473,7 +473,7 @@ namespace acslg::test::unit::analyzer {
         auto baseVar = getVarDecl(0);
         ASSERT_NE(baseVar, nullptr);
         std::string baseName = baseVar->getNameAsString();
-        auto offset1         = std::make_unique<LiteralExpr>(2);
+        auto offset1         = std::make_unique<detail::LiteralExprNode>(2);
 
         // Attach the source point to the address
         auto addr    = makeRangeAddr(0, std::move(offset1), nullptr, sp);
@@ -507,7 +507,7 @@ namespace acslg::test::unit::analyzer {
         ASSERT_NE(baseVar, nullptr);
         std::string baseName = baseVar->getNameAsString();
 
-        auto offset2 = std::make_unique<LiteralExpr>(2);
+        auto offset2 = std::make_unique<detail::LiteralExprNode>(2);
         auto addr    = makeRangeAddr(0, std::move(offset2), nullptr, filtered);
 
         auto resACSL = addr.getACSL(config);
@@ -598,9 +598,8 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_EQ(oneA, oneB);
         EXPECT_NE(oneA, two);
-        EXPECT_TRUE(oneA.isa<symbolic::LiteralExpr>());
         EXPECT_TRUE(oneA.isa<symbolic::detail::LiteralExprNode>());
-        EXPECT_EQ(oneA.cast<symbolic::LiteralExpr>().getLiteralValue(), 1);
+        EXPECT_EQ(oneA.cast<symbolic::detail::LiteralExprNode>().getLiteralValue(), 1);
 
         auto sumA =
             factory.binary(oneA, symbolic::BinaryOpExpr::Operator::Add, two);
@@ -649,9 +648,9 @@ namespace acslg::test::unit::analyzer {
         auto legacy = std::make_unique<symbolic::BinaryOpExpr>(
             std::make_unique<symbolic::UnaryOpExpr>(
                 symbolic::UnaryOpExpr::Operator::Minus,
-                std::make_unique<symbolic::LiteralExpr>(1)),
+                std::make_unique<symbolic::detail::LiteralExprNode>(1)),
             symbolic::BinaryOpExpr::Operator::Add,
-            std::make_unique<symbolic::LiteralExpr>(2));
+            std::make_unique<symbolic::detail::LiteralExprNode>(2));
 
         auto imported = factory.importExpr(*legacy);
         auto repeated = factory.importExpr(*legacy->clone());
@@ -684,20 +683,21 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        symbolic::Literal x{10};
-        symbolic::Literal y{20};
+        symbolic::LiteralExpr x{10};
+        symbolic::LiteralExpr y{20};
 
         symbolic::Expr sum = x + y;
-        symbolic::Expr sameSum = symbolic::Literal{10} + symbolic::Literal{20};
+        symbolic::Expr sameSum = symbolic::LiteralExpr{10} + symbolic::LiteralExpr{20};
         symbolic::Expr product = x * y;
 
         EXPECT_EQ(sum, sameSum);
+        EXPECT_EQ(sum.handle().get().get(), sameSum.handle().get().get());
         EXPECT_NE(sum, product);
         EXPECT_EQ(sum.cast<symbolic::BinaryOpExpr>().getOperator(),
                   symbolic::BinaryOpExpr::Operator::Add);
         EXPECT_EQ(product.cast<symbolic::BinaryOpExpr>().getOperator(),
                   symbolic::BinaryOpExpr::Operator::Multiply);
-        EXPECT_EQ(x.cast<symbolic::LiteralExpr>().getLiteralValue(), 10);
+        EXPECT_EQ(x.cast<symbolic::detail::LiteralExprNode>().getLiteralValue(), 10);
     }
 
     TEST(ExprFacadeTest, OperatorsRejectDifferentFactories) {
@@ -706,11 +706,11 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::Expr left = [&] {
             symbolic::ExprFactoryScope scope(leftFactory);
-            return symbolic::Expr{symbolic::Literal{1}};
+            return symbolic::Expr{symbolic::LiteralExpr{1}};
         }();
         symbolic::Expr right = [&] {
             symbolic::ExprFactoryScope scope(rightFactory);
-            return symbolic::Expr{symbolic::Literal{2}};
+            return symbolic::Expr{symbolic::LiteralExpr{2}};
         }();
 
         ASSERT_DEATH({ (void)(left + right); }, "");
@@ -720,11 +720,11 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        symbolic::Literal one{1};
-        symbolic::Literal two{2};
+        symbolic::LiteralExpr one{1};
+        symbolic::LiteralExpr two{2};
 
         auto equalA = one.equalTo(two);
-        auto equalB = symbolic::Literal{1}.equalTo(symbolic::Literal{2});
+        auto equalB = symbolic::LiteralExpr{1}.equalTo(symbolic::LiteralExpr{2});
         auto less = one.lessThan(two);
         auto greaterEqual = two.greaterEqual(one);
         auto conjunction = equalA.logicalAnd(less);

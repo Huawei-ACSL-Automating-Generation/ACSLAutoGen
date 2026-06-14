@@ -121,32 +121,32 @@ namespace acslg::analyzer::symbolic {
             return (int64_t)x;
         }
 
-        inline std::unique_ptr<LiteralExpr> makeLiteralFromUnifiedType(Type t,
+        inline std::unique_ptr<detail::LiteralExprNode> makeLiteralFromUnifiedType(Type t,
                                                                        bool asBool,
                                                                        uint64_t raw) {
             if (asBool)
-                return std::make_unique<LiteralExpr>(asBool);
+                return std::make_unique<detail::LiteralExprNode>(asBool);
 
             unsigned bw = t.bitWidth ? t.bitWidth : 64;
             if (t.kind == ScalarKind::UInt) {
                 uint64_t u = coerceU(bw, raw);
                 if (bw <= 16)
-                    return std::make_unique<LiteralExpr>((unsigned short)u);
+                    return std::make_unique<detail::LiteralExprNode>((unsigned short)u);
                 if (bw <= 32)
-                    return std::make_unique<LiteralExpr>((unsigned int)u);
-                return std::make_unique<LiteralExpr>((uint64_t)u);
+                    return std::make_unique<detail::LiteralExprNode>((unsigned int)u);
+                return std::make_unique<detail::LiteralExprNode>((uint64_t)u);
             } else { // Int
                 int64_t s = coerceS(bw, raw);
                 if (bw <= 16)
-                    return std::make_unique<LiteralExpr>((short)s);
+                    return std::make_unique<detail::LiteralExprNode>((short)s);
                 if (bw <= 32)
-                    return std::make_unique<LiteralExpr>((int)s);
-                return std::make_unique<LiteralExpr>((int64_t)s);
+                    return std::make_unique<detail::LiteralExprNode>((int)s);
+                return std::make_unique<detail::LiteralExprNode>((int64_t)s);
             }
         }
 
         inline bool isBooleanExpr(const SymbolicExpr &e) {
-            if (auto *lit = dyn_cast<LiteralExpr>(&e))
+            if (auto *lit = dyn_cast<detail::LiteralExprNode>(&e))
                 return lit->getLiteralValue() == 0 || lit->getLiteralValue() == 1 ||
                        e.getValType().kind == ScalarKind::Bool;
 
@@ -174,7 +174,7 @@ namespace acslg::analyzer::symbolic {
             return e.getValType().kind == ScalarKind::Bool;
         }
 
-        inline uint64_t literalRawU(const LiteralExpr &L) {
+        inline uint64_t literalRawU(const detail::LiteralExprNode &L) {
             switch (L.getLiteralType()) {
                 using enum detail::LiteralExprNode::LiteralType;
                 case Boolean: return L.getLiteralValue() != 0 ? 1u : 0u;
@@ -187,7 +187,7 @@ namespace acslg::analyzer::symbolic {
             }
             return 0;
         }
-        inline bool literalAsBool(const LiteralExpr &L) { return L.getLiteralValue() != 0; }
+        inline bool literalAsBool(const detail::LiteralExprNode &L) { return L.getLiteralValue() != 0; }
     } // namespace
 
     AddrHandle ExprFactory::variableAddress(utils::not_null<const clang::VarDecl *> from) {
@@ -296,13 +296,13 @@ namespace acslg::analyzer::symbolic {
                 if (C == 1)
                     result = expr->clone();
                 else
-                    result = std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(C),
+                    result = std::make_unique<BinaryOpExpr>(std::make_unique<detail::LiteralExprNode>(C),
                                                             Multiply, expr->clone());
             } else {
                 unsigned absC = std::abs(C);
                 std::unique_ptr<SymbolicExpr> varExpr{nullptr};
                 if (absC != 1)
-                    varExpr = std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(absC),
+                    varExpr = std::make_unique<BinaryOpExpr>(std::make_unique<detail::LiteralExprNode>(absC),
                                                              Multiply, expr->clone());
                 else
                     varExpr = expr->clone().into_underlying();
@@ -318,9 +318,9 @@ namespace acslg::analyzer::symbolic {
                 // Append the constant term to the linear combination.
                 result = std::make_unique<BinaryOpExpr>(
                     std::move(result.value()), (inhomo > 0 ? Add : Subtract),
-                    std::make_unique<LiteralExpr>(std::abs(inhomo)));
+                    std::make_unique<detail::LiteralExprNode>(std::abs(inhomo)));
             } else
-                result = std::make_unique<LiteralExpr>(inhomo);
+                result = std::make_unique<detail::LiteralExprNode>(inhomo);
         }
         if (result == std::nullopt) {
             ERROR("Simplified expr is null! Something goes wrong.");
@@ -330,14 +330,14 @@ namespace acslg::analyzer::symbolic {
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::clone() const {
         switch (getLiteralType()) {
-            case LiteralType::Boolean: return std::make_unique<LiteralExpr>(data_.boolValue);
-            case LiteralType::Int: return std::make_unique<LiteralExpr>(data_.intValue);
-            case LiteralType::UnsignedInt: return std::make_unique<LiteralExpr>(data_.uintValue);
-            case LiteralType::Short: return std::make_unique<LiteralExpr>(data_.shortValue);
+            case LiteralType::Boolean: return std::make_unique<detail::LiteralExprNode>(data_.boolValue);
+            case LiteralType::Int: return std::make_unique<detail::LiteralExprNode>(data_.intValue);
+            case LiteralType::UnsignedInt: return std::make_unique<detail::LiteralExprNode>(data_.uintValue);
+            case LiteralType::Short: return std::make_unique<detail::LiteralExprNode>(data_.shortValue);
             case LiteralType::UnsignedShort:
-                return std::make_unique<LiteralExpr>(data_.ushortValue);
-            case LiteralType::Int64: return std::make_unique<LiteralExpr>(data_.int64Value);
-            case LiteralType::UInt64: return std::make_unique<LiteralExpr>(data_.uint64Value);
+                return std::make_unique<detail::LiteralExprNode>(data_.ushortValue);
+            case LiteralType::Int64: return std::make_unique<detail::LiteralExprNode>(data_.int64Value);
+            case LiteralType::UInt64: return std::make_unique<detail::LiteralExprNode>(data_.uint64Value);
         }
 
         UNREACHABLE();
@@ -694,7 +694,7 @@ namespace acslg::analyzer::symbolic {
         if (op_ == Op::Equal || op_ == Op::NotEqual) {
             auto trySimplify = [&](const SymbolicExpr &lhs, const SymbolicExpr &rhs)
                 -> std::optional<utils::expected<std::string, GetACSLError>> {
-                auto lit = dyn_cast<LiteralExpr>(&rhs);
+                auto lit = dyn_cast<detail::LiteralExprNode>(&rhs);
                 if (!lit)
                     return std::nullopt;
                 auto v = lit->getLiteralValue();
@@ -936,7 +936,7 @@ namespace acslg::analyzer::symbolic {
             std::make_unique<BinaryOpExpr>(
                 std::make_unique<BinaryOpExpr>(getOffset()->clone(), detail::BinaryOpExprNode::Operator::Add,
                                                length_.value()->clone()),
-                detail::BinaryOpExprNode::Operator::Subtract, std::make_unique<LiteralExpr>(1))
+                detail::BinaryOpExprNode::Operator::Subtract, std::make_unique<detail::LiteralExprNode>(1))
                 ->simplifiedExpr();
         auto rightBoundStr =
             callGetACSL(*rightBound, config, usedPoints, currentPoint, rangePrec, true);
@@ -1033,7 +1033,7 @@ namespace acslg::analyzer::symbolic {
             auto simplifyBoolCmp = [&](const SymbolicExpr &boolExpr,
                                        const SymbolicExpr &litExpr)
                 -> std::unique_ptr<SymbolicExpr> {
-                auto lit = dyn_cast<LiteralExpr>(&litExpr);
+                auto lit = dyn_cast<detail::LiteralExprNode>(&litExpr);
                 if (!lit)
                     return nullptr;
                 auto v = lit->getLiteralValue();
@@ -1104,21 +1104,21 @@ namespace acslg::analyzer::symbolic {
         return clone();
     }
 
-    std::unique_ptr<LiteralExpr> detail::LiteralExprNode::evalToConstExpr() const {
+    std::unique_ptr<detail::LiteralExprNode> detail::LiteralExprNode::evalToConstExpr() const {
         switch (type_) {
-            case LiteralType::Boolean: return std::make_unique<LiteralExpr>(data_.boolValue);
-            case LiteralType::Int: return std::make_unique<LiteralExpr>(data_.intValue);
-            case LiteralType::UnsignedInt: return std::make_unique<LiteralExpr>(data_.uintValue);
-            case LiteralType::Short: return std::make_unique<LiteralExpr>(data_.shortValue);
+            case LiteralType::Boolean: return std::make_unique<detail::LiteralExprNode>(data_.boolValue);
+            case LiteralType::Int: return std::make_unique<detail::LiteralExprNode>(data_.intValue);
+            case LiteralType::UnsignedInt: return std::make_unique<detail::LiteralExprNode>(data_.uintValue);
+            case LiteralType::Short: return std::make_unique<detail::LiteralExprNode>(data_.shortValue);
             case LiteralType::UnsignedShort:
-                return std::make_unique<LiteralExpr>(data_.ushortValue);
-            case LiteralType::Int64: return std::make_unique<LiteralExpr>(data_.int64Value);
-            case LiteralType::UInt64: return std::make_unique<LiteralExpr>(data_.uint64Value);
+                return std::make_unique<detail::LiteralExprNode>(data_.ushortValue);
+            case LiteralType::Int64: return std::make_unique<detail::LiteralExprNode>(data_.int64Value);
+            case LiteralType::UInt64: return std::make_unique<detail::LiteralExprNode>(data_.uint64Value);
         }
         return nullptr;
     }
 
-    std::unique_ptr<LiteralExpr> detail::UnaryOpExprNode::evalToConstExpr() const {
+    std::unique_ptr<detail::LiteralExprNode> detail::UnaryOpExprNode::evalToConstExpr() const {
         auto C = expr_->evalToConstExpr();
         if (!C)
             return nullptr;
@@ -1130,7 +1130,7 @@ namespace acslg::analyzer::symbolic {
         switch (op_) {
             case Op::LogicalNot: {
                 bool r = !literalAsBool(*C);
-                return std::make_unique<LiteralExpr>(r);
+                return std::make_unique<detail::LiteralExprNode>(r);
             }
             case Op::BitwiseNot: {
                 uint64_t x = coerceU(bw, literalRawU(*C));
@@ -1158,7 +1158,7 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    std::unique_ptr<LiteralExpr> detail::BinaryOpExprNode::evalToConstExpr() const {
+    std::unique_ptr<detail::LiteralExprNode> detail::BinaryOpExprNode::evalToConstExpr() const {
         using BO = detail::BinaryOpExprNode::Operator;
 
         auto Lc = left_->evalToConstExpr();
@@ -1167,19 +1167,19 @@ namespace acslg::analyzer::symbolic {
 
         if (op_ == BO::LogicalAnd) {
             if (!literalAsBool(*Lc))
-                return std::make_unique<LiteralExpr>(false);
+                return std::make_unique<detail::LiteralExprNode>(false);
             auto Rc = right_->evalToConstExpr();
             if (!Rc)
                 return nullptr;
-            return std::make_unique<LiteralExpr>(literalAsBool(*Rc));
+            return std::make_unique<detail::LiteralExprNode>(literalAsBool(*Rc));
         }
         if (op_ == BO::LogicalOr) {
             if (literalAsBool(*Lc))
-                return std::make_unique<LiteralExpr>(true);
+                return std::make_unique<detail::LiteralExprNode>(true);
             auto Rc = right_->evalToConstExpr();
             if (!Rc)
                 return nullptr;
-            return std::make_unique<LiteralExpr>(literalAsBool(*Rc));
+            return std::make_unique<detail::LiteralExprNode>(literalAsBool(*Rc));
         }
 
         auto Rc = right_->evalToConstExpr();
@@ -1189,7 +1189,7 @@ namespace acslg::analyzer::symbolic {
         auto tgt = unify(left_->getValType(), right_->getValType());
         if (tgt.kind == ScalarKind::Void) {
             if (op_ == BO::Equal || op_ == BO::NotEqual) {
-                auto emitBool = [](bool b) { return std::make_unique<LiteralExpr>(b); };
+                auto emitBool = [](bool b) { return std::make_unique<detail::LiteralExprNode>(b); };
                 bool eq = (literalRawU(*Lc) == literalRawU(*Rc));
                 return emitBool(op_ == BO::Equal ? eq : !eq);
             }
@@ -1197,7 +1197,7 @@ namespace acslg::analyzer::symbolic {
         }
         unsigned bw = tgt.bitWidth ? tgt.bitWidth : 64;
 
-        auto emitBool = [](bool b) { return std::make_unique<LiteralExpr>(b); };
+        auto emitBool = [](bool b) { return std::make_unique<detail::LiteralExprNode>(b); };
 
         if (tgt.kind == ScalarKind::UInt) {
             uint64_t L = coerceU(bw, literalRawU(*Lc));
@@ -1286,7 +1286,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     bool detail::LiteralExprNode::equal(const SymbolicExpr &expr) const {
-        const auto liter = dyn_cast<const LiteralExpr>(&expr);
+        const auto liter = dyn_cast<const detail::LiteralExprNode>(&expr);
         if (!liter)
             return false;
 
@@ -1834,7 +1834,7 @@ namespace acslg::analyzer::symbolic {
         : Address(SymbolicExpr::ExprKind::K_SymbolAddress,
                   SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                   pointeeType),
-          Symbol(Kind::K_SymbolAddress), offset_(std::make_unique<LiteralExpr>(ZERO_OFFSET)),
+          Symbol(Kind::K_SymbolAddress), offset_(std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET)),
           fromAddr_(std::move(from)), fromPoint_(fromPoint), length_(std::move(length)) {
         if (offset != std::nullopt)
             offset_ = std::move(offset.value());
@@ -1908,7 +1908,7 @@ namespace acslg::analyzer::symbolic {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
         if (length_ == std::nullopt) {
-            length_.emplace(std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(1),
+            length_.emplace(std::make_unique<BinaryOpExpr>(std::make_unique<detail::LiteralExprNode>(1),
                                                            detail::BinaryOpExprNode::Operator::Add,
                                                            std::move(extra))
                                 ->simplifiedExpr()
@@ -2042,7 +2042,7 @@ namespace acslg::analyzer::symbolic {
                 auto addr = std::make_unique<SymbolAddress>(elemTy, std::move(fieldAddr), fromPoint);
                 if (auto *cat = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr())) {
                     auto len =
-                        std::make_unique<LiteralExpr>(cat->getSize().getZExtValue());
+                        std::make_unique<detail::LiteralExprNode>(cat->getSize().getZExtValue());
                     addr->setLength(std::move(len));
                 }
                 fields_.emplace_back(std::move(addr));

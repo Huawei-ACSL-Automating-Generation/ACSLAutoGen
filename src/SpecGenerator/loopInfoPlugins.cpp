@@ -534,19 +534,19 @@ namespace acslg::spec_generator {
                                    ? std::make_unique<symb::BinaryOpExpr>(
                                          std::make_unique<symb::BinaryOpExpr>(
                                              boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
+                                             std::make_unique<symb::detail::LiteralExprNode>(
                                                  indexPattern.value().step - 1)),
                                          Subtract, indexPattern.value().initialValue->clone())
                                    : std::make_unique<symb::BinaryOpExpr>(
                                          indexPattern.value().initialValue->clone(), Subtract,
                                          std::make_unique<symb::BinaryOpExpr>(
                                              boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
+                                             std::make_unique<symb::detail::LiteralExprNode>(
                                                  indexPattern.value().step + 1)));
                 if (opCode.value() == BO_LE || opCode.value() == BO_GE)
                     maxLoopCount = std::make_unique<symb::BinaryOpExpr>(
                         std::move(maxLoopCount.value()), Add,
-                        std::make_unique<symb::LiteralExpr>(1));
+                        std::make_unique<symb::detail::LiteralExprNode>(1));
 
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
@@ -601,7 +601,7 @@ namespace acslg::spec_generator {
                         unaryExpr);
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
-                boundValue = std::make_unique<symb::LiteralExpr>((int64_t)0);
+                boundValue = std::make_unique<symb::detail::LiteralExprNode>((int64_t)0);
 
                 using enum symb::BinaryOpExpr::Operator;
                 if (indexPattern == std::nullopt || boundValue == std::nullopt)
@@ -612,14 +612,14 @@ namespace acslg::spec_generator {
                                    ? std::make_unique<symb::BinaryOpExpr>(
                                          std::make_unique<symb::BinaryOpExpr>(
                                              boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
+                                             std::make_unique<symb::detail::LiteralExprNode>(
                                                  indexPattern.value().step - 1)),
                                          Subtract, indexPattern.value().initialValue->clone())
                                    : std::make_unique<symb::BinaryOpExpr>(
                                          indexPattern.value().initialValue->clone(), Subtract,
                                          std::make_unique<symb::BinaryOpExpr>(
                                              boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
+                                             std::make_unique<symb::detail::LiteralExprNode>(
                                                  indexPattern.value().step + 1)));
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
@@ -683,7 +683,7 @@ namespace acslg::spec_generator {
                     entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(refExpr);
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
-                boundValue = std::make_unique<symb::LiteralExpr>((int64_t)0);
+                boundValue = std::make_unique<symb::detail::LiteralExprNode>((int64_t)0);
 
                 using enum symb::BinaryOpExpr::Operator;
                 if (indexPattern == std::nullopt || boundValue == std::nullopt)
@@ -694,14 +694,14 @@ namespace acslg::spec_generator {
                                    ? std::make_unique<symb::BinaryOpExpr>(
                                          std::make_unique<symb::BinaryOpExpr>(
                                              boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
+                                             std::make_unique<symb::detail::LiteralExprNode>(
                                                  indexPattern.value().step - 1)),
                                          Subtract, indexPattern.value().initialValue->clone())
                                    : std::make_unique<symb::BinaryOpExpr>(
                                          indexPattern.value().initialValue->clone(), Subtract,
                                          std::make_unique<symb::BinaryOpExpr>(
                                              boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
+                                             std::make_unique<symb::detail::LiteralExprNode>(
                                                  indexPattern.value().step + 1)));
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
