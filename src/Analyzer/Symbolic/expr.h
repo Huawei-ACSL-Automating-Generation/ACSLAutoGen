@@ -1309,6 +1309,8 @@ namespace acslg::analyzer::symbolic {
             return intern(std::make_unique<BinaryOpExpr>(left, op, right));
         }
 
+        ExprHandle importExpr(const SymbolicExpr &expr);
+
         AddrHandle variableAddress(utils::not_null<const clang::VarDecl *> from);
         AddrHandle symbolAddress(
             clang::QualType pointeeType,
@@ -1371,6 +1373,9 @@ namespace acslg::analyzer::symbolic {
       public:
         Expr(ExprFactory &factory, ExprHandle handle) : factory_(&factory), handle_(handle) {}
         explicit Expr(ExprHandle handle) : Expr(ExprFactoryScope::current(), handle) {}
+        explicit Expr(const SymbolicExpr &expr)
+            : Expr(ExprFactoryScope::current(),
+                   ExprFactoryScope::current().importExpr(expr)) {}
 
         const SymbolicExpr &operator*() const { return *handle_; }
         const SymbolicExpr *operator->() const { return handle_.get().get(); }

@@ -640,6 +640,33 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(negNode->getSub().get(), one.get().get());
     }
 
+    TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {
+        symbolic::ExprFactory factory;
+
+        auto legacy = std::make_unique<symbolic::BinaryOpExpr>(
+            std::make_unique<symbolic::UnaryOpExpr>(
+                symbolic::UnaryOpExpr::Operator::Minus,
+                std::make_unique<symbolic::LiteralExpr>(1)),
+            symbolic::BinaryOpExpr::Operator::Add,
+            std::make_unique<symbolic::LiteralExpr>(2));
+
+        auto imported = factory.importExpr(*legacy);
+        auto repeated = factory.importExpr(*legacy->clone());
+
+        EXPECT_EQ(imported, repeated);
+        auto one = factory.literal(1);
+        auto two = factory.literal(2);
+
+        const auto &bin = imported.cast<symbolic::BinaryOpExpr>();
+        EXPECT_EQ(bin.getRight().get(), two.get().get());
+        const auto *unary = symbolic::cast<symbolic::UnaryOpExpr>(bin.getLeft().get());
+        EXPECT_EQ(unary->getSub().get(), one.get().get());
+
+        symbolic::ExprFactoryScope scope(factory);
+        symbolic::Expr facade{*legacy};
+        EXPECT_EQ(facade.handle(), imported);
+    }
+
     TEST(ExprFactoryTest, UnknownBuilderReusesUnknownNode) {
         symbolic::ExprFactory factory;
 

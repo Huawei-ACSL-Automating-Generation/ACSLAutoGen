@@ -42,6 +42,25 @@ namespace acslg::analyzer::symbolic {
         return current_ != nullptr;
     }
 
+    ExprHandle ExprFactory::importExpr(const SymbolicExpr &expr) {
+        if (auto *literal = dyn_cast<LiteralExpr>(&expr))
+            return intern(literal->clone());
+
+        if (isa<UnknownExpr>(&expr))
+            return unknown();
+
+        if (auto *unaryExpr = dyn_cast<UnaryOpExpr>(&expr))
+            return unary(unaryExpr->getOperator(), importExpr(*unaryExpr->getSub()));
+
+        if (auto *binaryExpr = dyn_cast<BinaryOpExpr>(&expr)) {
+            auto left  = importExpr(*binaryExpr->getLeft());
+            auto right = importExpr(*binaryExpr->getRight());
+            return binary(left, binaryExpr->getOperator(), right);
+        }
+
+        return intern(expr.clone());
+    }
+
     namespace {
         std::optional<utils::not_null<std::unique_ptr<const Address>>> cloneAddress(
             std::optional<AddrHandle> handle) {
