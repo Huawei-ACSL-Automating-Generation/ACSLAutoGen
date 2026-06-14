@@ -710,7 +710,7 @@ namespace acslg::analyzer {
                 returnExpr_ = std::nullopt;
                 return;
             }
-            returnExpr_.emplace(std::move(expr).value().into_underlying());
+            returnExpr_.emplace(context_.getExprFactory().importExpr(*expr.value()));
         };
         /// @brief Update the control-flow marker for this path.
         void setPathState(PathState state) { currentState_ = state; }
@@ -777,8 +777,7 @@ namespace acslg::analyzer {
         // Holds the current path state. Default is set to Step
         PathState currentState_ = PathState::Step;
 
-        std::optional<utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>> returnExpr_ =
-            std::nullopt;
+        std::optional<symbolic::ExprHandle> returnExpr_ = std::nullopt;
 
         context::ACSLGContext &context_;
 

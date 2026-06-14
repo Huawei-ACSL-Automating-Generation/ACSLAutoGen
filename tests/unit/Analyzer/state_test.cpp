@@ -489,6 +489,27 @@ namespace acslg::test::unit::analyzer {
             nullptr);
     }
 
+    TEST_F(MergeWithTest, ReturnExprUsesInternedHandlesAcrossCloneAndMerge) {
+        pathA->setPathState(Path::PathState::Return);
+        pathB->setPathState(Path::PathState::Return);
+
+        pathA->setReturnExpr(makeLiteral(7));
+        ASSERT_TRUE(pathA->getReturnExpr());
+        auto returnHandle = pathA->getReturnExpr().value();
+
+        auto cloned = pathA->clone();
+        ASSERT_TRUE(cloned->getReturnExpr());
+        EXPECT_EQ(returnHandle, cloned->getReturnExpr().value());
+
+        pathB->setReturnExpr(makeLiteral(7));
+        ASSERT_TRUE(pathB->getReturnExpr());
+        EXPECT_EQ(returnHandle, pathB->getReturnExpr().value());
+
+        pathA->mergeWith(*pathB);
+        ASSERT_TRUE(pathA->getReturnExpr());
+        EXPECT_EQ(returnHandle, pathA->getReturnExpr().value());
+    }
+
     TEST_F(MemoryModelTest, MergeConstantRanges_TouchingSameValue_ShouldCoalesce) {
         MemoryModel mm;
         const unsigned baseId = 21;

@@ -91,7 +91,7 @@ namespace acslg::analyzer {
             }
             currentState_ = other.currentState_;
             if (other.returnExpr_)
-                returnExpr_.emplace(other.returnExpr_.value()->clone().into_underlying());
+                returnExpr_.emplace(other.returnExpr_.value());
             else
                 returnExpr_ = std::nullopt;
         } else {
@@ -203,7 +203,7 @@ namespace acslg::analyzer {
                 ERROR("mergeWith: Return state without return expression.");
             if (*returnExpr_.value() == *other.returnExpr_.value())
                 return;
-            returnExpr_.emplace(symbolic::UnknownExpr::makeUnknown().into_underlying());
+            returnExpr_.emplace(context_.getExprFactory().unknown());
         }
     }
 
@@ -464,7 +464,7 @@ namespace acslg::analyzer {
         for (const auto &cond : pathConditions_)
             cloned->pathConditions_.emplace(cond);
         if (returnExpr_)
-            cloned->returnExpr_.emplace(returnExpr_.value()->clone().into_underlying());
+            cloned->returnExpr_.emplace(returnExpr_.value());
         else
             cloned->returnExpr_ = std::nullopt;
         cloned->stmtCtx_ = stmtCtx_;
