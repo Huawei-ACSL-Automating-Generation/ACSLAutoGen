@@ -176,13 +176,14 @@ namespace acslg::analyzer::symbolic {
 
         inline uint64_t literalRawU(const LiteralExpr &L) {
             switch (L.getLiteralType()) {
-                case LiteralExpr::LiteralType::Boolean: return L.getLiteralValue() != 0 ? 1u : 0u;
-                case LiteralExpr::LiteralType::Int: return (uint64_t)(int64_t)L.getLiteralValue();
-                case LiteralExpr::LiteralType::UnsignedInt: return (uint64_t)L.getLiteralValue();
-                case LiteralExpr::LiteralType::Short: return (uint64_t)(int64_t)L.getLiteralValue();
-                case LiteralExpr::LiteralType::UnsignedShort: return (uint64_t)L.getLiteralValue();
-                case LiteralExpr::LiteralType::Int64: return (uint64_t)(int64_t)L.getLiteralValue();
-                case LiteralExpr::LiteralType::UInt64: return (uint64_t)L.getLiteralValue();
+                using enum detail::LiteralExprNode::LiteralType;
+                case Boolean: return L.getLiteralValue() != 0 ? 1u : 0u;
+                case Int: return (uint64_t)(int64_t)L.getLiteralValue();
+                case UnsignedInt: return (uint64_t)L.getLiteralValue();
+                case Short: return (uint64_t)(int64_t)L.getLiteralValue();
+                case UnsignedShort: return (uint64_t)L.getLiteralValue();
+                case Int64: return (uint64_t)(int64_t)L.getLiteralValue();
+                case UInt64: return (uint64_t)L.getLiteralValue();
             }
             return 0;
         }
@@ -327,7 +328,7 @@ namespace acslg::analyzer::symbolic {
         return std::move(result.value());
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> LiteralExpr::clone() const {
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::clone() const {
         switch (getLiteralType()) {
             case LiteralType::Boolean: return std::make_unique<LiteralExpr>(data_.boolValue);
             case LiteralType::Int: return std::make_unique<LiteralExpr>(data_.intValue);
@@ -394,7 +395,7 @@ namespace acslg::analyzer::symbolic {
         return std::make_unique<FieldAddress>(*this);
     }
 
-    int64_t LiteralExpr::getLiteralValue() const {
+    int64_t detail::LiteralExprNode::getLiteralValue() const {
         switch (getLiteralType()) {
             case LiteralType::Boolean: return data_.boolValue;
             case LiteralType::Int: return data_.intValue;
@@ -409,7 +410,7 @@ namespace acslg::analyzer::symbolic {
         return 0;
     }
 
-    size_t LiteralExpr::hash() const {
+    size_t detail::LiteralExprNode::hash() const {
         size_t seed = utils::hash_val(getKind(), type_);
 
         switch (type_) {
@@ -462,7 +463,7 @@ namespace acslg::analyzer::symbolic {
 
     size_t UnknownExpr::hash() const { return utils::hash_val(getKind()); }
 
-    std::string LiteralExpr::dump() const {
+    std::string detail::LiteralExprNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
 
@@ -653,7 +654,7 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> LiteralExpr::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> detail::LiteralExprNode::doGetACSL(
         const SymbolicExpr::GetACSLConfig &,
         std::unordered_set<SourcePoint> &,
         std::optional<SourcePoint>,
@@ -1006,7 +1007,7 @@ namespace acslg::analyzer::symbolic {
         return prefix + std::move(valueStr.value()) + suffix;
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> LiteralExpr::simplifiedExpr() const {
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::simplifiedExpr() const {
         return simplifiedExprIfLinear(); // Here, unlike a direct `clone`, after
                                          // `simplifiedExprIfLinear`, all constants will have the
                                          // same type.
@@ -1103,7 +1104,7 @@ namespace acslg::analyzer::symbolic {
         return clone();
     }
 
-    std::unique_ptr<LiteralExpr> LiteralExpr::evalToConstExpr() const {
+    std::unique_ptr<LiteralExpr> detail::LiteralExprNode::evalToConstExpr() const {
         switch (type_) {
             case LiteralType::Boolean: return std::make_unique<LiteralExpr>(data_.boolValue);
             case LiteralType::Int: return std::make_unique<LiteralExpr>(data_.intValue);
@@ -1284,7 +1285,7 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    bool LiteralExpr::equal(const SymbolicExpr &expr) const {
+    bool detail::LiteralExprNode::equal(const SymbolicExpr &expr) const {
         const auto liter = dyn_cast<const LiteralExpr>(&expr);
         if (!liter)
             return false;
@@ -1411,7 +1412,7 @@ namespace acslg::analyzer::symbolic {
                                   [](auto &lhs, auto &rhs) { return *lhs == *rhs; });
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> LiteralExpr::getSubstitutedExpr(
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::getSubstitutedExpr(
         const Path &,
         const SourcePoint &) const {
         // Nothing to substitute
@@ -1551,7 +1552,7 @@ namespace acslg::analyzer::symbolic {
         return newSt;
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> LiteralExpr::getRangeIndexSubstituted(
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &,
         const SymbolicExpr &) const {
         // Nothing to substitute
@@ -1647,7 +1648,7 @@ namespace acslg::analyzer::symbolic {
         return newSt;
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> LiteralExpr::getSubstitutedValueExpr(
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return it->second->clone();

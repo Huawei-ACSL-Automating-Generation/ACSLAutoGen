@@ -111,7 +111,7 @@ namespace acslg::analyzer::symbolic {
      * @brief Convert literal to a PPL linear expression when possible.
      * @return Linear expression or nullopt if unsupported type.
      */
-    std::optional<Parma_Polyhedra_Library::Linear_Expression> LiteralExpr::toLinearExpr(
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> detail::LiteralExprNode::toLinearExpr(
         const std::unordered_map<std::string, size_t> &) const {
         using namespace Parma_Polyhedra_Library;
         switch (type_) {
@@ -213,7 +213,7 @@ namespace acslg::analyzer::symbolic {
     /**
      * @brief Convert literal to linear expression using hashed-variable map variant.
      */
-    Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr(
+    Parma_Polyhedra_Library::Linear_Expression detail::LiteralExprNode::toLinearExpr(
         const std::unordered_map<size_t, size_t> &) const {
         switch (type_) {
             case LiteralType::Boolean:

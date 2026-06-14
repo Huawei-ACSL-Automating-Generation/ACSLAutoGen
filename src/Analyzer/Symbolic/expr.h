@@ -36,9 +36,14 @@ namespace acslg::analyzer::symbolic {
     class Address;
     class SymbolAddress;
     class SymbolValue;
-    class LiteralExpr;
     class Symbol;
     struct SymbolAddrBaseInfo;
+
+    namespace detail {
+        class LiteralExprNode;
+    }
+
+    using LiteralExpr = detail::LiteralExprNode;
 
     /**
      * @class SourcePoint
@@ -607,9 +612,11 @@ namespace acslg::analyzer::symbolic {
         std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> owned_;
     };
 
-    /// @class LiteralExpr
+    namespace detail {
+
+    /// @class LiteralExprNode
     /// @brief Represents a literal constant value.
-    class LiteralExpr : public SymbolicExpr {
+    class LiteralExprNode : public SymbolicExpr {
       public:
         enum class LiteralType {
             Boolean,
@@ -621,43 +628,43 @@ namespace acslg::analyzer::symbolic {
             UInt64
         };
 
-        LiteralExpr(bool value)
+        LiteralExprNode(bool value)
             : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Bool, 1}),
               type_(LiteralType::Boolean) {
             data_.boolValue = value;
         }
 
-        LiteralExpr(int value)
+        LiteralExprNode(int value)
             : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Int, 32}),
               type_(LiteralType::Int) {
             data_.intValue = value;
         }
 
-        LiteralExpr(unsigned int value)
+        LiteralExprNode(unsigned int value)
             : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::UInt, 32}),
               type_(LiteralType::UnsignedInt) {
             data_.uintValue = value;
         }
 
-        LiteralExpr(short value)
+        LiteralExprNode(short value)
             : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Int, 16}),
               type_(LiteralType::Short) {
             data_.shortValue = value;
         }
 
-        LiteralExpr(unsigned short value)
+        LiteralExprNode(unsigned short value)
             : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::UInt, 16}),
               type_(LiteralType::UnsignedShort) {
             data_.ushortValue = value;
         }
 
-        LiteralExpr(int64_t value)
+        LiteralExprNode(int64_t value)
             : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Int, 64}),
               type_(LiteralType::Int64) {
             data_.int64Value = value;
         }
 
-        LiteralExpr(uint64_t value)
+        LiteralExprNode(uint64_t value)
             : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::UInt, 64}),
               type_(LiteralType::UInt64) {
             data_.uint64Value = value;
@@ -719,6 +726,8 @@ namespace acslg::analyzer::symbolic {
             ~Data() {}
         } data_;
     };
+
+    } // namespace detail
 
     /// @class BinaryOpExpr
     /// @brief Represents a binary operation expression.
@@ -946,7 +955,6 @@ namespace acslg::analyzer::symbolic {
 
     namespace detail {
         using SymbolicExprNode = SymbolicExpr;
-        using LiteralExprNode  = LiteralExpr;
         using UnaryOpExprNode  = UnaryOpExpr;
         using BinaryOpExprNode = BinaryOpExpr;
         using UnknownExprNode  = UnknownExpr;
