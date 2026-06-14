@@ -603,14 +603,14 @@ namespace acslg::spec_generator {
                         TODO();
                     // Case A: the base address itself moves linearly (x-step). Reset the offset to
                     // zero and set length to loopCount to represent a contiguous writable range.
-                    auto result = *symbolAddr;
-                    result.setOffset(
-                        std::make_unique<symb::detail::LiteralExprNode>(symb::SymbolAddress::ZERO_OFFSET));
+                    auto result = symbolAddr->withOffset(
+                        std::make_unique<symb::detail::LiteralExprNode>(
+                            symb::SymbolAddress::ZERO_OFFSET));
                     if (!indexInfo.preciseLoopCount->isUnknown())
-                        result.setLength(indexInfo.preciseLoopCount->simplifiedExpr());
+                        result = result->withLength(indexInfo.preciseLoopCount->simplifiedExpr());
                     else
-                        result.setLength(indexInfo.maxLoopCount->simplifiedExpr());
-                    return result;
+                        result = result->withLength(indexInfo.maxLoopCount->simplifiedExpr());
+                    return *result;
                 }
 
                 auto offset = symbolAddr->getOffset();
@@ -626,13 +626,12 @@ namespace acslg::spec_generator {
                             TODO();
                         // Case B: the base is stable but the offset changes linearly (typical for
                         // p[i] where i changes). Use the initial offset and set length = loopCount.
-                        auto result = *symbolAddr;
-                        result.setOffset(pattern.value().initialValue->clone());
+                        auto result = symbolAddr->withOffset(pattern.value().initialValue->clone());
                         if (!indexInfo.preciseLoopCount->isUnknown())
-                            result.setLength(indexInfo.preciseLoopCount->simplifiedExpr());
+                            result = result->withLength(indexInfo.preciseLoopCount->simplifiedExpr());
                         else
-                            result.setLength(indexInfo.maxLoopCount->simplifiedExpr());
-                        return result;
+                            result = result->withLength(indexInfo.maxLoopCount->simplifiedExpr());
+                        return *result;
                     } else {
                         TODO();
                     }
@@ -1363,13 +1362,13 @@ namespace acslg::spec_generator {
                     arrayRange = arrayRange->withResetOffset().into_underlying();
                     arrayRange =
                         arrayRange->withLength(indexInfo.indexBound->clone()).into_underlying();
-                    // arrayRange->setOffset(indexInfo.indexSymbolicValue->clone());
-                    // arrayRange->setLength(std::make_unique<symb::BinaryOpExpr>(
+                    // arrayRange = arrayRange->withOffset(indexInfo.indexSymbolicValue->clone());
+                    // arrayRange = arrayRange->withLength(std::make_unique<symb::BinaryOpExpr>(
                     //     indexInfo.indexBound->clone(), Subtract,
                     //     indexInfo.indexSymbolicValue->clone()));
                 } else {
                     arrayRange = arrayRange->withResetOffset().into_underlying();
-                    // arrayRange->setOffset(indexInfo.indexBound->clone());
+                    // arrayRange = arrayRange->withOffset(indexInfo.indexBound->clone());
                     arrayRange =
                         arrayRange
                             ->withLength(std::make_unique<symb::BinaryOpExpr>(

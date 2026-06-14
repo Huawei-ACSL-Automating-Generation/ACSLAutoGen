@@ -945,7 +945,7 @@ namespace acslg::analyzer {
                             // explicit range tracking, this statement can be uncommented to
                             // re-enable length assignment.
 
-                            // addr->setLength(std::move(lengthInElems));
+                            // addr = addr->withLength(std::move(lengthInElems));
 
                             // Materialize the first element symbol at the allocated base address.
                             auto elemSym = symbolic::UnknownExpr::makeUnknown();
@@ -2081,7 +2081,7 @@ namespace acslg::analyzer {
                         return;
 
                     // Seed the merged key from the first segment
-                    SA mergedKey     = items[startIdx].key;
+                    auto mergedKey   = std::make_unique<SA>(items[startIdx].key);
                     size_t cur       = startIdx;
                     size_t rightHash = items[cur].rightHash;
                     items[cur].used  = true;
@@ -2116,9 +2116,14 @@ namespace acslg::analyzer {
                         // - If successor is range: add its length expression
                         // - If successor is non-range: add 1
                         if (auto &len = itemToBeMerged.key.getLength()) {
-                            mergedKey.addLength(len.value()->clone());
+                            mergedKey =
+                                mergedKey->withAddedLength(len.value()->clone()).into_underlying();
                         } else {
-                            mergedKey.addLength(std::make_unique<symbolic::detail::LiteralExprNode>(1));
+                            mergedKey =
+                                mergedKey
+                                    ->withAddedLength(
+                                        std::make_unique<symbolic::detail::LiteralExprNode>(1))
+                                    .into_underlying();
                         }
 
                         // Advance to successor
@@ -2128,7 +2133,7 @@ namespace acslg::analyzer {
                     }
 
                     // Emit the merged interval with the value from the starting edge
-                    newMap.emplace(std::move(mergedKey), std::move(items[startIdx].val));
+                    newMap.emplace(std::move(*mergedKey), std::move(items[startIdx].val));
                 };
 
                 // Prefer starting at "obvious starts": Lh with zero in-degree

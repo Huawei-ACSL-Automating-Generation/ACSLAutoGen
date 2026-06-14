@@ -1843,97 +1843,85 @@ namespace acslg::analyzer::symbolic {
             offset_ = std::move(offset.value());
     }
 
-    void SymbolAddress::setOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> offset) {
-        if (!isValidOffsetOrLength(*offset))
-            ERROR("Invalid offset.");
-        offset_ = std::move(offset).into_underlying();
-    }
-
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withOffset(
         utils::not_null<std::unique_ptr<SymbolicExpr>> offset) const {
-        auto result = std::make_unique<SymbolAddress>(*this);
-        result->setOffset(std::move(offset));
-        return result;
-    }
-
-    void SymbolAddress::addOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra) {
-        if (!isValidOffsetOrLength(*extra))
+        if (!isValidOffsetOrLength(*offset))
             ERROR("Invalid offset.");
-        offset_ = std::make_unique<BinaryOpExpr>(offset_->clone().into_underlying(),
-                                                 detail::BinaryOpExprNode::Operator::Add, std::move(extra))
-                      ->simplifiedExpr()
-                      .into_underlying();
+        auto result = std::make_unique<SymbolAddress>(*this);
+        result->offset_ = std::move(offset).into_underlying();
+        return result;
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withAddedOffset(
         utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
-        auto result = std::make_unique<SymbolAddress>(*this);
-        result->addOffset(std::move(extra));
-        return result;
-    }
-
-    void SymbolAddress::subOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra) {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
-        offset_ = std::make_unique<BinaryOpExpr>(offset_->clone(), detail::BinaryOpExprNode::Operator::Subtract,
-                                                 std::move(extra))
-                      ->simplifiedExpr()
-                      .into_underlying();
+        auto result = std::make_unique<SymbolAddress>(*this);
+        result->offset_ =
+            std::make_unique<BinaryOpExpr>(offset_->clone().into_underlying(),
+                                           detail::BinaryOpExprNode::Operator::Add,
+                                           std::move(extra))
+                ->simplifiedExpr()
+                .into_underlying();
+        return result;
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withSubtractedOffset(
         utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
+        if (!isValidOffsetOrLength(*extra))
+            ERROR("Invalid offset.");
         auto result = std::make_unique<SymbolAddress>(*this);
-        result->subOffset(std::move(extra));
+        result->offset_ =
+            std::make_unique<BinaryOpExpr>(offset_->clone(),
+                                           detail::BinaryOpExprNode::Operator::Subtract,
+                                           std::move(extra))
+                ->simplifiedExpr()
+                .into_underlying();
         return result;
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withResetOffset() const {
         auto result = std::make_unique<SymbolAddress>(*this);
-        result->resetOffset();
+        result->offset_ = std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET);
         return result;
-    }
-
-    void SymbolAddress::setLength(utils::not_null<std::unique_ptr<SymbolicExpr>> len) {
-        if (!isValidOffsetOrLength(*len))
-            ERROR("Invalid Length.");
-        length_.emplace(std::move(len).into_underlying());
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withLength(
         utils::not_null<std::unique_ptr<SymbolicExpr>> len) const {
+        if (!isValidOffsetOrLength(*len))
+            ERROR("Invalid Length.");
         auto result = std::make_unique<SymbolAddress>(*this);
-        result->setLength(std::move(len));
+        result->length_.emplace(std::move(len).into_underlying());
         return result;
-    }
-
-    void SymbolAddress::addLength(utils::not_null<std::unique_ptr<SymbolicExpr>> extra) {
-        if (!isValidOffsetOrLength(*extra))
-            ERROR("Invalid offset.");
-        if (length_ == std::nullopt) {
-            length_.emplace(std::make_unique<BinaryOpExpr>(std::make_unique<detail::LiteralExprNode>(1),
-                                                           detail::BinaryOpExprNode::Operator::Add,
-                                                           std::move(extra))
-                                ->simplifiedExpr()
-                                .into_underlying());
-            return;
-        }
-        length_ = std::make_unique<BinaryOpExpr>(length_.value()->clone().into_underlying(),
-                                                 detail::BinaryOpExprNode::Operator::Add, std::move(extra))
-                      ->simplifiedExpr()
-                      .into_underlying();
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withAddedLength(
         utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
+        if (!isValidOffsetOrLength(*extra))
+            ERROR("Invalid offset.");
         auto result = std::make_unique<SymbolAddress>(*this);
-        result->addLength(std::move(extra));
+        if (length_ == std::nullopt) {
+            result->length_.emplace(
+                std::make_unique<BinaryOpExpr>(
+                    std::make_unique<detail::LiteralExprNode>(1),
+                    detail::BinaryOpExprNode::Operator::Add,
+                    std::move(extra))
+                    ->simplifiedExpr()
+                    .into_underlying());
+            return result;
+        }
+        result->length_ =
+            std::make_unique<BinaryOpExpr>(length_.value()->clone().into_underlying(),
+                                           detail::BinaryOpExprNode::Operator::Add,
+                                           std::move(extra))
+                ->simplifiedExpr()
+                .into_underlying();
         return result;
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withoutLength() const {
         auto result = std::make_unique<SymbolAddress>(*this);
-        result->resetLength();
+        result->length_ = std::nullopt;
         return result;
     }
 

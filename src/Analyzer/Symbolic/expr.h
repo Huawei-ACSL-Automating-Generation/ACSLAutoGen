@@ -286,7 +286,6 @@ namespace acslg::analyzer::symbolic {
 
         ExprKind getKind() const { return kind_; }
         Type getValType() const { return valueType_; }
-        void setValType(Type newType) { valueType_ = newType; }
 
         /// @brief Clone the expression.
         /// @return Deep copy of the expression.
@@ -538,6 +537,8 @@ namespace acslg::analyzer::symbolic {
         }
 
       private:
+        void setValType(Type newType) { valueType_ = newType; }
+
         /// @brief Try to evaluate the expression to an symbol address.
         /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
         virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
@@ -1545,10 +1546,6 @@ namespace acslg::analyzer::symbolic {
         bool operator==(const SymbolAddress &other) const { return equal(other); }
 
         utils::not_null<const SymbolicExpr *> getOffset() const { return offset_.get().get(); }
-        void setOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> offset);
-        void addOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
-        void subOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
-        void resetOffset() { offset_ = std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET); }
 
         utils::not_null<std::unique_ptr<SymbolAddress>> withOffset(
             utils::not_null<std::unique_ptr<SymbolicExpr>> offset) const;
@@ -1558,10 +1555,7 @@ namespace acslg::analyzer::symbolic {
             utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const;
         utils::not_null<std::unique_ptr<SymbolAddress>> withResetOffset() const;
 
-        void setLength(utils::not_null<std::unique_ptr<SymbolicExpr>> len);
-        void addLength(utils::not_null<std::unique_ptr<SymbolicExpr>> extra);
         auto getLength() const -> const auto & { return length_; }
-        void resetLength() { length_ = std::nullopt; }
 
         utils::not_null<std::unique_ptr<SymbolAddress>> withLength(
             utils::not_null<std::unique_ptr<SymbolicExpr>> len) const;
