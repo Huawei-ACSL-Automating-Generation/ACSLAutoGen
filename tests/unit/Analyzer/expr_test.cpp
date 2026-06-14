@@ -599,6 +599,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(oneA, oneB);
         EXPECT_NE(oneA, two);
         EXPECT_TRUE(oneA.isa<symbolic::LiteralExpr>());
+        EXPECT_TRUE(oneA.isa<symbolic::detail::LiteralExprNode>());
         EXPECT_EQ(oneA.cast<symbolic::LiteralExpr>().getLiteralValue(), 1);
 
         auto sumA =
@@ -610,6 +611,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(sumA, sumB);
         EXPECT_NE(sumA, diff);
         ASSERT_NE(sumA.dyn_cast<symbolic::BinaryOpExpr>(), nullptr);
+        ASSERT_NE(sumA.dyn_cast<symbolic::detail::BinaryOpExprNode>(), nullptr);
         EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getOperator(),
                   symbolic::BinaryOpExpr::Operator::Add);
         EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getLeft().get(), oneA.get().get());
@@ -619,6 +621,7 @@ namespace acslg::test::unit::analyzer {
         auto negB = factory.unary(symbolic::UnaryOpExpr::Operator::Minus, oneB);
         EXPECT_EQ(negA, negB);
         EXPECT_TRUE(negA.isa<symbolic::UnaryOpExpr>());
+        EXPECT_TRUE(negA.isa<symbolic::detail::UnaryOpExprNode>());
         EXPECT_EQ(negA.cast<symbolic::UnaryOpExpr>().getSub().get(), oneA.get().get());
     }
 

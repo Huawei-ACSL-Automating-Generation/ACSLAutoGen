@@ -944,6 +944,14 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
     };
 
+    namespace detail {
+        using SymbolicExprNode = SymbolicExpr;
+        using LiteralExprNode  = LiteralExpr;
+        using UnaryOpExprNode  = UnaryOpExpr;
+        using BinaryOpExprNode = BinaryOpExpr;
+        using UnknownExprNode  = UnknownExpr;
+    } // namespace detail
+
     /**
      * @class Symbol
      * @brief Mix-in for symbolic entities that carry provenance (address and source point).
@@ -1287,26 +1295,36 @@ namespace acslg::analyzer::symbolic {
 
     class ExprFactory {
       public:
-        ExprHandle literal(bool value) { return intern(std::make_unique<LiteralExpr>(value)); }
-        ExprHandle literal(int value) { return intern(std::make_unique<LiteralExpr>(value)); }
+        ExprHandle literal(bool value) {
+            return intern(std::make_unique<detail::LiteralExprNode>(value));
+        }
+        ExprHandle literal(int value) {
+            return intern(std::make_unique<detail::LiteralExprNode>(value));
+        }
         ExprHandle literal(unsigned int value) {
-            return intern(std::make_unique<LiteralExpr>(value));
+            return intern(std::make_unique<detail::LiteralExprNode>(value));
         }
-        ExprHandle literal(short value) { return intern(std::make_unique<LiteralExpr>(value)); }
+        ExprHandle literal(short value) {
+            return intern(std::make_unique<detail::LiteralExprNode>(value));
+        }
         ExprHandle literal(unsigned short value) {
-            return intern(std::make_unique<LiteralExpr>(value));
+            return intern(std::make_unique<detail::LiteralExprNode>(value));
         }
-        ExprHandle literal(int64_t value) { return intern(std::make_unique<LiteralExpr>(value)); }
-        ExprHandle literal(uint64_t value) { return intern(std::make_unique<LiteralExpr>(value)); }
+        ExprHandle literal(int64_t value) {
+            return intern(std::make_unique<detail::LiteralExprNode>(value));
+        }
+        ExprHandle literal(uint64_t value) {
+            return intern(std::make_unique<detail::LiteralExprNode>(value));
+        }
 
-        ExprHandle unknown() { return intern(std::make_unique<UnknownExpr>()); }
+        ExprHandle unknown() { return intern(std::make_unique<detail::UnknownExprNode>()); }
 
         ExprHandle unary(UnaryOpExpr::Operator op, ExprHandle expr) {
-            return intern(std::make_unique<UnaryOpExpr>(op, expr));
+            return intern(std::make_unique<detail::UnaryOpExprNode>(op, expr));
         }
 
         ExprHandle binary(ExprHandle left, BinaryOpExpr::Operator op, ExprHandle right) {
-            return intern(std::make_unique<BinaryOpExpr>(left, op, right));
+            return intern(std::make_unique<detail::BinaryOpExprNode>(left, op, right));
         }
 
         ExprHandle importExpr(const SymbolicExpr &expr);

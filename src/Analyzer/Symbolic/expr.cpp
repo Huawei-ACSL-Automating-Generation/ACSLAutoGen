@@ -43,16 +43,16 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle ExprFactory::importExpr(const SymbolicExpr &expr) {
-        if (auto *literal = dyn_cast<LiteralExpr>(&expr))
+        if (auto *literal = dyn_cast<detail::LiteralExprNode>(&expr))
             return intern(literal->clone());
 
-        if (isa<UnknownExpr>(&expr))
+        if (isa<detail::UnknownExprNode>(&expr))
             return unknown();
 
-        if (auto *unaryExpr = dyn_cast<UnaryOpExpr>(&expr))
+        if (auto *unaryExpr = dyn_cast<detail::UnaryOpExprNode>(&expr))
             return unary(unaryExpr->getOperator(), importExpr(*unaryExpr->getSub()));
 
-        if (auto *binaryExpr = dyn_cast<BinaryOpExpr>(&expr)) {
+        if (auto *binaryExpr = dyn_cast<detail::BinaryOpExprNode>(&expr)) {
             auto left  = importExpr(*binaryExpr->getLeft());
             auto right = importExpr(*binaryExpr->getRight());
             return binary(left, binaryExpr->getOperator(), right);
