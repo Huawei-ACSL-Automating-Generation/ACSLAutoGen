@@ -452,13 +452,19 @@ namespace acslg::test::unit::analyzer {
         auto condAOnly  = makeLiteral(2);
 
         pathA->insertPathCondition(condShared->clone());
+        ASSERT_EQ(pathA->getPathConditions().size(), 1u);
+        auto sharedHandle = *pathA->getPathConditions().begin();
+
         pathA->insertPathCondition(std::move(condAOnly));
         pathB->insertPathCondition(condShared->clone());
+        ASSERT_EQ(pathB->getPathConditions().size(), 1u);
+        EXPECT_EQ(sharedHandle, *pathB->getPathConditions().begin());
 
         pathA->mergeWith(*pathB);
 
         ASSERT_EQ(pathA->getPathConditions().size(), 1u);
         const auto &onlyCond = *pathA->getPathConditions().begin();
+        EXPECT_EQ(sharedHandle, onlyCond);
         auto lit             = symbolic::dyn_cast<symbolic::detail::LiteralExprNode>(onlyCond.get().get());
         ASSERT_NE(lit, nullptr);
         EXPECT_EQ(*lit, *condShared);

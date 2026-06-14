@@ -87,7 +87,7 @@ namespace acslg::analyzer {
         : context_(other.context_), startPoint_(other.startPoint_) {
         if (shallowCopy) {
             for (const auto &cond : other.pathConditions_) {
-                pathConditions_.emplace(cond->clone());
+                pathConditions_.emplace(cond);
             }
             currentState_ = other.currentState_;
             if (other.returnExpr_)
@@ -193,7 +193,7 @@ namespace acslg::analyzer {
         intersected.reserve(std::min(pathConditions_.size(), other.pathConditions_.size()));
         for (const auto &cond : pathConditions_) {
             if (other.pathConditions_.find(cond) != other.pathConditions_.end())
-                intersected.emplace(cond->clone());
+                intersected.emplace(cond);
         }
         pathConditions_ = std::move(intersected);
 
@@ -447,7 +447,7 @@ namespace acslg::analyzer {
      * @param cond Condition to add.
      */
     void Path::insertPathCondition(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> cond) {
-        pathConditions_.emplace(std::move(cond));
+        pathConditions_.emplace(context_.getExprFactory().importExpr(*cond));
     }
 
     /**
@@ -462,7 +462,7 @@ namespace acslg::analyzer {
                                      std::make_unique<symbolic::VariableAddress>(*entry.second));
         cloned->memoryState_ = memoryState_;
         for (const auto &cond : pathConditions_)
-            cloned->pathConditions_.emplace(cond->clone());
+            cloned->pathConditions_.emplace(cond);
         if (returnExpr_)
             cloned->returnExpr_.emplace(returnExpr_.value()->clone().into_underlying());
         else
@@ -2359,8 +2359,7 @@ namespace acslg::analyzer {
                     auto stripped = dropLocalConjuncts(*cond, localVars);
                     if (!stripped)
                         continue;
-                    filtered.emplace(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>(
-                        std::move(stripped)));
+                    filtered.emplace(path->context_.getExprFactory().importExpr(*stripped));
                 }
                 path->pathConditions_ = std::move(filtered);
             }

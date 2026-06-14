@@ -64,10 +64,16 @@ namespace acslg::analyzer {
             return lhs && rhs && lhs->equal(*rhs);
         }
     };
+    struct PathConditionHash {
+        std::size_t operator()(symbolic::ExprHandle expr) const noexcept { return expr.hash(); }
+    };
+    struct PathConditionEqual {
+        bool operator()(symbolic::ExprHandle lhs, symbolic::ExprHandle rhs) const noexcept {
+            return lhs.get().get() == rhs.get().get() || lhs->equal(*rhs);
+        }
+    };
     using PathConditions =
-        std::unordered_set<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>,
-                           SymbolicExprPtrHash,
-                           SymbolicExprPtrEqual>;
+        std::unordered_set<symbolic::ExprHandle, PathConditionHash, PathConditionEqual>;
     using TransRel = std::tuple<int, int, Parma_Polyhedra_Library::C_Polyhedron *>;
     using InitRel  = std::pair<int, Parma_Polyhedra_Library::C_Polyhedron *>;
 

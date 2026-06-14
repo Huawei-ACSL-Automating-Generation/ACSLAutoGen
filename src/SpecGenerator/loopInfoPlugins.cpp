@@ -263,7 +263,7 @@ namespace acslg::spec_generator {
 
             analyzer::PathConditions sharedConds;
             for (const auto &cond : merged->getPathConditions())
-                sharedConds.emplace(cond->clone());
+                sharedConds.emplace(cond);
 
             loopInfo.sharedMemoryMap = std::move(sharedMemory);
             loopInfo.sharedPathConds = std::move(sharedConds);
