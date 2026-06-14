@@ -45,7 +45,7 @@ namespace acslg::analyzer::symbolic {
      * Multiplication is considered linear only when exactly one side is constant; shifts are
      * treated as multiplication by powers of two when the shift amount is constant.
      */
-    bool BinaryOpExpr::isLinear() const {
+    bool detail::BinaryOpExprNode::isLinear() const {
         // Algebraic summaries of both sides.
         const int ldeg  = left_->getMaxDegree();
         const int rdeg  = right_->getMaxDegree();
@@ -80,7 +80,7 @@ namespace acslg::analyzer::symbolic {
      * @brief Compute algebraic degree assuming operands have known degrees.
      * @return Non-negative degree or -1 if the operator/operands make it invalid.
      */
-    int BinaryOpExpr::getMaxDegree() const {
+    int detail::BinaryOpExprNode::getMaxDegree() const {
         const int ldeg = left_->getMaxDegree();
         const int rdeg = right_->getMaxDegree();
 
@@ -134,7 +134,7 @@ namespace acslg::analyzer::symbolic {
      * @brief Convert a binary expression to a PPL linear expression if affine.
      * @return Linear expression or nullopt when non-affine.
      */
-    std::optional<Parma_Polyhedra_Library::Linear_Expression> BinaryOpExpr::toLinearExpr(
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> detail::BinaryOpExprNode::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
         auto L = left_->toLinearExpr(varIndexMap);
         auto R = right_->toLinearExpr(varIndexMap);
@@ -239,7 +239,7 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr(
+    Parma_Polyhedra_Library::Linear_Expression detail::BinaryOpExprNode::toLinearExpr(
         const std::unordered_map<size_t, size_t> &hashIdMap) const {
         auto L = left_->toLinearExpr(hashIdMap);
         auto R = right_->toLinearExpr(hashIdMap);
@@ -541,7 +541,7 @@ namespace acslg::analyzer {
         }
 
         std::vector<Formulas> negateFormulas(Formulas input) {
-            using Op = symbolic::BinaryOpExpr::Operator;
+            using Op = symbolic::detail::BinaryOpExprNode::Operator;
 
             std::vector<Formulas> result;
             std::queue<pair<Formulas, const size_t>> worklist;
@@ -639,7 +639,7 @@ namespace acslg::analyzer {
             Formulas result;
             for (auto &cond : conjConds) {
                 if (auto bin = symbolic::dyn_cast<symbolic::BinaryOpExpr>(cond.get().get())) {
-                    using enum symbolic::BinaryOpExpr::Operator;
+                    using enum symbolic::detail::BinaryOpExprNode::Operator;
                     const auto &lhs = bin->getLeft();
                     const auto &rhs = bin->getRight();
 
@@ -692,7 +692,7 @@ namespace acslg::analyzer {
                         symbolic::dyn_cast<const symbolic::BinaryOpExpr>(reOneExpr.front().get().get());
                     assert(uneqExpr);
                     switch (uneqExpr->getOperator()) {
-                        using enum symbolic::BinaryOpExpr::Operator;
+                        using enum symbolic::detail::BinaryOpExprNode::Operator;
                         case LessEqual: {
                             auto newRHS = std::make_unique<symbolic::BinaryOpExpr>(
                                 uneqExpr->getRight()->clone(), Add,
@@ -812,11 +812,11 @@ namespace acslg::analyzer {
             auto le = lhs.value() - rhs.value();
 
             switch (op) {
-                case symbolic::BinaryOpExpr::Operator::LessEqual:
+                case symbolic::detail::BinaryOpExprNode::Operator::LessEqual:
                     return Parma_Polyhedra_Library::Constraint(le <= 0);
-                case symbolic::BinaryOpExpr::Operator::GreaterEqual:
+                case symbolic::detail::BinaryOpExprNode::Operator::GreaterEqual:
                     return Parma_Polyhedra_Library::Constraint(le >= 0);
-                case symbolic::BinaryOpExpr::Operator::Equal:
+                case symbolic::detail::BinaryOpExprNode::Operator::Equal:
                     return Parma_Polyhedra_Library::Constraint(le == 0);
                 default:
                     WARN("toConstraint: unsupported binary operator in assertion (must be <=, >=, "
@@ -1164,11 +1164,11 @@ namespace acslg::analyzer {
                             term = std::make_unique<symbolic::BinaryOpExpr>(
 
                                 std::make_unique<symbolic::LiteralExpr>(coeff.get_si()),
-                                symbolic::BinaryOpExpr::Operator::Multiply, std::move(term));
+                                symbolic::detail::BinaryOpExprNode::Operator::Multiply, std::move(term));
                         }
 
                         rhs = std::make_unique<symbolic::BinaryOpExpr>(
-                            std::move(rhs), symbolic::BinaryOpExpr::Operator::Subtract,
+                            std::move(rhs), symbolic::detail::BinaryOpExprNode::Operator::Subtract,
                             std::move(term));
                     }
 
@@ -1177,7 +1177,7 @@ namespace acslg::analyzer {
                             symbolic::detail::UnaryOpExprNode::Operator::Minus, std::move(rhs));
                     } else if (coeffs[target] != 1) {
                         rhs = std::make_unique<symbolic::BinaryOpExpr>(
-                            std::move(rhs), symbolic::BinaryOpExpr::Operator::Divide,
+                            std::move(rhs), symbolic::detail::BinaryOpExprNode::Operator::Divide,
                             std::make_unique<symbolic::LiteralExpr>(coeffs[target].get_si()));
                     }
 
@@ -1224,14 +1224,14 @@ namespace acslg::analyzer {
                     if (c != 1) {
                         term = std::make_unique<symbolic::BinaryOpExpr>(
                             std::make_unique<symbolic::LiteralExpr>(c.get_si()),
-                            symbolic::BinaryOpExpr::Operator::Multiply, std::move(term));
+                            symbolic::detail::BinaryOpExprNode::Operator::Multiply, std::move(term));
                     }
 
                     if (!lhs) {
                         lhs = std::move(term);
                     } else {
                         lhs = std::make_unique<symbolic::BinaryOpExpr>(
-                            std::move(lhs.value()), symbolic::BinaryOpExpr::Operator::Add,
+                            std::move(lhs.value()), symbolic::detail::BinaryOpExprNode::Operator::Add,
                             std::move(term));
                     }
                 }
@@ -1246,17 +1246,17 @@ namespace acslg::analyzer {
                 Coefficient c0 = constraint.inhomogeneous_term();
                 if (c0 != 0) {
                     lhs = std::make_unique<symbolic::BinaryOpExpr>(
-                        std::move(lhs.value()), symbolic::BinaryOpExpr::Operator::Add,
+                        std::move(lhs.value()), symbolic::detail::BinaryOpExprNode::Operator::Add,
                         std::make_unique<symbolic::LiteralExpr>(c0.get_si()));
                 }
 
-                symbolic::BinaryOpExpr::Operator op;
+                symbolic::detail::BinaryOpExprNode::Operator op;
                 if (constraint.is_equality()) {
-                    op = symbolic::BinaryOpExpr::Operator::Equal;
+                    op = symbolic::detail::BinaryOpExprNode::Operator::Equal;
                 } else if (constraint.is_strict_inequality()) {
-                    op = symbolic::BinaryOpExpr::Operator::GreaterEqual;
+                    op = symbolic::detail::BinaryOpExprNode::Operator::GreaterEqual;
                 } else if (constraint.is_inequality()) {
-                    op = symbolic::BinaryOpExpr::Operator::GreaterThan;
+                    op = symbolic::detail::BinaryOpExprNode::Operator::GreaterThan;
                 } else {
                     continue;
                 }

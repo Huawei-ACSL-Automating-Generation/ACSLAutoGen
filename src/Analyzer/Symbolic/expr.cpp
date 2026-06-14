@@ -151,7 +151,7 @@ namespace acslg::analyzer::symbolic {
                        e.getValType().kind == ScalarKind::Bool;
 
             if (auto *bo = dyn_cast<BinaryOpExpr>(&e)) {
-                using BO = BinaryOpExpr::Operator;
+                using BO = detail::BinaryOpExprNode::Operator;
                 switch (bo->getOperator()) {
                     case BO::LogicalAnd:
                     case BO::LogicalOr:
@@ -283,7 +283,7 @@ namespace acslg::analyzer::symbolic {
         auto linearExpr = toLinearExpr(hashIdMap);
         std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> result{};
 
-        using enum BinaryOpExpr::Operator;
+        using enum detail::BinaryOpExprNode::Operator;
         for (auto [hash, symbol] : hashPtrMap) {
             auto expr = dyn_cast<const SymbolicExpr>(symbol.get());
             auto C = linearExpr.coefficient(Parma_Polyhedra_Library::Variable{hashIdMap.at(hash)})
@@ -343,7 +343,7 @@ namespace acslg::analyzer::symbolic {
         UNREACHABLE();
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> BinaryOpExpr::clone() const {
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::clone() const {
         auto leftHandle  = left_.handle();
         auto rightHandle = right_.handle();
         if (leftHandle && rightHandle)
@@ -436,7 +436,7 @@ namespace acslg::analyzer::symbolic {
         return utils::hash_val(getKind(), static_cast<size_t>(op_), expr_->hash());
     }
 
-    size_t BinaryOpExpr::hash() const {
+    size_t detail::BinaryOpExprNode::hash() const {
         return utils::hash_val(getKind(), static_cast<size_t>(op_), left_->hash(), right_->hash());
     }
 
@@ -494,7 +494,7 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    std::string BinaryOpExpr::dump() const {
+    std::string detail::BinaryOpExprNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         std::string opStr;
@@ -673,13 +673,13 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> BinaryOpExpr::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> detail::BinaryOpExprNode::doGetACSL(
         const SymbolicExpr::GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
         unsigned parentPrec,
         bool isRightChild) const {
-        using Op = BinaryOpExpr::Operator;
+        using Op = detail::BinaryOpExprNode::Operator;
 
         auto emitBoolCmp = [&](const SymbolicExpr &boolExpr,
                                bool expectTrue) -> utils::expected<std::string, GetACSLError> {
@@ -934,9 +934,9 @@ namespace acslg::analyzer::symbolic {
         // offset + length - 1
         auto rightBound =
             std::make_unique<BinaryOpExpr>(
-                std::make_unique<BinaryOpExpr>(getOffset()->clone(), BinaryOpExpr::Operator::Add,
+                std::make_unique<BinaryOpExpr>(getOffset()->clone(), detail::BinaryOpExprNode::Operator::Add,
                                                length_.value()->clone()),
-                BinaryOpExpr::Operator::Subtract, std::make_unique<LiteralExpr>(1))
+                detail::BinaryOpExprNode::Operator::Subtract, std::make_unique<LiteralExpr>(1))
                 ->simplifiedExpr();
         auto rightBoundStr =
             callGetACSL(*rightBound, config, usedPoints, currentPoint, rangePrec, true);
@@ -1013,7 +1013,7 @@ namespace acslg::analyzer::symbolic {
                                          // same type.
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> BinaryOpExpr::simplifiedExpr() const {
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::simplifiedExpr() const {
         if (isUnknown())
             return UnknownExpr::makeUnknown().into_underlying();
         if (isLinear())
@@ -1027,7 +1027,7 @@ namespace acslg::analyzer::symbolic {
         auto LHS = left_->simplifiedExpr();
         auto RHS = right_->simplifiedExpr();
 
-        using Op = BinaryOpExpr::Operator;
+        using Op = detail::BinaryOpExprNode::Operator;
         // Normalize comparisons against boolean literals to avoid chained equality like `x == 0 == 1`.
         if (op_ == Op::Equal || op_ == Op::NotEqual) {
             auto simplifyBoolCmp = [&](const SymbolicExpr &boolExpr,
@@ -1158,8 +1158,8 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    std::unique_ptr<LiteralExpr> BinaryOpExpr::evalToConstExpr() const {
-        using BO = BinaryOpExpr::Operator;
+    std::unique_ptr<LiteralExpr> detail::BinaryOpExprNode::evalToConstExpr() const {
+        using BO = detail::BinaryOpExprNode::Operator;
 
         auto Lc = left_->evalToConstExpr();
         if (!Lc)
@@ -1293,7 +1293,7 @@ namespace acslg::analyzer::symbolic {
         return type_ == liter->type_ && getLiteralValue() == liter->getLiteralValue();
     }
 
-    bool BinaryOpExpr::equal(const SymbolicExpr &expr) const {
+    bool detail::BinaryOpExprNode::equal(const SymbolicExpr &expr) const {
         const auto binary = dyn_cast<const BinaryOpExpr>(&expr);
         if (!binary)
             return false;
@@ -1529,7 +1529,7 @@ namespace acslg::analyzer::symbolic {
             pointeeType_, definition_, realBaseAddr->addressClone().into_underlying(), fieldIndex_);
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> BinaryOpExpr::getSubstitutedExpr(
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
         return std::make_unique<BinaryOpExpr>(left_->getSubstitutedExpr(pathSubTo, pointToSub), op_,
@@ -1623,7 +1623,7 @@ namespace acslg::analyzer::symbolic {
             pointeeType_, definition_, realBaseAddr->addressClone().into_underlying(), fieldIndex_);
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> BinaryOpExpr::getRangeIndexSubstituted(
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
         return std::make_unique<BinaryOpExpr>(
@@ -1718,7 +1718,7 @@ namespace acslg::analyzer::symbolic {
             pointeeType_, definition_, realBaseAddr->addressClone().into_underlying(), fieldIndex_);
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> BinaryOpExpr::getSubstitutedValueExpr(
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return it->second->clone();
@@ -1744,7 +1744,7 @@ namespace acslg::analyzer::symbolic {
         return newSt;
     }
 
-    std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> BinaryOpExpr::
+    std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> detail::BinaryOpExprNode::
         doTryEvalAsSymbolAddr() const {
         auto lhs = callTryEvalAsAddr(*left_), rhs = callTryEvalAsAddr(*right_);
         if (lhs && rhs)
@@ -1788,7 +1788,7 @@ namespace acslg::analyzer::symbolic {
 
     SymbolicExpr::UsedMap SymbolValue::collectUsedSymbols() const { return {{hash(), this}}; }
 
-    SymbolicExpr::UsedMap BinaryOpExpr::collectUsedSymbols() const {
+    SymbolicExpr::UsedMap detail::BinaryOpExprNode::collectUsedSymbols() const {
         auto lmap = left_->collectUsedSymbols();
         auto rmap = right_->collectUsedSymbols();
         lmap.insert(make_move_iterator(rmap.begin()), make_move_iterator(rmap.end()));
@@ -1857,7 +1857,7 @@ namespace acslg::analyzer::symbolic {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
         offset_ = std::make_unique<BinaryOpExpr>(offset_->clone().into_underlying(),
-                                                 BinaryOpExpr::Operator::Add, std::move(extra))
+                                                 detail::BinaryOpExprNode::Operator::Add, std::move(extra))
                       ->simplifiedExpr()
                       .into_underlying();
     }
@@ -1872,7 +1872,7 @@ namespace acslg::analyzer::symbolic {
     void SymbolAddress::subOffset(utils::not_null<std::unique_ptr<SymbolicExpr>> extra) {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
-        offset_ = std::make_unique<BinaryOpExpr>(offset_->clone(), BinaryOpExpr::Operator::Subtract,
+        offset_ = std::make_unique<BinaryOpExpr>(offset_->clone(), detail::BinaryOpExprNode::Operator::Subtract,
                                                  std::move(extra))
                       ->simplifiedExpr()
                       .into_underlying();
@@ -1909,14 +1909,14 @@ namespace acslg::analyzer::symbolic {
             ERROR("Invalid offset.");
         if (length_ == std::nullopt) {
             length_.emplace(std::make_unique<BinaryOpExpr>(std::make_unique<LiteralExpr>(1),
-                                                           BinaryOpExpr::Operator::Add,
+                                                           detail::BinaryOpExprNode::Operator::Add,
                                                            std::move(extra))
                                 ->simplifiedExpr()
                                 .into_underlying());
             return;
         }
         length_ = std::make_unique<BinaryOpExpr>(length_.value()->clone().into_underlying(),
-                                                 BinaryOpExpr::Operator::Add, std::move(extra))
+                                                 detail::BinaryOpExprNode::Operator::Add, std::move(extra))
                       ->simplifiedExpr()
                       .into_underlying();
     }
@@ -1943,7 +1943,7 @@ namespace acslg::analyzer::symbolic {
         // Not sure return which one is better, offset_+1 or nullopt.
         if (length_ == std::nullopt)
             return std::nullopt;
-        return std::make_unique<BinaryOpExpr>(offset_->clone(), BinaryOpExpr::Operator::Add,
+        return std::make_unique<BinaryOpExpr>(offset_->clone(), detail::BinaryOpExprNode::Operator::Add,
                                               length_.value()->clone());
     }
 
@@ -2267,10 +2267,10 @@ namespace acslg::analyzer::symbolic {
         return std::make_unique<UnaryOpExpr>(detail::UnaryOpExprNode::Operator::LogicalNot, std::move(expr));
     }
 
-    BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp) {
+    detail::BinaryOpExprNode::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp) {
         switch (compoundAssignOp) {
             using enum clang::BinaryOperatorKind;
-            using enum BinaryOpExpr::Operator;
+            using enum detail::BinaryOpExprNode::Operator;
             case BO_MulAssign: return Multiply;
             case BO_DivAssign: return Divide;
             case BO_RemAssign: return Remainder;
@@ -2286,27 +2286,27 @@ namespace acslg::analyzer::symbolic {
     }
 
     // No AssignOp Here.
-    BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op) {
+    detail::BinaryOpExprNode::Operator getBinaryOp(clang::BinaryOperatorKind op) {
         switch (op) {
             using enum clang::BinaryOperatorKind;
-            case BO_Mul: return BinaryOpExpr::Operator::Multiply;
-            case BO_Div: return BinaryOpExpr::Operator::Divide;
-            case BO_Rem: return BinaryOpExpr::Operator::Remainder;
-            case BO_Add: return BinaryOpExpr::Operator::Add;
-            case BO_Sub: return BinaryOpExpr::Operator::Subtract;
-            case BO_Shl: return BinaryOpExpr::Operator::ShiftLeft;
-            case BO_Shr: return BinaryOpExpr::Operator::ShiftRight;
-            case BO_LT: return BinaryOpExpr::Operator::LessThan;
-            case BO_GT: return BinaryOpExpr::Operator::GreaterThan;
-            case BO_LE: return BinaryOpExpr::Operator::LessEqual;
-            case BO_GE: return BinaryOpExpr::Operator::GreaterEqual;
-            case BO_EQ: return BinaryOpExpr::Operator::Equal;
-            case BO_NE: return BinaryOpExpr::Operator::NotEqual;
-            case BO_And: return BinaryOpExpr::Operator::BitAnd;
-            case BO_Xor: return BinaryOpExpr::Operator::BitXor;
-            case BO_Or: return BinaryOpExpr::Operator::BitOr;
-            case BO_LAnd: return BinaryOpExpr::Operator::LogicalAnd;
-            case BO_LOr: return BinaryOpExpr::Operator::LogicalOr;
+            case BO_Mul: return detail::BinaryOpExprNode::Operator::Multiply;
+            case BO_Div: return detail::BinaryOpExprNode::Operator::Divide;
+            case BO_Rem: return detail::BinaryOpExprNode::Operator::Remainder;
+            case BO_Add: return detail::BinaryOpExprNode::Operator::Add;
+            case BO_Sub: return detail::BinaryOpExprNode::Operator::Subtract;
+            case BO_Shl: return detail::BinaryOpExprNode::Operator::ShiftLeft;
+            case BO_Shr: return detail::BinaryOpExprNode::Operator::ShiftRight;
+            case BO_LT: return detail::BinaryOpExprNode::Operator::LessThan;
+            case BO_GT: return detail::BinaryOpExprNode::Operator::GreaterThan;
+            case BO_LE: return detail::BinaryOpExprNode::Operator::LessEqual;
+            case BO_GE: return detail::BinaryOpExprNode::Operator::GreaterEqual;
+            case BO_EQ: return detail::BinaryOpExprNode::Operator::Equal;
+            case BO_NE: return detail::BinaryOpExprNode::Operator::NotEqual;
+            case BO_And: return detail::BinaryOpExprNode::Operator::BitAnd;
+            case BO_Xor: return detail::BinaryOpExprNode::Operator::BitXor;
+            case BO_Or: return detail::BinaryOpExprNode::Operator::BitOr;
+            case BO_LAnd: return detail::BinaryOpExprNode::Operator::LogicalAnd;
+            case BO_LOr: return detail::BinaryOpExprNode::Operator::LogicalOr;
             case BO_Assign:
             case BO_AddAssign:
             case BO_SubAssign:
@@ -2320,7 +2320,7 @@ namespace acslg::analyzer::symbolic {
             case BO_OrAssign: UNREACHABLE();
             default:
                 UNIMPLEMENT("Unsupported binary operator: " << op);
-                return BinaryOpExpr::Operator::Add;
+                return detail::BinaryOpExprNode::Operator::Add;
         }
     }
 

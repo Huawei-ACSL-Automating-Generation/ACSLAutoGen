@@ -42,10 +42,12 @@ namespace acslg::analyzer::symbolic {
     namespace detail {
         class LiteralExprNode;
         class UnaryOpExprNode;
+        class BinaryOpExprNode;
     }
 
     using LiteralExpr = detail::LiteralExprNode;
     using UnaryOpExpr = detail::UnaryOpExprNode;
+    using BinaryOpExpr = detail::BinaryOpExprNode;
 
     /**
      * @class SourcePoint
@@ -731,48 +733,50 @@ namespace acslg::analyzer::symbolic {
 
     } // namespace detail
 
-    /// @class BinaryOpExpr
+    namespace detail {
+
+    /// @class BinaryOpExprNode
     /// @brief Represents a binary operation expression.
-    class BinaryOpExpr : public SymbolicExpr {
+    class BinaryOpExprNode : public SymbolicExpr {
       public:
         enum class Operator : unsigned {
 #define BIN_OP(name, tok, prec, isRightAssoc) name,
 #include "operators.def"
         };
 
-        inline static unsigned getPrecedence(BinaryOpExpr::Operator op) {
+        inline static unsigned getPrecedence(BinaryOpExprNode::Operator op) {
             switch (op) {
 #define BIN_OP(name, tok, prec, isRightAssoc)                                                      \
-    case BinaryOpExpr::Operator::name: return prec;
+    case BinaryOpExprNode::Operator::name: return prec;
 #include "operators.def"
                 default: ERROR("Unknown Operator");
             }
         }
 
-        inline static bool isRightAssociative(BinaryOpExpr::Operator op) {
+        inline static bool isRightAssociative(BinaryOpExprNode::Operator op) {
             switch (op) {
 #define BIN_OP(name, tok, prec, isRightAssoc)                                                      \
-    case BinaryOpExpr::Operator::name: return isRightAssoc;
+    case BinaryOpExprNode::Operator::name: return isRightAssoc;
 #include "operators.def"
                 default: ERROR("Unknown operator");
             }
         }
 
         // TODO(style): May use template to unify constructors.
-        BinaryOpExpr(utils::not_null<std::unique_ptr<SymbolicExpr>> left,
-                     Operator op,
-                     utils::not_null<std::unique_ptr<SymbolicExpr>> right)
+        BinaryOpExprNode(utils::not_null<std::unique_ptr<SymbolicExpr>> left,
+                         Operator op,
+                         utils::not_null<std::unique_ptr<SymbolicExpr>> right)
             : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()), left_(std::move(left)),
               op_(op), right_(std::move(right)) {}
 
-        BinaryOpExpr(utils::not_null<SymbolicExpr *> left,
-                     Operator op,
-                     utils::not_null<SymbolicExpr *> right)
+        BinaryOpExprNode(utils::not_null<SymbolicExpr *> left,
+                         Operator op,
+                         utils::not_null<SymbolicExpr *> right)
             : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()),
               left_(std::unique_ptr<SymbolicExpr>{left}), op_(op),
               right_(std::unique_ptr<SymbolicExpr>{right}) {}
 
-        BinaryOpExpr(ExprHandle left, Operator op, ExprHandle right)
+        BinaryOpExprNode(ExprHandle left, Operator op, ExprHandle right)
             : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()), left_(left), op_(op),
               right_(right) {}
 
@@ -829,6 +833,8 @@ namespace acslg::analyzer::symbolic {
         Operator op_;
         ExprChild right_;
     };
+
+    } // namespace detail
 
     namespace detail {
 
@@ -961,7 +967,6 @@ namespace acslg::analyzer::symbolic {
 
     namespace detail {
         using SymbolicExprNode = SymbolicExpr;
-        using BinaryOpExprNode = BinaryOpExpr;
         using UnknownExprNode  = UnknownExpr;
     } // namespace detail
 
