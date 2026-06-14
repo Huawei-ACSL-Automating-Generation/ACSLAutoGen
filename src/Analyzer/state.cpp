@@ -84,7 +84,8 @@ namespace acslg::analyzer {
      * @param shallowCopy When true, reuse symbolic objects to avoid deep duplication.
      */
     Path::Path(const Path &other, bool shallowCopy)
-        : context_(other.context_), startPoint_(other.startPoint_) {
+        : memoryState_(other.context_.getExprFactory()), context_(other.context_),
+          startPoint_(other.startPoint_) {
         if (shallowCopy) {
             for (const auto &cond : other.pathConditions_) {
                 pathConditions_.emplace(cond);
@@ -1695,21 +1696,43 @@ namespace acslg::analyzer {
         return symbolic::isa<symbolic::Structure>(expr);
     }
 
-    MemoryModel::MemoryModel(const MemoryModel &other) {
+    MemoryModel::MemoryModel() {
+        if (symbolic::ExprFactoryScope::hasCurrent()) {
+            factory_ = &symbolic::ExprFactoryScope::current();
+        } else {
+            ownedFactory_ = std::make_unique<symbolic::ExprFactory>();
+            factory_      = ownedFactory_.get();
+        }
+    }
+
+    MemoryModel::MemoryModel(symbolic::ExprFactory &factory) : factory_(&factory) {}
+
+    auto MemoryModel::importValue(const symbolic::SymbolicExpr &value) -> StoredValue {
+        return factory().importExpr(value);
+    }
+
+    auto MemoryModel::copyStoredValueFrom(const MemoryModel &other, StoredValue value)
+        -> StoredValue {
+        if (&factory() == &other.factory())
+            return value;
+        return importValue(*value);
+    }
+
+    MemoryModel::MemoryModel(const MemoryModel &other) : MemoryModel() {
         for (auto &[addr, value] : other.memoryMap_variableAddr_) {
-            memoryMap_variableAddr_.emplace(addr, value->clone());
+            memoryMap_variableAddr_.emplace(addr, copyStoredValueFrom(other, value));
         }
         for (auto &[baseInfo, rangeValueMap] : other.memoryMap_constantRange_) {
             auto &mapToFill = memoryMap_constantRange_[baseInfo];
             for (auto &[range, value] : rangeValueMap) {
-                mapToFill.emplace(range, value->clone());
+                mapToFill.emplace(range, copyStoredValueFrom(other, value));
             }
         }
 
         for (auto &[baseHash, addrValueMap] : other.memoryMap_symbolicRange_) {
             auto &mapToFill = memoryMap_symbolicRange_[baseHash];
             for (auto &[addr, value] : addrValueMap) {
-                mapToFill.emplace(addr, value->clone());
+                mapToFill.emplace(addr, copyStoredValueFrom(other, value));
             }
         }
     }
@@ -1721,19 +1744,19 @@ namespace acslg::analyzer {
         clear();
 
         for (auto &[addr, value] : other.memoryMap_variableAddr_) {
-            memoryMap_variableAddr_.emplace(addr, value->clone());
+            memoryMap_variableAddr_.emplace(addr, copyStoredValueFrom(other, value));
         }
         for (auto &[baseInfo, rangeValueMap] : other.memoryMap_constantRange_) {
             auto &mapToFill = memoryMap_constantRange_[baseInfo];
             for (auto &[range, value] : rangeValueMap) {
-                mapToFill.emplace(range, value->clone());
+                mapToFill.emplace(range, copyStoredValueFrom(other, value));
             }
         }
 
         for (auto &[baseHash, addrValueMap] : other.memoryMap_symbolicRange_) {
             auto &mapToFill = memoryMap_symbolicRange_[baseHash];
             for (auto &[addr, value] : addrValueMap) {
-                mapToFill.emplace(addr, value->clone());
+                mapToFill.emplace(addr, copyStoredValueFrom(other, value));
             }
         }
 
@@ -1810,9 +1833,10 @@ namespace acslg::analyzer {
     void MemoryModel::write(const symbolic::Address &addr,
                             utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> value) {
         if (auto varAddr = symbolic::dyn_cast<const symbolic::VariableAddress>(&addr)) {
-            memoryMap_variableAddr_.insert_or_assign(*varAddr, std::move(value));
+            memoryMap_variableAddr_.insert_or_assign(*varAddr, importValue(*value));
             return;
         } else if (auto symbolAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
+            auto valueHandle = importValue(*value);
             auto baseInfo = symbolAddr->getBaseInfo();
 
             auto constOffset = symbolAddr->getOffset()->tryEvalAsConstant();
@@ -1827,8 +1851,7 @@ namespace acslg::analyzer {
                 auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
                 auto unsignedLen = constLen ? static_cast<uint64_t>(constLen.value()) : uint64_t{1};
                 memoryMap_constantRange_.try_emplace(
-                    baseInfo, std::map<ConstRange,
-                                       utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>{});
+                    baseInfo, std::map<ConstRange, StoredValue>{});
                 auto &rangeValueMap = memoryMap_constantRange_.at(baseInfo);
                 auto range          = std::pair{unsignedOffset, unsignedOffset + unsignedLen};
                 auto rangeForSearch =
@@ -1843,11 +1866,11 @@ namespace acslg::analyzer {
                     auto &firstLE_value                           = firstLEIt->second;
                     if (firstLE_leftBound < range_leftBound) {
                         auto leftRange = std::pair{firstLE_leftBound, range_leftBound};
-                        rangeValueMap.insert_or_assign(leftRange, firstLE_value->clone());
+                        rangeValueMap.insert_or_assign(leftRange, firstLE_value);
                     }
                     if (firstLE_rightBound > range_rightBound) {
                         auto rightRange = std::pair{range_rightBound, firstLE_rightBound};
-                        rangeValueMap.insert_or_assign(rightRange, firstLE_value->clone());
+                        rangeValueMap.insert_or_assign(rightRange, firstLE_value);
                     }
                     rangeValueMap.erase(firstLEIt);
                 }
@@ -1856,11 +1879,11 @@ namespace acslg::analyzer {
                     auto &upperBound_value                              = upperBoundIt->second;
                     if (upperBound_rightBound > range_rightBound) {
                         auto rightRange = std::pair{range_rightBound, upperBound_rightBound};
-                        rangeValueMap.insert_or_assign(rightRange, upperBound_value->clone());
+                        rangeValueMap.insert_or_assign(rightRange, upperBound_value);
                     }
                     rangeValueMap.erase(upperBoundIt);
                 }
-                rangeValueMap.insert_or_assign(range, std::move(value));
+                rangeValueMap.insert_or_assign(range, valueHandle);
                 return;
             }
             // symbolic range
@@ -1869,10 +1892,10 @@ namespace acslg::analyzer {
                 symbolAddr->getLength().value()->tryEvalAsConstant() == 1) {
                 auto fakeRange = std::make_unique<symbolic::SymbolAddress>(*symbolAddr);
                 fakeRange = fakeRange->withoutLength().into_underlying();
-                addrValueMap.insert_or_assign(*fakeRange, std::move(value));
+                addrValueMap.insert_or_assign(*fakeRange, valueHandle);
                 return;
             }
-            addrValueMap.insert_or_assign(*symbolAddr, std::move(value));
+            addrValueMap.insert_or_assign(*symbolAddr, valueHandle);
             return;
         } else if (auto fieldAddr = symbolic::dyn_cast<const symbolic::FieldAddress>(&addr)) {
             auto &baseAddr = fieldAddr->getBaseAddr();
@@ -1930,17 +1953,15 @@ namespace acslg::analyzer {
     }
 
     void MemoryModel::mergeConstantRanges() {
-        using ExprUP = utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>;
-
         for (auto &[base, cmap] : memoryMap_constantRange_) {
             if (cmap.empty())
                 continue;
 
             // 1) Move to a vector to allow reordering and in-place merging
-            std::vector<std::pair<ConstRange, ExprUP>> v;
+            std::vector<std::pair<ConstRange, StoredValue>> v;
             v.reserve(cmap.size());
             for (auto &kv : cmap)
-                v.emplace_back(kv.first, std::move(kv.second));
+                v.emplace_back(kv.first, kv.second);
             cmap.clear();
 
             // Sort by offset (ascending)
@@ -1950,10 +1971,10 @@ namespace acslg::analyzer {
             std::sort(v.begin(), v.end(), byOffset);
 
             // 2) Single-pass merge
-            std::vector<std::pair<ConstRange, ExprUP>> merged;
+            std::vector<std::pair<ConstRange, StoredValue>> merged;
             merged.reserve(v.size());
 
-            auto pushOrMerge = [&](std::pair<ConstRange, ExprUP> &&cur) {
+            auto pushOrMerge = [&](std::pair<ConstRange, StoredValue> &&cur) {
                 if (merged.empty()) {
                     merged.push_back(std::move(cur));
                     return;
@@ -1985,9 +2006,8 @@ namespace acslg::analyzer {
     void MemoryModel::mergeSymbolicRanges() {
         using SA     = symbolic::SymbolAddress;
         using Expr   = symbolic::SymbolicExpr;
-        using ExprUP = utils::not_null<std::unique_ptr<Expr>>;
 
-        auto valueEquivalent = [](const ExprUP &a, const ExprUP &b) -> bool {
+        auto valueEquivalent = [](StoredValue a, StoredValue b) -> bool {
             return *a->simplifiedExpr() == *b->simplifiedExpr();
         };
 
@@ -2005,7 +2025,7 @@ namespace acslg::analyzer {
 
             struct Item {
                 SA key;                             ///< Symbolic address (offset[/length])
-                ExprUP val;                         ///< Stored value expression
+                StoredValue val;                    ///< Stored value expression
                 std::optional<uint64_t> constOff{}; ///< If offset folds to constant
                 std::optional<uint64_t> constLen{}; ///< If length folds to constant
                 size_t offHash{0};                  ///< hash(offset.simplified)
@@ -2060,7 +2080,7 @@ namespace acslg::analyzer {
             }
 
             // Result map being rebuilt for this BaseInfo
-            std::unordered_map<SA, ExprUP> newMap;
+            std::unordered_map<SA, StoredValue> newMap;
             newMap.reserve(items.size());
 
             // (3) For each value group, build adjacency and emit chains

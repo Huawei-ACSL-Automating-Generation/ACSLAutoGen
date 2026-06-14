@@ -292,6 +292,28 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(*got.value(), *saveExpr);
     }
 
+    TEST_F(MemoryModelTest, EqualStoredValuesShareInternedHandle) {
+        MemoryModel mm;
+
+        auto expected = makeSymbolValue(42);
+        mm.write(makeVariableAddr(1), expected->clone());
+        mm.write(makeVariableAddr(2), expected->clone());
+
+        std::vector<const symbolic::SymbolicExpr *> flatValues;
+        for (auto &&[addr, value] : mm.flat()) {
+            if (*value == *expected)
+                flatValues.push_back(value.get());
+        }
+
+        ASSERT_EQ(flatValues.size(), 2u);
+        EXPECT_EQ(flatValues[0], flatValues[1]);
+
+        auto readBack = mm.read(makeVariableAddr(1));
+        ASSERT_TRUE(readBack);
+        EXPECT_EQ(*readBack.value(), *expected);
+        EXPECT_NE(readBack.value().get().get(), flatValues[0]);
+    }
+
     TEST_F(MemoryModelTest, Flat_Yields_All_Three_Categories) {
         MemoryModel mm;
 
