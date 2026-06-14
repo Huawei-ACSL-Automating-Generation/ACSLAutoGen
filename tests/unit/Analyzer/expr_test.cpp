@@ -801,4 +801,63 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(fieldAddrA.isa<symbolic::FieldAddress>());
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
     }
+
+    TEST(SymbolAddressRebuildTest, RangeUpdatesDoNotMutateOriginalAddress) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        auto original = std::make_unique<symbolic::SymbolAddress>(
+            var->getType(), std::nullopt, point);
+        auto withOffset =
+            original->withOffset(std::make_unique<symbolic::detail::LiteralExprNode>(5));
+        auto withLength =
+            withOffset->withLength(std::make_unique<symbolic::detail::LiteralExprNode>(3));
+        auto withoutLength = withLength->withoutLength();
+        auto resetOffset   = withLength->withResetOffset();
+
+        EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(original->getOffset().get())
+                      ->getLiteralValue(),
+                  0);
+        EXPECT_FALSE(original->getLength());
+
+        EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(withOffset->getOffset().get())
+                      ->getLiteralValue(),
+                  5);
+        EXPECT_FALSE(withOffset->getLength());
+
+        ASSERT_TRUE(withLength->getLength());
+        EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(withLength->getOffset().get())
+                      ->getLiteralValue(),
+                  5);
+        EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(
+                      withLength->getLength().value().get().get())
+                      ->getLiteralValue(),
+                  3);
+
+        EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(withoutLength->getOffset().get())
+                      ->getLiteralValue(),
+                  5);
+        EXPECT_FALSE(withoutLength->getLength());
+
+        ASSERT_TRUE(resetOffset->getLength());
+        EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(resetOffset->getOffset().get())
+                      ->getLiteralValue(),
+                  0);
+        EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(
+                      resetOffset->getLength().value().get().get())
+                      ->getLiteralValue(),
+                  3);
+    }
 } // namespace acslg::test::unit::analyzer

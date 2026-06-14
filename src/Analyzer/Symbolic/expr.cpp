@@ -1496,13 +1496,14 @@ namespace acslg::analyzer::symbolic {
                 ERROR("This expr should be a `SymbolAddress");
 
             // Apply substituted offset to the concrete address.
-            realAddr.value()->addOffset(std::move(offset));
+            auto concreteAddr = std::move(realAddr).value();
+            concreteAddr      = concreteAddr->withAddedOffset(std::move(offset));
 
             if (length) {
-                realAddr.value()->setLength(std::move(length).value());
+                concreteAddr = concreteAddr->withLength(std::move(length).value());
             }
             // Return the underlying concrete address (std::unique_ptr<Address>).
-            return std::move(realAddr).value().into_underlying();
+            return std::move(concreteAddr).into_underlying();
         } else {
             // The origin hasn't been accessed at loop entry -> construct a
             // SymbolAddress with corrext fromAddr and fromPoint.
@@ -1760,8 +1761,10 @@ namespace acslg::analyzer::symbolic {
             auto expr = right_->clone();
             switch (op_) {
                 using enum Operator;
-                case Add: addr->addOffset(std::move(expr)); break;
-                case Subtract: addr->subOffset(std::move(expr)); break;
+                case Add: addr = addr->withAddedOffset(std::move(expr)).into_underlying(); break;
+                case Subtract:
+                    addr = addr->withSubtractedOffset(std::move(expr)).into_underlying();
+                    break;
 
                 default: return std::nullopt;
             }
@@ -1772,7 +1775,7 @@ namespace acslg::analyzer::symbolic {
             auto expr = left_->clone();
             switch (op_) {
                 using enum Operator;
-                case Add: addr->addOffset(std::move(expr)); break;
+                case Add: addr = addr->withAddedOffset(std::move(expr)).into_underlying(); break;
                 case Subtract: return std::nullopt;
                 default: return std::nullopt;
             }
@@ -2043,7 +2046,7 @@ namespace acslg::analyzer::symbolic {
                 if (auto *cat = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr())) {
                     auto len =
                         std::make_unique<detail::LiteralExprNode>(cat->getSize().getZExtValue());
-                    addr->setLength(std::move(len));
+                    addr = addr->withLength(std::move(len)).into_underlying();
                 }
                 fields_.emplace_back(std::move(addr));
             } else {

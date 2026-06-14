@@ -1360,18 +1360,22 @@ namespace acslg::spec_generator {
                 if (indexStep > 0) {
                     // For now we take [0, bound) for max/min over range (reset offset to zero).
                     // More precise modeling (e.g. starting at index_init) is left for future work.
-                    arrayRange->resetOffset(); // just zero offset, :)
-                    arrayRange->setLength(indexInfo.indexBound->clone());
+                    arrayRange = arrayRange->withResetOffset().into_underlying();
+                    arrayRange =
+                        arrayRange->withLength(indexInfo.indexBound->clone()).into_underlying();
                     // arrayRange->setOffset(indexInfo.indexSymbolicValue->clone());
                     // arrayRange->setLength(std::make_unique<symb::BinaryOpExpr>(
                     //     indexInfo.indexBound->clone(), Subtract,
                     //     indexInfo.indexSymbolicValue->clone()));
                 } else {
-                    arrayRange->resetOffset(); // just zero offset, :)
+                    arrayRange = arrayRange->withResetOffset().into_underlying();
                     // arrayRange->setOffset(indexInfo.indexBound->clone());
-                    arrayRange->setLength(std::make_unique<symb::BinaryOpExpr>(
-                        indexInfo.indexSymbolicValue->clone(), Subtract,
-                        indexInfo.indexBound->clone()));
+                    arrayRange =
+                        arrayRange
+                            ->withLength(std::make_unique<symb::BinaryOpExpr>(
+                                indexInfo.indexSymbolicValue->clone(), Subtract,
+                                indexInfo.indexBound->clone()))
+                            .into_underlying();
                 }
 
                 // Safety guard: avoid constructing MaxMinOverRange with an invalid range.
@@ -1661,15 +1665,22 @@ namespace acslg::spec_generator {
             // the getACSL layer.
             auto arrayRange = std::make_unique<symb::SymbolAddress>(*arrayInCond);
             if (indexStep > 0) {
-                arrayRange->setOffset(indexInfo.indexSymbolicValue->clone());
-                arrayRange->setLength(
-                    std::make_unique<symb::BinaryOpExpr>(indexInfo.indexBound->clone(), Subtract,
-                                                         indexInfo.indexSymbolicValue->clone()));
+                arrayRange =
+                    arrayRange->withOffset(indexInfo.indexSymbolicValue->clone()).into_underlying();
+                arrayRange =
+                    arrayRange
+                        ->withLength(std::make_unique<symb::BinaryOpExpr>(
+                            indexInfo.indexBound->clone(), Subtract,
+                            indexInfo.indexSymbolicValue->clone()))
+                        .into_underlying();
             } else {
-                arrayRange->setOffset(indexInfo.indexBound->clone());
-                arrayRange->setLength(
-                    std::make_unique<symb::BinaryOpExpr>(indexInfo.indexSymbolicValue->clone(),
-                                                         Subtract, indexInfo.indexBound->clone()));
+                arrayRange = arrayRange->withOffset(indexInfo.indexBound->clone()).into_underlying();
+                arrayRange =
+                    arrayRange
+                        ->withLength(std::make_unique<symb::BinaryOpExpr>(
+                            indexInfo.indexSymbolicValue->clone(), Subtract,
+                            indexInfo.indexBound->clone()))
+                        .into_underlying();
             }
             normalPathInfo.pathState = analyzer::Path::PathState::Step;
             normalPathInfo.pathConds.push_back(std::make_unique<symb::QuantifierOverRange>(

@@ -427,8 +427,10 @@ namespace acslg::analyzer::symbolic {
         std::string_view indexName,
         const SourcePoint &fromPoint) {
         auto indexedRange = std::make_unique<SymbolAddress>(range);
-        indexedRange->setOffset(std::make_unique<SymbolAddress::RangeIndex>(indexName));
-        indexedRange->resetLength();
+        indexedRange =
+            indexedRange->withOffset(std::make_unique<SymbolAddress::RangeIndex>(indexName))
+                .into_underlying();
+        indexedRange = indexedRange->withoutLength().into_underlying();
         return getSymbol(range.getPointeeType(), std::move(indexedRange), fromPoint)
             .into_underlying();
     }

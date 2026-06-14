@@ -262,7 +262,7 @@ namespace acslg::analyzer {
                 if (idxEval.second.size() != 1)
                     ERROR("This location does not support control flow branches.");
                 auto idxExpr = std::move(idxEval.second[0]);
-                resultAddr->addOffset(std::move(idxExpr));
+                resultAddr = resultAddr->withAddedOffset(std::move(idxExpr)).into_underlying();
                 if (!memoryState_.contains(*resultAddr)) {
                     auto newSymbol = getSymbol(
                         arr->getType(), resultAddr->addressClone().into_underlying(), startPoint_);
@@ -746,7 +746,7 @@ namespace acslg::analyzer {
                             auto idxExpr        = std::move(idx.second[i]);
                             std::string idxDump = idxExpr->dump();
                             auto newAddr        = std::make_unique<symbolic::SymbolAddress>(*addr);
-                            newAddr->setOffset(std::move(idxExpr));
+                            newAddr = newAddr->withOffset(std::move(idxExpr)).into_underlying();
                             if (auto value = memoryState_.read(*newAddr); value == std::nullopt) {
                                 auto elemType = arrSub->getType();
                                 auto symbol =
@@ -1017,7 +1017,7 @@ namespace acslg::analyzer {
 
                         // Normalize to base address (offset = 0) for consistent memory handling.
                         auto freedAddr = std::move(*maybeAddr);
-                        freedAddr->resetOffset();
+                        freedAddr = freedAddr->withResetOffset();
 
                         // Overwrite freed memory with an UnknownExpr (symbolic tombstone).
                         // This prevents later reads from reusing stale symbolic values.
@@ -1091,13 +1091,15 @@ namespace acslg::analyzer {
 
                         auto destRange =
                             std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
-                        destRange->setLength(std::move(lengthExpr));
+                        destRange = destRange->withLength(std::move(lengthExpr)).into_underlying();
 
                         auto srcIndexed =
                             std::make_unique<symbolic::SymbolAddress>(*srcAddr.value());
-                        srcIndexed->resetLength();
-                        srcIndexed->addOffset(
-                            std::make_unique<symbolic::SymbolAddress::RangeIndex>("i"));
+                        srcIndexed = srcIndexed->withoutLength().into_underlying();
+                        srcIndexed = srcIndexed
+                                         ->withAddedOffset(std::make_unique<
+                                                          symbolic::SymbolAddress::RangeIndex>("i"))
+                                         .into_underlying();
 
                         auto valueExpr = symbolic::getSymbol(
                             elemTy, srcIndexed->addressClone().into_underlying(), startPoint_);
@@ -1185,7 +1187,7 @@ namespace acslg::analyzer {
                         if (elemTy->isStructureType()) {
                             auto destBase =
                                 std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
-                            destBase->resetLength();
+                            destBase = destBase->withoutLength().into_underlying();
                             auto structVal = symbolic::makeUnknownStructure(
                                 elemTy, destBase->addressClone().into_underlying(), pointAfterCall);
                             memoryState_.write(*destBase, std::move(structVal));
@@ -1194,7 +1196,7 @@ namespace acslg::analyzer {
 
                         auto destRange =
                             std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
-                        destRange->setLength(std::move(lengthExpr));
+                        destRange = destRange->withLength(std::move(lengthExpr)).into_underlying();
                         memoryState_.write(
                             *destRange, symbolic::UnknownExpr::makeUnknown().into_underlying());
                         return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -1415,7 +1417,7 @@ namespace acslg::analyzer {
                     auto targetType = symbolic::deriveType(castExpr->getType());
 
                     for (auto &subExpr : sub.second)
-                        subExpr->setValType(targetType);
+                        subExpr = subExpr->withValType(targetType);
 
                     return {std::move(sub.first), std::move(sub.second)};
                 })
@@ -1494,16 +1496,15 @@ namespace acslg::analyzer {
                         if (sub.second.size() != 1)
                             ERROR("ConstantExpr subExpr produced multiple results");
                         auto resultTy = symbolic::deriveType(ce->getType());
-                        sub.second[0]->setValType(resultTy);
+                        sub.second[0] = sub.second[0]->withValType(resultTy);
                         return {std::move(sub.first), std::move(sub.second)};
                     }
                     auto resultTy = symbolic::deriveType(ce->getType());
                     auto lit      = std::make_unique<symbolic::detail::LiteralExprNode>(
                         v.isSigned() ? static_cast<int64_t>(v.getSExtValue())
                                      : static_cast<uint64_t>(v.getZExtValue()));
-                    lit->setValType(resultTy);
                     EvalResult r;
-                    r.second.emplace_back(std::move(lit));
+                    r.second.emplace_back(lit->withValType(resultTy));
                     return r;
                 })
                 .Case<clang::UnaryExprOrTypeTraitExpr>(
@@ -1541,10 +1542,9 @@ namespace acslg::analyzer {
                         // Materialize a literal of the expression’s result type (typically size_t).
                         auto resultTy = symbolic::deriveType(uett->getType());
                         auto lit      = std::make_unique<symbolic::detail::LiteralExprNode>(value);
-                        lit->setValType(resultTy);
 
                         EvalResult r;
-                        r.second.emplace_back(std::move(lit));
+                        r.second.emplace_back(lit->withValType(resultTy));
                         return r;
                     })
 
@@ -1783,7 +1783,7 @@ namespace acslg::analyzer {
             if (symbolAddr->getLength() && symbolAddr->getLength().value()->tryEvalAsConstant() &&
                 symbolAddr->getLength().value()->tryEvalAsConstant().value() == 1) {
                 auto fakeRange = std::make_unique<symbolic::SymbolAddress>(*symbolAddr);
-                fakeRange->resetLength();
+                fakeRange = fakeRange->withoutLength().into_underlying();
                 auto it = addrValueMap.find(*fakeRange);
                 if (it == addrValueMap.end())
                     return std::nullopt;
@@ -1868,7 +1868,7 @@ namespace acslg::analyzer {
             if (symbolAddr->getLength() && symbolAddr->getLength().value()->tryEvalAsConstant() &&
                 symbolAddr->getLength().value()->tryEvalAsConstant() == 1) {
                 auto fakeRange = std::make_unique<symbolic::SymbolAddress>(*symbolAddr);
-                fakeRange->resetLength();
+                fakeRange = fakeRange->withoutLength().into_underlying();
                 addrValueMap.insert_or_assign(*fakeRange, std::move(value));
                 return;
             }
