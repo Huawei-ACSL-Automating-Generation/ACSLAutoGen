@@ -166,7 +166,7 @@ namespace acslg::analyzer::symbolic {
             }
 
             if (auto *uo = dyn_cast<UnaryOpExpr>(&e)) {
-                using UO = UnaryOpExpr::Operator;
+                using UO = detail::UnaryOpExprNode::Operator;
                 if (uo->getOperator() == UO::LogicalNot)
                     return true;
             }
@@ -352,7 +352,7 @@ namespace acslg::analyzer::symbolic {
         return std::make_unique<BinaryOpExpr>(left_->clone(), op_, right_->clone());
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> UnaryOpExpr::clone() const {
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::clone() const {
         if (auto handle = expr_.handle())
             return std::make_unique<UnaryOpExpr>(op_, *handle);
 
@@ -432,7 +432,7 @@ namespace acslg::analyzer::symbolic {
         return seed;
     }
 
-    size_t UnaryOpExpr::hash() const {
+    size_t detail::UnaryOpExprNode::hash() const {
         return utils::hash_val(getKind(), static_cast<size_t>(op_), expr_->hash());
     }
 
@@ -523,7 +523,7 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    std::string UnaryOpExpr::dump() const {
+    std::string detail::UnaryOpExprNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         std::string opStr;
@@ -736,7 +736,7 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> UnaryOpExpr::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> detail::UnaryOpExprNode::doGetACSL(
         const SymbolicExpr::GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
@@ -1046,7 +1046,7 @@ namespace acslg::analyzer::symbolic {
                 if (expectTrue)
                     return boolExpr.clone().into_underlying();
                 return std::make_unique<UnaryOpExpr>(
-                    UnaryOpExpr::Operator::LogicalNot,
+                    detail::UnaryOpExprNode::Operator::LogicalNot,
                     utils::not_null<std::unique_ptr<SymbolicExpr>>(boolExpr.clone()));
             };
 
@@ -1088,7 +1088,7 @@ namespace acslg::analyzer::symbolic {
         return std::make_unique<BinaryOpExpr>(std::move(LHS), op_, std::move(RHS));
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> UnaryOpExpr::simplifiedExpr() const {
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::simplifiedExpr() const {
         if (isUnknown())
             return UnknownExpr::makeUnknown().into_underlying();
         if (isLinear())
@@ -1118,12 +1118,12 @@ namespace acslg::analyzer::symbolic {
         return nullptr;
     }
 
-    std::unique_ptr<LiteralExpr> UnaryOpExpr::evalToConstExpr() const {
+    std::unique_ptr<LiteralExpr> detail::UnaryOpExprNode::evalToConstExpr() const {
         auto C = expr_->evalToConstExpr();
         if (!C)
             return nullptr;
 
-        using Op    = UnaryOpExpr::Operator;
+        using Op    = detail::UnaryOpExprNode::Operator;
         auto vt     = expr_->getValType();
         unsigned bw = std::max(vt.bitWidth ? vt.bitWidth : 32u, 32u);
 
@@ -1301,7 +1301,7 @@ namespace acslg::analyzer::symbolic {
         return *left_ == *(binary->left_) && op_ == binary->op_ && *right_ == *(binary->right_);
     }
 
-    bool UnaryOpExpr::equal(const SymbolicExpr &expr) const {
+    bool detail::UnaryOpExprNode::equal(const SymbolicExpr &expr) const {
         const auto unary = dyn_cast<const UnaryOpExpr>(&expr);
         if (!unary)
             return false;
@@ -1536,7 +1536,7 @@ namespace acslg::analyzer::symbolic {
                                               right_->getSubstitutedExpr(pathSubTo, pointToSub));
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> UnaryOpExpr::getSubstitutedExpr(
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
         return std::make_unique<UnaryOpExpr>(op_, expr_->getSubstitutedExpr(pathSubTo, pointToSub));
@@ -1631,7 +1631,7 @@ namespace acslg::analyzer::symbolic {
             right_->getRangeIndexSubstituted(rangeBase, indexExpr));
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> UnaryOpExpr::getRangeIndexSubstituted(
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
         return std::make_unique<UnaryOpExpr>(op_,
@@ -1726,7 +1726,7 @@ namespace acslg::analyzer::symbolic {
                                               right_->getSubstitutedValueExpr(hashExprMap));
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> UnaryOpExpr::getSubstitutedValueExpr(
+    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return it->second->clone();
@@ -1795,7 +1795,7 @@ namespace acslg::analyzer::symbolic {
         return lmap;
     }
 
-    SymbolicExpr::UsedMap UnaryOpExpr::collectUsedSymbols() const {
+    SymbolicExpr::UsedMap detail::UnaryOpExprNode::collectUsedSymbols() const {
         return expr_->collectUsedSymbols();
     }
 
@@ -2264,7 +2264,7 @@ namespace acslg::analyzer::symbolic {
 
     std::unique_ptr<SymbolicExpr> createLNotExpr(
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-        return std::make_unique<UnaryOpExpr>(UnaryOpExpr::Operator::LogicalNot, std::move(expr));
+        return std::make_unique<UnaryOpExpr>(detail::UnaryOpExprNode::Operator::LogicalNot, std::move(expr));
     }
 
     BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp) {

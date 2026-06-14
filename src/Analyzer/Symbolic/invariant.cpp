@@ -19,7 +19,7 @@ namespace acslg::analyzer::symbolic {
      * @brief Determine whether the unary operation preserves linearity.
      * @return True for + or - over a linear operand; false otherwise.
      */
-    bool UnaryOpExpr::isLinear() const {
+    bool detail::UnaryOpExprNode::isLinear() const {
         switch (op_) {
             case Operator::Plus:
             case Operator::Minus: return expr_->isLinear();
@@ -31,7 +31,7 @@ namespace acslg::analyzer::symbolic {
      * @brief Compute the algebraic degree of the unary expression.
      * @return Degree of operand for +/-; -1 when undefined.
      */
-    int UnaryOpExpr::getMaxDegree() const {
+    int detail::UnaryOpExprNode::getMaxDegree() const {
         switch (op_) {
             case Operator::Plus:
             case Operator::Minus: return expr_->getMaxDegree();
@@ -176,7 +176,7 @@ namespace acslg::analyzer::symbolic {
     /**
      * @brief Convert unary expression to linear form when operator is +/-.
      */
-    std::optional<Parma_Polyhedra_Library::Linear_Expression> UnaryOpExpr::toLinearExpr(
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> detail::UnaryOpExprNode::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
         auto E = expr_->toLinearExpr(varIndexMap);
         if (E == std::nullopt)
@@ -305,7 +305,7 @@ namespace acslg::analyzer::symbolic {
         return e;
     }
 
-    Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr(
+    Parma_Polyhedra_Library::Linear_Expression detail::UnaryOpExprNode::toLinearExpr(
         const std::unordered_map<size_t, size_t> &hashIdMap) const {
         auto E = expr_->toLinearExpr(hashIdMap);
 
@@ -681,7 +681,7 @@ namespace acslg::analyzer {
                         default: continue;
                     }
                 } else if (auto unary = symbolic::dyn_cast<symbolic::UnaryOpExpr>(cond.get().get())) {
-                    if (unary->getOperator() != symbolic::UnaryOpExpr::Operator::LogicalNot)
+                    if (unary->getOperator() != symbolic::detail::UnaryOpExprNode::Operator::LogicalNot)
                         continue;
                     Formulas oneExpr;
                     oneExpr.push_back(unary->getSub()->clone());
@@ -1174,7 +1174,7 @@ namespace acslg::analyzer {
 
                     if (coeffs[target] == -1) {
                         rhs = std::make_unique<symbolic::UnaryOpExpr>(
-                            symbolic::UnaryOpExpr::Operator::Minus, std::move(rhs));
+                            symbolic::detail::UnaryOpExprNode::Operator::Minus, std::move(rhs));
                     } else if (coeffs[target] != 1) {
                         rhs = std::make_unique<symbolic::BinaryOpExpr>(
                             std::move(rhs), symbolic::BinaryOpExpr::Operator::Divide,

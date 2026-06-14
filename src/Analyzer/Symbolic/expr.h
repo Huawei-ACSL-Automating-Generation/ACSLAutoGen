@@ -41,9 +41,11 @@ namespace acslg::analyzer::symbolic {
 
     namespace detail {
         class LiteralExprNode;
+        class UnaryOpExprNode;
     }
 
     using LiteralExpr = detail::LiteralExprNode;
+    using UnaryOpExpr = detail::UnaryOpExprNode;
 
     /**
      * @class SourcePoint
@@ -828,38 +830,40 @@ namespace acslg::analyzer::symbolic {
         ExprChild right_;
     };
 
-    /// @class UnaryOpExpr
+    namespace detail {
+
+    /// @class UnaryOpExprNode
     /// @brief Represents a unary operation expression.
-    class UnaryOpExpr : public SymbolicExpr {
+    class UnaryOpExprNode : public SymbolicExpr {
       public:
         enum class Operator : unsigned {
 #define UN_OP(name, tok, prec, isRightAssoc) name,
 #include "operators.def"
         };
 
-        inline static unsigned getPrecedence(UnaryOpExpr::Operator op) {
+        inline static unsigned getPrecedence(UnaryOpExprNode::Operator op) {
             switch (op) {
 #define UN_OP(name, tok, prec, isRightAssoc)                                                       \
-    case UnaryOpExpr::Operator::name: return prec;
+    case UnaryOpExprNode::Operator::name: return prec;
 #include "operators.def"
                 default: ERROR("Unknown Operator");
             }
         }
 
-        inline static bool isRightAssociative(UnaryOpExpr::Operator op) {
+        inline static bool isRightAssociative(UnaryOpExprNode::Operator op) {
             switch (op) {
 #define UN_OP(name, tok, prec, isRightAssoc)                                                       \
-    case UnaryOpExpr::Operator::name: return isRightAssoc;
+    case UnaryOpExprNode::Operator::name: return isRightAssoc;
 #include "operators.def"
                 default: ERROR("Unknown operator");
             }
         }
 
-        UnaryOpExpr(Operator op, utils::not_null<std::unique_ptr<SymbolicExpr>> expr)
+        UnaryOpExprNode(Operator op, utils::not_null<std::unique_ptr<SymbolicExpr>> expr)
             : SymbolicExpr(ExprKind::K_UnaryOpExpr, expr->getValType()), op_(op),
               expr_(std::move(expr)) {}
 
-        UnaryOpExpr(Operator op, ExprHandle expr)
+        UnaryOpExprNode(Operator op, ExprHandle expr)
             : SymbolicExpr(ExprKind::K_UnaryOpExpr, expr->getValType()), op_(op), expr_(expr) {}
 
         static bool classof(const SymbolicExpr *expr) {
@@ -909,6 +913,8 @@ namespace acslg::analyzer::symbolic {
         ExprChild expr_;
     };
 
+    } // namespace detail
+
     /// @class UnknownExpr
     /// @brief Represents a unknown symbolic expression, primarily used to denote cases beyond
     /// capabilities.
@@ -955,7 +961,6 @@ namespace acslg::analyzer::symbolic {
 
     namespace detail {
         using SymbolicExprNode = SymbolicExpr;
-        using UnaryOpExprNode  = UnaryOpExpr;
         using BinaryOpExprNode = BinaryOpExpr;
         using UnknownExprNode  = UnknownExpr;
     } // namespace detail
