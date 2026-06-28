@@ -744,11 +744,13 @@ namespace acslg::analyzer {
                         std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                         Formulas outExprs;
 
+                        auto &factory = context_.getExprFactory();
+                        auto baseAddrHandle = factory.importAddress(*addr);
                         for (size_t i = 0; i < idx.second.size(); ++i) {
-                            auto idxExpr        = std::move(idx.second[i]);
-                            std::string idxDump = idxExpr->dump();
-                            auto newAddr        = std::make_unique<symbolic::SymbolAddress>(*addr);
-                            newAddr = newAddr->withOffset(std::move(idxExpr)).into_underlying();
+                            auto newAddrHandle =
+                                factory.withOffset(baseAddrHandle,
+                                                   factory.importExpr(*idx.second[i]));
+                            auto newAddr = newAddrHandle->addressClone().into_underlying();
                             if (auto value = memoryState_.read(*newAddr); value == std::nullopt) {
                                 auto elemType = arrSub->getType();
                                 auto symbol =
