@@ -1363,6 +1363,7 @@ namespace acslg::analyzer::symbolic {
         ExprHandle binary(ExprHandle left, BinaryOpExpr::Operator op, ExprHandle right) {
             return intern(std::make_unique<detail::BinaryOpExprNode>(left, op, right));
         }
+        ExprHandle simplifiedBinary(ExprHandle left, BinaryOpExpr::Operator op, ExprHandle right);
 
         ExprHandle withValType(ExprHandle expr, SymbolicExpr::Type newType);
 

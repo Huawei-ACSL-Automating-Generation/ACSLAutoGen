@@ -265,6 +265,15 @@ namespace acslg::analyzer::symbolic {
             varType, std::move(clonedFrom.value()), std::move(fromPoint)));
     }
 
+    ExprHandle ExprFactory::simplifiedBinary(ExprHandle left,
+                                             BinaryOpExpr::Operator op,
+                                             ExprHandle right) {
+        auto simplified = std::make_unique<detail::BinaryOpExprNode>(
+                              cloneExpr(left), op, cloneExpr(right))
+                              ->simplifiedExpr();
+        return importExpr(*simplified);
+    }
+
     AddrHandle ExprFactory::variableAddress(utils::not_null<const clang::VarDecl *> from) {
         return internAddress(std::make_unique<VariableAddress>(from));
     }
@@ -296,22 +305,16 @@ namespace acslg::analyzer::symbolic {
 
     AddrHandle ExprFactory::withAddedOffset(AddrHandle address, ExprHandle extra) {
         const auto &symbolAddr = address.cast<SymbolAddress>();
-        auto newOffset = std::make_unique<BinaryOpExpr>(
-                             cloneExpr(importExpr(*symbolAddr.getOffset())),
-                             detail::BinaryOpExprNode::Operator::Add,
-                             cloneExpr(extra))
-                             ->simplifiedExpr();
-        return withOffset(address, importExpr(*newOffset));
+        auto newOffset = simplifiedBinary(importExpr(*symbolAddr.getOffset()),
+                                          detail::BinaryOpExprNode::Operator::Add, extra);
+        return withOffset(address, newOffset);
     }
 
     AddrHandle ExprFactory::withSubtractedOffset(AddrHandle address, ExprHandle extra) {
         const auto &symbolAddr = address.cast<SymbolAddress>();
-        auto newOffset = std::make_unique<BinaryOpExpr>(
-                             cloneExpr(importExpr(*symbolAddr.getOffset())),
-                             detail::BinaryOpExprNode::Operator::Subtract,
-                             cloneExpr(extra))
-                             ->simplifiedExpr();
-        return withOffset(address, importExpr(*newOffset));
+        auto newOffset = simplifiedBinary(importExpr(*symbolAddr.getOffset()),
+                                          detail::BinaryOpExprNode::Operator::Subtract, extra);
+        return withOffset(address, newOffset);
     }
 
     AddrHandle ExprFactory::withLength(AddrHandle address, ExprHandle length) {
@@ -330,12 +333,9 @@ namespace acslg::analyzer::symbolic {
         const auto &symbolAddr = address.cast<SymbolAddress>();
         auto currentLength =
             symbolAddr.getLength() ? importExpr(*symbolAddr.getLength().value()) : literal(1);
-        auto newLength = std::make_unique<BinaryOpExpr>(
-                             currentLength->clone(),
-                             detail::BinaryOpExprNode::Operator::Add,
-                             extra->clone())
-                             ->simplifiedExpr();
-        return withLength(address, importExpr(*newLength));
+        auto newLength = simplifiedBinary(currentLength, detail::BinaryOpExprNode::Operator::Add,
+                                          extra);
+        return withLength(address, newLength);
     }
 
     AddrHandle ExprFactory::withoutLength(AddrHandle address) {
