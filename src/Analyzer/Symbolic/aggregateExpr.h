@@ -283,7 +283,7 @@ namespace acslg::analyzer::symbolic {
 
         MaxMinOverRange(const MaxMinOverRange &other)
             : OverRangeExpr(other), Symbol(other), extremum_(other.extremum_),
-              expr_(other.expr_->clone().into_underlying()), fromPoint_(other.fromPoint_) {}
+              expr_(other.expr_.clone()), fromPoint_(other.fromPoint_) {}
         MaxMinOverRange(MaxMinOverRange &&) = default;
         MaxMinOverRange &operator=(const MaxMinOverRange &);
         MaxMinOverRange &operator=(MaxMinOverRange &&) = default;
@@ -301,7 +301,8 @@ namespace acslg::analyzer::symbolic {
                             expr->getValType(),
                             std::move(range),
                             indexName),
-              Symbol(Kind::K_MaxMinOverRange), extremum_(extremum), expr_(std::move(expr)),
+              Symbol(Kind::K_MaxMinOverRange), extremum_(extremum),
+              expr_(ExprChild::fromConstOwned(std::move(expr))),
               fromPoint_(std::move(fromPoint)) {}
 
         // SymbolicExpr
@@ -343,7 +344,7 @@ namespace acslg::analyzer::symbolic {
 
       private:
         Extremum extremum_;
-        utils::not_null<std::unique_ptr<const SymbolicExpr>> expr_;
+        ExprChild expr_;
         SourcePoint fromPoint_;
 
         static utils::not_null<std::unique_ptr<const SymbolicExpr>> makeDefaultExpr(

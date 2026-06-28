@@ -728,6 +728,47 @@ namespace acslg::test::unit::analyzer {
         EXPECT_NE(*substituted, quantifier);
     }
 
+    TEST(MaxMinOverRangeRebuildTest, BodyUsesExprChildAcrossCloneAndSubstitution) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        auto range = std::make_unique<symbolic::SymbolAddress>(
+            var->getType(),
+            std::make_unique<symbolic::VariableAddress>(var),
+            point);
+        range = range->withLength(
+                         std::make_unique<symbolic::detail::LiteralExprNode>(3))
+                    .into_underlying();
+        auto rangeBase = range->getBaseInfo();
+
+        std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
+        symbolic::MaxMinOverRange max{
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
+                std::move(constRange)},
+            "i",
+            symbolic::MaxMinOverRange::Extremum::Max,
+            point};
+
+        auto clone = max.clone();
+        EXPECT_EQ(*clone, max);
+
+        auto substituted = max.getRangeIndexSubstituted(
+            rangeBase, symbolic::detail::LiteralExprNode{1});
+        EXPECT_NE(*substituted, max);
+    }
+
     TEST(ExprFacadeTest, LiteralAndOperatorsUseCurrentFactory) {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);

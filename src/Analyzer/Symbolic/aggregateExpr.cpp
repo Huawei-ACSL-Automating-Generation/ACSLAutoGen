@@ -350,7 +350,7 @@ namespace acslg::analyzer::symbolic {
 
         auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
         newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newMMOR->expr_  = std::move(subedBody).into_underlying();
+        newMMOR->expr_  = ExprChild{std::move(subedBody)};
         if (fromPoint_ == pointToSub)
             TODO();
         return newMMOR;
@@ -367,7 +367,7 @@ namespace acslg::analyzer::symbolic {
 
         auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
         newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newMMOR->expr_  = std::move(subedBody).into_underlying();
+        newMMOR->expr_  = ExprChild{std::move(subedBody)};
         return newMMOR;
     }
 
@@ -383,7 +383,7 @@ namespace acslg::analyzer::symbolic {
 
         auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
         newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newMMOR->expr_  = std::move(subedBody).into_underlying();
+        newMMOR->expr_  = ExprChild{std::move(subedBody)};
         return newMMOR;
     }
 
@@ -393,7 +393,7 @@ namespace acslg::analyzer::symbolic {
         OverRangeExpr::operator=(other);
         Symbol::operator=(other);
         extremum_  = other.extremum_;
-        expr_      = other.expr_->clone().into_underlying();
+        expr_      = ExprChild{other.expr_.clone()};
         fromPoint_ = other.fromPoint_;
         return *this;
     }
@@ -413,7 +413,7 @@ namespace acslg::analyzer::symbolic {
                         indexName),
           Symbol(Kind::K_MaxMinOverRange),
           extremum_(extremum),
-          expr_(makeDefaultExpr(*range_, indexName, fromPoint).into_underlying()),
+          expr_(ExprChild::fromConstOwned(makeDefaultExpr(*range_, indexName, fromPoint))),
           fromPoint_(std::move(fromPoint)) {}
 
     MaxMinOverRange::MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
