@@ -1021,7 +1021,13 @@ namespace acslg::analyzer {
 
                         // Normalize to base address (offset = 0) for consistent memory handling.
                         auto freedAddr = std::move(*maybeAddr);
-                        freedAddr = freedAddr->withResetOffset();
+                        auto &factory = context_.getExprFactory();
+                        auto freedAddrHandle =
+                            factory.withOffset(factory.importAddress(*freedAddr),
+                                               factory.literal(static_cast<int64_t>(
+                                                   symbolic::SymbolAddress::ZERO_OFFSET)));
+                        freedAddr = std::make_unique<symbolic::SymbolAddress>(
+                            freedAddrHandle.cast<symbolic::SymbolAddress>());
 
                         // Overwrite freed memory with an UnknownExpr (symbolic tombstone).
                         // This prevents later reads from reusing stale symbolic values.
