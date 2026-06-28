@@ -1910,8 +1910,11 @@ namespace acslg::analyzer {
             auto baseSt = symbolic::dyn_cast<symbolic::Structure>(baseValue.value().get().get());
             if (baseSt == nullptr)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
-            baseSt->setFieldValue(index, std::move(value));
-            write(*baseAddr, std::move(baseValue.value()));
+            auto updated = baseSt->withFieldValue(index, std::move(value));
+            std::unique_ptr<symbolic::SymbolicExpr> updatedExpr =
+                std::move(updated).into_underlying();
+            write(*baseAddr, utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>{
+                                 std::move(updatedExpr)});
             return;
         }
         UNREACHABLE();

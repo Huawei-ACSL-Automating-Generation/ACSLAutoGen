@@ -258,11 +258,11 @@ namespace acslg::analyzer::symbolic {
             if (fty->isStructureType()) {
                 // Recursively build unknown sub-structures so nested fields are initialized.
                 auto nested = makeUnknownStructure(fty, makeFieldAddr(), fromPoint);
-                st->setFieldValue(idx, std::move(nested));
+                st = st->withFieldValue(idx, std::move(nested)).into_underlying();
             } else {
                 // Tie field values to their field address so later lookups can recover provenance.
                 auto fieldSym = getSymbol(fty, std::make_optional(makeFieldAddr()), fromPoint);
-                st->setFieldValue(idx, std::move(fieldSym));
+                st = st->withFieldValue(idx, std::move(fieldSym)).into_underlying();
             }
             ++idx;
         }
@@ -1983,18 +1983,13 @@ namespace acslg::analyzer::symbolic {
         return *this;
     }
 
-    void Structure::setFieldValue(size_t index,
-                                  utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-        if (index >= fields_.size())
-            ERROR("Out-of-bounds access");
-        fields_[index] = std::move(expr);
-    }
-
     utils::not_null<std::unique_ptr<Structure>> Structure::withFieldValue(
         size_t index,
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) const {
+        if (index >= fields_.size())
+            ERROR("Out-of-bounds access");
         auto result = std::make_unique<Structure>(*this);
-        result->setFieldValue(index, std::move(expr));
+        result->fields_[index] = std::move(expr);
         return result;
     }
 

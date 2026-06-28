@@ -860,4 +860,44 @@ namespace acslg::test::unit::analyzer {
                       ->getLiteralValue(),
                   3);
     }
+
+    TEST(StructureRebuildTest, FieldUpdateDoesNotMutateOriginalStructure) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct S {
+                int a;
+                int b;
+            };
+
+            int f(void) {
+                struct S s;
+                return 0;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        auto structureExpr = symbolic::makeUnknownStructure(
+            var->getType(), std::make_unique<symbolic::VariableAddress>(var), point);
+        auto *structure = symbolic::cast<symbolic::Structure>(structureExpr.get().get());
+        auto originalField0 = structure->getFieldValue(0)->clone();
+        auto originalField1 = structure->getFieldValue(1)->clone();
+
+        auto updated = structure->withFieldValue(
+            0, std::make_unique<symbolic::detail::LiteralExprNode>(42));
+
+        EXPECT_EQ(*structure->getFieldValue(0), *originalField0);
+        EXPECT_EQ(*structure->getFieldValue(1), *originalField1);
+
+        auto *updatedField0 =
+            symbolic::cast<symbolic::detail::LiteralExprNode>(
+                updated->getFieldValue(0).get().get());
+        EXPECT_EQ(updatedField0->getLiteralValue(), 42);
+        EXPECT_EQ(*updated->getFieldValue(1), *originalField1);
+    }
 } // namespace acslg::test::unit::analyzer

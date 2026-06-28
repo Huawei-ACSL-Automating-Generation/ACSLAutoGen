@@ -1086,7 +1086,6 @@ namespace acslg::analyzer::symbolic {
         static bool classof(const Symbol *e) { return e->getKind() == Symbol::Kind::K_Structure; }
 
         size_t getNumFields() const { return info_.getNumFields(); }
-        void setFieldValue(size_t index, utils::not_null<std::unique_ptr<SymbolicExpr>> expr);
         utils::not_null<std::unique_ptr<Structure>> withFieldValue(
             size_t index,
             utils::not_null<std::unique_ptr<SymbolicExpr>> expr) const;
