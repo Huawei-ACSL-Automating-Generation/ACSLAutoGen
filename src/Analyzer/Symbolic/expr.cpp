@@ -297,9 +297,9 @@ namespace acslg::analyzer::symbolic {
     AddrHandle ExprFactory::withAddedOffset(AddrHandle address, ExprHandle extra) {
         const auto &symbolAddr = address.cast<SymbolAddress>();
         auto newOffset = std::make_unique<BinaryOpExpr>(
-                             importExpr(*symbolAddr.getOffset())->clone(),
+                             cloneExpr(importExpr(*symbolAddr.getOffset())),
                              detail::BinaryOpExprNode::Operator::Add,
-                             extra->clone())
+                             cloneExpr(extra))
                              ->simplifiedExpr();
         return withOffset(address, importExpr(*newOffset));
     }
@@ -307,9 +307,9 @@ namespace acslg::analyzer::symbolic {
     AddrHandle ExprFactory::withSubtractedOffset(AddrHandle address, ExprHandle extra) {
         const auto &symbolAddr = address.cast<SymbolAddress>();
         auto newOffset = std::make_unique<BinaryOpExpr>(
-                             importExpr(*symbolAddr.getOffset())->clone(),
+                             cloneExpr(importExpr(*symbolAddr.getOffset())),
                              detail::BinaryOpExprNode::Operator::Subtract,
-                             extra->clone())
+                             cloneExpr(extra))
                              ->simplifiedExpr();
         return withOffset(address, importExpr(*newOffset));
     }
@@ -365,13 +365,13 @@ namespace acslg::analyzer::symbolic {
             utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
             if (!ExprFactoryScope::hasCurrent())
                 return expr;
-            return ExprFactoryScope::current().importExpr(*expr)->clone();
+            return ExprFactoryScope::current().importAndCloneExpr(*expr);
         }
     } // namespace
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeLiteralExpr(int64_t value) {
         if (ExprFactoryScope::hasCurrent())
-            return ExprFactoryScope::current().literal(value)->clone();
+            return ExprFactoryScope::current().cloneExpr(ExprFactoryScope::current().literal(value));
         return std::make_unique<detail::LiteralExprNode>(value);
     }
 
@@ -380,7 +380,7 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return factory.unary(op, factory.importExpr(*expr))->clone();
+            return factory.cloneExpr(factory.unary(op, factory.importExpr(*expr)));
         }
         return std::make_unique<UnaryOpExpr>(op, std::move(expr));
     }
@@ -391,14 +391,16 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> rhs) {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs))->clone();
+            return factory.cloneExpr(
+                factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
         }
         return std::make_unique<BinaryOpExpr>(std::move(lhs), op, std::move(rhs));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeRangeIndexExpr(std::string_view name) {
         if (ExprFactoryScope::hasCurrent())
-            return ExprFactoryScope::current().rangeIndex(name)->clone();
+            return ExprFactoryScope::current().cloneExpr(
+                ExprFactoryScope::current().rangeIndex(name));
         return std::make_unique<SymbolAddress::RangeIndex>(name);
     }
 

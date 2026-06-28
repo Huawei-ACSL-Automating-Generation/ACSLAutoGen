@@ -1368,6 +1368,13 @@ namespace acslg::analyzer::symbolic {
 
         ExprHandle importExpr(const SymbolicExpr &expr);
         AddrHandle importAddress(const Address &address);
+        utils::not_null<std::unique_ptr<SymbolicExpr>> cloneExpr(ExprHandle expr) {
+            return expr->clone();
+        }
+        utils::not_null<std::unique_ptr<SymbolicExpr>> importAndCloneExpr(
+            const SymbolicExpr &expr) {
+            return cloneExpr(importExpr(expr));
+        }
 
         AddrHandle variableAddress(utils::not_null<const clang::VarDecl *> from);
         AddrHandle symbolAddress(

@@ -1450,7 +1450,7 @@ namespace acslg::analyzer {
                             } else {
                                 auto &factory = context_.getExprFactory();
                                 outExprs.emplace_back(
-                                    factory.unary(op, factory.importExpr(*unExpr))->clone());
+                                    factory.cloneExpr(factory.unary(op, factory.importExpr(*unExpr))));
                             }
                         }();
                         if (i > 0)

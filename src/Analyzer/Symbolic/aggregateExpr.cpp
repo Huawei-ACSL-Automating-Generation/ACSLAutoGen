@@ -21,7 +21,7 @@ namespace acslg::analyzer::symbolic {
             if (!ExprFactoryScope::hasCurrent())
                 return expr;
 
-            return ExprFactoryScope::current().importExpr(*expr)->clone();
+            return ExprFactoryScope::current().importAndCloneExpr(*expr);
         }
     } // namespace
 
