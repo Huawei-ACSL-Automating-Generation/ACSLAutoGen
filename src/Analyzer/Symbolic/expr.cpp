@@ -1845,14 +1845,14 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
-        return std::make_unique<BinaryOpExpr>(left_->getSubstitutedExpr(pathSubTo, pointToSub), op_,
-                                              right_->getSubstitutedExpr(pathSubTo, pointToSub));
+        return makeBinaryExpr(left_->getSubstitutedExpr(pathSubTo, pointToSub), op_,
+                              right_->getSubstitutedExpr(pathSubTo, pointToSub));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
-        return std::make_unique<UnaryOpExpr>(op_, expr_->getSubstitutedExpr(pathSubTo, pointToSub));
+        return makeUnaryExpr(op_, expr_->getSubstitutedExpr(pathSubTo, pointToSub));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedExpr(
@@ -1939,16 +1939,14 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
-        return std::make_unique<BinaryOpExpr>(
-            left_->getRangeIndexSubstituted(rangeBase, indexExpr), op_,
-            right_->getRangeIndexSubstituted(rangeBase, indexExpr));
+        return makeBinaryExpr(left_->getRangeIndexSubstituted(rangeBase, indexExpr), op_,
+                              right_->getRangeIndexSubstituted(rangeBase, indexExpr));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
-        return std::make_unique<UnaryOpExpr>(op_,
-                                             expr_->getRangeIndexSubstituted(rangeBase, indexExpr));
+        return makeUnaryExpr(op_, expr_->getRangeIndexSubstituted(rangeBase, indexExpr));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getRangeIndexSubstituted(
@@ -2035,15 +2033,15 @@ namespace acslg::analyzer::symbolic {
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return it->second->clone();
-        return std::make_unique<BinaryOpExpr>(left_->getSubstitutedValueExpr(hashExprMap), op_,
-                                              right_->getSubstitutedValueExpr(hashExprMap));
+        return makeBinaryExpr(left_->getSubstitutedValueExpr(hashExprMap), op_,
+                              right_->getSubstitutedValueExpr(hashExprMap));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return it->second->clone();
-        return std::make_unique<UnaryOpExpr>(op_, expr_->getSubstitutedValueExpr(hashExprMap));
+        return makeUnaryExpr(op_, expr_->getSubstitutedValueExpr(hashExprMap));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedValueExpr(
