@@ -1812,9 +1812,10 @@ namespace acslg::analyzer {
             auto &addrValueMap = memoryMap_symbolicRange_.at(baseInfo);
             if (symbolAddr->getLength() && symbolAddr->getLength().value()->tryEvalAsConstant() &&
                 symbolAddr->getLength().value()->tryEvalAsConstant().value() == 1) {
-                auto fakeRange = std::make_unique<symbolic::SymbolAddress>(*symbolAddr);
-                fakeRange = fakeRange->withoutLength().into_underlying();
-                auto it = addrValueMap.find(*fakeRange);
+                auto fakeRangeHandle =
+                    factory().withoutLength(factory().importAddress(*symbolAddr));
+                const auto &fakeRange = fakeRangeHandle.cast<symbolic::SymbolAddress>();
+                auto it = addrValueMap.find(fakeRange);
                 if (it == addrValueMap.end())
                     return std::nullopt;
                 return it->second->clone();
@@ -1897,9 +1898,10 @@ namespace acslg::analyzer {
             auto &addrValueMap = memoryMap_symbolicRange_[baseInfo];
             if (symbolAddr->getLength() && symbolAddr->getLength().value()->tryEvalAsConstant() &&
                 symbolAddr->getLength().value()->tryEvalAsConstant() == 1) {
-                auto fakeRange = std::make_unique<symbolic::SymbolAddress>(*symbolAddr);
-                fakeRange = fakeRange->withoutLength().into_underlying();
-                addrValueMap.insert_or_assign(*fakeRange, valueHandle);
+                auto fakeRangeHandle =
+                    factory().withoutLength(factory().importAddress(*symbolAddr));
+                const auto &fakeRange = fakeRangeHandle.cast<symbolic::SymbolAddress>();
+                addrValueMap.insert_or_assign(fakeRange, valueHandle);
                 return;
             }
             addrValueMap.insert_or_assign(*symbolAddr, valueHandle);
@@ -2145,16 +2147,16 @@ namespace acslg::analyzer {
                         // Append the successor's length:
                         // - If successor is range: add its length expression
                         // - If successor is non-range: add 1
+                        auto mergedHandle = factory().importAddress(*mergedKey);
                         if (auto &len = itemToBeMerged.key.getLength()) {
-                            mergedKey =
-                                mergedKey->withAddedLength(len.value()->clone()).into_underlying();
+                            mergedHandle =
+                                factory().withAddedLength(mergedHandle,
+                                                          factory().importExpr(*len.value()));
                         } else {
-                            mergedKey =
-                                mergedKey
-                                    ->withAddedLength(
-                                        std::make_unique<symbolic::detail::LiteralExprNode>(1))
-                                    .into_underlying();
+                            mergedHandle =
+                                factory().withAddedLength(mergedHandle, factory().literal(1));
                         }
+                        mergedKey = std::make_unique<SA>(mergedHandle.cast<SA>());
 
                         // Advance to successor
                         rightHash           = itemToBeMerged.rightHash;
