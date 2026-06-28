@@ -35,22 +35,35 @@ namespace acslg::analyzer::symbolic {
         : SumOverRange(makeInit(std::move(range)), indexName, std::move(fromPoint)) {}
 
     OverRangeExpr::OverRangeExpr(const OverRangeExpr &other)
-        : SymbolicExpr(other), range_(std::make_unique<SymbolAddress>(*other.range_)),
+        : SymbolicExpr(other), range_(other.range_.clone()),
           indexName_(other.indexName_) {}
 
     OverRangeExpr &OverRangeExpr::operator=(const OverRangeExpr &other) {
         if (&other == this)
             return *this;
         SymbolicExpr::operator=(other);
-        range_     = std::make_unique<SymbolAddress>(*other.range_);
+        range_     = ExprChild{other.range_.clone()};
         indexName_ = other.indexName_;
         return *this;
+    }
+
+    const SymbolAddress &OverRangeExpr::range() const {
+        auto *symbolAddr = dyn_cast<const SymbolAddress>(range_.get().get());
+        if (symbolAddr == nullptr)
+            ERROR("Over-range expression range child must be a SymbolAddress.");
+        return *symbolAddr;
+    }
+
+    ExprChild OverRangeExpr::makeRangeChild(
+        utils::not_null<std::unique_ptr<const SymbolAddress>> range) {
+        return ExprChild::fromConstOwned(utils::not_null<std::unique_ptr<const SymbolicExpr>>{
+            std::move(range).into_underlying()});
     }
 
     std::string OverRangeExpr::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
-        oss << "{" + key("range: ") + range_->dump() + "}, ";
+        oss << "{" + key("range: ") + range().dump() + "}, ";
         oss << "{" + key("index name: ") + accent(indexName_) + "}";
         return oss.str();
     }
@@ -59,13 +72,13 @@ namespace acslg::analyzer::symbolic {
         auto ORE = dyn_cast<const OverRangeExpr>(&other);
         if (ORE == nullptr)
             return false;
-        if (*range_ != *ORE->range_)
+        if (range() != ORE->range())
             return false;
         // No indexName_.
         return true;
     }
 
-    std::size_t OverRangeExpr::hash() const { return utils::hash_val(range_->hash()); }
+    std::size_t OverRangeExpr::hash() const { return utils::hash_val(range().hash()); }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::clone() const {
         return std::make_unique<RangeIndex>(*this);
@@ -132,7 +145,7 @@ namespace acslg::analyzer::symbolic {
         if (fromPoint_ != pointToSub)
             return clone();
         // Substitute only when the label matches; otherwise preserve the original expression.
-        auto subedExpr  = range_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto subedExpr  = range().getSubstitutedExpr(pathSubTo, pointToSub);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
@@ -143,7 +156,7 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
-        auto subedExpr  = range_->getRangeIndexSubstituted(rangeBase, indexExpr);
+        auto subedExpr  = range().getRangeIndexSubstituted(rangeBase, indexExpr);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
@@ -155,7 +168,7 @@ namespace acslg::analyzer::symbolic {
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return it->second->clone();
-        auto subedExpr  = range_->getSubstitutedValueExpr(hashExprMap);
+        auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
@@ -173,12 +186,12 @@ namespace acslg::analyzer::symbolic {
             "\\sum(integer ${i} = ${0}; ${i} < ${n}; ${i}++, ${prefix}${a}[${i}]${suffix})"};
 
         // Lower bound of a range is always zero for now.
-        auto zeroStr = callGetACSL(*range_->getOffset(), config, usedPoints, currentPoint,
+        auto zeroStr = callGetACSL(*range().getOffset(), config, usedPoints, currentPoint,
                                    getPrecedence(Operator::Assign), true);
         if (!zeroStr)
             return zeroStr.error();
 
-        auto rightBound = range_->getRightBound();
+        auto rightBound = range().getRightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
         auto nStr = callGetACSL(*rightBound.value(), config, usedPoints, currentPoint,
@@ -186,7 +199,7 @@ namespace acslg::analyzer::symbolic {
         if (!nStr)
             return nStr.error();
 
-        auto rangeFrom = range_->getFromAddr();
+        auto rangeFrom = range().getFromAddr();
         if (rangeFrom == std::nullopt)
             return GetACSLError::HeapAddress;
 
@@ -196,7 +209,7 @@ namespace acslg::analyzer::symbolic {
 
         // Build the pointer expression used inside the summation body.
         auto aStr =
-            callGetACSLOfValueProxy(*range_->getFromAddr().value(), config, usedPoints, fromPoint_,
+            callGetACSLOfValueProxy(*range().getFromAddr().value(), config, usedPoints, fromPoint_,
                                     hasAt ? 0 : getPrecedence(Operator::Subscript), false);
         if (!aStr)
             return aStr.error();
@@ -212,7 +225,7 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
-        auto subedExpr  = range_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto subedExpr  = range().getSubstitutedExpr(pathSubTo, pointToSub);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
@@ -221,7 +234,7 @@ namespace acslg::analyzer::symbolic {
         auto subedPred = pred_->getSubstitutedExpr(pathSubTo, pointToSub);
 
         auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
-        newQOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
+        newQOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
         newQOR->pred_  = ExprChild{std::move(subedPred)};
         return newQOR;
     }
@@ -229,14 +242,14 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
-        auto subedExpr  = range_->getRangeIndexSubstituted(rangeBase, indexExpr);
+        auto subedExpr  = range().getRangeIndexSubstituted(rangeBase, indexExpr);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
         auto subedPred = pred_->getRangeIndexSubstituted(rangeBase, indexExpr);
 
         auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
-        newQOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
+        newQOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
         newQOR->pred_  = ExprChild{std::move(subedPred)};
         return newQOR;
     }
@@ -245,14 +258,14 @@ namespace acslg::analyzer::symbolic {
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return it->second->clone();
-        auto subedExpr  = range_->getSubstitutedValueExpr(hashExprMap);
+        auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
         auto subedPred = pred_->getSubstitutedValueExpr(hashExprMap);
 
         auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
-        newQOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
+        newQOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
         newQOR->pred_  = ExprChild{std::move(subedPred)};
         return newQOR;
     }
@@ -310,12 +323,12 @@ namespace acslg::analyzer::symbolic {
             default: UNREACHABLE();
         }
 
-        auto zeroStr = callGetACSL(*range_->getOffset()->simplifiedExpr(), config, usedPoints,
+        auto zeroStr = callGetACSL(*range().getOffset()->simplifiedExpr(), config, usedPoints,
                                    currentPoint, getPrecedence(Operator::LessThan), false);
         if (!zeroStr)
             return zeroStr.error();
 
-        auto rightBound = range_->getRightBound();
+        auto rightBound = range().getRightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
         auto nStr = callGetACSL(*rightBound.value()->simplifiedExpr(), config, usedPoints,
@@ -341,7 +354,7 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
-        auto subedExpr  = range_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto subedExpr  = range().getSubstitutedExpr(pathSubTo, pointToSub);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
@@ -349,7 +362,7 @@ namespace acslg::analyzer::symbolic {
         auto subedBody = expr_->getSubstitutedExpr(pathSubTo, pointToSub);
 
         auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
-        newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
+        newMMOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
         newMMOR->expr_  = ExprChild{std::move(subedBody)};
         if (fromPoint_ == pointToSub)
             TODO();
@@ -359,14 +372,14 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
-        auto subedExpr  = range_->getRangeIndexSubstituted(rangeBase, indexExpr);
+        auto subedExpr  = range().getRangeIndexSubstituted(rangeBase, indexExpr);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
         auto subedBody = expr_->getRangeIndexSubstituted(rangeBase, indexExpr);
 
         auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
-        newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
+        newMMOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
         newMMOR->expr_  = ExprChild{std::move(subedBody)};
         return newMMOR;
     }
@@ -375,14 +388,14 @@ namespace acslg::analyzer::symbolic {
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return it->second->clone();
-        auto subedExpr  = range_->getSubstitutedValueExpr(hashExprMap);
+        auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
         auto subedBody = expr_->getSubstitutedValueExpr(hashExprMap);
 
         auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
-        newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
+        newMMOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
         newMMOR->expr_  = ExprChild{std::move(subedBody)};
         return newMMOR;
     }
@@ -413,7 +426,7 @@ namespace acslg::analyzer::symbolic {
                         indexName),
           Symbol(Kind::K_MaxMinOverRange),
           extremum_(extremum),
-          expr_(ExprChild::fromConstOwned(makeDefaultExpr(*range_, indexName, fromPoint))),
+          expr_(ExprChild::fromConstOwned(makeDefaultExpr(range(), indexName, fromPoint))),
           fromPoint_(std::move(fromPoint)) {}
 
     MaxMinOverRange::MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
@@ -480,14 +493,14 @@ namespace acslg::analyzer::symbolic {
             "(\\forall integer ${i}; ${l} <= ${i} < ${u} ==> \\result ${cmp} ${expr}) &&\n"
             "      (\\exists integer ${i}; ${l} <= ${i} < ${u} && \\result == ${expr})"};
 
-        auto rightBound = range_->getRightBound();
+        auto rightBound = range().getRightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
 
         auto [prefix, suffix] =
             details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
 
-        auto lowerStr = callGetACSL(*range_->getOffset()->simplifiedExpr(), config, usedPoints,
+        auto lowerStr = callGetACSL(*range().getOffset()->simplifiedExpr(), config, usedPoints,
                                     fromPoint_, getPrecedence(Operator::LessEqual), false);
         if (!lowerStr)
             return lowerStr.error();

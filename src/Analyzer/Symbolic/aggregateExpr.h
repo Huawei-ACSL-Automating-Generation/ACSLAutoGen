@@ -109,12 +109,17 @@ namespace acslg::analyzer::symbolic {
                       Type type,
                       utils::not_null<std::unique_ptr<const SymbolAddress>> range,
                       std::string_view indexName)
-            : SymbolicExpr(kind, type), range_(std::move(range)), indexName_(indexName) {
-            if (!range_->getLength())
+            : SymbolicExpr(kind, type), range_(makeRangeChild(std::move(range))),
+              indexName_(indexName) {
+            if (!this->range().getLength())
                 ERROR("`range_` is not a memory *range*.");
         }
 
-        utils::not_null<std::unique_ptr<const SymbolAddress>> range_;
+        const SymbolAddress &range() const;
+        static ExprChild makeRangeChild(
+            utils::not_null<std::unique_ptr<const SymbolAddress>> range);
+
+        ExprChild range_;
         std::string indexName_;
     };
 
