@@ -90,6 +90,19 @@ namespace acslg::spec_generator {
                    stmtHasArrayOrPointer(loopInfo.initStmt);
         }
 
+        template <typename FactoryRebuild, typename LegacyRebuild>
+        symb::SymbolAddress rebuildSymbolAddress(const symb::SymbolAddress &address,
+                                                 FactoryRebuild &&factoryRebuild,
+                                                 LegacyRebuild &&legacyRebuild) {
+            if (!symb::ExprFactoryScope::hasCurrent())
+                return *std::forward<LegacyRebuild>(legacyRebuild)(address);
+
+            auto &factory = symb::ExprFactoryScope::current();
+            auto rebuilt  = std::forward<FactoryRebuild>(factoryRebuild)(
+                factory, factory.importAddress(address));
+            return symb::SymbolAddress(rebuilt.template cast<symb::SymbolAddress>());
+        }
+
         bool stmtHasNonAffineOps(const clang::Stmt *stmt) {
             if (!stmt)
                 return false;
@@ -603,14 +616,32 @@ namespace acslg::spec_generator {
                         TODO();
                     // Case A: the base address itself moves linearly (x-step). Reset the offset to
                     // zero and set length to loopCount to represent a contiguous writable range.
-                    auto result = symbolAddr->withOffset(
-                        std::make_unique<symb::detail::LiteralExprNode>(
-                            symb::SymbolAddress::ZERO_OFFSET));
-                    if (!indexInfo.preciseLoopCount->isUnknown())
-                        result = result->withLength(indexInfo.preciseLoopCount->simplifiedExpr());
-                    else
-                        result = result->withLength(indexInfo.maxLoopCount->simplifiedExpr());
-                    return *result;
+                    auto result = rebuildSymbolAddress(
+                        *symbolAddr,
+                        [](symb::ExprFactory &factory, symb::AddrHandle address) {
+                            return factory.withOffset(
+                                address,
+                                factory.literal(
+                                    static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)));
+                        },
+                        [](const symb::SymbolAddress &address) {
+                            return address
+                                .withOffset(std::make_unique<symb::detail::LiteralExprNode>(
+                                    symb::SymbolAddress::ZERO_OFFSET))
+                                .into_underlying();
+                        });
+                    auto lengthExpr = !indexInfo.preciseLoopCount->isUnknown()
+                                          ? indexInfo.preciseLoopCount->simplifiedExpr()
+                                          : indexInfo.maxLoopCount->simplifiedExpr();
+                    auto resultWithLength = rebuildSymbolAddress(
+                        result,
+                        [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
+                            return factory.withLength(address, factory.importExpr(*lengthExpr));
+                        },
+                        [&lengthExpr](const symb::SymbolAddress &address) {
+                            return address.withLength(lengthExpr->clone()).into_underlying();
+                        });
+                    return resultWithLength;
                 }
 
                 auto offset = symbolAddr->getOffset();
@@ -626,12 +657,28 @@ namespace acslg::spec_generator {
                             TODO();
                         // Case B: the base is stable but the offset changes linearly (typical for
                         // p[i] where i changes). Use the initial offset and set length = loopCount.
-                        auto result = symbolAddr->withOffset(pattern.value().initialValue->clone());
-                        if (!indexInfo.preciseLoopCount->isUnknown())
-                            result = result->withLength(indexInfo.preciseLoopCount->simplifiedExpr());
-                        else
-                            result = result->withLength(indexInfo.maxLoopCount->simplifiedExpr());
-                        return *result;
+                        auto result = rebuildSymbolAddress(
+                            *symbolAddr,
+                            [&pattern](symb::ExprFactory &factory, symb::AddrHandle address) {
+                                return factory.withOffset(
+                                    address, factory.importExpr(*pattern.value().initialValue));
+                            },
+                            [&pattern](const symb::SymbolAddress &address) {
+                                return address.withOffset(pattern.value().initialValue->clone())
+                                    .into_underlying();
+                            });
+                        auto lengthExpr = !indexInfo.preciseLoopCount->isUnknown()
+                                              ? indexInfo.preciseLoopCount->simplifiedExpr()
+                                              : indexInfo.maxLoopCount->simplifiedExpr();
+                        auto resultWithLength = rebuildSymbolAddress(
+                            result,
+                            [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
+                                return factory.withLength(address, factory.importExpr(*lengthExpr));
+                            },
+                            [&lengthExpr](const symb::SymbolAddress &address) {
+                                return address.withLength(lengthExpr->clone()).into_underlying();
+                            });
+                        return resultWithLength;
                     } else {
                         TODO();
                     }
@@ -1355,26 +1402,51 @@ namespace acslg::spec_generator {
                         "\n";
 
                 using enum symb::BinaryOpExpr::Operator;
-                auto arrayRange = std::make_unique<symb::SymbolAddress>(*arrayAddr);
+                auto arrayRange = std::make_unique<symb::SymbolAddress>(
+                    rebuildSymbolAddress(
+                        *arrayAddr,
+                        [](symb::ExprFactory &factory, symb::AddrHandle address) {
+                            return factory.withOffset(
+                                address,
+                                factory.literal(
+                                    static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)));
+                        },
+                        [](const symb::SymbolAddress &address) {
+                            return address.withResetOffset().into_underlying();
+                        }));
                 if (indexStep > 0) {
                     // For now we take [0, bound) for max/min over range (reset offset to zero).
                     // More precise modeling (e.g. starting at index_init) is left for future work.
-                    arrayRange = arrayRange->withResetOffset().into_underlying();
-                    arrayRange =
-                        arrayRange->withLength(indexInfo.indexBound->clone()).into_underlying();
+                    arrayRange = std::make_unique<symb::SymbolAddress>(
+                        rebuildSymbolAddress(
+                            *arrayRange,
+                            [&](symb::ExprFactory &factory, symb::AddrHandle address) {
+                                return factory.withLength(
+                                    address, factory.importExpr(*indexInfo.indexBound));
+                            },
+                            [&](const symb::SymbolAddress &address) {
+                                return address.withLength(indexInfo.indexBound->clone())
+                                    .into_underlying();
+                            }));
                     // arrayRange = arrayRange->withOffset(indexInfo.indexSymbolicValue->clone());
                     // arrayRange = arrayRange->withLength(std::make_unique<symb::BinaryOpExpr>(
                     //     indexInfo.indexBound->clone(), Subtract,
                     //     indexInfo.indexSymbolicValue->clone()));
                 } else {
-                    arrayRange = arrayRange->withResetOffset().into_underlying();
                     // arrayRange = arrayRange->withOffset(indexInfo.indexBound->clone());
-                    arrayRange =
-                        arrayRange
-                            ->withLength(std::make_unique<symb::BinaryOpExpr>(
-                                indexInfo.indexSymbolicValue->clone(), Subtract,
-                                indexInfo.indexBound->clone()))
-                            .into_underlying();
+                    auto lengthExpr = std::make_unique<symb::BinaryOpExpr>(
+                        indexInfo.indexSymbolicValue->clone(), Subtract,
+                        indexInfo.indexBound->clone());
+                    arrayRange = std::make_unique<symb::SymbolAddress>(
+                        rebuildSymbolAddress(
+                            *arrayRange,
+                            [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
+                                return factory.withLength(address,
+                                                          factory.importExpr(*lengthExpr));
+                            },
+                            [&lengthExpr](const symb::SymbolAddress &address) {
+                                return address.withLength(lengthExpr->clone()).into_underlying();
+                            }));
                 }
 
                 // Safety guard: avoid constructing MaxMinOverRange with an invalid range.
@@ -1664,22 +1736,53 @@ namespace acslg::spec_generator {
             // the getACSL layer.
             auto arrayRange = std::make_unique<symb::SymbolAddress>(*arrayInCond);
             if (indexStep > 0) {
-                arrayRange =
-                    arrayRange->withOffset(indexInfo.indexSymbolicValue->clone()).into_underlying();
-                arrayRange =
-                    arrayRange
-                        ->withLength(std::make_unique<symb::BinaryOpExpr>(
-                            indexInfo.indexBound->clone(), Subtract,
-                            indexInfo.indexSymbolicValue->clone()))
-                        .into_underlying();
+                arrayRange = std::make_unique<symb::SymbolAddress>(
+                    rebuildSymbolAddress(
+                        *arrayRange,
+                        [&](symb::ExprFactory &factory, symb::AddrHandle address) {
+                            return factory.withOffset(
+                                address, factory.importExpr(*indexInfo.indexSymbolicValue));
+                        },
+                        [&](const symb::SymbolAddress &address) {
+                            return address.withOffset(indexInfo.indexSymbolicValue->clone())
+                                .into_underlying();
+                        }));
+                auto lengthExpr = std::make_unique<symb::BinaryOpExpr>(
+                    indexInfo.indexBound->clone(), Subtract,
+                    indexInfo.indexSymbolicValue->clone());
+                arrayRange = std::make_unique<symb::SymbolAddress>(
+                    rebuildSymbolAddress(
+                        *arrayRange,
+                        [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
+                            return factory.withLength(address, factory.importExpr(*lengthExpr));
+                        },
+                        [&lengthExpr](const symb::SymbolAddress &address) {
+                            return address.withLength(lengthExpr->clone()).into_underlying();
+                        }));
             } else {
-                arrayRange = arrayRange->withOffset(indexInfo.indexBound->clone()).into_underlying();
-                arrayRange =
-                    arrayRange
-                        ->withLength(std::make_unique<symb::BinaryOpExpr>(
-                            indexInfo.indexSymbolicValue->clone(), Subtract,
-                            indexInfo.indexBound->clone()))
-                        .into_underlying();
+                arrayRange = std::make_unique<symb::SymbolAddress>(
+                    rebuildSymbolAddress(
+                        *arrayRange,
+                        [&](symb::ExprFactory &factory, symb::AddrHandle address) {
+                            return factory.withOffset(address,
+                                                      factory.importExpr(*indexInfo.indexBound));
+                        },
+                        [&](const symb::SymbolAddress &address) {
+                            return address.withOffset(indexInfo.indexBound->clone())
+                                .into_underlying();
+                        }));
+                auto lengthExpr = std::make_unique<symb::BinaryOpExpr>(
+                    indexInfo.indexSymbolicValue->clone(), Subtract,
+                    indexInfo.indexBound->clone());
+                arrayRange = std::make_unique<symb::SymbolAddress>(
+                    rebuildSymbolAddress(
+                        *arrayRange,
+                        [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
+                            return factory.withLength(address, factory.importExpr(*lengthExpr));
+                        },
+                        [&lengthExpr](const symb::SymbolAddress &address) {
+                            return address.withLength(lengthExpr->clone()).into_underlying();
+                        }));
             }
             normalPathInfo.pathState = analyzer::Path::PathState::Step;
             normalPathInfo.pathConds.push_back(std::make_unique<symb::QuantifierOverRange>(
