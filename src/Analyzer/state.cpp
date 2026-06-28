@@ -258,12 +258,13 @@ namespace acslg::analyzer {
                     ERROR("Value of ArraySubscriptExpr's base is not 'symbolic::SymbolAddress', "
                           "base is "
                           "neither pointer nor std::array?");
-                auto resultAddr = std::make_unique<symbolic::SymbolAddress>(*symbolAddr);
                 auto idxEval    = evalExpr(arr->getIdx());
                 if (idxEval.second.size() != 1)
                     ERROR("This location does not support control flow branches.");
-                auto idxExpr = std::move(idxEval.second[0]);
-                resultAddr = resultAddr->withAddedOffset(std::move(idxExpr)).into_underlying();
+                auto &factory     = context_.getExprFactory();
+                auto resultHandle = factory.withAddedOffset(
+                    factory.importAddress(*symbolAddr), factory.importExpr(*idxEval.second[0]));
+                auto resultAddr = resultHandle->addressClone().into_underlying();
                 if (!memoryState_.contains(*resultAddr)) {
                     auto newSymbol = getSymbol(
                         arr->getType(), resultAddr->addressClone().into_underlying(), startPoint_);
