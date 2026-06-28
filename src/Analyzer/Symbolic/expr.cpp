@@ -1225,12 +1225,13 @@ namespace acslg::analyzer::symbolic {
             return offsetStr.error();
 
         // offset + length - 1
-        auto rightBound =
-            std::make_unique<BinaryOpExpr>(
-                std::make_unique<BinaryOpExpr>(getOffset()->clone(), detail::BinaryOpExprNode::Operator::Add,
-                                               length_.value()->clone()),
-                detail::BinaryOpExprNode::Operator::Subtract, std::make_unique<detail::LiteralExprNode>(1))
-                ->simplifiedExpr();
+        auto offsetPlusLength = makeBinaryExpr(getOffset()->clone(),
+                                               detail::BinaryOpExprNode::Operator::Add,
+                                               length_.value()->clone());
+        auto rightBound = makeBinaryExpr(std::move(offsetPlusLength),
+                                         detail::BinaryOpExprNode::Operator::Subtract,
+                                         makeLiteralExpr(1))
+                              ->simplifiedExpr();
         auto rightBoundStr =
             callGetACSL(*rightBound, config, usedPoints, currentPoint, rangePrec, true);
         if (!rightBoundStr)
@@ -2295,8 +2296,8 @@ namespace acslg::analyzer::symbolic {
         // Not sure return which one is better, offset_+1 or nullopt.
         if (length_ == std::nullopt)
             return std::nullopt;
-        return std::make_unique<BinaryOpExpr>(offset_->clone(), detail::BinaryOpExprNode::Operator::Add,
-                                              length_.value()->clone());
+        return makeBinaryExpr(offset_->clone(), detail::BinaryOpExprNode::Operator::Add,
+                              length_.value()->clone());
     }
 
     SymbolAddrBaseInfo SymbolAddress::getBaseInfo() const {

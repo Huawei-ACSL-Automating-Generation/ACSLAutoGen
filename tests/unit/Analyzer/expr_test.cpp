@@ -462,6 +462,23 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(resRange.value().second.empty());
     }
 
+    TEST_F(GetACSLTest, SymbolAddressRightBoundUsesFactoryScope) {
+        auto offset5   = std::make_unique<detail::LiteralExprNode>(5);
+        auto length3   = std::make_unique<detail::LiteralExprNode>(3);
+        auto addrRange = makeRangeAddr(0, std::move(offset5), std::move(length3));
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto rightBound = addrRange.getRightBound();
+        ASSERT_TRUE(rightBound);
+
+        auto expected = factory.binary(factory.importExpr(*addrRange.getOffset()),
+                                       BinaryOpExpr::Operator::Add,
+                                       factory.importExpr(*addrRange.getLength().value()));
+        EXPECT_EQ(factory.importExpr(*rightBound.value()), expected);
+    }
+
     // Test usage of \\at(...) when predefinedLabels is set.
     TEST_F(GetACSLTest, SymbolAddress_predefinedLabels) {
         SymbolicExpr::GetACSLConfig config;
