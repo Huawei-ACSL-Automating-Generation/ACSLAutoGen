@@ -1093,17 +1093,19 @@ namespace acslg::analyzer {
                         if (noCopy)
                             return Path::EvalResult(std::move(empty), std::move(exprs));
 
-                        auto destRange =
-                            std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
-                        destRange = destRange->withLength(std::move(lengthExpr)).into_underlying();
+                        auto &factory = context_.getExprFactory();
+                        auto destRangeHandle = factory.withLength(
+                            factory.importAddress(*destAddr.value()),
+                            factory.importExpr(*lengthExpr));
+                        auto destRange = destRangeHandle->addressClone().into_underlying();
 
-                        auto srcIndexed =
-                            std::make_unique<symbolic::SymbolAddress>(*srcAddr.value());
-                        srcIndexed = srcIndexed->withoutLength().into_underlying();
-                        srcIndexed = srcIndexed
-                                         ->withAddedOffset(std::make_unique<
-                                                          symbolic::SymbolAddress::RangeIndex>("i"))
-                                         .into_underlying();
+                        auto srcBaseHandle =
+                            factory.withoutLength(factory.importAddress(*srcAddr.value()));
+                        symbolic::SymbolAddress::RangeIndex rangeIndex{"i"};
+                        auto srcIndexedHandle =
+                            factory.withAddedOffset(srcBaseHandle,
+                                                    factory.importExpr(rangeIndex));
+                        auto srcIndexed = srcIndexedHandle->addressClone().into_underlying();
 
                         auto valueExpr = symbolic::getSymbol(
                             elemTy, srcIndexed->addressClone().into_underlying(), startPoint_);
@@ -1189,18 +1191,21 @@ namespace acslg::analyzer {
                             return Path::EvalResult(std::move(empty), std::move(exprs));
 
                         if (elemTy->isStructureType()) {
-                            auto destBase =
-                                std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
-                            destBase = destBase->withoutLength().into_underlying();
+                            auto &factory = context_.getExprFactory();
+                            auto destBaseHandle =
+                                factory.withoutLength(factory.importAddress(*destAddr.value()));
+                            auto destBase = destBaseHandle->addressClone().into_underlying();
                             auto structVal = symbolic::makeUnknownStructure(
                                 elemTy, destBase->addressClone().into_underlying(), pointAfterCall);
                             memoryState_.write(*destBase, std::move(structVal));
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
 
-                        auto destRange =
-                            std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
-                        destRange = destRange->withLength(std::move(lengthExpr)).into_underlying();
+                        auto &factory = context_.getExprFactory();
+                        auto destRangeHandle = factory.withLength(
+                            factory.importAddress(*destAddr.value()),
+                            factory.importExpr(*lengthExpr));
+                        auto destRange = destRangeHandle->addressClone().into_underlying();
                         memoryState_.write(
                             *destRange, symbolic::UnknownExpr::makeUnknown().into_underlying());
                         return Path::EvalResult(std::move(empty), std::move(exprs));
