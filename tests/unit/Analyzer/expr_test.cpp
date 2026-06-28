@@ -643,6 +643,28 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(negNode->getSub().get(), one.get().get());
     }
 
+    TEST(ExprFactoryTest, WithValTypeDoesNotMutateFactorySharedOperation) {
+        symbolic::ExprFactory factory;
+
+        auto one = factory.literal(1);
+        auto two = factory.literal(2);
+        auto sum = factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
+
+        auto targetType = symbolic::SymbolicExpr::Type{
+            symbolic::SymbolicExpr::ScalarKind::UInt, 64};
+        auto typedSum = sum->withValType(targetType);
+
+        EXPECT_EQ(sum->getValType().kind, symbolic::SymbolicExpr::ScalarKind::Int);
+        EXPECT_EQ(sum->getValType().bitWidth, 32);
+        EXPECT_EQ(typedSum->getValType().kind, symbolic::SymbolicExpr::ScalarKind::UInt);
+        EXPECT_EQ(typedSum->getValType().bitWidth, 64);
+
+        const auto *typedSumNode =
+            symbolic::cast<symbolic::BinaryOpExpr>(typedSum.get().get());
+        EXPECT_EQ(typedSumNode->getLeft().get(), one.get().get());
+        EXPECT_EQ(typedSumNode->getRight().get(), two.get().get());
+    }
+
     TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {
         symbolic::ExprFactory factory;
 
