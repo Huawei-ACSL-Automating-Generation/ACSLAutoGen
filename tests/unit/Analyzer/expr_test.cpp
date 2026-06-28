@@ -842,12 +842,8 @@ namespace acslg::test::unit::analyzer {
             var->getType(),
             std::make_unique<symbolic::VariableAddress>(var),
             point);
-        range = range->withOffset(
-                         std::make_unique<symbolic::SymbolAddress::RangeIndex>("i"))
-                    .into_underlying();
-        range = range->withLength(
-                         std::make_unique<symbolic::detail::LiteralExprNode>(3))
-                    .into_underlying();
+        range = range->withOffset(symbolic::makeRangeIndexExpr("i")).into_underlying();
+        range = range->withLength(symbolic::makeLiteralExpr(3)).into_underlying();
         auto rangeBase = range->getBaseInfo();
 
         std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
@@ -860,8 +856,8 @@ namespace acslg::test::unit::analyzer {
         auto clone = sum.clone();
         EXPECT_EQ(*clone, sum);
 
-        auto substituted =
-            sum.getRangeIndexSubstituted(rangeBase, symbolic::detail::LiteralExprNode{1});
+        auto index = symbolic::makeLiteralExpr(1);
+        auto substituted = sum.getRangeIndexSubstituted(rangeBase, *index);
         EXPECT_NE(*substituted, sum);
     }
 
@@ -885,18 +881,17 @@ namespace acslg::test::unit::analyzer {
             var->getType(),
             std::make_unique<symbolic::VariableAddress>(var),
             point);
-        range = range->withLength(
-                         std::make_unique<symbolic::detail::LiteralExprNode>(3))
-                    .into_underlying();
+        range = range->withLength(symbolic::makeLiteralExpr(3)).into_underlying();
         auto rangeBase = range->getBaseInfo();
 
-        auto pred = std::make_unique<symbolic::BinaryOpExpr>(
-            std::make_unique<symbolic::SymbolAddress::RangeIndex>("i"),
+        auto pred = symbolic::makeBinaryExpr(
+            symbolic::makeRangeIndexExpr("i"),
             symbolic::BinaryOpExpr::Operator::LessThan,
-            std::make_unique<symbolic::detail::LiteralExprNode>(3));
+            symbolic::makeLiteralExpr(3));
 
         std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
-        std::unique_ptr<const symbolic::SymbolicExpr> constPred = std::move(pred);
+        std::unique_ptr<const symbolic::SymbolicExpr> constPred =
+            std::move(pred).into_underlying();
         symbolic::QuantifierOverRange quantifier{
             ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
                 std::move(constRange)},
@@ -908,8 +903,8 @@ namespace acslg::test::unit::analyzer {
         auto clone = quantifier.clone();
         EXPECT_EQ(*clone, quantifier);
 
-        auto substituted = quantifier.getRangeIndexSubstituted(
-            rangeBase, symbolic::detail::LiteralExprNode{1});
+        auto index = symbolic::makeLiteralExpr(1);
+        auto substituted = quantifier.getRangeIndexSubstituted(rangeBase, *index);
         EXPECT_NE(*substituted, quantifier);
     }
 
@@ -933,9 +928,7 @@ namespace acslg::test::unit::analyzer {
             var->getType(),
             std::make_unique<symbolic::VariableAddress>(var),
             point);
-        range = range->withLength(
-                         std::make_unique<symbolic::detail::LiteralExprNode>(3))
-                    .into_underlying();
+        range = range->withLength(symbolic::makeLiteralExpr(3)).into_underlying();
         auto rangeBase = range->getBaseInfo();
 
         std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
@@ -949,8 +942,8 @@ namespace acslg::test::unit::analyzer {
         auto clone = max.clone();
         EXPECT_EQ(*clone, max);
 
-        auto substituted = max.getRangeIndexSubstituted(
-            rangeBase, symbolic::detail::LiteralExprNode{1});
+        auto index = symbolic::makeLiteralExpr(1);
+        auto substituted = max.getRangeIndexSubstituted(rangeBase, *index);
         EXPECT_NE(*substituted, max);
     }
 
@@ -975,12 +968,8 @@ namespace acslg::test::unit::analyzer {
                 var->getType(),
                 std::make_unique<symbolic::VariableAddress>(var),
                 point);
-            range = range->withOffset(
-                             std::make_unique<symbolic::SymbolAddress::RangeIndex>("i"))
-                        .into_underlying();
-            return range->withLength(
-                            std::make_unique<symbolic::detail::LiteralExprNode>(3))
-                .into_underlying();
+            range = range->withOffset(symbolic::makeRangeIndexExpr("i")).into_underlying();
+            return range->withLength(symbolic::makeLiteralExpr(3)).into_underlying();
         };
         auto makeConstRange = [](std::unique_ptr<symbolic::SymbolAddress> range) {
             std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
@@ -990,14 +979,14 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto one   = factory.literal(1);
-        auto three = factory.literal(3);
+        auto one   = factory.literal(int64_t{1});
+        auto three = factory.literal(int64_t{3});
 
         auto sumRange = makeRange();
         auto rangeBase = sumRange->getBaseInfo();
         symbolic::SumOverRange sum{makeConstRange(std::move(sumRange)), "i", point};
-        auto substitutedSum =
-            sum.getRangeIndexSubstituted(rangeBase, symbolic::detail::LiteralExprNode{1});
+        auto index = symbolic::makeLiteralExpr(1);
+        auto substitutedSum = sum.getRangeIndexSubstituted(rangeBase, *index);
         const auto &sumNode =
             *symbolic::cast<symbolic::SumOverRange>(substitutedSum.get().get());
         EXPECT_EQ(sumNode.getRange().getOffset().get(), one.get().get());
@@ -1010,9 +999,8 @@ namespace acslg::test::unit::analyzer {
             "i",
             symbolic::QuantifierOverRange::Quantifier::ForAll,
             ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
-                std::make_unique<symbolic::SymbolAddress::RangeIndex>("i")}};
-        auto substitutedQuantifier = quantifier.getRangeIndexSubstituted(
-            rangeBase, symbolic::detail::LiteralExprNode{1});
+                symbolic::makeRangeIndexExpr("i").into_underlying()}};
+        auto substitutedQuantifier = quantifier.getRangeIndexSubstituted(rangeBase, *index);
         const auto &quantifierNode =
             *symbolic::cast<symbolic::QuantifierOverRange>(substitutedQuantifier.get().get());
         EXPECT_EQ(&quantifierNode.getPredicate(), one.get().get());
@@ -1023,10 +1011,9 @@ namespace acslg::test::unit::analyzer {
             "i",
             symbolic::MaxMinOverRange::Extremum::Max,
             ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
-                std::make_unique<symbolic::SymbolAddress::RangeIndex>("i")},
+                symbolic::makeRangeIndexExpr("i").into_underlying()},
             point};
-        auto substitutedMax =
-            max.getRangeIndexSubstituted(rangeBase, symbolic::detail::LiteralExprNode{1});
+        auto substitutedMax = max.getRangeIndexSubstituted(rangeBase, *index);
         const auto &maxNode =
             *symbolic::cast<symbolic::MaxMinOverRange>(substitutedMax.get().get());
         EXPECT_EQ(&maxNode.getExpr(), one.get().get());
