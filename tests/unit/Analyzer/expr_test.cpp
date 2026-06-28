@@ -1132,7 +1132,9 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         auto importedA = factory.importExpr(legacy);
         auto importedB = factory.importExpr(legacy);
+        auto importedAddress = factory.importAddress(legacy);
         EXPECT_EQ(importedA, importedB);
+        EXPECT_EQ(importedAddress.asExpr(), importedA);
 
         const auto &importedAddr = importedA.cast<symbolic::SymbolAddress>();
         auto importedOffset = factory.importExpr(*legacy.getOffset());

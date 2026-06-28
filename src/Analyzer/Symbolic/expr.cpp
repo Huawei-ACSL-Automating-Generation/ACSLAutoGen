@@ -42,6 +42,10 @@ namespace acslg::analyzer::symbolic {
         return current_ != nullptr;
     }
 
+    AddrHandle ExprFactory::importAddress(const Address &address) {
+        return AddrHandle{cast<const Address>(importExpr(address).get().get())};
+    }
+
     ExprHandle ExprFactory::importExpr(const SymbolicExpr &expr) {
         if (auto *literal = dyn_cast<detail::LiteralExprNode>(&expr))
             return intern(literal->clone());
@@ -82,7 +86,7 @@ namespace acslg::analyzer::symbolic {
         }
 
         if (auto *sum = dyn_cast<SumOverRange>(&expr)) {
-            auto range = AddrHandle{cast<const Address>(importExpr(sum->getRange()).get().get())};
+            auto range = importAddress(sum->getRange());
             auto fromPoint = sum->getFromPoint();
             if (!fromPoint)
                 ERROR("SumOverRange must have a source point.");
@@ -91,16 +95,14 @@ namespace acslg::analyzer::symbolic {
         }
 
         if (auto *quantifier = dyn_cast<QuantifierOverRange>(&expr)) {
-            auto range =
-                AddrHandle{cast<const Address>(importExpr(quantifier->getRange()).get().get())};
+            auto range = importAddress(quantifier->getRange());
             auto pred = importExpr(quantifier->getPredicate());
             return intern(std::make_unique<QuantifierOverRange>(
                 range, quantifier->getIndexName(), quantifier->getQuantifier(), pred));
         }
 
         if (auto *maxMin = dyn_cast<MaxMinOverRange>(&expr)) {
-            auto range =
-                AddrHandle{cast<const Address>(importExpr(maxMin->getRange()).get().get())};
+            auto range = importAddress(maxMin->getRange());
             auto body = importExpr(maxMin->getExpr());
             auto fromPoint = maxMin->getFromPoint();
             if (!fromPoint)
