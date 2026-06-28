@@ -1163,6 +1163,14 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(varAddrA, varAddrB);
         EXPECT_TRUE(varAddrA.isa<symbolic::VariableAddress>());
 
+        auto defaultSymAddr = factory.symbolAddress(
+            firstField->getType(), std::optional<symbolic::AddrHandle>{varAddrA}, point);
+        const auto &defaultSymAddrNode = defaultSymAddr.cast<symbolic::SymbolAddress>();
+        EXPECT_EQ(defaultSymAddrNode.getOffset().get(),
+                  factory.literal(static_cast<int64_t>(symbolic::SymbolAddress::ZERO_OFFSET))
+                      .get()
+                      .get());
+
         auto offset = factory.literal(4);
         auto length = factory.literal(2);
         auto symAddrA = factory.symbolAddress(

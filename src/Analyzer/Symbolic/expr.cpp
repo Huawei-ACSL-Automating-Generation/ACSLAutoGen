@@ -284,8 +284,10 @@ namespace acslg::analyzer::symbolic {
         SourcePoint fromPoint,
         std::optional<ExprHandle> offset,
         std::optional<ExprHandle> length) {
+        auto resolvedOffset =
+            offset.value_or(literal(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)));
         return internAddress(std::make_unique<SymbolAddress>(
-            pointeeType, cloneAddress(from), std::move(fromPoint), offset, length));
+            pointeeType, cloneAddress(from), std::move(fromPoint), resolvedOffset, length));
     }
 
     AddrHandle ExprFactory::withOffset(AddrHandle address, ExprHandle offset) {
