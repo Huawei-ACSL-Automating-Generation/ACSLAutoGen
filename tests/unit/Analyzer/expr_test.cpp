@@ -1191,6 +1191,55 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
     }
 
+    TEST(ExprFactoryTest, StructureBuilderInitializesFieldHandles) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct S {
+                int a;
+                int *p;
+                int arr[2];
+            };
+
+            void f(void) {
+                struct S s;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto *record = e.findFirstDecl<RecordDecl>();
+        ASSERT_NE(record, nullptr);
+        ASSERT_TRUE(record->isCompleteDefinition());
+        record = record->getDefinition();
+        auto &layout = record->getASTContext().getASTRecordLayout(record);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        auto varAddr = factory.variableAddress(var);
+        auto structure = factory.structure(record, layout, varAddr, point);
+        const auto &structureNode = structure.cast<symbolic::Structure>();
+
+        ASSERT_EQ(structureNode.getNumFields(), 3u);
+        auto field0 = structureNode.getFieldValue(0);
+        auto field1 = structureNode.getFieldValue(1);
+        auto field2 = structureNode.getFieldValue(2);
+
+        EXPECT_NE(symbolic::dyn_cast<const symbolic::SymbolValue>(field0.get()), nullptr);
+        EXPECT_NE(symbolic::dyn_cast<const symbolic::SymbolAddress>(field1.get()), nullptr);
+        auto *arrayAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(field2.get());
+        ASSERT_NE(arrayAddr, nullptr);
+        ASSERT_TRUE(arrayAddr->getLength());
+
+        EXPECT_EQ(field0.get(), factory.importExpr(*field0.get()).get().get());
+        EXPECT_EQ(field1.get(), factory.importExpr(*field1.get()).get().get());
+        EXPECT_EQ(field2.get(), factory.importExpr(*field2.get()).get().get());
+        EXPECT_EQ(arrayAddr->getLength().value().get().get(),
+                  factory.literal(uint64_t{2}).get().get());
+    }
+
     TEST(ExprFactoryTest, AddressRebuildsReuseInternedRangeChildren) {
         ASTExtractor e;
         e.init(R"c(

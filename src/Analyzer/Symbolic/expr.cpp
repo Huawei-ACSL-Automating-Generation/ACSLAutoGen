@@ -362,6 +362,51 @@ namespace acslg::analyzer::symbolic {
             fieldIndex));
     }
 
+    ExprHandle ExprFactory::structure(const clang::RecordDecl *record,
+                                      const clang::ASTRecordLayout &layout,
+                                      AddrHandle from,
+                                      SourcePoint fromPoint) {
+        if (!record || !record->isCompleteDefinition())
+            ERROR("Incomplete struct definition");
+        record = record->getDefinition();
+
+        std::vector<ExprHandle> fields;
+        fields.reserve(layout.getFieldCount());
+        for (auto field : record->fields()) {
+            const auto index    = field->getFieldIndex();
+            clang::QualType fty = field->getType();
+            auto fieldAddr      = fieldAddress(fty, record, from, index);
+
+            if (fty->isStructureType()) {
+                auto nestedRD = fty->getAsRecordDecl();
+                if (!nestedRD || !nestedRD->isCompleteDefinition())
+                    ERROR("Incomplete nested struct definition");
+                nestedRD           = nestedRD->getDefinition();
+                auto &nestedLayout = nestedRD->getASTContext().getASTRecordLayout(nestedRD);
+                fields.push_back(structure(nestedRD, nestedLayout, fieldAddr, fromPoint));
+            } else if (fty->isPointerType()) {
+                fields.push_back(
+                    symbolAddress(fty, std::optional<AddrHandle>{fieldAddr}, fromPoint).asExpr());
+            } else if (fty->isArrayType()) {
+                auto arrayType = llvm::cast<clang::ArrayType>(fty);
+                auto elemTy    = arrayType->getElementType();
+                std::optional<ExprHandle> length;
+                if (auto *cat = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr()))
+                    length = literal(cat->getSize().getZExtValue());
+                fields.push_back(symbolAddress(elemTy, std::optional<AddrHandle>{fieldAddr},
+                                               fromPoint, std::nullopt, length)
+                                     .asExpr());
+            } else {
+                fields.push_back(symbolValue(deriveType(fty), fieldAddr, fromPoint));
+            }
+        }
+
+        if (fields.size() != layout.getFieldCount())
+            UNREACHABLE();
+        return intern(std::make_unique<Structure>(Structure::Info{record, layout},
+                                                  std::move(fields)));
+    }
+
     ExprHandle ExprFactory::withField(ExprHandle structure, size_t index, ExprHandle value) {
         const auto &structureNode = structure.cast<Structure>();
         if (index >= structureNode.getNumFields())
@@ -502,12 +547,8 @@ namespace acslg::analyzer::symbolic {
                                              const clang::ASTRecordLayout &layout,
                                              std::unique_ptr<Address> from,
                                              SourcePoint fromPoint) {
-        std::unique_ptr<const Address> constFrom = std::move(from);
-        auto structure = std::make_unique<Structure>(
-            record, layout,
-            utils::not_null<std::unique_ptr<const Address>>{std::move(constFrom)},
-            std::move(fromPoint));
-        return cloneStructure(factory.importExpr(*structure));
+        auto fromHandle = factory.importAddress(*from);
+        return cloneStructure(factory.structure(record, layout, fromHandle, std::move(fromPoint)));
     }
 
     /**

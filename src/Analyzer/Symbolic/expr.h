@@ -1394,6 +1394,10 @@ namespace acslg::analyzer::symbolic {
                                 const clang::RecordDecl *record,
                                 AddrHandle baseAddr,
                                 size_t fieldIndex);
+        ExprHandle structure(const clang::RecordDecl *record,
+                             const clang::ASTRecordLayout &layout,
+                             AddrHandle from,
+                             SourcePoint fromPoint);
         ExprHandle withField(ExprHandle structure, size_t index, ExprHandle value);
 
         ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node) {
