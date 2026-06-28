@@ -1029,6 +1029,15 @@ namespace acslg::test::unit::analyzer {
         auto zero    = factory.literal(0);
         auto length  = factory.literal(3);
         auto offset  = factory.literal(4);
+        auto extra   = factory.unknown();
+        auto simplifiedBinary = [&](symbolic::ExprHandle left,
+                                    symbolic::BinaryOpExpr::Operator op,
+                                    symbolic::ExprHandle right) {
+            auto legacy = std::make_unique<symbolic::BinaryOpExpr>(
+                left->clone(), op, right->clone());
+            auto simplified = legacy->simplifiedExpr();
+            return factory.importExpr(*simplified);
+        };
 
         auto base = factory.symbolAddress(
             var->getType(), std::optional<symbolic::AddrHandle>{varAddr}, point,
@@ -1053,6 +1062,40 @@ namespace acslg::test::unit::analyzer {
         const auto &scalarNode = scalarAddr.cast<symbolic::SymbolAddress>();
         EXPECT_EQ(scalarNode.getOffset().get(), offset.get().get());
         EXPECT_FALSE(scalarNode.getLength());
+
+        auto addedOffset = factory.withAddedOffset(base, extra);
+        EXPECT_EQ(addedOffset, factory.withAddedOffset(base, extra));
+        const auto &addedOffsetNode = addedOffset.cast<symbolic::SymbolAddress>();
+        EXPECT_EQ(addedOffsetNode.getOffset().get(),
+                  simplifiedBinary(zero, symbolic::BinaryOpExpr::Operator::Add, extra)
+                      .get()
+                      .get());
+
+        auto subtractedOffset = factory.withSubtractedOffset(base, extra);
+        EXPECT_EQ(subtractedOffset, factory.withSubtractedOffset(base, extra));
+        const auto &subtractedOffsetNode = subtractedOffset.cast<symbolic::SymbolAddress>();
+        EXPECT_EQ(subtractedOffsetNode.getOffset().get(),
+                  simplifiedBinary(zero, symbolic::BinaryOpExpr::Operator::Subtract, extra)
+                      .get()
+                      .get());
+
+        auto addedLength = factory.withAddedLength(base, extra);
+        EXPECT_EQ(addedLength, factory.withAddedLength(base, extra));
+        auto expectedAddedLength =
+            simplifiedBinary(factory.literal(1), symbolic::BinaryOpExpr::Operator::Add, extra);
+        const auto &addedLengthNode = addedLength.cast<symbolic::SymbolAddress>();
+        ASSERT_TRUE(addedLengthNode.getLength());
+        EXPECT_EQ(addedLengthNode.getLength().value().get().get(),
+                  expectedAddedLength.get().get());
+
+        auto extendedLength = factory.withAddedLength(ranged, extra);
+        EXPECT_EQ(extendedLength, factory.withAddedLength(ranged, extra));
+        auto expectedExtendedLength =
+            simplifiedBinary(length, symbolic::BinaryOpExpr::Operator::Add, extra);
+        const auto &extendedLengthNode = extendedLength.cast<symbolic::SymbolAddress>();
+        ASSERT_TRUE(extendedLengthNode.getLength());
+        EXPECT_EQ(extendedLengthNode.getLength().value().get().get(),
+                  expectedExtendedLength.get().get());
     }
 
     TEST(ExprFactoryTest, ImportsLegacySymbolAddressRangeChildrenAsHandles) {

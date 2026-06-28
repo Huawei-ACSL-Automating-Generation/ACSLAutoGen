@@ -1359,7 +1359,10 @@ namespace acslg::analyzer::symbolic {
             std::optional<ExprHandle> offset = std::nullopt,
             std::optional<ExprHandle> length = std::nullopt);
         AddrHandle withOffset(AddrHandle address, ExprHandle offset);
+        AddrHandle withAddedOffset(AddrHandle address, ExprHandle extra);
+        AddrHandle withSubtractedOffset(AddrHandle address, ExprHandle extra);
         AddrHandle withLength(AddrHandle address, ExprHandle length);
+        AddrHandle withAddedLength(AddrHandle address, ExprHandle extra);
         AddrHandle withoutLength(AddrHandle address);
         AddrHandle fieldAddress(clang::QualType pointeeType,
                                 const clang::RecordDecl *record,

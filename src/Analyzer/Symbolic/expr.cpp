@@ -262,6 +262,26 @@ namespace acslg::analyzer::symbolic {
         return symbolAddress(base.pointeeType_, from, base.fromPoint_, offset, length);
     }
 
+    AddrHandle ExprFactory::withAddedOffset(AddrHandle address, ExprHandle extra) {
+        const auto &symbolAddr = address.cast<SymbolAddress>();
+        auto newOffset = std::make_unique<BinaryOpExpr>(
+                             importExpr(*symbolAddr.getOffset())->clone(),
+                             detail::BinaryOpExprNode::Operator::Add,
+                             extra->clone())
+                             ->simplifiedExpr();
+        return withOffset(address, importExpr(*newOffset));
+    }
+
+    AddrHandle ExprFactory::withSubtractedOffset(AddrHandle address, ExprHandle extra) {
+        const auto &symbolAddr = address.cast<SymbolAddress>();
+        auto newOffset = std::make_unique<BinaryOpExpr>(
+                             importExpr(*symbolAddr.getOffset())->clone(),
+                             detail::BinaryOpExprNode::Operator::Subtract,
+                             extra->clone())
+                             ->simplifiedExpr();
+        return withOffset(address, importExpr(*newOffset));
+    }
+
     AddrHandle ExprFactory::withLength(AddrHandle address, ExprHandle length) {
         const auto &symbolAddr = address.cast<SymbolAddress>();
         auto base              = symbolAddr.getBaseInfo();
@@ -272,6 +292,18 @@ namespace acslg::analyzer::symbolic {
 
         return symbolAddress(base.pointeeType_, from, base.fromPoint_,
                              importExpr(*symbolAddr.getOffset()), length);
+    }
+
+    AddrHandle ExprFactory::withAddedLength(AddrHandle address, ExprHandle extra) {
+        const auto &symbolAddr = address.cast<SymbolAddress>();
+        auto currentLength =
+            symbolAddr.getLength() ? importExpr(*symbolAddr.getLength().value()) : literal(1);
+        auto newLength = std::make_unique<BinaryOpExpr>(
+                             currentLength->clone(),
+                             detail::BinaryOpExprNode::Operator::Add,
+                             extra->clone())
+                             ->simplifiedExpr();
+        return withLength(address, importExpr(*newLength));
     }
 
     AddrHandle ExprFactory::withoutLength(AddrHandle address) {
