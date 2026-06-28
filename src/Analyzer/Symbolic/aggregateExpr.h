@@ -211,12 +211,6 @@ namespace acslg::analyzer::symbolic {
         SumOverRange(Init init, std::string_view indexName, SourcePoint fromPoint);
     };
 
-    template <class F>
-    concept CallableFromIndexToExpr =
-        std::invocable<F, utils::not_null<std::unique_ptr<SymbolicExpr>>> && std::convertible_to<
-            std::invoke_result_t<F, utils::not_null<std::unique_ptr<SymbolAddress::RangeIndex>>>,
-            utils::not_null<std::unique_ptr<const SymbolicExpr>>>;
-
     class QuantifierOverRange : public OverRangeExpr {
       public:
         static bool classof(const SymbolicExpr *e) {
