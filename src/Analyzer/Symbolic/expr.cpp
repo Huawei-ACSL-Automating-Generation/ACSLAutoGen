@@ -47,19 +47,26 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle ExprFactory::importExpr(const SymbolicExpr &expr) {
+        auto preserveImportedType = [this, &expr](ExprHandle imported) {
+            if (imported->getValType() == expr.getValType())
+                return imported;
+            return intern(imported->withValType(expr.getValType()));
+        };
+
         if (auto *literal = dyn_cast<detail::LiteralExprNode>(&expr))
-            return intern(literal->clone());
+            return preserveImportedType(intern(literal->clone()));
 
         if (isa<detail::UnknownExprNode>(&expr))
-            return unknown();
+            return preserveImportedType(unknown());
 
         if (auto *unaryExpr = dyn_cast<detail::UnaryOpExprNode>(&expr))
-            return unary(unaryExpr->getOperator(), importExpr(*unaryExpr->getSub()));
+            return preserveImportedType(
+                unary(unaryExpr->getOperator(), importExpr(*unaryExpr->getSub())));
 
         if (auto *binaryExpr = dyn_cast<detail::BinaryOpExprNode>(&expr)) {
             auto left  = importExpr(*binaryExpr->getLeft());
             auto right = importExpr(*binaryExpr->getRight());
-            return binary(left, binaryExpr->getOperator(), right);
+            return preserveImportedType(binary(left, binaryExpr->getOperator(), right));
         }
 
         if (auto *symbolAddr = dyn_cast<SymbolAddress>(&expr)) {
@@ -1404,6 +1411,8 @@ namespace acslg::analyzer::symbolic {
         const auto liter = dyn_cast<const detail::LiteralExprNode>(&expr);
         if (!liter)
             return false;
+        if (getValType() != expr.getValType())
+            return false;
 
         return type_ == liter->type_ && getLiteralValue() == liter->getLiteralValue();
     }
@@ -1411,6 +1420,8 @@ namespace acslg::analyzer::symbolic {
     bool detail::BinaryOpExprNode::equal(const SymbolicExpr &expr) const {
         const auto binary = dyn_cast<const BinaryOpExpr>(&expr);
         if (!binary)
+            return false;
+        if (getValType() != expr.getValType())
             return false;
 
         return *left_ == *(binary->left_) && op_ == binary->op_ && *right_ == *(binary->right_);
@@ -1420,15 +1431,21 @@ namespace acslg::analyzer::symbolic {
         const auto unary = dyn_cast<const UnaryOpExpr>(&expr);
         if (!unary)
             return false;
+        if (getValType() != expr.getValType())
+            return false;
 
         return op_ == unary->op_ && *expr_ == *(unary->expr_);
     }
 
-    bool UnknownExpr::equal(const SymbolicExpr &expr) const { return expr.isUnknown(); }
+    bool UnknownExpr::equal(const SymbolicExpr &expr) const {
+        return expr.isUnknown() && getValType() == expr.getValType();
+    }
 
     bool SymbolValue::equal(const SymbolicExpr &expr) const {
         const auto symbolValue = dyn_cast<const SymbolValue>(&expr);
         if (!symbolValue)
+            return false;
+        if (getValType() != expr.getValType())
             return false;
 
         if (fromPoint_ != symbolValue->fromPoint_)
@@ -1440,6 +1457,8 @@ namespace acslg::analyzer::symbolic {
     bool SymbolAddress::equal(const SymbolicExpr &expr) const {
         auto other = dyn_cast<const SymbolAddress>(&expr);
         if (!other)
+            return false;
+        if (getValType() != expr.getValType())
             return false;
 
         // compare from
@@ -1473,6 +1492,8 @@ namespace acslg::analyzer::symbolic {
         auto other = dyn_cast<const VariableAddress>(&expr);
         if (!other)
             return false;
+        if (getValType() != expr.getValType())
+            return false;
 
         return from_ == other->from_;
     }
@@ -1480,6 +1501,8 @@ namespace acslg::analyzer::symbolic {
     bool FieldAddress::equal(const SymbolicExpr &expr) const {
         auto other = dyn_cast<const FieldAddress>(&expr);
         if (!other)
+            return false;
+        if (getValType() != expr.getValType())
             return false;
 
         return *baseAddr_ == *other->baseAddr_ && fieldIndex_ == other->fieldIndex_;
@@ -1520,6 +1543,8 @@ namespace acslg::analyzer::symbolic {
     bool Structure::equal(const SymbolicExpr &expr) const {
         const auto st = dyn_cast<const Structure>(&expr);
         if (!st)
+            return false;
+        if (getValType() != expr.getValType())
             return false;
         if (!info_.equal(st->info_))
             return false;

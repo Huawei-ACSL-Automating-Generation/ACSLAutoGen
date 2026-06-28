@@ -91,6 +91,8 @@ namespace acslg::analyzer::symbolic {
         auto ORE = dyn_cast<const OverRangeExpr>(&other);
         if (ORE == nullptr)
             return false;
+        if (getValType() != other.getValType())
+            return false;
         if (range() != ORE->range())
             return false;
         // No indexName_.
@@ -113,6 +115,8 @@ namespace acslg::analyzer::symbolic {
     bool SymbolAddress::RangeIndex::equal(const SymbolicExpr &other) const {
         auto index = dyn_cast<const SymbolAddress::RangeIndex>(&other);
         if (!index)
+            return false;
+        if (getValType() != other.getValType())
             return false;
 
         // `name_` does not determine equality.

@@ -663,6 +663,18 @@ namespace acslg::test::unit::analyzer {
             symbolic::cast<symbolic::BinaryOpExpr>(typedSum.get().get());
         EXPECT_EQ(typedSumNode->getLeft().get(), one.get().get());
         EXPECT_EQ(typedSumNode->getRight().get(), two.get().get());
+
+        auto importedTypedSum = factory.importExpr(*typedSum);
+        EXPECT_NE(importedTypedSum, sum);
+        EXPECT_EQ(importedTypedSum, factory.importExpr(*typedSum));
+        EXPECT_EQ(importedTypedSum->getValType().kind,
+                  symbolic::SymbolicExpr::ScalarKind::UInt);
+        EXPECT_EQ(importedTypedSum->getValType().bitWidth, 64);
+
+        const auto &importedTypedSumNode =
+            importedTypedSum.cast<symbolic::BinaryOpExpr>();
+        EXPECT_EQ(importedTypedSumNode.getLeft().get(), one.get().get());
+        EXPECT_EQ(importedTypedSumNode.getRight().get(), two.get().get());
     }
 
     TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {

@@ -273,6 +273,11 @@ namespace acslg::analyzer::symbolic {
         struct Type {
             ScalarKind kind;   ///< Base scalar category (int, uint, bool, etc.).
             unsigned bitWidth; ///< Number of bits for the value (0 when unspecified).
+
+            friend bool operator==(Type lhs, Type rhs) {
+                return lhs.kind == rhs.kind && lhs.bitWidth == rhs.bitWidth;
+            }
+            friend bool operator!=(Type lhs, Type rhs) { return !(lhs == rhs); }
         };
 
         virtual ~SymbolicExpr()                       = default;
