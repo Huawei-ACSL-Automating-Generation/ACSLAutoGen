@@ -274,7 +274,16 @@ namespace acslg::test::utils {
     }
 
     symbolic::VariableAddress FixtureWithCode::makeVariableAddr(unsigned int id) {
-        return symbolic::VariableAddress{getVarDecl(id)};
+        return *symbolic::makeVariableAddress(exprFactory_, getVarDecl(id));
+    }
+
+    not_null<unique_ptr<symbolic::SymbolicExpr>> FixtureWithCode::makeLiteralExpr(uint64_t value) {
+        return exprFactory_.literal(value)->clone();
+    }
+
+    not_null<unique_ptr<symbolic::SymbolicExpr>> FixtureWithCode::makeRangeIndexExpr(
+        string_view name) {
+        return exprFactory_.rangeIndex(name)->clone();
     }
 
     symbolic::SymbolAddress FixtureWithCode::makeRangeAddr(
@@ -282,39 +291,39 @@ namespace acslg::test::utils {
         unique_ptr<const symbolic::SymbolicExpr> offset,
         unique_ptr<const symbolic::SymbolicExpr> len,
         optional<symbolic::SourcePoint> fromPoint) {
-        auto baseAddr = makeVariableAddr(id);
+        auto baseHandle = exprFactory_.variableAddress(getVarDecl(id));
+        optional<symbolic::ExprHandle> offsetHandle;
+        if (offset != nullptr)
+            offsetHandle = exprFactory_.importExpr(*offset);
+
+        optional<symbolic::ExprHandle> lenHandle;
         if (len != nullptr)
-            return symbolic::SymbolAddress{QualType{}, baseAddr.addressClone().into_underlying(),
-                                           fromPoint.value_or(defaultPoint), std::move(offset),
-                                           std::move(len)};
-        return symbolic::SymbolAddress{QualType{}, baseAddr.addressClone().into_underlying(),
-                                       fromPoint.value_or(defaultPoint), std::move(offset),
-                                       nullopt};
+            lenHandle = exprFactory_.importExpr(*len);
+
+        return *symbolic::cloneSymbolAddress(exprFactory_.symbolAddress(
+            QualType{}, baseHandle, fromPoint.value_or(defaultPoint), offsetHandle, lenHandle));
     }
 
     unique_ptr<symbolic::SymbolValue> FixtureWithCode::makeSymbolValue(
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
-        return make_unique<symbolic::SymbolValue>(
+        return symbolic::makeSymbolValue(
+            exprFactory_,
             symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::UInt, id},
-            make_unique<symbolic::VariableAddress>(getVarDecl(id)),
+            symbolic::makeVariableAddress(exprFactory_, getVarDecl(id)),
             fromPoint.value_or(defaultPoint));
     }
 
     symbolic::SymbolAddress FixtureWithCode::makeSimpleSymbolAddr(
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
-        auto baseAddr = makeVariableAddr(id);
-        using LegacyExprOpt =
-            optional<not_null<unique_ptr<const symbolic::SymbolicExpr>>>;
-        return symbolic::SymbolAddress{QualType{}, baseAddr.addressClone().into_underlying(),
-                                       fromPoint.value_or(defaultPoint), LegacyExprOpt{},
-                                       LegacyExprOpt{}};
+        return *symbolic::cloneSymbolAddress(exprFactory_.symbolAddress(
+            QualType{}, exprFactory_.variableAddress(getVarDecl(id)),
+            fromPoint.value_or(defaultPoint)));
     }
 
     symbolic::SymbolAddress FixtureWithCode::makePointAddr(unsigned int id, uint64_t off) {
-        return makeRangeAddr(id, make_unique<symbolic::detail::LiteralExprNode>(static_cast<uint64_t>(off)),
-                             nullptr);
+        return makeRangeAddr(id, makeLiteralExpr(off).into_underlying(), nullptr);
     }
 
     ::testing::AssertionResult FixtureWithCode::ExpectReadEqAt(

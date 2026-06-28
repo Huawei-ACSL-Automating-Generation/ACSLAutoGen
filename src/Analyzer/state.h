@@ -270,20 +270,26 @@ namespace acslg::analyzer {
          * @return A unique_ptr to the composed Address.
          * @note Length must be non-zero.
          */
-        static std::unique_ptr<symbolic::Address> compose_address(symbolic::SymbolAddrBaseInfo base,
+        template <class Owner>
+        static std::unique_ptr<symbolic::Address> compose_address(Owner &owner,
+                                                                  symbolic::SymbolAddrBaseInfo base,
                                                                   uint64_t off,
                                                                   uint64_t len) {
             if (len == 0)
                 ERROR("Length should not be 0, something goes wrong.");
-            else if (len == 1)
-                return std::make_unique<symbolic::SymbolAddress>(
-                    base.pointeeType_, std::move(base.fromAddr_), base.fromPoint_,
-                    std::make_unique<symbolic::detail::LiteralExprNode>(off));
-            else
-                return make_unique<symbolic::SymbolAddress>(
-                    base.pointeeType_, std::move(base.fromAddr_), base.fromPoint_,
-                    std::make_unique<symbolic::detail::LiteralExprNode>(off),
-                    std::make_unique<symbolic::detail::LiteralExprNode>(len));
+
+            auto &factory = owner.factory();
+            std::optional<symbolic::AddrHandle> from;
+            if (base.fromAddr_)
+                from = factory.importAddress(*base.fromAddr_.value());
+
+            auto offset = factory.literal(off);
+            auto addr = len == 1
+                            ? factory.symbolAddress(base.pointeeType_, from, base.fromPoint_,
+                                                    offset)
+                            : factory.symbolAddress(base.pointeeType_, from, base.fromPoint_,
+                                                    offset, factory.literal(len));
+            return addr->addressClone().into_underlying();
         }
 
         /// Helper to access variable address map from owner
@@ -364,7 +370,7 @@ namespace acslg::analyzer {
                     case Phase::Const: {
                         const symbolic::SymbolAddrBaseInfo &base = c_outer_->first;
                         const auto [off, offPlusLen]             = c_inner_->first;
-                        auto addr = compose_address(base, off, offPlusLen - off);
+                        auto addr = compose_address(owner_, base, off, offPlusLen - off);
                         return R{std::move(addr), c_inner_->second.get()};
                     }
                     case Phase::Symb: {
@@ -382,9 +388,12 @@ namespace acslg::analyzer {
                         auto fieldType =
                             std::ranges::next(st.getInfo().definition_->field_begin(), index)
                                 ->getType();
-                        auto addr = make_unique<symbolic::FieldAddress>(
-                            fieldType, st.getInfo().definition_,
-                            baseAddr.get().addressClone().into_underlying(), index);
+                        auto &factory = owner_.factory();
+                        auto addr = factory
+                                        .fieldAddress(fieldType, st.getInfo().definition_,
+                                                      factory.importAddress(baseAddr.get()), index)
+                                        ->addressClone()
+                                        .into_underlying();
                         return R{std::move(addr), st.getFieldValue(index).get()};
                     }
                     default: break;

@@ -54,28 +54,39 @@ namespace acslg::analyzer {
         }
 
         std::unique_ptr<symbolic::SymbolicExpr> dropLocalConjuncts(
+            symbolic::ExprFactory &factory,
             const symbolic::SymbolicExpr &expr,
             const std::unordered_set<const clang::VarDecl *> &locals) {
             if (const auto *bin = symbolic::dyn_cast<symbolic::BinaryOpExpr>(&expr);
                 bin && bin->getOperator() == symbolic::BinaryOpExpr::Operator::LogicalAnd) {
-                auto lhs = dropLocalConjuncts(*bin->getLeft(), locals);
-                auto rhs = dropLocalConjuncts(*bin->getRight(), locals);
+                auto lhs = dropLocalConjuncts(factory, *bin->getLeft(), locals);
+                auto rhs = dropLocalConjuncts(factory, *bin->getRight(), locals);
                 if (!lhs && !rhs)
                     return nullptr;
                 if (!lhs)
                     return rhs;
                 if (!rhs)
                     return lhs;
-                return std::make_unique<symbolic::BinaryOpExpr>(
-                    utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>(std::move(lhs)),
-                    symbolic::BinaryOpExpr::Operator::LogicalAnd,
-                    utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>(std::move(rhs)));
+                return factory
+                    .binary(factory.importExpr(*lhs),
+                            symbolic::BinaryOpExpr::Operator::LogicalAnd,
+                            factory.importExpr(*rhs))
+                    ->clone()
+                    .into_underlying();
             }
 
             if (containsLocalVar(expr, locals))
                 return nullptr;
             return expr.clone().into_underlying();
         }
+
+        using symbolic::cloneStructure;
+        using symbolic::cloneSymbolAddress;
+        using symbolic::cloneVariableAddress;
+        using symbolic::makeFieldAddress;
+        using symbolic::makeStructure;
+        using symbolic::makeSymbolAddress;
+        using symbolic::makeVariableAddress;
     } // namespace
 
     /**
@@ -131,7 +142,8 @@ namespace acslg::analyzer {
 
         // Union variable addresses so that both paths agree on storage locations.
         for (const auto &[var, addr] : other.varAddr_)
-            varAddr_.emplace(var, std::make_unique<symbolic::VariableAddress>(*addr));
+            varAddr_.emplace(
+                var, cloneVariableAddress(context_.getExprFactory().importAddress(*addr)));
 
         // Collect all addresses touched by either path to merge differing symbolic values.
         MemoryModel::KeySet addresses;
@@ -241,7 +253,8 @@ namespace acslg::analyzer {
         if (auto declRef = dyn_cast<clang::DeclRefExpr>(lexpr)) {
             if (auto varDecl = llvm::dyn_cast<clang::VarDecl>(declRef->getDecl())) {
                 if (auto it = varAddr_.find(varDecl->getCanonicalDecl()); it != varAddr_.end()) {
-                    return std::make_unique<symbolic::VariableAddress>(*it->second);
+                    return cloneVariableAddress(
+                        context_.getExprFactory().importAddress(*it->second));
                 } else {
                     ERROR("varState has no `VarDecl*` of `DeclRefExpr`, undefined variable?");
                 }
@@ -320,24 +333,26 @@ namespace acslg::analyzer {
                     ERROR("Expected symbolic::Address for '->' base, got: " << baseExpr->dump());
 
                 if (!memoryState_.contains(*baseAddr.value())) {
-                    auto st = std::make_unique<symbolic::Structure>(
-                        RD, layout, baseAddr.value()->addressClone().into_underlying(),
-                        startPoint_);
+                    auto st = makeStructure(context_.getExprFactory(), RD, layout,
+                                            baseAddr.value()->addressClone().into_underlying(),
+                                            startPoint_);
                     memoryState_.write(*baseAddr.value(), std::move(st));
                 }
-                return std::make_unique<symbolic::FieldAddress>(
-                    fieldType, RD, baseAddr.value()->addressClone().into_underlying(),
-                    FD->getFieldIndex());
+                return makeFieldAddress(context_.getExprFactory(), fieldType, RD,
+                                        baseAddr.value()->addressClone().into_underlying(),
+                                        FD->getFieldIndex());
             } else {
                 auto baseAddr = extractLValue(base);
 
                 if (!memoryState_.contains(*baseAddr)) {
-                    auto st = std::make_unique<symbolic::Structure>(
-                        RD, layout, baseAddr->addressClone().into_underlying(), startPoint_);
+                    auto st = makeStructure(context_.getExprFactory(), RD, layout,
+                                            baseAddr->addressClone().into_underlying(),
+                                            startPoint_);
                     memoryState_.write(*baseAddr, std::move(st));
                 }
-                return std::make_unique<symbolic::FieldAddress>(
-                    fieldType, RD, baseAddr->addressClone().into_underlying(), FD->getFieldIndex());
+                return makeFieldAddress(context_.getExprFactory(), fieldType, RD,
+                                        baseAddr->addressClone().into_underlying(),
+                                        FD->getFieldIndex());
             }
         }
 
@@ -382,7 +397,7 @@ namespace acslg::analyzer {
             // All `symbolic::VariableAddress` built from same canonicalVar are same.
             return varAddr_.at(canonicalVar).get().get();
         }
-        auto newAddr = std::make_unique<symbolic::VariableAddress>(var);
+        auto newAddr = makeVariableAddress(context_.getExprFactory(), var);
         auto rawPtr  = newAddr.get();
         varAddr_.emplace(canonicalVar, std::move(newAddr));
 
@@ -461,7 +476,8 @@ namespace acslg::analyzer {
         cloned->currentState_ = currentState_;
         for (const auto &entry : varAddr_)
             cloned->varAddr_.emplace(entry.first,
-                                     std::make_unique<symbolic::VariableAddress>(*entry.second));
+                                     cloneVariableAddress(
+                                         context_.getExprFactory().importAddress(*entry.second)));
         cloned->memoryState_ = memoryState_;
         for (const auto &cond : pathConditions_)
             cloned->pathConditions_.emplace(cond);
@@ -574,43 +590,44 @@ namespace acslg::analyzer {
 
         EvalResult eval_result =
             llvm::TypeSwitch<const clang::Expr *, EvalResult>(expr)
-                .Case<clang::IntegerLiteral>([](const clang::IntegerLiteral *lit) -> EvalResult {
+                .Case<clang::IntegerLiteral>([this](
+                                                 const clang::IntegerLiteral *lit) -> EvalResult {
                     DEBUG("evaluating IntegerLiteral...");
                     llvm::APInt ap          = lit->getValue();
                     clang::QualType litType = lit->getType();
-                    std::unique_ptr<symbolic::SymbolicExpr> result;
+                    auto &factory           = context_.getExprFactory();
+                    symbolic::ExprHandle result = factory.literal(0);
 
                     if (litType->isBooleanType()) {
-                        result = std::make_unique<symbolic::detail::LiteralExprNode>(
-                            static_cast<bool>(ap.getZExtValue()));
+                        result = factory.literal(static_cast<bool>(ap.getZExtValue()));
                     } else if (litType->isUnsignedIntegerType()) {
                         if (ap.getBitWidth() <= 8)
-                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
+                            result = factory.literal(
                                 static_cast<unsigned char>(ap.getZExtValue()));
                         else if (ap.getBitWidth() <= 16)
-                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
+                            result = factory.literal(
                                 static_cast<unsigned short>(ap.getZExtValue()));
                         else if (ap.getBitWidth() <= 32)
-                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
+                            result = factory.literal(
                                 static_cast<unsigned int>(ap.getZExtValue()));
                         else if (ap.getBitWidth() <= 64)
-                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
+                            result = factory.literal(
                                 static_cast<uint64_t>(ap.getZExtValue()));
                         else
                             UNIMPLEMENT("Unsupported unsigned integer literal with bit width > 64: "
                                         << ap.getBitWidth());
                     } else {
                         if (ap.getBitWidth() <= 8)
-                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
+                            result = factory.literal(
                                 static_cast<char>(ap.getSExtValue()));
                         else if (ap.getBitWidth() <= 16)
-                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
+                            result = factory.literal(
                                 static_cast<short>(ap.getSExtValue()));
                         else if (ap.getBitWidth() <= 32)
-                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
+                            result = factory.literal(
                                 static_cast<int>(ap.getSExtValue()));
                         else if (ap.getBitWidth() <= 64)
-                            result = std::make_unique<symbolic::detail::LiteralExprNode>(
+                            result = factory.literal(
                                 static_cast<int64_t>(ap.getSExtValue()));
                         else
                             UNIMPLEMENT("Unsupported signed integer literal with bit width > 64: "
@@ -619,7 +636,7 @@ namespace acslg::analyzer {
 
                     Formulas exprs;
                     exprs.reserve(1);
-                    exprs.push_back(std::move(result));
+                    exprs.push_back(result->clone());
 
                     return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
                             std::move(exprs)};
@@ -630,6 +647,7 @@ namespace acslg::analyzer {
                     // TODO: maybe pack the logic in BO, ArraySub into a function?
                     EvalResult lhs                      = evalExpr(binOp->getLHS());
                     symbolic::BinaryOpExpr::Operator op = symbolic::getBinaryOp(binOp->getOpcode());
+                    auto &factory                       = context_.getExprFactory();
 
                     std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                     Formulas outExprs;
@@ -644,8 +662,9 @@ namespace acslg::analyzer {
                         for (size_t j = 0; j < rhsCount; ++j) {
                             auto rhsExpr = std::move(rhs.second[j]);
 
-                            outExprs.emplace_back(std::make_unique<symbolic::BinaryOpExpr>(
-                                lhsExpr->clone(), op, std::move(rhsExpr)));
+                            auto exprHandle = factory.binary(factory.importExpr(*lhsExpr), op,
+                                                             factory.importExpr(*rhsExpr));
+                            outExprs.emplace_back(exprHandle->clone());
 
                             if (i == 0 && j == 0)
                                 continue;
@@ -690,9 +709,9 @@ namespace acslg::analyzer {
                                 WARN("DeclRefExpr to pointer '"
                                      << varDecl->getNameAsString()
                                      << "' has non-address value; fabricating symbolic address.");
-                                auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                    varDecl->getType()->getPointeeType(), std::nullopt,
-                                    startPoint_);
+                                auto addr = makeSymbolAddress(context_.getExprFactory(),
+                                                              varDecl->getType()->getPointeeType(),
+                                                              startPoint_);
                                 varExpr = std::move(addr);
                             }
                         }
@@ -705,10 +724,10 @@ namespace acslg::analyzer {
                     if (const auto *enumDecl =
                             dyn_cast<clang::EnumConstantDecl>(declRef->getDecl())) {
                         llvm::APSInt value = enumDecl->getInitVal();
-                        auto litExpr       = std::make_unique<symbolic::detail::LiteralExprNode>(
+                        auto litExpr = context_.getExprFactory().literal(
                             static_cast<int>(value.getSExtValue()));
                         Formulas exprs;
-                        exprs.push_back(std::move(litExpr));
+                        exprs.push_back(litExpr->clone());
                         return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
                                 std::move(exprs)};
                     }
@@ -732,7 +751,8 @@ namespace acslg::analyzer {
                                       "neither "
                                       "pointer nor "
                                       "array?");
-                            addr = std::make_unique<symbolic::SymbolAddress>(*ptr);
+                            addr = cloneSymbolAddress(
+                                context_.getExprFactory().importAddress(*ptr));
                         } else {
                             ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither "
                                   "pointer "
@@ -847,7 +867,7 @@ namespace acslg::analyzer {
                         auto sizeExpr = evalNoBranch(call->getArg(0));
                         if (auto c = sizeExpr->tryEvalAsConstant(); c && *c == 0) {
                             Formulas exprs;
-                            exprs.emplace_back(std::make_unique<symbolic::detail::LiteralExprNode>(0));
+                            exprs.emplace_back(context_.getExprFactory().literal(0)->clone());
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
@@ -864,8 +884,8 @@ namespace acslg::analyzer {
                         auto pointAfterCall = symbolic::SourcePoint::fromStmtAfter(
                             call, context_.getSourceManager(), context_.getLangOptions());
                         auto pointeeTy = retTy->getPointeeType();
-                        auto addr = std::make_unique<symbolic::SymbolAddress>(
-                            pointeeTy, std::nullopt, pointAfterCall);
+                        auto addr =
+                            makeSymbolAddress(context_.getExprFactory(), pointeeTy, pointAfterCall);
 
                         Formulas exprs;
                         exprs.emplace_back(std::move(addr));
@@ -926,10 +946,13 @@ namespace acslg::analyzer {
 
                             // Form the total-size expression by multiplying the two arguments.
                             using Op = symbolic::BinaryOpExpr::Operator;
+                            auto &factory = context_.getExprFactory();
                             auto totalSizeBytes =
                                 utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>{
-                                    std::make_unique<symbolic::BinaryOpExpr>(
-                                        a0->clone(), Op::Multiply, a1->clone())};
+                                    factory.binary(factory.importExpr(*a0), Op::Multiply,
+                                                   factory.importExpr(*a1))
+                                        ->clone()
+                                        .into_underlying()};
 
                             // Remove exactly one multiplicative factor equal to sizeof(T) to obtain
                             // the element count. This corresponds to interpreting the product as
@@ -940,8 +963,8 @@ namespace acslg::analyzer {
 
                             // Allocate a fresh symbolic address anchored at the current allocation
                             // site.
-                            auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                elemTy, std::nullopt, pointAfterCall);
+                            auto addr = makeSymbolAddress(context_.getExprFactory(), elemTy,
+                                                          pointAfterCall);
 
                             // Note: The length is temporarily omitted since it conceptually
                             // represents the legal bound of accessible memory, rather than a
@@ -966,9 +989,12 @@ namespace acslg::analyzer {
                         // layout.
                         if (elemTy->isStructureType()) {
                             DEBUG("BSL_SAL_Calloc: structure type");
-                            auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                elemTy, std::nullopt, pointAfterCall,
-                                std::make_unique<symbolic::detail::LiteralExprNode>(0));
+                            auto &factory = context_.getExprFactory();
+                            auto addr =
+                                factory.symbolAddress(elemTy, std::nullopt, pointAfterCall,
+                                                      factory.literal(0))
+                                    ->addressClone()
+                                    .into_underlying();
 
                             // Build a Structure whose fields (and nested structs) are Unknown, then
                             // write it.
@@ -1026,8 +1052,7 @@ namespace acslg::analyzer {
                             factory.withOffset(factory.importAddress(*freedAddr),
                                                factory.literal(static_cast<int64_t>(
                                                    symbolic::SymbolAddress::ZERO_OFFSET)));
-                        freedAddr = std::make_unique<symbolic::SymbolAddress>(
-                            freedAddrHandle.cast<symbolic::SymbolAddress>());
+                        freedAddr = cloneSymbolAddress(freedAddrHandle);
 
                         // Overwrite freed memory with an UnknownExpr (symbolic tombstone).
                         // This prevents later reads from reusing stale symbolic values.
@@ -1086,7 +1111,8 @@ namespace acslg::analyzer {
                             } else if (sz > 1) {
                                 if (raw % sz != 0)
                                     UNIMPLEMENT("memcpy size is not a multiple of element size.");
-                                lengthExpr = std::make_unique<symbolic::detail::LiteralExprNode>(raw / sz);
+                                lengthExpr =
+                                    context_.getExprFactory().literal(raw / sz)->clone();
                             }
                         } else if (sz > 1) {
                             lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
@@ -1183,7 +1209,8 @@ namespace acslg::analyzer {
                             } else if (sz > 1) {
                                 if (raw % sz != 0)
                                     UNIMPLEMENT("memset_s size is not a multiple of element size.");
-                                lengthExpr = std::make_unique<symbolic::detail::LiteralExprNode>(raw / sz);
+                                lengthExpr =
+                                    context_.getExprFactory().literal(raw / sz)->clone();
                             }
                         } else if (sz > 1) {
                             lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
@@ -1262,7 +1289,9 @@ namespace acslg::analyzer {
                             for (const auto &[vd, addrPtr] : callerSnapshot->varAddr_) {
                                 if (!p->varAddr_.contains(vd)) {
                                     p->varAddr_.emplace(
-                                        vd, std::make_unique<symbolic::VariableAddress>(*addrPtr));
+                                        vd, cloneVariableAddress(
+                                                p->context_.getExprFactory().importAddress(
+                                                    *addrPtr)));
                                 }
                                 if (auto val = callerSnapshot->memoryState_.read(*addrPtr)) {
                                     auto &dstAddr = p->varAddr_.at(vd);
@@ -1309,8 +1338,11 @@ namespace acslg::analyzer {
 
                             // false branch
                             auto falsePath   = condPath->clone();
-                            auto negatedCond = std::make_unique<symbolic::UnaryOpExpr>(
-                                symbolic::UnaryOpExpr::Operator::LogicalNot, condExpr->clone());
+                            auto &factory    = context_.getExprFactory();
+                            auto negatedCond =
+                                factory.unary(symbolic::UnaryOpExpr::Operator::LogicalNot,
+                                              factory.importExpr(*condExpr))
+                                    ->clone();
                             falsePath->insertPathCondition(std::move(negatedCond));
 
                             EvalResult falseVal = falsePath->evalExpr(condOp->getFalseExpr());
@@ -1378,15 +1410,17 @@ namespace acslg::analyzer {
                                 if (oldVal == std::nullopt)
                                     ERROR("memoryState_ doesn't contain addr.");
                                 // compute new = old +/- 1
-                                auto one    = std::make_unique<symbolic::detail::LiteralExprNode>(1);
+                                auto &factory = context_.getExprFactory();
+                                auto one      = factory.literal(1);
                                 auto binOp  = (op == PreInc || op == PostInc)
                                                   ? symbolic::BinaryOpExpr::Operator::Add
                                                   : symbolic::BinaryOpExpr::Operator::Subtract;
-                                auto newVal = std::make_unique<symbolic::BinaryOpExpr>(
-                                    oldVal.value()->clone(), binOp, std::move(one));
+                                auto newValHandle = factory.binary(
+                                    factory.importExpr(*oldVal.value()), binOp, one);
+                                auto newVal = newValHandle->clone();
                                 // return pre vs post
                                 if (op == PreInc || op == PreDec)
-                                    outExprs.emplace_back(newVal->clone());
+                                    outExprs.emplace_back(newValHandle->clone());
                                 else {
                                     outExprs.emplace_back(oldVal.value()->clone());
                                 }
@@ -1413,9 +1447,11 @@ namespace acslg::analyzer {
                                 // &x
                                 auto addr = path->extractLValue(uop->getSubExpr());
                                 outExprs.emplace_back(addr->addressClone().into_underlying());
-                            } else
+                            } else {
+                                auto &factory = context_.getExprFactory();
                                 outExprs.emplace_back(
-                                    std::make_unique<symbolic::UnaryOpExpr>(op, std::move(unExpr)));
+                                    factory.unary(op, factory.importExpr(*unExpr))->clone());
+                            }
                         }();
                         if (i > 0)
                             outPaths.emplace_back(std::move(operand.first[i - 1]));
@@ -1430,9 +1466,11 @@ namespace acslg::analyzer {
                         return sub;
 
                     auto targetType = symbolic::deriveType(castExpr->getType());
+                    auto &factory   = context_.getExprFactory();
 
                     for (auto &subExpr : sub.second)
-                        subExpr = subExpr->withValType(targetType);
+                        subExpr = factory.withValType(factory.importExpr(*subExpr), targetType)
+                                      ->clone();
 
                     return {std::move(sub.first), std::move(sub.second)};
                 })
@@ -1460,22 +1498,22 @@ namespace acslg::analyzer {
                         if (baseAddr == std::nullopt) {
                             WARN("LHS of '->' is not an address; fabricating symbolic pointer to "
                                  "continue.");
-                            auto newAddr = std::make_unique<symbolic::SymbolAddress>(
-                                memberExpr->getBase()->getType()->getPointeeType(), std::nullopt,
-                                startPoint_);
+                            auto newAddr = makeSymbolAddress(
+                                context_.getExprFactory(),
+                                memberExpr->getBase()->getType()->getPointeeType(), startPoint_);
                             baseAddr = utils::not_null<std::unique_ptr<symbolic::SymbolAddress>>{
                                 std::move(newAddr)};
                         }
                         auto val = memoryState_.read(*baseAddr.value());
                         DEBUG("MemberExpr base in memory: " << (val ? "yes" : "no"));
                         if (val == std::nullopt) {
-                            st = std::make_unique<symbolic::Structure>(
-                                RD, layout, baseAddr.value()->addressClone().into_underlying(),
-                                startPoint_);
+                            st = makeStructure(
+                                context_.getExprFactory(), RD, layout,
+                                baseAddr.value()->addressClone().into_underlying(), startPoint_);
                             memoryState_.write(*baseAddr.value(), st->clone());
                         } else if (auto stVal = symbolic::dyn_cast<const symbolic::Structure>(
                                        val.value().get().get())) {
-                            st = std::make_unique<symbolic::Structure>(*stVal);
+                            st = cloneStructure(context_.getExprFactory().importExpr(*stVal));
                         } else {
                             ERROR("Dereferenced value is not a structure");
                         }
@@ -1510,15 +1548,20 @@ namespace acslg::analyzer {
                         if (sub.second.size() != 1)
                             ERROR("ConstantExpr subExpr produced multiple results");
                         auto resultTy = symbolic::deriveType(ce->getType());
-                        sub.second[0] = sub.second[0]->withValType(resultTy);
+                        auto &factory = context_.getExprFactory();
+                        sub.second[0] =
+                            factory.withValType(factory.importExpr(*sub.second[0]), resultTy)
+                                ->clone();
                         return {std::move(sub.first), std::move(sub.second)};
                     }
                     auto resultTy = symbolic::deriveType(ce->getType());
-                    auto lit      = std::make_unique<symbolic::detail::LiteralExprNode>(
-                        v.isSigned() ? static_cast<int64_t>(v.getSExtValue())
-                                     : static_cast<uint64_t>(v.getZExtValue()));
+                    auto &factory = context_.getExprFactory();
+                    auto lit =
+                        v.isSigned()
+                            ? factory.literal(static_cast<int64_t>(v.getSExtValue()))
+                            : factory.literal(static_cast<uint64_t>(v.getZExtValue()));
                     EvalResult r;
-                    r.second.emplace_back(lit->withValType(resultTy));
+                    r.second.emplace_back(factory.withValType(lit, resultTy)->clone());
                     return r;
                 })
                 .Case<clang::UnaryExprOrTypeTraitExpr>(
@@ -1555,10 +1598,11 @@ namespace acslg::analyzer {
 
                         // Materialize a literal of the expression’s result type (typically size_t).
                         auto resultTy = symbolic::deriveType(uett->getType());
-                        auto lit      = std::make_unique<symbolic::detail::LiteralExprNode>(value);
+                        auto &factory = context_.getExprFactory();
+                        auto lit      = factory.literal(value);
 
                         EvalResult r;
-                        r.second.emplace_back(lit->withValType(resultTy));
+                        r.second.emplace_back(factory.withValType(lit, resultTy)->clone());
                         return r;
                     })
 
@@ -2029,10 +2073,12 @@ namespace acslg::analyzer {
             return *a->simplifiedExpr() == *b->simplifiedExpr();
         };
 
-        // Compute hash of (a + b) by constructing a BinaryOp(Add), simplifying, then hashing.
-        auto addedHash = [](const Expr &a, const Expr &b) {
-            return std::make_unique<symbolic::BinaryOpExpr>(
-                       a.clone(), symbolic::BinaryOpExpr::Operator::Add, b.clone())
+        // Compute hash of (a + b) by constructing a factory-backed BinaryOp(Add), simplifying,
+        // then hashing.
+        auto addedHash = [this](const Expr &a, const Expr &b) {
+            return factory_
+                ->binary(factory_->importExpr(a), symbolic::BinaryOpExpr::Operator::Add,
+                         factory_->importExpr(b))
                 ->simplifiedExpr()
                 ->hash();
         };
@@ -2394,7 +2440,8 @@ namespace acslg::analyzer {
                 PathConditions filtered;
                 filtered.reserve(path->pathConditions_.size());
                 for (auto &cond : path->pathConditions_) {
-                    auto stripped = dropLocalConjuncts(*cond, localVars);
+                    auto stripped =
+                        dropLocalConjuncts(path->context_.getExprFactory(), *cond, localVars);
                     if (!stripped)
                         continue;
                     filtered.emplace(path->context_.getExprFactory().importExpr(*stripped));
@@ -2621,6 +2668,7 @@ namespace acslg::analyzer {
             if (binOp->isCompoundAssignmentOp()) {
                 symbolic::BinaryOpExpr::Operator op =
                     symbolic::getCompoundAssignOp(binOp->getOpcode());
+                auto &factory = context_.getExprFactory();
 
                 Path::EvalResult lhs = path->evalExpr(binOp->getLHS());
 
@@ -2633,8 +2681,10 @@ namespace acslg::analyzer {
                     Path::EvalResult rhs = lhsPath.evalExpr(binOp->getRHS());
 
                     for (size_t j = 0; j < rhs.second.size(); ++j) {
-                        outExprs.emplace_back(std::make_unique<symbolic::BinaryOpExpr>(
-                            lhs.second[i]->clone(), op, std::move(rhs.second[j])));
+                        auto exprHandle =
+                            factory.binary(factory.importExpr(*lhs.second[i]), op,
+                                           factory.importExpr(*rhs.second[j]));
+                        outExprs.emplace_back(exprHandle->clone());
 
                         if (i != 0 || j != 0)
                             outPaths.emplace_back(std::move(rhs.first[j - 1]));
@@ -2743,9 +2793,10 @@ namespace acslg::analyzer {
 
                         RD = RD->getDefinition();
 
-                        auto st = std::make_unique<symbolic::Structure>(
-                            RD, RD->getASTContext().getASTRecordLayout(RD),
-                            varAddr->addressClone().into_underlying(), startPoint_);
+                        auto st = makeStructure(context_.getExprFactory(), RD,
+                                                RD->getASTContext().getASTRecordLayout(RD),
+                                                varAddr->addressClone().into_underlying(),
+                                                startPoint_);
                         if (initListExpr->getNumInits() != st->getNumFields())
                             ERROR("Initializer std::list size mismatches the struct's field "
                                   "count.");
@@ -2989,19 +3040,20 @@ namespace acslg::analyzer {
 
                 auto caseSymExpr = std::move(caseCondEval.second[0]);
                 auto eqState     = current->clone();
+                auto &factory    = context_.getExprFactory();
 
-                auto condExprEq = std::make_unique<symbolic::BinaryOpExpr>(
-                    symValue->clone(), symbolic::BinaryOpExpr::Operator::Equal,
-                    caseSymExpr->clone());
+                auto condExprEq = factory.binary(factory.importExpr(*symValue),
+                                                 symbolic::BinaryOpExpr::Operator::Equal,
+                                                 factory.importExpr(*caseSymExpr));
                 for (auto &p : eqState->paths_)
                     p->insertPathCondition(condExprEq->clone());
 
                 for (auto *s : stmts)
                     eqState->step(s);
 
-                auto condExprNe = std::make_unique<symbolic::BinaryOpExpr>(
-                    symValue->clone(), symbolic::BinaryOpExpr::Operator::NotEqual,
-                    std::move(caseSymExpr));
+                auto condExprNe = factory.binary(factory.importExpr(*symValue),
+                                                 symbolic::BinaryOpExpr::Operator::NotEqual,
+                                                 factory.importExpr(*caseSymExpr));
                 for (auto &p : current->paths_)
                     p->insertPathCondition(condExprNe->clone());
 

@@ -89,6 +89,10 @@ namespace acslg::test::utils {
         ::acslg::utils::not_null<const clang::VarDecl *> getVarDecl(unsigned int id);
         ::acslg::utils::not_null<const clang::FunctionDecl *> getFuncDecl(unsigned int id);
         analyzer::symbolic::VariableAddress makeVariableAddr(unsigned int id);
+        ::acslg::utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
+        makeLiteralExpr(std::uint64_t value);
+        ::acslg::utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
+        makeRangeIndexExpr(std::string_view name);
         analyzer::symbolic::SymbolAddress makeRangeAddr(
             unsigned int id,
             std::unique_ptr<const analyzer::symbolic::SymbolicExpr> offset,
@@ -120,6 +124,8 @@ namespace acslg::test::utils {
         std::vector<const clang::FunctionDecl *> funcDecls;
         size_t func_count{0};
         std::unordered_map<unsigned int, size_t> funcIdCountMap{};
+
+        analyzer::symbolic::ExprFactory exprFactory_;
     };
 
 #define EXPECT_OK_AND_FIRST_EQ(expr, expected_first)                                               \

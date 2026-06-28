@@ -42,6 +42,12 @@ namespace acslg::analyzer::symbolic {
         return current_ != nullptr;
     }
 
+    ExprHandle ExprFactory::withValType(ExprHandle expr, SymbolicExpr::Type newType) {
+        if (expr->getValType() == newType)
+            return expr;
+        return intern(expr->withValType(newType));
+    }
+
     AddrHandle ExprFactory::importAddress(const Address &address) {
         return AddrHandle{cast<const Address>(importExpr(address).get().get())};
     }
@@ -50,7 +56,7 @@ namespace acslg::analyzer::symbolic {
         auto preserveImportedType = [this, &expr](ExprHandle imported) {
             if (imported->getValType() == expr.getValType())
                 return imported;
-            return intern(imported->withValType(expr.getValType()));
+            return withValType(imported, expr.getValType());
         };
 
         if (auto *literal = dyn_cast<detail::LiteralExprNode>(&expr))
@@ -58,6 +64,9 @@ namespace acslg::analyzer::symbolic {
 
         if (isa<detail::UnknownExprNode>(&expr))
             return preserveImportedType(unknown());
+
+        if (auto *index = dyn_cast<SymbolAddress::RangeIndex>(&expr))
+            return preserveImportedType(rangeIndex(index->getName()));
 
         if (auto *unaryExpr = dyn_cast<detail::UnaryOpExprNode>(&expr))
             return preserveImportedType(
@@ -242,6 +251,20 @@ namespace acslg::analyzer::symbolic {
         inline bool literalAsBool(const detail::LiteralExprNode &L) { return L.getLiteralValue() != 0; }
     } // namespace
 
+    ExprHandle ExprFactory::rangeIndex(std::string_view name) {
+        return intern(std::make_unique<SymbolAddress::RangeIndex>(name));
+    }
+
+    ExprHandle ExprFactory::symbolValue(SymbolicExpr::Type varType,
+                                        AddrHandle from,
+                                        SourcePoint fromPoint) {
+        auto clonedFrom = cloneAddress(from);
+        if (!clonedFrom)
+            ERROR("SymbolValue requires a source address.");
+        return intern(std::make_unique<SymbolValue>(
+            varType, std::move(clonedFrom.value()), std::move(fromPoint)));
+    }
+
     AddrHandle ExprFactory::variableAddress(utils::not_null<const clang::VarDecl *> from) {
         return internAddress(std::make_unique<VariableAddress>(from));
     }
@@ -335,6 +358,136 @@ namespace acslg::analyzer::symbolic {
         return internAddress(std::make_unique<FieldAddress>(
             pointeeType, record, utils::not_null<std::unique_ptr<const Address>>{std::move(base)},
             fieldIndex));
+    }
+
+    namespace {
+        utils::not_null<std::unique_ptr<SymbolicExpr>> importThroughCurrentFactory(
+            utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
+            if (!ExprFactoryScope::hasCurrent())
+                return expr;
+            return ExprFactoryScope::current().importExpr(*expr)->clone();
+        }
+    } // namespace
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeLiteralExpr(int64_t value) {
+        if (ExprFactoryScope::hasCurrent())
+            return ExprFactoryScope::current().literal(value)->clone();
+        return std::make_unique<detail::LiteralExprNode>(value);
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeUnaryExpr(
+        UnaryOpExpr::Operator op,
+        utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return factory.unary(op, factory.importExpr(*expr))->clone();
+        }
+        return std::make_unique<UnaryOpExpr>(op, std::move(expr));
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeBinaryExpr(
+        utils::not_null<std::unique_ptr<SymbolicExpr>> lhs,
+        BinaryOpExpr::Operator op,
+        utils::not_null<std::unique_ptr<SymbolicExpr>> rhs) {
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs))->clone();
+        }
+        return std::make_unique<BinaryOpExpr>(std::move(lhs), op, std::move(rhs));
+    }
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeRangeIndexExpr(std::string_view name) {
+        if (ExprFactoryScope::hasCurrent())
+            return ExprFactoryScope::current().rangeIndex(name)->clone();
+        return std::make_unique<SymbolAddress::RangeIndex>(name);
+    }
+
+    std::unique_ptr<SymbolValue> cloneSymbolValue(ExprHandle value) {
+        return std::make_unique<SymbolValue>(value.cast<SymbolValue>());
+    }
+
+    std::unique_ptr<SymbolValue> makeSymbolValue(ExprFactory &factory,
+                                                 SymbolicExpr::Type varType,
+                                                 std::unique_ptr<Address> from,
+                                                 SourcePoint fromPoint) {
+        auto fromHandle = factory.importAddress(*from);
+        return cloneSymbolValue(
+            factory.symbolValue(varType, fromHandle, std::move(fromPoint)));
+    }
+
+    std::unique_ptr<SymbolAddress> cloneSymbolAddress(AddrHandle address) {
+        return std::make_unique<SymbolAddress>(address.cast<SymbolAddress>());
+    }
+
+    std::unique_ptr<SymbolAddress> cloneSymbolAddress(const SymbolAddress &address) {
+        if (!ExprFactoryScope::hasCurrent())
+            return std::make_unique<SymbolAddress>(address);
+        return cloneSymbolAddress(ExprFactoryScope::current().importAddress(address));
+    }
+
+    std::unique_ptr<SymbolAddress> makeSymbolAddress(ExprFactory &factory,
+                                                     clang::QualType pointeeType,
+                                                     SourcePoint fromPoint) {
+        return cloneSymbolAddress(
+            factory.symbolAddress(pointeeType, std::nullopt, std::move(fromPoint)));
+    }
+
+    std::unique_ptr<SymbolAddress> makeSymbolAddress(clang::QualType pointeeType,
+                                                     std::unique_ptr<Address> from,
+                                                     SourcePoint fromPoint) {
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            auto fromHandle = factory.importAddress(*from);
+            return cloneSymbolAddress(
+                factory.symbolAddress(pointeeType, fromHandle, std::move(fromPoint)));
+        }
+
+        std::unique_ptr<const Address> constFrom = std::move(from);
+        return std::make_unique<SymbolAddress>(
+            pointeeType,
+            utils::not_null<std::unique_ptr<const Address>>{std::move(constFrom)},
+            std::move(fromPoint));
+    }
+
+    std::unique_ptr<VariableAddress> cloneVariableAddress(AddrHandle address) {
+        return std::make_unique<VariableAddress>(address.cast<VariableAddress>());
+    }
+
+    std::unique_ptr<VariableAddress> makeVariableAddress(
+        ExprFactory &factory,
+        utils::not_null<const clang::VarDecl *> from) {
+        return cloneVariableAddress(factory.variableAddress(from));
+    }
+
+    std::unique_ptr<FieldAddress> cloneFieldAddress(AddrHandle address) {
+        return std::make_unique<FieldAddress>(address.cast<FieldAddress>());
+    }
+
+    std::unique_ptr<FieldAddress> makeFieldAddress(ExprFactory &factory,
+                                                   clang::QualType pointeeType,
+                                                   const clang::RecordDecl *record,
+                                                   std::unique_ptr<Address> base,
+                                                   size_t fieldIndex) {
+        auto baseHandle = factory.importAddress(*base);
+        return cloneFieldAddress(
+            factory.fieldAddress(pointeeType, record, baseHandle, fieldIndex));
+    }
+
+    std::unique_ptr<Structure> cloneStructure(ExprHandle structure) {
+        return std::make_unique<Structure>(structure.cast<Structure>());
+    }
+
+    std::unique_ptr<Structure> makeStructure(ExprFactory &factory,
+                                             const clang::RecordDecl *record,
+                                             const clang::ASTRecordLayout &layout,
+                                             std::unique_ptr<Address> from,
+                                             SourcePoint fromPoint) {
+        std::unique_ptr<const Address> constFrom = std::move(from);
+        auto structure = std::make_unique<Structure>(
+            record, layout,
+            utils::not_null<std::unique_ptr<const Address>>{std::move(constFrom)},
+            std::move(fromPoint));
+        return cloneStructure(factory.importExpr(*structure));
     }
 
     /**
@@ -1593,9 +1746,9 @@ namespace acslg::analyzer::symbolic {
             // Address originates from an address present on this path at loop
             // entry but hasn't been accessed -> construct a SymbolValue with
             // corrext fromAddr and pointToSub.
-            return std::make_unique<SymbolValue>(getValType(),
-                                                 realFromAddr->addressClone().into_underlying(),
-                                                 pathSubTo.getStartPoint());
+            return importThroughCurrentFactory(std::make_unique<SymbolValue>(
+                getValType(), realFromAddr->addressClone().into_underlying(),
+                pathSubTo.getStartPoint()));
         }
     }
 
@@ -1721,8 +1874,8 @@ namespace acslg::analyzer::symbolic {
         auto addr = dyn_cast<Address>(expr.get().get());
         if (addr == nullptr)
             UNREACHABLE();
-        return std::make_unique<SymbolValue>(getValType(), addr->addressClone().into_underlying(),
-                                             fromPoint_);
+        return importThroughCurrentFactory(std::make_unique<SymbolValue>(
+            getValType(), addr->addressClone().into_underlying(), fromPoint_));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getRangeIndexSubstituted(
@@ -1818,8 +1971,8 @@ namespace acslg::analyzer::symbolic {
         auto addr = dyn_cast<Address>(expr.get().get());
         if (addr == nullptr)
             UNREACHABLE();
-        return std::make_unique<SymbolValue>(getValType(), addr->addressClone().into_underlying(),
-                                             fromPoint_);
+        return importThroughCurrentFactory(std::make_unique<SymbolValue>(
+            getValType(), addr->addressClone().into_underlying(), fromPoint_));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getSubstitutedValueExpr(
@@ -2556,16 +2709,18 @@ namespace acslg::analyzer::symbolic {
             auto pointerType = llvm::cast<clang::PointerType>(type);
             auto pointeeType = pointerType->getPointeeType();
             if (from)
-                return std::make_unique<SymbolAddress>(pointeeType, std::move(from.value()),
-                                                       std::move(fromPoint));
-            return std::make_unique<SymbolAddress>(pointeeType, std::nullopt, std::move(fromPoint));
+                return importThroughCurrentFactory(std::make_unique<SymbolAddress>(
+                    pointeeType, std::move(from.value()), std::move(fromPoint)));
+            return importThroughCurrentFactory(
+                std::make_unique<SymbolAddress>(pointeeType, std::nullopt, std::move(fromPoint)));
         } else if (type->isArrayType()) {
             auto arrayType   = llvm::cast<clang::ArrayType>(type);
             auto elementType = arrayType->getElementType();
             if (from)
-                return std::make_unique<SymbolAddress>(elementType, std::move(from.value()),
-                                                       std::move(fromPoint));
-            return std::make_unique<SymbolAddress>(elementType, std::nullopt, std::move(fromPoint));
+                return importThroughCurrentFactory(std::make_unique<SymbolAddress>(
+                    elementType, std::move(from.value()), std::move(fromPoint)));
+            return importThroughCurrentFactory(
+                std::make_unique<SymbolAddress>(elementType, std::nullopt, std::move(fromPoint)));
         } else if (type->isStructureType()) {
             if (from == std::nullopt)
                 ERROR("Structure should *from* an `Address`.");
@@ -2574,15 +2729,17 @@ namespace acslg::analyzer::symbolic {
                 ERROR("Incomplete struct definition");
             RD           = RD->getDefinition();
             auto &layout = RD->getASTContext().getASTRecordLayout(RD);
-            return std::make_unique<Structure>(RD, layout, std::move(from.value()),
-                                               std::move(fromPoint));
+            return importThroughCurrentFactory(
+                std::make_unique<Structure>(RD, layout, std::move(from.value()),
+                                            std::move(fromPoint)));
 
         } else {
             if (from == std::nullopt)
                 ERROR("SymbolValue should *from* an `Address`.");
             SymbolicExpr::Type vty = deriveType(type);
-            return std::make_unique<SymbolValue>(vty, std::move(from.value()),
-                                                 std::move(fromPoint));
+            return importThroughCurrentFactory(
+                std::make_unique<SymbolValue>(vty, std::move(from.value()),
+                                              std::move(fromPoint)));
         }
     }
 

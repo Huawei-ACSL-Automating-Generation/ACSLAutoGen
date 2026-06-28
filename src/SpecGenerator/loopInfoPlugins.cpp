@@ -10,6 +10,30 @@
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
 
+    namespace {
+        using OwnedSymbolicExpr = utils::not_null<std::unique_ptr<symb::SymbolicExpr>>;
+        using symb::makeBinaryExpr;
+        using symb::makeLiteralExpr;
+
+        OwnedSymbolicExpr buildMaxLoopCountExpr(const LoopInfo::Pattern &pattern,
+                                                const symb::SymbolicExpr &boundValue,
+                                                bool includeClosedBound) {
+            using enum symb::BinaryOpExpr::Operator;
+
+            auto result =
+                pattern.step > 0
+                    ? makeBinaryExpr(makeBinaryExpr(boundValue.clone(), Add,
+                                                    makeLiteralExpr(pattern.step - 1)),
+                                     Subtract, pattern.initialValue->clone())
+                    : makeBinaryExpr(pattern.initialValue->clone(), Subtract,
+                                     makeBinaryExpr(boundValue.clone(), Add,
+                                                    makeLiteralExpr(pattern.step + 1)));
+            if (includeClosedBound)
+                result = makeBinaryExpr(std::move(result), Add, makeLiteralExpr(1));
+            return result;
+        }
+    } // namespace
+
     /**
      * @class SetEntryAndCurrentPlugin
      * @brief Computes symbolic loop entry/current states and inactive paths.
@@ -524,29 +548,13 @@ namespace acslg::spec_generator {
                         return false;
                 }
 
-                using enum symb::BinaryOpExpr::Operator;
                 if (indexPattern == std::nullopt || boundValue == std::nullopt ||
                     opCode == std::nullopt)
                     UNREACHABLE();
 
-                // abs(n - i + step - 1)
-                maxLoopCount = indexPattern.value().step > 0
-                                   ? std::make_unique<symb::BinaryOpExpr>(
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::detail::LiteralExprNode>(
-                                                 indexPattern.value().step - 1)),
-                                         Subtract, indexPattern.value().initialValue->clone())
-                                   : std::make_unique<symb::BinaryOpExpr>(
-                                         indexPattern.value().initialValue->clone(), Subtract,
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::detail::LiteralExprNode>(
-                                                 indexPattern.value().step + 1)));
-                if (opCode.value() == BO_LE || opCode.value() == BO_GE)
-                    maxLoopCount = std::make_unique<symb::BinaryOpExpr>(
-                        std::move(maxLoopCount.value()), Add,
-                        std::make_unique<symb::detail::LiteralExprNode>(1));
+                maxLoopCount = buildMaxLoopCountExpr(
+                    indexPattern.value(), *boundValue.value(),
+                    opCode.value() == BO_LE || opCode.value() == BO_GE);
 
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
@@ -601,26 +609,13 @@ namespace acslg::spec_generator {
                         unaryExpr);
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
-                boundValue = std::make_unique<symb::detail::LiteralExprNode>((int64_t)0);
+                boundValue = makeLiteralExpr(0);
 
-                using enum symb::BinaryOpExpr::Operator;
                 if (indexPattern == std::nullopt || boundValue == std::nullopt)
                     UNREACHABLE();
 
-                // abs(n - i + step - 1)
-                maxLoopCount = indexPattern.value().step > 0
-                                   ? std::make_unique<symb::BinaryOpExpr>(
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::detail::LiteralExprNode>(
-                                                 indexPattern.value().step - 1)),
-                                         Subtract, indexPattern.value().initialValue->clone())
-                                   : std::make_unique<symb::BinaryOpExpr>(
-                                         indexPattern.value().initialValue->clone(), Subtract,
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::detail::LiteralExprNode>(
-                                                 indexPattern.value().step + 1)));
+                maxLoopCount =
+                    buildMaxLoopCountExpr(indexPattern.value(), *boundValue.value(), false);
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
                     preciseLoopCount = maxLoopCount.value()->clone();
@@ -683,26 +678,13 @@ namespace acslg::spec_generator {
                     entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(refExpr);
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
-                boundValue = std::make_unique<symb::detail::LiteralExprNode>((int64_t)0);
+                boundValue = makeLiteralExpr(0);
 
-                using enum symb::BinaryOpExpr::Operator;
                 if (indexPattern == std::nullopt || boundValue == std::nullopt)
                     UNREACHABLE();
 
-                // abs(n - i + step - 1)
-                maxLoopCount = indexPattern.value().step > 0
-                                   ? std::make_unique<symb::BinaryOpExpr>(
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::detail::LiteralExprNode>(
-                                                 indexPattern.value().step - 1)),
-                                         Subtract, indexPattern.value().initialValue->clone())
-                                   : std::make_unique<symb::BinaryOpExpr>(
-                                         indexPattern.value().initialValue->clone(), Subtract,
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::detail::LiteralExprNode>(
-                                                 indexPattern.value().step + 1)));
+                maxLoopCount =
+                    buildMaxLoopCountExpr(indexPattern.value(), *boundValue.value(), false);
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
                     preciseLoopCount = maxLoopCount.value()->clone();

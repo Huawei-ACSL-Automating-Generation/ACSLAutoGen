@@ -1351,6 +1351,11 @@ namespace acslg::analyzer::symbolic {
 
         ExprHandle unknown() { return intern(std::make_unique<detail::UnknownExprNode>()); }
 
+        ExprHandle rangeIndex(std::string_view name);
+        ExprHandle symbolValue(SymbolicExpr::Type varType,
+                               AddrHandle from,
+                               SourcePoint fromPoint);
+
         ExprHandle unary(UnaryOpExpr::Operator op, ExprHandle expr) {
             return intern(std::make_unique<detail::UnaryOpExprNode>(op, expr));
         }
@@ -1358,6 +1363,8 @@ namespace acslg::analyzer::symbolic {
         ExprHandle binary(ExprHandle left, BinaryOpExpr::Operator op, ExprHandle right) {
             return intern(std::make_unique<detail::BinaryOpExprNode>(left, op, right));
         }
+
+        ExprHandle withValType(ExprHandle expr, SymbolicExpr::Type newType);
 
         ExprHandle importExpr(const SymbolicExpr &expr);
         AddrHandle importAddress(const Address &address);
@@ -1446,6 +1453,9 @@ namespace acslg::analyzer::symbolic {
             const SymbolicExpr::GetACSLConfig &config,
             std::optional<SourcePoint> currentPoint = std::nullopt) const {
             return handle_.getACSL(config, currentPoint);
+        }
+        Expr withType(SymbolicExpr::Type newType) const {
+            return Expr{factory(), factory().withValType(handle_, newType)};
         }
 
         template <typename T> bool isa() const { return handle_.isa<T>(); }
@@ -1998,6 +2008,45 @@ namespace acslg::analyzer::symbolic {
         clang::QualType type,
         std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
         SourcePoint fromPoint);
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeLiteralExpr(int64_t value);
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeUnaryExpr(
+        UnaryOpExpr::Operator op,
+        utils::not_null<std::unique_ptr<SymbolicExpr>> expr);
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeBinaryExpr(
+        utils::not_null<std::unique_ptr<SymbolicExpr>> lhs,
+        BinaryOpExpr::Operator op,
+        utils::not_null<std::unique_ptr<SymbolicExpr>> rhs);
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeRangeIndexExpr(std::string_view name);
+    std::unique_ptr<SymbolValue> cloneSymbolValue(ExprHandle value);
+    std::unique_ptr<SymbolValue> makeSymbolValue(ExprFactory &factory,
+                                                 SymbolicExpr::Type varType,
+                                                 std::unique_ptr<Address> from,
+                                                 SourcePoint fromPoint);
+    std::unique_ptr<SymbolAddress> cloneSymbolAddress(AddrHandle address);
+    std::unique_ptr<SymbolAddress> cloneSymbolAddress(const SymbolAddress &address);
+    std::unique_ptr<SymbolAddress> makeSymbolAddress(ExprFactory &factory,
+                                                     clang::QualType pointeeType,
+                                                     SourcePoint fromPoint);
+    std::unique_ptr<SymbolAddress> makeSymbolAddress(clang::QualType pointeeType,
+                                                     std::unique_ptr<Address> from,
+                                                     SourcePoint fromPoint);
+    std::unique_ptr<VariableAddress> cloneVariableAddress(AddrHandle address);
+    std::unique_ptr<VariableAddress> makeVariableAddress(
+        ExprFactory &factory,
+        utils::not_null<const clang::VarDecl *> from);
+    std::unique_ptr<FieldAddress> cloneFieldAddress(AddrHandle address);
+    std::unique_ptr<FieldAddress> makeFieldAddress(ExprFactory &factory,
+                                                   clang::QualType pointeeType,
+                                                   const clang::RecordDecl *record,
+                                                   std::unique_ptr<Address> base,
+                                                   size_t fieldIndex);
+    std::unique_ptr<Structure> cloneStructure(ExprHandle structure);
+    std::unique_ptr<Structure> makeStructure(ExprFactory &factory,
+                                             const clang::RecordDecl *record,
+                                             const clang::ASTRecordLayout &layout,
+                                             std::unique_ptr<Address> from,
+                                             SourcePoint fromPoint);
 
     enum class Operator : unsigned {
 #define ALL_OP(name, tok, prec, isRightAssoc) name,

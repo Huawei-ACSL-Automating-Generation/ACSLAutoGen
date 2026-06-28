@@ -677,6 +677,26 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(importedTypedSumNode.getRight().get(), two.get().get());
     }
 
+    TEST(ExprFactoryTest, WithValTypeInternsTypedRebuilds) {
+        symbolic::ExprFactory factory;
+
+        auto one = factory.literal(1);
+        auto targetType = symbolic::SymbolicExpr::Type{
+            symbolic::SymbolicExpr::ScalarKind::UInt, 64};
+
+        auto typedOne = factory.withValType(one, targetType);
+        EXPECT_NE(typedOne, one);
+        EXPECT_EQ(typedOne, factory.withValType(one, targetType));
+        EXPECT_EQ(factory.withValType(typedOne, targetType), typedOne);
+        EXPECT_EQ(typedOne->getValType(), targetType);
+
+        symbolic::ExprFactoryScope scope(factory);
+        symbolic::Expr facade{one};
+        auto typedFacade = facade.withType(targetType);
+        EXPECT_EQ(typedFacade.handle(), typedOne);
+        EXPECT_EQ(typedFacade.getValType(), targetType);
+    }
+
     TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {
         symbolic::ExprFactory factory;
 
@@ -712,6 +732,21 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_EQ(a, b);
         EXPECT_TRUE(a.isa<symbolic::UnknownExpr>());
+    }
+
+    TEST(ExprFactoryTest, RangeIndexBuilderAndImportReuseNode) {
+        symbolic::ExprFactory factory;
+
+        auto k = factory.rangeIndex("k");
+        auto i = factory.rangeIndex("i");
+
+        EXPECT_EQ(k, i);
+        EXPECT_TRUE(k.isa<symbolic::SymbolAddress::RangeIndex>());
+
+        symbolic::SymbolAddress::RangeIndex legacy{"j"};
+        auto imported = factory.importExpr(legacy);
+
+        EXPECT_EQ(imported, k);
     }
 
     TEST(ExprFactoryTest, ImportsLegacyAggregateChildrenAsHandles) {

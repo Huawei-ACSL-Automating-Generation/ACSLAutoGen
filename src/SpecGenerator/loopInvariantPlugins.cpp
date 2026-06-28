@@ -25,6 +25,7 @@
 #include <iterator>
 #include <llvm/Support/Casting.h>
 #include <memory>
+#include <string_view>
 #include <unordered_set>
 
 #include "state.h"
@@ -102,6 +103,14 @@ namespace acslg::spec_generator {
                 factory, factory.importAddress(address));
             return symb::SymbolAddress(rebuilt.template cast<symb::SymbolAddress>());
         }
+
+        using OwnedSymbolicExpr = utils::not_null<std::unique_ptr<symb::SymbolicExpr>>;
+        using symb::cloneSymbolAddress;
+        using symb::makeBinaryExpr;
+        using symb::makeLiteralExpr;
+        using symb::makeRangeIndexExpr;
+        using symb::makeSymbolAddress;
+        using symb::makeUnaryExpr;
 
         bool stmtHasNonAffineOps(const clang::Stmt *stmt) {
             if (!stmt)
@@ -298,43 +307,46 @@ namespace acslg::spec_generator {
                 using enum symb::BinaryOpExpr::Operator;
                 case BO_LT: {
                     // Normalize strict inequalities to non-strict to simplify invariant printing.
-                    auto newRHS = std::make_unique<symb::BinaryOpExpr>(
-                        rhs->clone(), Subtract, std::make_unique<symb::detail::LiteralExprNode>(1));
-                    loopCond = std::make_unique<symb::BinaryOpExpr>(lhs->clone(), LessEqual,
-                                                                    std::move(newRHS));
+                    auto newRHS = makeBinaryExpr(rhs->clone(), Subtract, makeLiteralExpr(1));
+                    loopCond = makeBinaryExpr(lhs->clone(), LessEqual, std::move(newRHS))
+                                   .into_underlying();
                     break;
                 }
                 case BO_GT: {
-                    auto newRHS = std::make_unique<symb::BinaryOpExpr>(
-                        rhs->clone(), Add, std::make_unique<symb::detail::LiteralExprNode>(1));
-                    loopCond = std::make_unique<symb::BinaryOpExpr>(lhs->clone(), GreaterEqual,
-                                                                    std::move(newRHS));
+                    auto newRHS = makeBinaryExpr(rhs->clone(), Add, makeLiteralExpr(1));
+                    loopCond = makeBinaryExpr(lhs->clone(), GreaterEqual, std::move(newRHS))
+                                   .into_underlying();
                     break;
                 }
                 case BO_LE:
-                    loopCond = std::make_unique<symb::BinaryOpExpr>(lhs->clone(), LessEqual,
-                                                                    std::move(rhs));
+                    loopCond =
+                        makeBinaryExpr(lhs->clone(), LessEqual,
+                                       utils::not_null<std::unique_ptr<symb::SymbolicExpr>>{
+                                           std::move(rhs)})
+                            .into_underlying();
                     break;
                 case BO_GE:
-                    loopCond = std::make_unique<symb::BinaryOpExpr>(lhs->clone(), GreaterEqual,
-                                                                    std::move(rhs));
+                    loopCond =
+                        makeBinaryExpr(lhs->clone(), GreaterEqual,
+                                       utils::not_null<std::unique_ptr<symb::SymbolicExpr>>{
+                                           std::move(rhs)})
+                            .into_underlying();
                     break;
                 case BO_NE: {
                     // Handling "i != bound" depends on the step direction:
                     // - step < 0 (decreasing): i != bound is normalized as i >= bound+1
                     // - step > 0 (increasing): i != bound is normalized as i <= bound-1
                     if (indexInfo.indexPattern.step < 0) {
-                        auto rhsPlus1 = std::make_unique<symb::BinaryOpExpr>(
-                            rhs->clone(), Add, std::make_unique<symb::detail::LiteralExprNode>(1));
-                        auto geExpr = std::make_unique<symb::BinaryOpExpr>(
-                            lhs->clone(), GreaterEqual, std::move(rhsPlus1));
-                        loopCond = std::move(geExpr);
+                        auto rhsPlus1 = makeBinaryExpr(rhs->clone(), Add, makeLiteralExpr(1));
+                        loopCond = makeBinaryExpr(lhs->clone(), GreaterEqual,
+                                                  std::move(rhsPlus1))
+                                       .into_underlying();
                     } else if (indexInfo.indexPattern.step > 0) {
-                        auto rhsMinus1 = std::make_unique<symb::BinaryOpExpr>(
-                            rhs->clone(), Subtract, std::make_unique<symb::detail::LiteralExprNode>(1));
-                        auto leExpr = std::make_unique<symb::BinaryOpExpr>(lhs->clone(), LessEqual,
-                                                                           std::move(rhsMinus1));
-                        loopCond    = std::move(leExpr);
+                        auto rhsMinus1 =
+                            makeBinaryExpr(rhs->clone(), Subtract, makeLiteralExpr(1));
+                        loopCond = makeBinaryExpr(lhs->clone(), LessEqual,
+                                                  std::move(rhsMinus1))
+                                       .into_underlying();
                     } else {
                         UNREACHABLE();
                     }
@@ -362,8 +374,7 @@ namespace acslg::spec_generator {
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
                         continue;
-                    symbolEntry->getMutMemoryState().write(
-                        addr, std::make_unique<symb::detail::LiteralExprNode>(constVal.value()));
+                    symbolEntry->getMutMemoryState().write(addr, makeLiteralExpr(constVal.value()));
                 }
             }
             auto loopCurrent = entryAndCurrentInfo.symbolicLoopCurrent->clone();
@@ -471,8 +482,7 @@ namespace acslg::spec_generator {
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
                         continue;
-                    symbolEntry->getMutMemoryState().write(
-                        addr, std::make_unique<symb::detail::LiteralExprNode>(constVal.value()));
+                    symbolEntry->getMutMemoryState().write(addr, makeLiteralExpr(constVal.value()));
                 }
             }
 
@@ -626,8 +636,7 @@ namespace acslg::spec_generator {
                         },
                         [](const symb::SymbolAddress &address) {
                             return address
-                                .withOffset(std::make_unique<symb::detail::LiteralExprNode>(
-                                    symb::SymbolAddress::ZERO_OFFSET))
+                                .withOffset(makeLiteralExpr(symb::SymbolAddress::ZERO_OFFSET))
                                 .into_underlying();
                         });
                     auto lengthExpr = !indexInfo.preciseLoopCount->isUnknown()
@@ -750,11 +759,12 @@ namespace acslg::spec_generator {
                             // init + step * loopCount
                             auto [_, ok] = memoryMap.emplace(
                                 addr,
-                                std::make_unique<symb::BinaryOpExpr>(
+                                makeBinaryExpr(
                                     pattern.value().initialValue->clone(), Add,
-                                    std::make_unique<symb::BinaryOpExpr>(
-                                        std::make_unique<symb::detail::LiteralExprNode>(pattern.value().step),
-                                        Multiply, indexInfo.preciseLoopCount->clone())));
+                                    makeBinaryExpr(makeLiteralExpr(pattern.value().step),
+                                                   Multiply,
+                                                   indexInfo.preciseLoopCount->clone()))
+                                    .into_underlying());
                             if (!ok)
                                 UNREACHABLE();
                         } else {
@@ -789,10 +799,10 @@ namespace acslg::spec_generator {
                             // i <= 0 (step < 0)
                             auto firstIndexCond =
                                 (indexInfo.indexPattern.step > 0
-                                     ? std::make_unique<symb::BinaryOpExpr>(
+                                     ? makeBinaryExpr(
                                            indexValueAfterLoop->clone(), GreaterEqual,
                                            indexInfo.indexBound->clone())
-                                     : std::make_unique<symb::BinaryOpExpr>(
+                                     : makeBinaryExpr(
                                            indexValueAfterLoop->clone(), LessEqual,
                                            indexInfo.indexBound->clone()));
 
@@ -800,18 +810,16 @@ namespace acslg::spec_generator {
                             // i > 0 + step (step < 0)
                             auto secondIndexCond =
                                 (indexInfo.indexPattern.step > 0
-                                     ? std::make_unique<symb::BinaryOpExpr>(
+                                     ? makeBinaryExpr(
                                            indexValueAfterLoop->clone(), LessThan,
-                                           std::make_unique<symb::BinaryOpExpr>(
-                                               indexInfo.indexBound->clone(), Add,
-                                               std::make_unique<symb::detail::LiteralExprNode>(
-                                                   indexInfo.indexPattern.step)))
-                                     : std::make_unique<symb::BinaryOpExpr>(
+                                           makeBinaryExpr(indexInfo.indexBound->clone(), Add,
+                                                          makeLiteralExpr(
+                                                              indexInfo.indexPattern.step)))
+                                     : makeBinaryExpr(
                                            indexValueAfterLoop->clone(), GreaterThan,
-                                           std::make_unique<symb::BinaryOpExpr>(
-                                               indexInfo.indexBound->clone(), Add,
-                                               std::make_unique<symb::detail::LiteralExprNode>(
-                                                   indexInfo.indexPattern.step))));
+                                           makeBinaryExpr(indexInfo.indexBound->clone(), Add,
+                                                          makeLiteralExpr(
+                                                              indexInfo.indexPattern.step))));
 
                             condsForInsert.emplace(firstIndexCond->hash(), firstIndexCond->clone());
                             condsForInsert.emplace(secondIndexCond->hash(),
@@ -819,22 +827,22 @@ namespace acslg::spec_generator {
 
                             // abs(i_post - i_init)
                             auto diff = (indexInfo.indexPattern.step > 0
-                                             ? std::make_unique<symb::BinaryOpExpr>(
+                                             ? makeBinaryExpr(
                                                    indexValueAfterLoop->clone(), Subtract,
                                                    indexInfo.indexSymbolicValue->clone())
-                                             : std::make_unique<symb::BinaryOpExpr>(
+                                             : makeBinaryExpr(
                                                    indexInfo.indexSymbolicValue->clone(), Subtract,
                                                    indexValueAfterLoop->clone()));
 
                             auto postValue = (pattern.value().step > 0
-                                                  ? std::make_unique<symb::BinaryOpExpr>(
+                                                  ? makeBinaryExpr(
                                                         pattern.value().initialValue->clone(), Add,
                                                         std::move(diff))
-                                                  : std::make_unique<symb::BinaryOpExpr>(
+                                                  : makeBinaryExpr(
                                                         pattern.value().initialValue->clone(),
                                                         Subtract, std::move(diff)));
 
-                            memoryMap.emplace(addr, std::move(postValue));
+                            memoryMap.emplace(addr, std::move(postValue).into_underlying());
                         }
                     }();
 
@@ -1188,7 +1196,7 @@ namespace acslg::spec_generator {
                                 param_array = acslExpected.value().first;
                                 if (auto *symbolAddr =
                                         symb::dyn_cast<symb::Address>(addr.value().get().get()))
-                                    arrayAddr = std::make_unique<symb::SymbolAddress>(
+                                    arrayAddr = makeSymbolAddress(
                                         arraySub->getType(),
                                         symbolAddr->addressClone().into_underlying(),
                                         entryAndCurrentInfo.symbolicLoopEntry->getStartPoint());
@@ -1214,7 +1222,7 @@ namespace acslg::spec_generator {
                                     param_array = acslExpected.value().first;
                                     if (auto *symbolAddr =
                                             symb::dyn_cast<symb::Address>(addr.value().get().get()))
-                                        arrayAddr = std::make_unique<symb::SymbolAddress>(
+                                        arrayAddr = makeSymbolAddress(
                                             unary->getType(),
                                             symbolAddr->addressClone().into_underlying(),
                                             entryAndCurrentInfo.symbolicLoopEntry->getStartPoint());
@@ -1238,7 +1246,7 @@ namespace acslg::spec_generator {
                                 param_array = acslExpected.value().first;
                                 if (auto *symbolAddr =
                                         symb::dyn_cast<symb::Address>(addr.value().get().get()))
-                                    arrayAddr = std::make_unique<symb::SymbolAddress>(
+                                    arrayAddr = makeSymbolAddress(
                                         declRef->getType(),
                                         symbolAddr->addressClone().into_underlying(),
                                         entryAndCurrentInfo.symbolicLoopEntry->getStartPoint());
@@ -1402,7 +1410,7 @@ namespace acslg::spec_generator {
                         "\n";
 
                 using enum symb::BinaryOpExpr::Operator;
-                auto arrayRange = std::make_unique<symb::SymbolAddress>(
+                auto arrayRange = cloneSymbolAddress(
                     rebuildSymbolAddress(
                         *arrayAddr,
                         [](symb::ExprFactory &factory, symb::AddrHandle address) {
@@ -1417,7 +1425,7 @@ namespace acslg::spec_generator {
                 if (indexStep > 0) {
                     // For now we take [0, bound) for max/min over range (reset offset to zero).
                     // More precise modeling (e.g. starting at index_init) is left for future work.
-                    arrayRange = std::make_unique<symb::SymbolAddress>(
+                    arrayRange = cloneSymbolAddress(
                         rebuildSymbolAddress(
                             *arrayRange,
                             [&](symb::ExprFactory &factory, symb::AddrHandle address) {
@@ -1428,16 +1436,11 @@ namespace acslg::spec_generator {
                                 return address.withLength(indexInfo.indexBound->clone())
                                     .into_underlying();
                             }));
-                    // arrayRange = arrayRange->withOffset(indexInfo.indexSymbolicValue->clone());
-                    // arrayRange = arrayRange->withLength(std::make_unique<symb::BinaryOpExpr>(
-                    //     indexInfo.indexBound->clone(), Subtract,
-                    //     indexInfo.indexSymbolicValue->clone()));
                 } else {
                     // arrayRange = arrayRange->withOffset(indexInfo.indexBound->clone());
-                    auto lengthExpr = std::make_unique<symb::BinaryOpExpr>(
-                        indexInfo.indexSymbolicValue->clone(), Subtract,
-                        indexInfo.indexBound->clone());
-                    arrayRange = std::make_unique<symb::SymbolAddress>(
+                    auto lengthExpr = makeBinaryExpr(indexInfo.indexSymbolicValue->clone(),
+                                                     Subtract, indexInfo.indexBound->clone());
+                    arrayRange = cloneSymbolAddress(
                         rebuildSymbolAddress(
                             *arrayRange,
                             [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
@@ -1469,8 +1472,9 @@ namespace acslg::spec_generator {
                 DEBUG("ParadigmMaxMinPlugin: pointAfterLoop label -> " + pointAfterLoop.getLabel());
                 symb::AddressBox maxAddrBox{*maxAddrIt->second};
                 normalPostInfo.memoryMap.emplace(
-                    maxAddrBox, std::make_unique<symb::MaxMinOverRange>(std::move(arrayRange), "k",
-                                                                        *extremum, pointAfterLoop));
+                    maxAddrBox,
+                    makeMaxMinOverRangeExpr(std::move(arrayRange), "k", *extremum,
+                                            pointAfterLoop));
             }}; // ifVisitor end
             ifVisitor.runOn(loopInfo.bodyStmt);
 
@@ -1639,21 +1643,19 @@ namespace acslg::spec_generator {
                 using enum symb::BinaryOpExpr::Operator;
                 // x_init + x_step * (index - index_init)
                 if (indexStep > 0)
-                    return std::make_unique<symb::BinaryOpExpr>(
+                    return makeBinaryExpr(
                         initValue->clone(), Add,
-                        std::make_unique<symb::BinaryOpExpr>(
-                            std::make_unique<symb::detail::LiteralExprNode>(step), Multiply,
-                            std::make_unique<symb::BinaryOpExpr>(
-                                std::make_unique<symb::SymbolAddress::RangeIndex>("k"), Subtract,
-                                indexInfo.indexSymbolicValue->clone())));
+                        makeBinaryExpr(
+                            makeLiteralExpr(step), Multiply,
+                            makeBinaryExpr(makeRangeIndexExpr("k"), Subtract,
+                                           indexInfo.indexSymbolicValue->clone())));
                 // x_init + x_step * (index_init - index)
-                return std::make_unique<symb::BinaryOpExpr>(
+                return makeBinaryExpr(
                     initValue->clone(), Add,
-                    std::make_unique<symb::BinaryOpExpr>(
-                        std::make_unique<symb::detail::LiteralExprNode>(step), Multiply,
-                        std::make_unique<symb::BinaryOpExpr>(
-                            indexInfo.indexSymbolicValue->clone(), Subtract,
-                            std::make_unique<symb::SymbolAddress::RangeIndex>("k"))));
+                    makeBinaryExpr(
+                        makeLiteralExpr(step), Multiply,
+                        makeBinaryExpr(indexInfo.indexSymbolicValue->clone(), Subtract,
+                                       makeRangeIndexExpr("k"))));
             }; // getSubExpr ends
 
             // Try to extract a "common concrete value" across multiple real entry paths:
@@ -1686,7 +1688,7 @@ namespace acslg::spec_generator {
                 if (auto fromSymbolAddr =
                         symb::dyn_cast<const symb::SymbolAddress>(fromAddr.value().get().get())) {
                     if (arrayInCond == nullptr)
-                        arrayInCond = std::make_unique<symb::SymbolAddress>(*fromSymbolAddr);
+                        arrayInCond = cloneSymbolAddress(*fromSymbolAddr);
                     auto offset = fromSymbolAddr->getOffset();
                     for (auto &[hashInOff, symbolInOff] : offset->collectUsedSymbols()) {
                         auto subedExpr = getSubExpr(*symbolInOff);
@@ -1734,9 +1736,9 @@ namespace acslg::spec_generator {
             // - step<0: from bound to current index (excluding current index)
             // Note: we represent the range via SymbolAddress offset/length; printing is handled by
             // the getACSL layer.
-            auto arrayRange = std::make_unique<symb::SymbolAddress>(*arrayInCond);
+            auto arrayRange = cloneSymbolAddress(*arrayInCond);
             if (indexStep > 0) {
-                arrayRange = std::make_unique<symb::SymbolAddress>(
+                arrayRange = cloneSymbolAddress(
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&](symb::ExprFactory &factory, symb::AddrHandle address) {
@@ -1747,10 +1749,9 @@ namespace acslg::spec_generator {
                             return address.withOffset(indexInfo.indexSymbolicValue->clone())
                                 .into_underlying();
                         }));
-                auto lengthExpr = std::make_unique<symb::BinaryOpExpr>(
-                    indexInfo.indexBound->clone(), Subtract,
-                    indexInfo.indexSymbolicValue->clone());
-                arrayRange = std::make_unique<symb::SymbolAddress>(
+                auto lengthExpr = makeBinaryExpr(indexInfo.indexBound->clone(), Subtract,
+                                                 indexInfo.indexSymbolicValue->clone());
+                arrayRange = cloneSymbolAddress(
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
@@ -1760,7 +1761,7 @@ namespace acslg::spec_generator {
                             return address.withLength(lengthExpr->clone()).into_underlying();
                         }));
             } else {
-                arrayRange = std::make_unique<symb::SymbolAddress>(
+                arrayRange = cloneSymbolAddress(
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&](symb::ExprFactory &factory, symb::AddrHandle address) {
@@ -1771,10 +1772,9 @@ namespace acslg::spec_generator {
                             return address.withOffset(indexInfo.indexBound->clone())
                                 .into_underlying();
                         }));
-                auto lengthExpr = std::make_unique<symb::BinaryOpExpr>(
-                    indexInfo.indexSymbolicValue->clone(), Subtract,
-                    indexInfo.indexBound->clone());
-                arrayRange = std::make_unique<symb::SymbolAddress>(
+                auto lengthExpr = makeBinaryExpr(indexInfo.indexSymbolicValue->clone(),
+                                                 Subtract, indexInfo.indexBound->clone());
+                arrayRange = cloneSymbolAddress(
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
@@ -1785,19 +1785,17 @@ namespace acslg::spec_generator {
                         }));
             }
             normalPathInfo.pathState = analyzer::Path::PathState::Step;
-            normalPathInfo.pathConds.push_back(std::make_unique<symb::QuantifierOverRange>(
-                std::make_unique<symb::SymbolAddress>(*arrayRange), "k", ForAll,
-                std::make_unique<symb::UnaryOpExpr>(symb::UnaryOpExpr::Operator::LogicalNot,
-                                                    pred->clone())));
+            normalPathInfo.pathConds.push_back(makeQuantifierOverRangeExpr(
+                cloneSymbolAddress(*arrayRange), "k", ForAll,
+                makeUnaryExpr(symb::UnaryOpExpr::Operator::LogicalNot, pred->clone())));
 
-            interruptedPathInfo.pathConds.push_back(std::make_unique<symb::QuantifierOverRange>(
-                std::move(arrayRange), "k", Exist, pred->clone().into_underlying()));
+            interruptedPathInfo.pathConds.push_back(makeQuantifierOverRangeExpr(
+                std::move(arrayRange), "k", Exist, pred->clone()));
 
             // Try to print the forall form as a concrete ACSL text. If that fails, we still return
             // post-info but do not emit an invariant clause.
             auto expected =
-                std::make_unique<symb::UnaryOpExpr>(symb::UnaryOpExpr::Operator::LogicalNot,
-                                                    pred->clone())
+                makeUnaryExpr(symb::UnaryOpExpr::Operator::LogicalNot, pred->clone())
                     ->getACSL({.predefinedLabels{
                         {entryAndCurrentInfo.symbolicLoopEntry->getStartPoint(), "LoopEntry"}}});
             if (expected) {

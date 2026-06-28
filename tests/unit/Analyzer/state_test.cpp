@@ -271,10 +271,7 @@ namespace acslg::test::unit::analyzer {
             std::unique_ptr<Path> pathA;
             std::unique_ptr<Path> pathB;
 
-            static auto makeLiteral(int v) {
-                return acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>{
-                    std::make_unique<symbolic::detail::LiteralExprNode>(v)};
-            }
+            auto makeLiteral(int v) { return makeLiteralExpr(static_cast<uint64_t>(v)); }
         };
     } // namespace
 
@@ -349,8 +346,8 @@ namespace acslg::test::unit::analyzer {
         mm.write(baseA, std::move(eA));
 
         // constantRange
-        auto rangeB = makeRangeAddr(2, /*off=*/make_unique<symbolic::detail::LiteralExprNode>(4),
-                                    /*len=*/make_unique<symbolic::detail::LiteralExprNode>(2));
+        auto rangeB = makeRangeAddr(2, /*off=*/makeLiteralExpr(4).into_underlying(),
+                                    /*len=*/makeLiteralExpr(2).into_underlying());
         auto eB     = makeSymbolValue(2);
         auto saveEB = eB->clone();
         mm.write(rangeB, std::move(eB));
@@ -381,29 +378,29 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 10;
 
         // A: [0,10)
-        auto aRange = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(0U),
-                                    make_unique<symbolic::detail::LiteralExprNode>(10U));
+        auto aRange = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
+                                    makeLiteralExpr(10U).into_underlying());
         auto eA     = makeSymbolValue(100);
         auto saveA  = eA->clone();
         mm.write(aRange, std::move(eA));
 
         // B: [3,8)
-        auto bRange = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(3U),
-                                    make_unique<symbolic::detail::LiteralExprNode>(5U));
+        auto bRange = makeRangeAddr(baseId, makeLiteralExpr(3U).into_underlying(),
+                                    makeLiteralExpr(5U).into_underlying());
         auto eB     = makeSymbolValue(200);
         auto saveB  = eB->clone();
         mm.write(bRange, std::move(eB));
 
         // C: [1,3)
-        auto cRange = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(1U),
-                                    make_unique<symbolic::detail::LiteralExprNode>(2U));
+        auto cRange = makeRangeAddr(baseId, makeLiteralExpr(1U).into_underlying(),
+                                    makeLiteralExpr(2U).into_underlying());
         auto eC     = makeSymbolValue(300);
         auto saveC  = eC->clone();
         mm.write(cRange, std::move(eC));
 
         // D: [7,10)
-        auto dRange = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(7U),
-                                    make_unique<symbolic::detail::LiteralExprNode>(3U));
+        auto dRange = makeRangeAddr(baseId, makeLiteralExpr(7U).into_underlying(),
+                                    makeLiteralExpr(3U).into_underlying());
         auto eD     = makeSymbolValue(400);
         auto saveD  = eD->clone();
         mm.write(dRange, std::move(eD));
@@ -431,8 +428,8 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 11;
 
         // X: [5,9)
-        auto r     = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(5U),
-                                   make_unique<symbolic::detail::LiteralExprNode>(4U));
+        auto r     = makeRangeAddr(baseId, makeLiteralExpr(5U).into_underlying(),
+                                   makeLiteralExpr(4U).into_underlying());
         auto eX    = makeSymbolValue(500);
         auto saveX = eX->clone();
         mm.write(r, std::move(eX));
@@ -563,15 +560,15 @@ namespace acslg::test::unit::analyzer {
 
         // Two adjacent constant ranges with the same value
         // [0,3) value=V
-        auto r1 = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(0U),
-                                make_unique<symbolic::detail::LiteralExprNode>(3U));
+        auto r1 = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
+                                makeLiteralExpr(3U).into_underlying());
         auto v  = makeSymbolValue(1000);
         auto sv = v->clone();
         mm.write(r1, std::move(v));
 
         // [3,5) value=V
-        auto r2 = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(3U),
-                                make_unique<symbolic::detail::LiteralExprNode>(2U));
+        auto r2 = makeRangeAddr(baseId, makeLiteralExpr(3U).into_underlying(),
+                                makeLiteralExpr(2U).into_underlying());
         auto v2 = makeSymbolValue(1000); // same value
         mm.write(r2, std::move(v2));
 
@@ -592,15 +589,15 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 22;
 
         // [0,3) value=V1
-        auto r1 = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(0U),
-                                make_unique<symbolic::detail::LiteralExprNode>(3U));
+        auto r1 = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
+                                makeLiteralExpr(3U).into_underlying());
         auto v1 = makeSymbolValue(1111);
         auto s1 = v1->clone();
         mm.write(r1, std::move(v1));
 
         // [3,5) value=V2 (different value)
-        auto r2 = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(3U),
-                                make_unique<symbolic::detail::LiteralExprNode>(2U));
+        auto r2 = makeRangeAddr(baseId, makeLiteralExpr(3U).into_underlying(),
+                                makeLiteralExpr(2U).into_underlying());
         auto v2 = makeSymbolValue(2222);
         auto s2 = v2->clone();
         mm.write(r2, std::move(v2));
@@ -623,12 +620,12 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 23;
 
         // [0,2) + [2,5) + [5,7) with the same value
-        auto r1 = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(0U),
-                                make_unique<symbolic::detail::LiteralExprNode>(2U));
-        auto r2 = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(2U),
-                                make_unique<symbolic::detail::LiteralExprNode>(3U));
-        auto r3 = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(5U),
-                                make_unique<symbolic::detail::LiteralExprNode>(2U));
+        auto r1 = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
+                                makeLiteralExpr(2U).into_underlying());
+        auto r2 = makeRangeAddr(baseId, makeLiteralExpr(2U).into_underlying(),
+                                makeLiteralExpr(3U).into_underlying());
+        auto r3 = makeRangeAddr(baseId, makeLiteralExpr(5U).into_underlying(),
+                                makeLiteralExpr(2U).into_underlying());
 
         auto v = makeSymbolValue(3333);
         auto s = v->clone();
@@ -651,12 +648,12 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 24;
 
         // [0,2) V, [2,5) W, [5,7) V → cannot merge into one due to the middle different value
-        auto r1 = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(0U),
-                                make_unique<symbolic::detail::LiteralExprNode>(2U));
-        auto r2 = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(2U),
-                                make_unique<symbolic::detail::LiteralExprNode>(3U));
-        auto r3 = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(5U),
-                                make_unique<symbolic::detail::LiteralExprNode>(2U));
+        auto r1 = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
+                                makeLiteralExpr(2U).into_underlying());
+        auto r2 = makeRangeAddr(baseId, makeLiteralExpr(2U).into_underlying(),
+                                makeLiteralExpr(3U).into_underlying());
+        auto r3 = makeRangeAddr(baseId, makeLiteralExpr(5U).into_underlying(),
+                                makeLiteralExpr(2U).into_underlying());
 
         auto v = makeSymbolValue(4444);
         auto s = v->clone();
@@ -684,8 +681,9 @@ namespace acslg::test::unit::analyzer {
     namespace {
         using ExprUP = ::acslg::utils::not_null<unique_ptr<symbolic::SymbolicExpr>>;
         auto makeAdd(ExprUP a, ExprUP b) {
-            return make_unique<symbolic::BinaryOpExpr>(
-                std::move(a), symbolic::BinaryOpExpr::Operator::Add, std::move(b));
+            return symbolic::makeBinaryExpr(std::move(a), symbolic::BinaryOpExpr::Operator::Add,
+                                            std::move(b))
+                .into_underlying();
         }
     } // namespace
 
@@ -695,8 +693,8 @@ namespace acslg::test::unit::analyzer {
 
         // X, X+1, X+2 each represents a single address (non-range → [off, off+1))
         auto X  = makeSymbolValue(901); // symbolic SymbolValue expression (example)
-        auto X1 = makeAdd(X->clone(), make_unique<symbolic::detail::LiteralExprNode>(1U));
-        auto X2 = makeAdd(X->clone(), make_unique<symbolic::detail::LiteralExprNode>(2U));
+        auto X1 = makeAdd(X->clone(), makeLiteralExpr(1U));
+        auto X2 = makeAdd(X->clone(), makeLiteralExpr(2U));
 
         auto a0 = makeRangeAddr(baseId, /*off=*/std::move(X), /*len=*/nullptr);  // single @ X
         auto a1 = makeRangeAddr(baseId, /*off=*/std::move(X1), /*len=*/nullptr); // single @ X+1
@@ -720,7 +718,7 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 32;
 
         auto X  = makeSymbolValue(902);
-        auto X2 = makeAdd(X->clone(), make_unique<symbolic::detail::LiteralExprNode>(2U));
+        auto X2 = makeAdd(X->clone(), makeLiteralExpr(2U));
 
         auto a0 = makeRangeAddr(baseId, std::move(X), nullptr);  // single @ X
         auto a2 = makeRangeAddr(baseId, std::move(X2), nullptr); // single @ X+2
@@ -741,7 +739,7 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 33;
 
         auto X  = makeSymbolValue(903);
-        auto X1 = makeAdd(X->clone(), make_unique<symbolic::detail::LiteralExprNode>(1U));
+        auto X1 = makeAdd(X->clone(), makeLiteralExpr(1U));
 
         auto a0 = makeRangeAddr(baseId, std::move(X), nullptr);  // single @ X
         auto a1 = makeRangeAddr(baseId, std::move(X1), nullptr); // single @ X+1
@@ -774,12 +772,12 @@ namespace acslg::test::unit::analyzer {
 
         // For two different bases, write X and X+1 with the same values
         auto XA  = makeSymbolValue(910);
-        auto X1A = makeAdd(XA->clone(), make_unique<symbolic::detail::LiteralExprNode>(1U));
+        auto X1A = makeAdd(XA->clone(), makeLiteralExpr(1U));
         auto a0A = makeRangeAddr(baseA, std::move(XA), nullptr);
         auto a1A = makeRangeAddr(baseA, std::move(X1A), nullptr);
 
         auto XB  = makeSymbolValue(910); // same construction but different base
-        auto X1B = makeAdd(XB->clone(), make_unique<symbolic::detail::LiteralExprNode>(1U));
+        auto X1B = makeAdd(XB->clone(), makeLiteralExpr(1U));
         auto a0B = makeRangeAddr(baseB, std::move(XB), nullptr);
         auto a1B = makeRangeAddr(baseB, std::move(X1B), nullptr);
 
@@ -821,8 +819,8 @@ namespace acslg::test::unit::analyzer {
         auto a0 = makeRangeAddr(baseId, std::move(X), nullptr); // single @ X
 
         // Successor: [X+1, X+1 + 3) → len = 3
-        auto X1 = makeAdd(makeSymbolValue(904), make_unique<symbolic::detail::LiteralExprNode>(1U));
-        auto a1 = makeRangeAddr(baseId, std::move(X1), make_unique<symbolic::detail::LiteralExprNode>(3U));
+        auto X1 = makeAdd(makeSymbolValue(904), makeLiteralExpr(1U));
+        auto a1 = makeRangeAddr(baseId, std::move(X1), makeLiteralExpr(3U).into_underlying());
 
         // Same value
         auto v  = makeSymbolValue(1313);
@@ -850,22 +848,14 @@ namespace acslg::test::unit::analyzer {
             FAIL() << symbolAddr->dump();
         }
     }
-    namespace {
-        template <typename Base, typename Derived>
-        std::unique_ptr<Base> static_unique_ptr_cast(std::unique_ptr<Derived> &&d) {
-            return std::unique_ptr<Base>{static_cast<Base *>(d.release())};
-        }
-
-    } // namespace
     TEST_F(MemoryModelTest, ConstRange_RangeIndexSubedCorrectly) {
         MemoryModel mm;
         const unsigned baseId = 10;
 
         // A: [0,10) -> i
-        auto aRange = makeRangeAddr(baseId, make_unique<symbolic::detail::LiteralExprNode>(0U),
-                                    make_unique<symbolic::detail::LiteralExprNode>(10U));
-        auto eA     = std::make_unique<symbolic::SymbolAddress::RangeIndex>("i");
-        mm.write(aRange, static_unique_ptr_cast<symbolic::SymbolicExpr>(std::move(eA)));
+        auto aRange = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
+                                    makeLiteralExpr(10U).into_underlying());
+        mm.write(aRange, makeRangeIndexExpr("i").into_underlying());
 
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 0, symbolic::detail::LiteralExprNode{uint64_t{0}}));
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 1, symbolic::detail::LiteralExprNode{uint64_t{1}}));
@@ -888,7 +878,7 @@ namespace acslg::test::unit::analyzer {
         auto X = makeSymbolValue(904);
         // A: [X,X+1) -> v
         auto aRange = makeRangeAddr(baseId, X->clone().into_underlying(),
-                                    make_unique<symbolic::detail::LiteralExprNode>(1U));
+                                    makeLiteralExpr(1U).into_underlying());
         auto v      = makeSymbolValue(1313);
 
         mm.write(aRange, v->clone());

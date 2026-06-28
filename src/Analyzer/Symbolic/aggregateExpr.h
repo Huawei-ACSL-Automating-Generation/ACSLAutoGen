@@ -30,6 +30,8 @@ namespace acslg::analyzer::symbolic {
         RangeIndex(std::string_view name)
             : SymbolicExpr(ExprKind::K_RangeIndex, Type{ScalarKind::UInt, 64}), name_(name) {}
 
+        std::string_view getName() const { return name_; }
+
         // SymbolicExpr
       public:
         /**
@@ -397,6 +399,23 @@ namespace acslg::analyzer::symbolic {
                         Extremum extremum,
                         SourcePoint fromPoint);
     };
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeSumOverRangeExpr(
+        std::unique_ptr<SymbolAddress> range,
+        std::string_view indexName,
+        SourcePoint fromPoint);
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeQuantifierOverRangeExpr(
+        std::unique_ptr<SymbolAddress> range,
+        std::string_view indexName,
+        QuantifierOverRange::Quantifier quantifier,
+        utils::not_null<std::unique_ptr<SymbolicExpr>> predicate);
+
+    utils::not_null<std::unique_ptr<SymbolicExpr>> makeMaxMinOverRangeExpr(
+        std::unique_ptr<SymbolAddress> range,
+        std::string_view indexName,
+        MaxMinOverRange::Extremum extremum,
+        SourcePoint fromPoint);
 } // namespace acslg::analyzer::symbolic
 
 #endif
