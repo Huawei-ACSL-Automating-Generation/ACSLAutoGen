@@ -4,7 +4,6 @@
  */
 #include "aggregateExpr.h"
 
-#include <llvm/Support/Casting.h>
 #include <memory>
 #include <optional>
 #include <strings.h>

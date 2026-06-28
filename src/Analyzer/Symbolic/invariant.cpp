@@ -4,7 +4,6 @@
  *        expressions.
  */
 #include <iterator>
-#include <llvm/Support/Casting.h>
 #include <queue>
 #include <regex>
 #include "ppl.hh"
