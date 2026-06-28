@@ -896,7 +896,7 @@ namespace acslg::test::unit::analyzer {
 
         auto *updatedField0 =
             symbolic::cast<symbolic::detail::LiteralExprNode>(
-                updated->getFieldValue(0).get().get());
+                updated->getFieldValue(0).get());
         EXPECT_EQ(updatedField0->getLiteralValue(), 42);
         EXPECT_EQ(*updated->getFieldValue(1), *originalField1);
     }

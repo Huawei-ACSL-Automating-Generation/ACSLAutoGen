@@ -1473,10 +1473,9 @@ namespace acslg::analyzer {
                     }
 
                     size_t idx = FD->getFieldIndex();
-                    auto slots = st->fieldsValues();
-                    if (idx >= slots.size())
+                    if (idx >= st->getNumFields())
                         UNREACHABLE();
-                    auto fieldValue = slots[idx]->clone();
+                    auto fieldValue = st->getFieldValue(idx)->clone();
                     DEBUG("MemberExpr field " << FD->getNameAsString() << " idx=" << idx
                                               << " value: " << fieldValue->dump());
                     EvalResult result{};
@@ -2734,8 +2733,7 @@ namespace acslg::analyzer {
                         if (initListExpr->getNumInits() != st->getNumFields())
                             ERROR("Initializer std::list size mismatches the struct's field "
                                   "count.");
-                        auto slots = st->fieldsValues();
-                        for (size_t i = 0; i < slots.size(); ++i) {
+                        for (size_t i = 0; i < st->getNumFields(); ++i) {
                             const clang::Expr *init = initListExpr->getInit(i);
 
                             Path::EvalResult eval = path->evalExpr(init);
@@ -2743,7 +2741,7 @@ namespace acslg::analyzer {
                                 UNIMPLEMENT(
                                     "No control flow branching permitted within an initializer "
                                     "list now.");
-                            slots[i] = std::move(eval.second[0]);
+                            st = st->withFieldValue(i, std::move(eval.second[0])).into_underlying();
                         }
 
                         path->updateVarState(varDecl, std::move(st));

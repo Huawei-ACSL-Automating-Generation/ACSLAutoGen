@@ -1094,12 +1094,6 @@ namespace acslg::analyzer::symbolic {
                 ERROR("Out-of-bounds access");
             return fields_[index].get().get();
         };
-        utils::not_null<std::unique_ptr<SymbolicExpr>> &getFieldValue(size_t index) {
-            if (index >= fields_.size())
-                ERROR("Out-of-bounds access");
-            return fields_[index];
-        };
-        auto fieldsValues() { return std::span{fields_}; }
         auto fieldsValues() const {
             return fields_ | std::views::transform(
                                  [](auto const &up) -> utils::not_null<const SymbolicExpr *> {

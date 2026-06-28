@@ -1547,7 +1547,7 @@ namespace acslg::analyzer::symbolic {
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
         auto newSt = std::make_unique<Structure>(*this);
-        for (auto &field : newSt->fieldsValues()) {
+        for (auto &field : newSt->fields_) {
             field = field->getSubstitutedExpr(pathSubTo, pointToSub);
         }
         return newSt;
@@ -1643,7 +1643,7 @@ namespace acslg::analyzer::symbolic {
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
         auto newSt = std::make_unique<Structure>(*this);
-        for (auto &field : newSt->fieldsValues()) {
+        for (auto &field : newSt->fields_) {
             field = field->getRangeIndexSubstituted(rangeBase, indexExpr);
         }
         return newSt;
@@ -1739,7 +1739,7 @@ namespace acslg::analyzer::symbolic {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return it->second->clone();
         auto newSt = std::make_unique<Structure>(*this);
-        for (auto &field : newSt->fieldsValues()) {
+        for (auto &field : newSt->fields_) {
             field = field->getSubstitutedValueExpr(hashExprMap);
         }
         return newSt;

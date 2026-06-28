@@ -385,8 +385,7 @@ namespace acslg::analyzer {
                         auto addr = make_unique<symbolic::FieldAddress>(
                             fieldType, st.getInfo().definition_,
                             baseAddr.get().addressClone().into_underlying(), index);
-                        auto &fieldValue = st.getFieldValue(index);
-                        return R{std::move(addr), fieldValue.get().get()};
+                        return R{std::move(addr), st.getFieldValue(index).get()};
                     }
                     default: break;
                 }
@@ -458,7 +457,7 @@ namespace acslg::analyzer {
             /// State for traversing fields inside a Structure
             struct FieldState {
                 const symbolic::AddressBox base_addr_; ///< Base address of the structure
-                symbolic::Structure *st_;              ///< Pointer to Structure
+                const symbolic::Structure *st_;        ///< Pointer to Structure
                 size_t index_;                         ///< Current field index
                 Phase pre_phase_;                      ///< Previous phase before entering fields
             };
@@ -573,8 +572,7 @@ namespace acslg::analyzer {
                 }
 
                 // Dive into Structure's fields
-                auto state =
-                    FieldState{std::move(addr), const_cast<symbolic::Structure *>(st), 0, phase_};
+                auto state = FieldState{std::move(addr), st, 0, phase_};
                 state_saver_.push(std::move(state));
                 phase_ = Phase::Field;
             }

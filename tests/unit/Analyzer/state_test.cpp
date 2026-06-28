@@ -285,6 +285,24 @@ namespace acslg::test::unit::analyzer {
         ASSERT_DEATH(pathA->mergeWith(otherPath), "");
     }
 
+    TEST(ProgramStateTest, StructInitializerListRebuildsFields) {
+        auto postState = execOnFirstFunc(R"c(
+            struct S {
+                int a;
+                int b;
+            };
+
+            int func(void) {
+                struct S s = {1, 2};
+                return s.a * 10 + s.b;
+            }
+        )c");
+
+        auto result = getReturnExprOfFirstPath(*postState)->simplifiedExpr();
+        auto *lit   = symbolic::cast<symbolic::detail::LiteralExprNode>(result.get().get());
+        EXPECT_EQ(lit->getLiteralValue(), 12);
+    }
+
     TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
         MemoryModel mm;
 
