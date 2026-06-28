@@ -15,6 +15,16 @@
 #include "Analyzer/state.h"
 
 namespace acslg::analyzer::symbolic {
+    namespace {
+        utils::not_null<std::unique_ptr<SymbolicExpr>> importIfFactoryScoped(
+            utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
+            if (!ExprFactoryScope::hasCurrent())
+                return expr;
+
+            return ExprFactoryScope::current().importExpr(*expr)->clone();
+        }
+    } // namespace
+
     SumOverRange::Init SumOverRange::makeInit(
         utils::not_null<std::unique_ptr<const SymbolAddress>> range) {
         return Init{deriveType(range->getPointeeType()), std::move(range)};
@@ -44,14 +54,14 @@ namespace acslg::analyzer::symbolic {
           fromPoint_(std::move(fromPoint)) {}
 
     OverRangeExpr::OverRangeExpr(const OverRangeExpr &other)
-        : SymbolicExpr(other), range_(other.range_.clone()),
+        : SymbolicExpr(other), range_(other.range_.copy()),
           indexName_(other.indexName_) {}
 
     OverRangeExpr &OverRangeExpr::operator=(const OverRangeExpr &other) {
         if (&other == this)
             return *this;
         SymbolicExpr::operator=(other);
-        range_     = ExprChild{other.range_.clone()};
+        range_     = other.range_.copy();
         indexName_ = other.indexName_;
         return *this;
     }
@@ -152,14 +162,15 @@ namespace acslg::analyzer::symbolic {
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
         if (fromPoint_ != pointToSub)
-            return clone();
+            return importIfFactoryScoped(clone());
         // Substitute only when the label matches; otherwise preserve the original expression.
         auto subedExpr  = range().getSubstitutedExpr(pathSubTo, pointToSub);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
-        return std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
-                                              indexName_, pathSubTo.getStartPoint());
+        return importIfFactoryScoped(
+            std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
+                                           indexName_, pathSubTo.getStartPoint()));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getRangeIndexSubstituted(
@@ -169,20 +180,22 @@ namespace acslg::analyzer::symbolic {
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
-        return std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
-                                              indexName_, fromPoint_);
+        return importIfFactoryScoped(
+            std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
+                                           indexName_, fromPoint_));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importIfFactoryScoped(it->second->clone());
         auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
-        return std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
-                                              indexName_, fromPoint_);
+        return importIfFactoryScoped(
+            std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
+                                           indexName_, fromPoint_));
     }
 
     utils::expected<std::string, SymbolicExpr::GetACSLError> SumOverRange::doGetACSL(
@@ -245,7 +258,7 @@ namespace acslg::analyzer::symbolic {
         auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
         newQOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
         newQOR->pred_  = ExprChild{std::move(subedPred)};
-        return newQOR;
+        return importIfFactoryScoped(std::move(newQOR));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getRangeIndexSubstituted(
@@ -260,13 +273,13 @@ namespace acslg::analyzer::symbolic {
         auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
         newQOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
         newQOR->pred_  = ExprChild{std::move(subedPred)};
-        return newQOR;
+        return importIfFactoryScoped(std::move(newQOR));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importIfFactoryScoped(it->second->clone());
         auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
@@ -276,7 +289,7 @@ namespace acslg::analyzer::symbolic {
         auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
         newQOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
         newQOR->pred_  = ExprChild{std::move(subedPred)};
-        return newQOR;
+        return importIfFactoryScoped(std::move(newQOR));
     }
 
     QuantifierOverRange &QuantifierOverRange::operator=(const QuantifierOverRange &other) {
@@ -284,7 +297,7 @@ namespace acslg::analyzer::symbolic {
             return *this;
         OverRangeExpr::operator=(other);
         quant_ = other.quant_;
-        pred_  = ExprChild{other.pred_.clone()};
+        pred_  = other.pred_.copy();
         return *this;
     }
 
@@ -375,7 +388,7 @@ namespace acslg::analyzer::symbolic {
         newMMOR->expr_  = ExprChild{std::move(subedBody)};
         if (fromPoint_ == pointToSub)
             TODO();
-        return newMMOR;
+        return importIfFactoryScoped(std::move(newMMOR));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getRangeIndexSubstituted(
@@ -390,13 +403,13 @@ namespace acslg::analyzer::symbolic {
         auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
         newMMOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
         newMMOR->expr_  = ExprChild{std::move(subedBody)};
-        return newMMOR;
+        return importIfFactoryScoped(std::move(newMMOR));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importIfFactoryScoped(it->second->clone());
         auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
@@ -406,7 +419,7 @@ namespace acslg::analyzer::symbolic {
         auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
         newMMOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
         newMMOR->expr_  = ExprChild{std::move(subedBody)};
-        return newMMOR;
+        return importIfFactoryScoped(std::move(newMMOR));
     }
 
     MaxMinOverRange &MaxMinOverRange::operator=(const MaxMinOverRange &other) {
@@ -415,7 +428,7 @@ namespace acslg::analyzer::symbolic {
         OverRangeExpr::operator=(other);
         Symbol::operator=(other);
         extremum_  = other.extremum_;
-        expr_      = ExprChild{other.expr_.clone()};
+        expr_      = other.expr_.copy();
         fromPoint_ = other.fromPoint_;
         return *this;
     }

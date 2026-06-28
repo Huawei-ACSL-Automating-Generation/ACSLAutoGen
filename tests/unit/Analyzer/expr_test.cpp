@@ -907,6 +907,84 @@ namespace acslg::test::unit::analyzer {
         EXPECT_NE(*substituted, max);
     }
 
+    TEST(AggregateRebuildTest, ScopedSubstitutionReturnsHandleBackedChildren) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        auto makeRange = [&]() {
+            auto range = std::make_unique<symbolic::SymbolAddress>(
+                var->getType(),
+                std::make_unique<symbolic::VariableAddress>(var),
+                point);
+            range = range->withOffset(
+                             std::make_unique<symbolic::SymbolAddress::RangeIndex>("i"))
+                        .into_underlying();
+            return range->withLength(
+                            std::make_unique<symbolic::detail::LiteralExprNode>(3))
+                .into_underlying();
+        };
+        auto makeConstRange = [](std::unique_ptr<symbolic::SymbolAddress> range) {
+            std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
+            return ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
+                std::move(constRange)};
+        };
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto one   = factory.literal(1);
+        auto three = factory.literal(3);
+
+        auto sumRange = makeRange();
+        auto rangeBase = sumRange->getBaseInfo();
+        symbolic::SumOverRange sum{makeConstRange(std::move(sumRange)), "i", point};
+        auto substitutedSum =
+            sum.getRangeIndexSubstituted(rangeBase, symbolic::detail::LiteralExprNode{1});
+        const auto &sumNode =
+            *symbolic::cast<symbolic::SumOverRange>(substitutedSum.get().get());
+        EXPECT_EQ(sumNode.getRange().getOffset().get(), one.get().get());
+        ASSERT_TRUE(sumNode.getRange().getLength());
+        EXPECT_EQ(sumNode.getRange().getLength().value().get().get(), three.get().get());
+
+        auto quantRange = makeRange();
+        symbolic::QuantifierOverRange quantifier{
+            makeConstRange(std::move(quantRange)),
+            "i",
+            symbolic::QuantifierOverRange::Quantifier::ForAll,
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
+                std::make_unique<symbolic::SymbolAddress::RangeIndex>("i")}};
+        auto substitutedQuantifier = quantifier.getRangeIndexSubstituted(
+            rangeBase, symbolic::detail::LiteralExprNode{1});
+        const auto &quantifierNode =
+            *symbolic::cast<symbolic::QuantifierOverRange>(substitutedQuantifier.get().get());
+        EXPECT_EQ(&quantifierNode.getPredicate(), one.get().get());
+
+        auto maxRange = makeRange();
+        symbolic::MaxMinOverRange max{
+            makeConstRange(std::move(maxRange)),
+            "i",
+            symbolic::MaxMinOverRange::Extremum::Max,
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
+                std::make_unique<symbolic::SymbolAddress::RangeIndex>("i")},
+            point};
+        auto substitutedMax =
+            max.getRangeIndexSubstituted(rangeBase, symbolic::detail::LiteralExprNode{1});
+        const auto &maxNode =
+            *symbolic::cast<symbolic::MaxMinOverRange>(substitutedMax.get().get());
+        EXPECT_EQ(&maxNode.getExpr(), one.get().get());
+    }
+
     TEST(ExprFacadeTest, LiteralAndOperatorsUseCurrentFactory) {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);

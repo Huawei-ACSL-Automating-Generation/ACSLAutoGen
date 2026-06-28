@@ -614,6 +614,11 @@ namespace acslg::analyzer::symbolic {
         const SymbolicExpr &operator*() const { return *get(); }
         const SymbolicExpr *operator->() const { return get().get(); }
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const { return get()->clone(); }
+        ExprChild copy() const {
+            if (handle_)
+                return ExprChild{*handle_};
+            return ExprChild{owned_->get()->clone()};
+        }
 
         std::optional<ExprHandle> handle() const { return handle_; }
 
