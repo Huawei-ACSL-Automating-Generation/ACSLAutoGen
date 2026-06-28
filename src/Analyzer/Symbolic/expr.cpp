@@ -360,6 +360,22 @@ namespace acslg::analyzer::symbolic {
             fieldIndex));
     }
 
+    ExprHandle ExprFactory::withField(ExprHandle structure, size_t index, ExprHandle value) {
+        const auto &structureNode = structure.cast<Structure>();
+        if (index >= structureNode.getNumFields())
+            ERROR("Out-of-bounds access");
+
+        std::vector<ExprHandle> fields;
+        fields.reserve(structureNode.getNumFields());
+        size_t currentIndex = 0;
+        for (auto field : structureNode.fieldsValues()) {
+            fields.push_back(currentIndex == index ? value : importExpr(*field));
+            ++currentIndex;
+        }
+
+        return intern(std::make_unique<Structure>(structureNode.getInfo(), std::move(fields)));
+    }
+
     namespace {
         utils::not_null<std::unique_ptr<SymbolicExpr>> importThroughCurrentFactory(
             utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
@@ -2333,6 +2349,11 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) const {
         if (index >= fields_.size())
             ERROR("Out-of-bounds access");
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return cloneStructure(factory.withField(
+                factory.importExpr(*this), index, factory.importExpr(*expr)));
+        }
         auto result = std::make_unique<Structure>(*this);
         result->fields_[index] = ExprChild{std::move(expr)};
         return result;

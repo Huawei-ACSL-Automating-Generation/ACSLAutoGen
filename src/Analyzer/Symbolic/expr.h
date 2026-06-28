@@ -1394,6 +1394,7 @@ namespace acslg::analyzer::symbolic {
                                 const clang::RecordDecl *record,
                                 AddrHandle baseAddr,
                                 size_t fieldIndex);
+        ExprHandle withField(ExprHandle structure, size_t index, ExprHandle value);
 
         ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node) {
             const auto hash = node->hash();
