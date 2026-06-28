@@ -278,6 +278,13 @@ namespace acslg::test::unit::analyzer {
         };
     } // namespace
 
+    TEST_F(MergeWithTest, MergeRejectsDifferentContexts) {
+        context::ACSLGContext otherContext(e.getASTContext());
+        Path otherPath(otherContext, defaultPoint);
+
+        ASSERT_DEATH(pathA->mergeWith(otherPath), "");
+    }
+
     TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
         MemoryModel mm;
 
