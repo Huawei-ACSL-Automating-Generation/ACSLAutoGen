@@ -247,6 +247,45 @@ namespace acslg::analyzer::symbolic {
             pointeeType, cloneAddress(from), std::move(fromPoint), offset, length));
     }
 
+    AddrHandle ExprFactory::withOffset(AddrHandle address, ExprHandle offset) {
+        const auto &symbolAddr = address.cast<SymbolAddress>();
+        auto base              = symbolAddr.getBaseInfo();
+
+        std::optional<AddrHandle> from;
+        if (base.fromAddr_)
+            from = internAddress(base.fromAddr_.value()->addressClone());
+
+        std::optional<ExprHandle> length;
+        if (const auto &existingLength = symbolAddr.getLength(); existingLength)
+            length = importExpr(*existingLength.value());
+
+        return symbolAddress(base.pointeeType_, from, base.fromPoint_, offset, length);
+    }
+
+    AddrHandle ExprFactory::withLength(AddrHandle address, ExprHandle length) {
+        const auto &symbolAddr = address.cast<SymbolAddress>();
+        auto base              = symbolAddr.getBaseInfo();
+
+        std::optional<AddrHandle> from;
+        if (base.fromAddr_)
+            from = internAddress(base.fromAddr_.value()->addressClone());
+
+        return symbolAddress(base.pointeeType_, from, base.fromPoint_,
+                             importExpr(*symbolAddr.getOffset()), length);
+    }
+
+    AddrHandle ExprFactory::withoutLength(AddrHandle address) {
+        const auto &symbolAddr = address.cast<SymbolAddress>();
+        auto base              = symbolAddr.getBaseInfo();
+
+        std::optional<AddrHandle> from;
+        if (base.fromAddr_)
+            from = internAddress(base.fromAddr_.value()->addressClone());
+
+        return symbolAddress(base.pointeeType_, from, base.fromPoint_,
+                             importExpr(*symbolAddr.getOffset()), std::nullopt);
+    }
+
     AddrHandle ExprFactory::fieldAddress(clang::QualType pointeeType,
                                          const clang::RecordDecl *record,
                                          AddrHandle baseAddr,

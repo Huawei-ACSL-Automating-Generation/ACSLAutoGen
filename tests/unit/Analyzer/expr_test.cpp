@@ -1008,6 +1008,53 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
     }
 
+    TEST(ExprFactoryTest, AddressRebuildsReuseInternedRangeChildren) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        auto varAddr = factory.variableAddress(var);
+        auto zero    = factory.literal(0);
+        auto length  = factory.literal(3);
+        auto offset  = factory.literal(4);
+
+        auto base = factory.symbolAddress(
+            var->getType(), std::optional<symbolic::AddrHandle>{varAddr}, point,
+            std::optional<symbolic::ExprHandle>{zero}, std::nullopt);
+
+        auto ranged = factory.withLength(base, length);
+        EXPECT_EQ(ranged, factory.withLength(base, length));
+        const auto &rangedNode = ranged.cast<symbolic::SymbolAddress>();
+        EXPECT_EQ(rangedNode.getOffset().get(), zero.get().get());
+        ASSERT_TRUE(rangedNode.getLength());
+        EXPECT_EQ(rangedNode.getLength().value().get().get(), length.get().get());
+
+        auto shifted = factory.withOffset(ranged, offset);
+        EXPECT_EQ(shifted, factory.withOffset(ranged, offset));
+        const auto &shiftedNode = shifted.cast<symbolic::SymbolAddress>();
+        EXPECT_EQ(shiftedNode.getOffset().get(), offset.get().get());
+        ASSERT_TRUE(shiftedNode.getLength());
+        EXPECT_EQ(shiftedNode.getLength().value().get().get(), length.get().get());
+
+        auto scalarAddr = factory.withoutLength(shifted);
+        EXPECT_EQ(scalarAddr, factory.withoutLength(shifted));
+        const auto &scalarNode = scalarAddr.cast<symbolic::SymbolAddress>();
+        EXPECT_EQ(scalarNode.getOffset().get(), offset.get().get());
+        EXPECT_FALSE(scalarNode.getLength());
+    }
+
     TEST(ExprFactoryTest, ImportsLegacySymbolAddressRangeChildrenAsHandles) {
         ASTExtractor e;
         e.init(R"c(
