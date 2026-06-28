@@ -2161,6 +2161,11 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> offset) const {
         if (!isValidOffsetOrLength(*offset))
             ERROR("Invalid offset.");
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return cloneSymbolAddress(
+                factory.withOffset(factory.importAddress(*this), factory.importExpr(*offset)));
+        }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ = ExprChild{std::move(offset)};
         return result;
@@ -2170,6 +2175,11 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return cloneSymbolAddress(factory.withAddedOffset(
+                factory.importAddress(*this), factory.importExpr(*extra)));
+        }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ =
             ExprChild{std::make_unique<BinaryOpExpr>(offset_->clone().into_underlying(),
@@ -2183,6 +2193,11 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return cloneSymbolAddress(factory.withSubtractedOffset(
+                factory.importAddress(*this), factory.importExpr(*extra)));
+        }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ =
             ExprChild{std::make_unique<BinaryOpExpr>(offset_->clone(),
@@ -2193,6 +2208,12 @@ namespace acslg::analyzer::symbolic {
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withResetOffset() const {
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return cloneSymbolAddress(factory.withOffset(
+                factory.importAddress(*this),
+                factory.literal(static_cast<int64_t>(ZERO_OFFSET))));
+        }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ = ExprChild{std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET)};
         return result;
@@ -2202,6 +2223,11 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> len) const {
         if (!isValidOffsetOrLength(*len))
             ERROR("Invalid Length.");
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return cloneSymbolAddress(
+                factory.withLength(factory.importAddress(*this), factory.importExpr(*len)));
+        }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->length_.emplace(std::move(len));
         return result;
@@ -2211,6 +2237,11 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return cloneSymbolAddress(factory.withAddedLength(
+                factory.importAddress(*this), factory.importExpr(*extra)));
+        }
         auto result = std::make_unique<SymbolAddress>(*this);
         if (length_ == std::nullopt) {
             result->length_.emplace(
@@ -2230,6 +2261,10 @@ namespace acslg::analyzer::symbolic {
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withoutLength() const {
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return cloneSymbolAddress(factory.withoutLength(factory.importAddress(*this)));
+        }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->length_ = std::nullopt;
         return result;

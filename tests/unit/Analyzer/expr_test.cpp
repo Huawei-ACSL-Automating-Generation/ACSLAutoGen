@@ -1367,6 +1367,73 @@ namespace acslg::test::unit::analyzer {
                   3);
     }
 
+    TEST(SymbolAddressRebuildTest, ScopedRangeUpdatesReuseFactoryChildren) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto original = std::make_unique<symbolic::SymbolAddress>(
+            var->getType(), std::nullopt, point);
+        auto offset = factory.literal(5);
+        auto length = factory.literal(3);
+        auto extra  = factory.unknown();
+
+        auto sizeBefore = factory.size();
+        auto withOffset = original->withOffset(factory.cloneExpr(offset));
+        EXPECT_GT(factory.size(), sizeBefore);
+        EXPECT_EQ(*withOffset->getOffset().get(), *offset.get().get());
+        EXPECT_EQ(factory.importAddress(*withOffset),
+                  factory.withOffset(factory.importAddress(*original), offset));
+
+        sizeBefore = factory.size();
+        auto withLength = withOffset->withLength(factory.cloneExpr(length));
+        EXPECT_GT(factory.size(), sizeBefore);
+        ASSERT_TRUE(withLength->getLength());
+        EXPECT_EQ(*withLength->getLength().value().get().get(), *length.get().get());
+        EXPECT_EQ(factory.importAddress(*withLength),
+                  factory.withLength(factory.importAddress(*withOffset), length));
+
+        sizeBefore = factory.size();
+        auto addedOffset = withOffset->withAddedOffset(factory.cloneExpr(extra));
+        EXPECT_GT(factory.size(), sizeBefore);
+        auto expectedOffset =
+            factory.simplifiedBinary(offset, symbolic::BinaryOpExpr::Operator::Add, extra);
+        EXPECT_EQ(*addedOffset->getOffset().get(), *expectedOffset.get().get());
+
+        sizeBefore = factory.size();
+        auto addedLength = withLength->withAddedLength(factory.cloneExpr(extra));
+        EXPECT_GT(factory.size(), sizeBefore);
+        auto expectedLength =
+            factory.simplifiedBinary(length, symbolic::BinaryOpExpr::Operator::Add, extra);
+        ASSERT_TRUE(addedLength->getLength());
+        EXPECT_EQ(*addedLength->getLength().value().get().get(), *expectedLength.get().get());
+
+        sizeBefore = factory.size();
+        auto resetOffset = withLength->withResetOffset();
+        EXPECT_GT(factory.size(), sizeBefore);
+        EXPECT_EQ(*resetOffset->getOffset().get(), *factory.literal(int64_t{0}).get().get());
+
+        auto withoutLength = withLength->withoutLength();
+        EXPECT_FALSE(withoutLength->getLength());
+        EXPECT_EQ(*withoutLength->getOffset().get(), *offset.get().get());
+        EXPECT_EQ(factory.importAddress(*withoutLength),
+                  factory.withoutLength(factory.importAddress(*withLength)));
+    }
+
     TEST(StructureRebuildTest, FieldUpdateDoesNotMutateOriginalStructure) {
         ASTExtractor e;
         e.init(R"c(
