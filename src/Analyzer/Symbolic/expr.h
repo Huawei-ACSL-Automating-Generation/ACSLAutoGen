@@ -597,7 +597,13 @@ namespace acslg::analyzer::symbolic {
       public:
         explicit ExprChild(ExprHandle handle) : handle_(handle) {}
         explicit ExprChild(utils::not_null<std::unique_ptr<SymbolicExpr>> owned)
-            : owned_(std::move(owned)) {}
+            : ExprChild(ConstOwnedTag{}, utils::not_null<std::unique_ptr<const SymbolicExpr>>{
+                  std::move(owned).into_underlying()}) {}
+
+        static ExprChild fromConstOwned(
+            utils::not_null<std::unique_ptr<const SymbolicExpr>> owned) {
+            return ExprChild{ConstOwnedTag{}, std::move(owned)};
+        }
 
         utils::not_null<const SymbolicExpr *> get() const {
             if (handle_)
@@ -612,8 +618,12 @@ namespace acslg::analyzer::symbolic {
         std::optional<ExprHandle> handle() const { return handle_; }
 
       private:
+        struct ConstOwnedTag {};
+        ExprChild(ConstOwnedTag, utils::not_null<std::unique_ptr<const SymbolicExpr>> owned)
+            : owned_(std::move(owned)) {}
+
         std::optional<ExprHandle> handle_;
-        std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> owned_;
+        std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> owned_;
     };
 
     namespace detail {
@@ -1529,6 +1539,11 @@ namespace acslg::analyzer::symbolic {
                           std::nullopt,
                       std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> length =
                           std::nullopt);
+        SymbolAddress(const clang::QualType pointeeType,
+                      std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
+                      SourcePoint fromPoint,
+                      std::optional<ExprHandle> offset,
+                      std::optional<ExprHandle> length);
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_SymbolAddress;
@@ -1539,7 +1554,7 @@ namespace acslg::analyzer::symbolic {
 
         bool operator==(const SymbolAddress &other) const { return equal(other); }
 
-        utils::not_null<const SymbolicExpr *> getOffset() const { return offset_.get().get(); }
+        utils::not_null<const SymbolicExpr *> getOffset() const { return offset_.get(); }
 
         utils::not_null<std::unique_ptr<SymbolAddress>> withOffset(
             utils::not_null<std::unique_ptr<SymbolicExpr>> offset) const;
@@ -1629,8 +1644,7 @@ namespace acslg::analyzer::symbolic {
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
 
       private:
-        utils::not_null<std::unique_ptr<const SymbolicExpr>>
-            offset_; ///< Offset relative to an address.
+        ExprChild offset_; ///< Offset relative to an address.
         std::optional<utils::not_null<std::unique_ptr<const Address>>>
             fromAddr_; ///< From another Address p means this is a value(may with offset) of a
                        ///< pointer variable whose address is p; std::nullopt means this a
@@ -1638,7 +1652,7 @@ namespace acslg::analyzer::symbolic {
                        ///< the *alloc*.
 
         SourcePoint fromPoint_;
-        std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> length_;
+        std::optional<ExprChild> length_;
     };
 
     struct SymbolAddrBaseInfo {

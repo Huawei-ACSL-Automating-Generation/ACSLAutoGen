@@ -305,8 +305,11 @@ namespace acslg::test::utils {
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
         auto baseAddr = makeVariableAddr(id);
+        using LegacyExprOpt =
+            optional<not_null<unique_ptr<const symbolic::SymbolicExpr>>>;
         return symbolic::SymbolAddress{QualType{}, baseAddr.addressClone().into_underlying(),
-                                       fromPoint.value_or(defaultPoint), nullopt, nullopt};
+                                       fromPoint.value_or(defaultPoint), LegacyExprOpt{},
+                                       LegacyExprOpt{}};
     }
 
     symbolic::SymbolAddress FixtureWithCode::makePointAddr(unsigned int id, uint64_t off) {

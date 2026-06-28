@@ -802,6 +802,52 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
     }
 
+    TEST(ExprFactoryTest, ImportsLegacySymbolAddressRangeChildrenAsHandles) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        std::unique_ptr<const symbolic::Address> from =
+            std::make_unique<symbolic::VariableAddress>(var);
+        std::unique_ptr<const symbolic::SymbolicExpr> offset =
+            std::make_unique<symbolic::detail::LiteralExprNode>(4);
+        std::unique_ptr<const symbolic::SymbolicExpr> length =
+            std::make_unique<symbolic::detail::LiteralExprNode>(2);
+        symbolic::SymbolAddress legacy{
+            var->getType(),
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>{std::move(from)},
+            point,
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
+                std::move(offset)},
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
+                std::move(length)}};
+
+        symbolic::ExprFactory factory;
+        auto importedA = factory.importExpr(legacy);
+        auto importedB = factory.importExpr(legacy);
+        EXPECT_EQ(importedA, importedB);
+
+        const auto &importedAddr = importedA.cast<symbolic::SymbolAddress>();
+        auto importedOffset = factory.importExpr(*legacy.getOffset());
+        ASSERT_TRUE(importedAddr.getLength());
+        ASSERT_TRUE(legacy.getLength());
+        auto importedLength = factory.importExpr(*legacy.getLength().value());
+
+        EXPECT_EQ(importedAddr.getOffset().get(), importedOffset.get().get());
+        EXPECT_EQ(importedAddr.getLength().value().get().get(), importedLength.get().get());
+    }
+
     TEST(ExprFactoryTest, ImportsLegacyStructureFieldsAsHandles) {
         ASTExtractor e;
         e.init(R"c(

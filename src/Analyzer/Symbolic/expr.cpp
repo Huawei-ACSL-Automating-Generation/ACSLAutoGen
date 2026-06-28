@@ -58,6 +58,21 @@ namespace acslg::analyzer::symbolic {
             return binary(left, binaryExpr->getOperator(), right);
         }
 
+        if (auto *symbolAddr = dyn_cast<SymbolAddress>(&expr)) {
+            auto base = symbolAddr->getBaseInfo();
+            std::optional<AddrHandle> from;
+            if (base.fromAddr_)
+                from = internAddress(base.fromAddr_.value()->addressClone());
+
+            std::optional<ExprHandle> length;
+            if (const auto &legacyLength = symbolAddr->getLength(); legacyLength)
+                length = importExpr(*legacyLength.value());
+
+            return symbolAddress(base.pointeeType_, from, base.fromPoint_,
+                                 importExpr(*symbolAddr->getOffset()), length)
+                .asExpr();
+        }
+
         if (auto *structure = dyn_cast<Structure>(&expr)) {
             std::vector<ExprHandle> fields;
             fields.reserve(structure->getNumFields());
@@ -77,14 +92,6 @@ namespace acslg::analyzer::symbolic {
             std::unique_ptr<const Address> cloned =
                 handle.value()->addressClone().into_underlying();
             return utils::not_null<std::unique_ptr<const Address>>{std::move(cloned)};
-        }
-
-        std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> cloneExpr(
-            std::optional<ExprHandle> handle) {
-            if (!handle)
-                return std::nullopt;
-            std::unique_ptr<const SymbolicExpr> cloned = handle.value()->clone().into_underlying();
-            return utils::not_null<std::unique_ptr<const SymbolicExpr>>{std::move(cloned)};
         }
 
         template <class... Ts> struct overloaded : Ts... {
@@ -209,8 +216,7 @@ namespace acslg::analyzer::symbolic {
         std::optional<ExprHandle> offset,
         std::optional<ExprHandle> length) {
         return internAddress(std::make_unique<SymbolAddress>(
-            pointeeType, cloneAddress(from), std::move(fromPoint), cloneExpr(offset),
-            cloneExpr(length)));
+            pointeeType, cloneAddress(from), std::move(fromPoint), offset, length));
     }
 
     AddrHandle ExprFactory::fieldAddress(clang::QualType pointeeType,
@@ -1818,10 +1824,10 @@ namespace acslg::analyzer::symbolic {
     }
 
     SymbolAddress::SymbolAddress(const SymbolAddress &other)
-        : Address(other), Symbol(other), offset_(other.offset_->clone().into_underlying()),
+        : Address(other), Symbol(other), offset_(other.offset_.clone()),
           fromPoint_(other.fromPoint_), length_(std::nullopt) {
         if (other.length_)
-            length_ = other.length_.value()->clone().into_underlying();
+            length_.emplace(other.length_.value().clone());
         if (other.fromAddr_ == std::nullopt)
             fromAddr_ = std::nullopt;
         else
@@ -1846,9 +1852,28 @@ namespace acslg::analyzer::symbolic {
                   SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                   pointeeType),
           Symbol(Kind::K_SymbolAddress), offset_(std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET)),
-          fromAddr_(std::move(from)), fromPoint_(fromPoint), length_(std::move(length)) {
+          fromAddr_(std::move(from)), fromPoint_(fromPoint), length_(std::nullopt) {
         if (offset != std::nullopt)
-            offset_ = std::move(offset.value());
+            offset_ = ExprChild::fromConstOwned(std::move(offset.value()));
+        if (length != std::nullopt)
+            length_.emplace(ExprChild::fromConstOwned(std::move(length.value())));
+    }
+
+    SymbolAddress::SymbolAddress(
+        const clang::QualType pointeeType,
+        std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
+        SourcePoint fromPoint,
+        std::optional<ExprHandle> offset,
+        std::optional<ExprHandle> length)
+        : Address(SymbolicExpr::ExprKind::K_SymbolAddress,
+                  SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
+                  pointeeType),
+          Symbol(Kind::K_SymbolAddress), offset_(std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET)),
+          fromAddr_(std::move(from)), fromPoint_(fromPoint), length_(std::nullopt) {
+        if (offset != std::nullopt)
+            offset_ = ExprChild{offset.value()};
+        if (length != std::nullopt)
+            length_.emplace(length.value());
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withOffset(
@@ -1856,7 +1881,7 @@ namespace acslg::analyzer::symbolic {
         if (!isValidOffsetOrLength(*offset))
             ERROR("Invalid offset.");
         auto result = std::make_unique<SymbolAddress>(*this);
-        result->offset_ = std::move(offset).into_underlying();
+        result->offset_ = ExprChild{std::move(offset)};
         return result;
     }
 
@@ -1866,11 +1891,10 @@ namespace acslg::analyzer::symbolic {
             ERROR("Invalid offset.");
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ =
-            std::make_unique<BinaryOpExpr>(offset_->clone().into_underlying(),
-                                           detail::BinaryOpExprNode::Operator::Add,
-                                           std::move(extra))
-                ->simplifiedExpr()
-                .into_underlying();
+            ExprChild{std::make_unique<BinaryOpExpr>(offset_->clone().into_underlying(),
+                                                     detail::BinaryOpExprNode::Operator::Add,
+                                                     std::move(extra))
+                          ->simplifiedExpr()};
         return result;
     }
 
@@ -1880,17 +1904,16 @@ namespace acslg::analyzer::symbolic {
             ERROR("Invalid offset.");
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ =
-            std::make_unique<BinaryOpExpr>(offset_->clone(),
-                                           detail::BinaryOpExprNode::Operator::Subtract,
-                                           std::move(extra))
-                ->simplifiedExpr()
-                .into_underlying();
+            ExprChild{std::make_unique<BinaryOpExpr>(offset_->clone(),
+                                                     detail::BinaryOpExprNode::Operator::Subtract,
+                                                     std::move(extra))
+                          ->simplifiedExpr()};
         return result;
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withResetOffset() const {
         auto result = std::make_unique<SymbolAddress>(*this);
-        result->offset_ = std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET);
+        result->offset_ = ExprChild{std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET)};
         return result;
     }
 
@@ -1899,7 +1922,7 @@ namespace acslg::analyzer::symbolic {
         if (!isValidOffsetOrLength(*len))
             ERROR("Invalid Length.");
         auto result = std::make_unique<SymbolAddress>(*this);
-        result->length_.emplace(std::move(len).into_underlying());
+        result->length_.emplace(std::move(len));
         return result;
     }
 
@@ -1910,20 +1933,18 @@ namespace acslg::analyzer::symbolic {
         auto result = std::make_unique<SymbolAddress>(*this);
         if (length_ == std::nullopt) {
             result->length_.emplace(
-                std::make_unique<BinaryOpExpr>(
+                ExprChild{std::make_unique<BinaryOpExpr>(
                     std::make_unique<detail::LiteralExprNode>(1),
                     detail::BinaryOpExprNode::Operator::Add,
                     std::move(extra))
-                    ->simplifiedExpr()
-                    .into_underlying());
+                              ->simplifiedExpr()});
             return result;
         }
         result->length_ =
-            std::make_unique<BinaryOpExpr>(length_.value()->clone().into_underlying(),
-                                           detail::BinaryOpExprNode::Operator::Add,
-                                           std::move(extra))
-                ->simplifiedExpr()
-                .into_underlying();
+            ExprChild{std::make_unique<BinaryOpExpr>(length_.value()->clone().into_underlying(),
+                                                     detail::BinaryOpExprNode::Operator::Add,
+                                                     std::move(extra))
+                          ->simplifiedExpr()};
         return result;
     }
 
