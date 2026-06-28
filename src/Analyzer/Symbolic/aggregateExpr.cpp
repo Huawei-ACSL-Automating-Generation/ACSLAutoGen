@@ -448,11 +448,20 @@ namespace acslg::analyzer::symbolic {
         const SymbolAddress &range,
         std::string_view indexName,
         const SourcePoint &fromPoint) {
-        auto indexedRange = std::make_unique<SymbolAddress>(range);
-        indexedRange =
-            indexedRange->withOffset(std::make_unique<SymbolAddress::RangeIndex>(indexName))
-                .into_underlying();
-        indexedRange = indexedRange->withoutLength().into_underlying();
+        std::unique_ptr<ExprFactory> localFactory;
+        ExprFactory *factory = nullptr;
+        if (ExprFactoryScope::hasCurrent()) {
+            factory = &ExprFactoryScope::current();
+        } else {
+            localFactory = std::make_unique<ExprFactory>();
+            factory      = localFactory.get();
+        }
+
+        SymbolAddress::RangeIndex rangeIndex{indexName};
+        auto indexedRangeHandle = factory->withOffset(factory->importAddress(range),
+                                                      factory->importExpr(rangeIndex));
+        indexedRangeHandle = factory->withoutLength(indexedRangeHandle);
+        auto indexedRange = indexedRangeHandle->addressClone().into_underlying();
         return getSymbol(range.getPointeeType(), std::move(indexedRange), fromPoint)
             .into_underlying();
     }
