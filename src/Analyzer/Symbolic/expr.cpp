@@ -58,6 +58,14 @@ namespace acslg::analyzer::symbolic {
             return binary(left, binaryExpr->getOperator(), right);
         }
 
+        if (auto *structure = dyn_cast<Structure>(&expr)) {
+            std::vector<ExprHandle> fields;
+            fields.reserve(structure->getNumFields());
+            for (auto field : structure->fieldsValues())
+                fields.push_back(importExpr(*field));
+            return intern(std::make_unique<Structure>(structure->getInfo(), std::move(fields)));
+        }
+
         return intern(expr.clone());
     }
 
@@ -1548,7 +1556,7 @@ namespace acslg::analyzer::symbolic {
         const SourcePoint &pointToSub) const {
         auto newSt = std::make_unique<Structure>(*this);
         for (auto &field : newSt->fields_) {
-            field = field->getSubstitutedExpr(pathSubTo, pointToSub);
+            field = ExprChild{field->getSubstitutedExpr(pathSubTo, pointToSub)};
         }
         return newSt;
     }
@@ -1644,7 +1652,7 @@ namespace acslg::analyzer::symbolic {
         const SymbolicExpr &indexExpr) const {
         auto newSt = std::make_unique<Structure>(*this);
         for (auto &field : newSt->fields_) {
-            field = field->getRangeIndexSubstituted(rangeBase, indexExpr);
+            field = ExprChild{field->getRangeIndexSubstituted(rangeBase, indexExpr)};
         }
         return newSt;
     }
@@ -1740,7 +1748,7 @@ namespace acslg::analyzer::symbolic {
             return it->second->clone();
         auto newSt = std::make_unique<Structure>(*this);
         for (auto &field : newSt->fields_) {
-            field = field->getSubstitutedValueExpr(hashExprMap);
+            field = ExprChild{field->getSubstitutedValueExpr(hashExprMap)};
         }
         return newSt;
     }
@@ -1989,8 +1997,21 @@ namespace acslg::analyzer::symbolic {
         if (index >= fields_.size())
             ERROR("Out-of-bounds access");
         auto result = std::make_unique<Structure>(*this);
-        result->fields_[index] = std::move(expr);
+        result->fields_[index] = ExprChild{std::move(expr)};
         return result;
+    }
+
+    Structure::Structure(Info info, std::vector<ExprHandle> fields)
+        : SymbolicExpr(
+              ExprKind::K_Structure,
+              Type{ScalarKind::Structure, static_cast<unsigned>(info.layout_.getSize().getQuantity()) *
+                                              8 /*By default, char is 8-bit.*/}),
+          Symbol(Kind::K_Structure), info_(info) {
+        if (fields.size() != info_.layout_.getFieldCount())
+            ERROR("Structure field count mismatch");
+        fields_.reserve(fields.size());
+        for (auto field : fields)
+            fields_.emplace_back(field);
     }
 
     Structure::Structure(const clang::RecordDecl *RD,

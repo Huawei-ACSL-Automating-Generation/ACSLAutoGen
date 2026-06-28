@@ -802,6 +802,43 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
     }
 
+    TEST(ExprFactoryTest, ImportsLegacyStructureFieldsAsHandles) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct S {
+                int a;
+                int b;
+            };
+
+            void f(void) {
+                struct S s;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        auto legacyExpr = symbolic::makeUnknownStructure(
+            var->getType(), std::make_unique<symbolic::VariableAddress>(var), point);
+        auto *legacyStructure = symbolic::cast<symbolic::Structure>(legacyExpr.get().get());
+
+        symbolic::ExprFactory factory;
+        auto importedA = factory.importExpr(*legacyStructure);
+        auto importedB = factory.importExpr(*legacyStructure);
+        EXPECT_EQ(importedA, importedB);
+
+        const auto &importedStructure = importedA.cast<symbolic::Structure>();
+        auto importedField0 = factory.importExpr(*legacyStructure->getFieldValue(0));
+        auto importedField1 = factory.importExpr(*legacyStructure->getFieldValue(1));
+
+        EXPECT_EQ(importedStructure.getFieldValue(0).get(), importedField0.get().get());
+        EXPECT_EQ(importedStructure.getFieldValue(1).get(), importedField1.get().get());
+    }
+
     TEST(SymbolAddressRebuildTest, RangeUpdatesDoNotMutateOriginalAddress) {
         ASTExtractor e;
         e.init(R"c(

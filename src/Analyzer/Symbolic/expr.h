@@ -1069,14 +1069,15 @@ namespace acslg::analyzer::symbolic {
                   const clang::ASTRecordLayout &layout,
                   utils::not_null<std::unique_ptr<const Address>> from,
                   SourcePoint fromPoint);
+        Structure(Info info, std::vector<ExprHandle> fields);
 
         Structure(const Structure &other) : SymbolicExpr(other), Symbol(other), info_(other.info_) {
             fields_.clear();
             fields_.reserve(other.fields_.size());
             std::ranges::transform(
                 other.fields_, std::back_inserter(fields_),
-                [](auto &field) -> utils::not_null<std::unique_ptr<SymbolicExpr>> {
-                    return field->clone();
+                [](const ExprChild &field) -> ExprChild {
+                    return ExprChild{field.clone()};
                 });
         }
 
@@ -1092,12 +1093,12 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<const SymbolicExpr *> getFieldValue(size_t index) const {
             if (index >= fields_.size())
                 ERROR("Out-of-bounds access");
-            return fields_[index].get().get();
+            return fields_[index].get();
         };
         auto fieldsValues() const {
             return fields_ | std::views::transform(
-                                 [](auto const &up) -> utils::not_null<const SymbolicExpr *> {
-                                     return up.value().get().get();
+                                 [](const ExprChild &field) -> utils::not_null<const SymbolicExpr *> {
+                                     return field.get();
                                  });
         }
         auto getInfo() const -> const auto & { return info_; }
@@ -1143,7 +1144,7 @@ namespace acslg::analyzer::symbolic {
 
       private:
         Info info_;
-        std::vector<utils::not_null<std::unique_ptr<SymbolicExpr>>> fields_;
+        std::vector<ExprChild> fields_;
     };
 
     /**
