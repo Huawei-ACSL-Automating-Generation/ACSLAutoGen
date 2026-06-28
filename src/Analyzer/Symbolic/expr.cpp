@@ -2199,9 +2199,9 @@ namespace acslg::analyzer::symbolic {
         }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ =
-            ExprChild{std::make_unique<BinaryOpExpr>(offset_->clone().into_underlying(),
-                                                     detail::BinaryOpExprNode::Operator::Add,
-                                                     std::move(extra))
+            ExprChild{makeBinaryExpr(offset_->clone(),
+                                      detail::BinaryOpExprNode::Operator::Add,
+                                      std::move(extra))
                           ->simplifiedExpr()};
         return result;
     }
@@ -2217,9 +2217,9 @@ namespace acslg::analyzer::symbolic {
         }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ =
-            ExprChild{std::make_unique<BinaryOpExpr>(offset_->clone(),
-                                                     detail::BinaryOpExprNode::Operator::Subtract,
-                                                     std::move(extra))
+            ExprChild{makeBinaryExpr(offset_->clone(),
+                                      detail::BinaryOpExprNode::Operator::Subtract,
+                                      std::move(extra))
                           ->simplifiedExpr()};
         return result;
     }
@@ -2232,7 +2232,7 @@ namespace acslg::analyzer::symbolic {
                 factory.literal(static_cast<int64_t>(ZERO_OFFSET))));
         }
         auto result = std::make_unique<SymbolAddress>(*this);
-        result->offset_ = ExprChild{std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET)};
+        result->offset_ = ExprChild{makeLiteralExpr(static_cast<int64_t>(ZERO_OFFSET))};
         return result;
     }
 
@@ -2262,17 +2262,16 @@ namespace acslg::analyzer::symbolic {
         auto result = std::make_unique<SymbolAddress>(*this);
         if (length_ == std::nullopt) {
             result->length_.emplace(
-                ExprChild{std::make_unique<BinaryOpExpr>(
-                    std::make_unique<detail::LiteralExprNode>(1),
-                    detail::BinaryOpExprNode::Operator::Add,
-                    std::move(extra))
+                ExprChild{makeBinaryExpr(makeLiteralExpr(1),
+                                          detail::BinaryOpExprNode::Operator::Add,
+                                          std::move(extra))
                               ->simplifiedExpr()});
             return result;
         }
         result->length_ =
-            ExprChild{std::make_unique<BinaryOpExpr>(length_.value()->clone().into_underlying(),
-                                                     detail::BinaryOpExprNode::Operator::Add,
-                                                     std::move(extra))
+            ExprChild{makeBinaryExpr(length_.value()->clone(),
+                                      detail::BinaryOpExprNode::Operator::Add,
+                                      std::move(extra))
                           ->simplifiedExpr()};
         return result;
     }

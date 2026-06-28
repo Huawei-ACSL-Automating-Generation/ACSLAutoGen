@@ -1377,9 +1377,13 @@ namespace acslg::test::unit::analyzer {
         auto original = std::make_unique<symbolic::SymbolAddress>(
             var->getType(), std::nullopt, point);
         auto withOffset =
-            original->withOffset(std::make_unique<symbolic::detail::LiteralExprNode>(5));
+            original->withOffset(symbolic::makeLiteralExpr(5));
         auto withLength =
-            withOffset->withLength(std::make_unique<symbolic::detail::LiteralExprNode>(3));
+            withOffset->withLength(symbolic::makeLiteralExpr(3));
+        auto addedOffset = withOffset->withAddedOffset(symbolic::makeLiteralExpr(2));
+        auto subtractedOffset = withOffset->withSubtractedOffset(symbolic::makeLiteralExpr(2));
+        auto addedLengthFromScalar = original->withAddedLength(symbolic::makeLiteralExpr(2));
+        auto addedLength = withLength->withAddedLength(symbolic::makeLiteralExpr(2));
         auto withoutLength = withLength->withoutLength();
         auto resetOffset   = withLength->withResetOffset();
 
@@ -1401,6 +1405,29 @@ namespace acslg::test::unit::analyzer {
                       withLength->getLength().value().get().get())
                       ->getLiteralValue(),
                   3);
+
+        EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(addedOffset->getOffset().get())
+                      ->getLiteralValue(),
+                  7);
+        EXPECT_FALSE(addedOffset->getLength());
+
+        EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(
+                      subtractedOffset->getOffset().get())
+                      ->getLiteralValue(),
+                  3);
+        EXPECT_FALSE(subtractedOffset->getLength());
+
+        ASSERT_TRUE(addedLengthFromScalar->getLength());
+        EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(
+                      addedLengthFromScalar->getLength().value().get().get())
+                      ->getLiteralValue(),
+                  3);
+
+        ASSERT_TRUE(addedLength->getLength());
+        EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(
+                      addedLength->getLength().value().get().get())
+                      ->getLiteralValue(),
+                  5);
 
         EXPECT_EQ(symbolic::cast<symbolic::detail::LiteralExprNode>(withoutLength->getOffset().get())
                       ->getLiteralValue(),
