@@ -838,12 +838,12 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
-        auto range = std::make_unique<symbolic::SymbolAddress>(
-            var->getType(),
-            std::make_unique<symbolic::VariableAddress>(var),
-            point);
-        range = range->withOffset(symbolic::makeRangeIndexExpr("i")).into_underlying();
-        range = range->withLength(symbolic::makeLiteralExpr(3)).into_underlying();
+        symbolic::ExprFactory factory;
+        auto rangeHandle = factory.symbolAddress(
+            var->getType(), factory.variableAddress(var), point);
+        rangeHandle = factory.withOffset(rangeHandle, factory.rangeIndex("i"));
+        rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
+        auto range = symbolic::cloneSymbolAddress(rangeHandle);
         auto rangeBase = range->getBaseInfo();
 
         std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
@@ -877,11 +877,11 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
-        auto range = std::make_unique<symbolic::SymbolAddress>(
-            var->getType(),
-            std::make_unique<symbolic::VariableAddress>(var),
-            point);
-        range = range->withLength(symbolic::makeLiteralExpr(3)).into_underlying();
+        symbolic::ExprFactory factory;
+        auto rangeHandle = factory.symbolAddress(
+            var->getType(), factory.variableAddress(var), point);
+        rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
+        auto range = symbolic::cloneSymbolAddress(rangeHandle);
         auto rangeBase = range->getBaseInfo();
 
         auto pred = symbolic::makeBinaryExpr(
@@ -924,11 +924,11 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
-        auto range = std::make_unique<symbolic::SymbolAddress>(
-            var->getType(),
-            std::make_unique<symbolic::VariableAddress>(var),
-            point);
-        range = range->withLength(symbolic::makeLiteralExpr(3)).into_underlying();
+        symbolic::ExprFactory factory;
+        auto rangeHandle = factory.symbolAddress(
+            var->getType(), factory.variableAddress(var), point);
+        rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
+        auto range = symbolic::cloneSymbolAddress(rangeHandle);
         auto rangeBase = range->getBaseInfo();
 
         std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
@@ -963,13 +963,14 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
         auto makeRange = [&]() {
-            auto range = std::make_unique<symbolic::SymbolAddress>(
-                var->getType(),
-                std::make_unique<symbolic::VariableAddress>(var),
-                point);
-            range = range->withOffset(symbolic::makeRangeIndexExpr("i")).into_underlying();
-            return range->withLength(symbolic::makeLiteralExpr(3)).into_underlying();
+            auto rangeHandle = factory.symbolAddress(
+                var->getType(), factory.variableAddress(var), point);
+            rangeHandle = factory.withOffset(rangeHandle, factory.rangeIndex("i"));
+            rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
+            return symbolic::cloneSymbolAddress(rangeHandle);
         };
         auto makeConstRange = [](std::unique_ptr<symbolic::SymbolAddress> range) {
             std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
@@ -977,8 +978,6 @@ namespace acslg::test::unit::analyzer {
                 std::move(constRange)};
         };
 
-        symbolic::ExprFactory factory;
-        symbolic::ExprFactoryScope scope(factory);
         auto one   = factory.literal(int64_t{1});
         auto three = factory.literal(int64_t{3});
 
