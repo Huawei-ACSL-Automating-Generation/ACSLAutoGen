@@ -34,6 +34,16 @@ namespace acslg::analyzer::symbolic {
                                SourcePoint fromPoint)
         : SumOverRange(makeInit(std::move(range)), indexName, std::move(fromPoint)) {}
 
+    SumOverRange::SumOverRange(AddrHandle range,
+                               std::string_view indexName,
+                               SourcePoint fromPoint)
+        : OverRangeExpr(ExprKind::K_SumOverRange,
+                        deriveType(range.cast<SymbolAddress>().getPointeeType()),
+                        range,
+                        indexName),
+          Symbol(Kind::K_SumOverRange),
+          fromPoint_(std::move(fromPoint)) {}
+
     OverRangeExpr::OverRangeExpr(const OverRangeExpr &other)
         : SymbolicExpr(other), range_(other.range_.clone()),
           indexName_(other.indexName_) {}

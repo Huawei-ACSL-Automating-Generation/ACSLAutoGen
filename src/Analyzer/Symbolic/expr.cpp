@@ -81,6 +81,34 @@ namespace acslg::analyzer::symbolic {
             return intern(std::make_unique<Structure>(structure->getInfo(), std::move(fields)));
         }
 
+        if (auto *sum = dyn_cast<SumOverRange>(&expr)) {
+            auto range = AddrHandle{cast<const Address>(importExpr(sum->getRange()).get().get())};
+            auto fromPoint = sum->getFromPoint();
+            if (!fromPoint)
+                ERROR("SumOverRange must have a source point.");
+            return intern(std::make_unique<SumOverRange>(
+                range, sum->getIndexName(), fromPoint.value()));
+        }
+
+        if (auto *quantifier = dyn_cast<QuantifierOverRange>(&expr)) {
+            auto range =
+                AddrHandle{cast<const Address>(importExpr(quantifier->getRange()).get().get())};
+            auto pred = importExpr(quantifier->getPredicate());
+            return intern(std::make_unique<QuantifierOverRange>(
+                range, quantifier->getIndexName(), quantifier->getQuantifier(), pred));
+        }
+
+        if (auto *maxMin = dyn_cast<MaxMinOverRange>(&expr)) {
+            auto range =
+                AddrHandle{cast<const Address>(importExpr(maxMin->getRange()).get().get())};
+            auto body = importExpr(maxMin->getExpr());
+            auto fromPoint = maxMin->getFromPoint();
+            if (!fromPoint)
+                ERROR("MaxMinOverRange must have a source point.");
+            return intern(std::make_unique<MaxMinOverRange>(
+                range, maxMin->getIndexName(), maxMin->getExtremum(), body, fromPoint.value()));
+        }
+
         return intern(expr.clone());
     }
 

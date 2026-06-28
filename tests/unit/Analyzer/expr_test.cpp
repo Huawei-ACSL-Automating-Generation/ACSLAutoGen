@@ -680,6 +680,79 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(a.isa<symbolic::UnknownExpr>());
     }
 
+    TEST(ExprFactoryTest, ImportsLegacyAggregateChildrenAsHandles) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        auto makeRange =
+            [&]() -> ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>> {
+            auto range = std::make_unique<symbolic::SymbolAddress>(
+                var->getType(),
+                std::make_unique<symbolic::VariableAddress>(var),
+                point);
+            range = range->withLength(
+                             std::make_unique<symbolic::detail::LiteralExprNode>(3))
+                        .into_underlying();
+            std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
+            return ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
+                std::move(constRange)};
+        };
+
+        auto makePred =
+            []() -> ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>> {
+            auto pred = std::make_unique<symbolic::BinaryOpExpr>(
+                std::make_unique<symbolic::SymbolAddress::RangeIndex>("i"),
+                symbolic::BinaryOpExpr::Operator::LessThan,
+                std::make_unique<symbolic::detail::LiteralExprNode>(3));
+            std::unique_ptr<const symbolic::SymbolicExpr> constPred = std::move(pred);
+            return ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
+                std::move(constPred)};
+        };
+
+        symbolic::SumOverRange sum{makeRange(), "i", point};
+        symbolic::QuantifierOverRange quantifier{
+            makeRange(), "i", symbolic::QuantifierOverRange::Quantifier::ForAll, makePred()};
+        symbolic::MaxMinOverRange max{
+            makeRange(), "i", symbolic::MaxMinOverRange::Extremum::Max, point};
+
+        symbolic::ExprFactory factory;
+
+        auto importedSum = factory.importExpr(sum);
+        auto sumRange    = factory.importExpr(sum.getRange());
+        const auto &sumNode = importedSum.cast<symbolic::SumOverRange>();
+        EXPECT_EQ(&sumNode.getRange(), sumRange.get().get());
+        EXPECT_EQ(importedSum, factory.importExpr(*sum.clone()));
+
+        auto importedQuantifier = factory.importExpr(quantifier);
+        auto quantifierRange    = factory.importExpr(quantifier.getRange());
+        auto quantifierPred     = factory.importExpr(quantifier.getPredicate());
+        const auto &quantifierNode =
+            importedQuantifier.cast<symbolic::QuantifierOverRange>();
+        EXPECT_EQ(&quantifierNode.getRange(), quantifierRange.get().get());
+        EXPECT_EQ(&quantifierNode.getPredicate(), quantifierPred.get().get());
+        EXPECT_EQ(importedQuantifier, factory.importExpr(*quantifier.clone()));
+
+        auto importedMax = factory.importExpr(max);
+        auto maxRange    = factory.importExpr(max.getRange());
+        auto maxBody     = factory.importExpr(max.getExpr());
+        const auto &maxNode = importedMax.cast<symbolic::MaxMinOverRange>();
+        EXPECT_EQ(&maxNode.getRange(), maxRange.get().get());
+        EXPECT_EQ(&maxNode.getExpr(), maxBody.get().get());
+        EXPECT_EQ(importedMax, factory.importExpr(*max.clone()));
+    }
+
     TEST(SumOverRangeRebuildTest, RangeUsesExprChildAcrossCloneAndSubstitution) {
         ASTExtractor e;
         e.init(R"c(

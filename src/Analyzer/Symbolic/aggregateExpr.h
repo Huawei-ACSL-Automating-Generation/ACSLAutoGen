@@ -104,6 +104,9 @@ namespace acslg::analyzer::symbolic {
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override;
 
+        const SymbolAddress &getRange() const { return range(); }
+        std::string_view getIndexName() const { return indexName_; }
+
       protected:
         OverRangeExpr(ExprKind kind,
                       Type type,
@@ -111,6 +114,11 @@ namespace acslg::analyzer::symbolic {
                       std::string_view indexName)
             : SymbolicExpr(kind, type), range_(makeRangeChild(std::move(range))),
               indexName_(indexName) {
+            if (!this->range().getLength())
+                ERROR("`range_` is not a memory *range*.");
+        }
+        OverRangeExpr(ExprKind kind, Type type, AddrHandle range, std::string_view indexName)
+            : SymbolicExpr(kind, type), range_(range.asExpr()), indexName_(indexName) {
             if (!this->range().getLength())
                 ERROR("`range_` is not a memory *range*.");
         }
@@ -140,6 +148,7 @@ namespace acslg::analyzer::symbolic {
         SumOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
                      std::string_view indexName,
                      SourcePoint fromPoint);
+        SumOverRange(AddrHandle range, std::string_view indexName, SourcePoint fromPoint);
 
         // SymbolicExpr
         /**
@@ -235,6 +244,18 @@ namespace acslg::analyzer::symbolic {
                             std::move(range),
                             indexName),
               quant_(quant), pred_(ExprChild::fromConstOwned(std::move(pred))) {}
+        QuantifierOverRange(AddrHandle range,
+                            std::string_view indexName,
+                            Quantifier quant,
+                            ExprHandle pred)
+            : OverRangeExpr(ExprKind::K_QuantifierOverRange,
+                            Type{ScalarKind::Bool, 8},
+                            range,
+                            indexName),
+              quant_(quant), pred_(pred) {}
+
+        Quantifier getQuantifier() const { return quant_; }
+        const SymbolicExpr &getPredicate() const { return *pred_; }
 
         // SymbolicExpr
         /// @brief Clone the quantified expression.
@@ -309,6 +330,20 @@ namespace acslg::analyzer::symbolic {
               Symbol(Kind::K_MaxMinOverRange), extremum_(extremum),
               expr_(ExprChild::fromConstOwned(std::move(expr))),
               fromPoint_(std::move(fromPoint)) {}
+        MaxMinOverRange(AddrHandle range,
+                        std::string_view indexName,
+                        Extremum extremum,
+                        ExprHandle expr,
+                        SourcePoint fromPoint)
+            : OverRangeExpr(ExprKind::K_MaxMinOverRange,
+                            expr.getValType(),
+                            range,
+                            indexName),
+              Symbol(Kind::K_MaxMinOverRange), extremum_(extremum), expr_(expr),
+              fromPoint_(std::move(fromPoint)) {}
+
+        Extremum getExtremum() const { return extremum_; }
+        const SymbolicExpr &getExpr() const { return *expr_; }
 
         // SymbolicExpr
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override {
