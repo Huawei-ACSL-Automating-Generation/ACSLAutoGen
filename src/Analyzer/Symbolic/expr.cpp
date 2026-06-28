@@ -2628,7 +2628,8 @@ namespace acslg::analyzer::symbolic {
 
     std::unique_ptr<SymbolicExpr> createLNotExpr(
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-        return std::make_unique<UnaryOpExpr>(detail::UnaryOpExprNode::Operator::LogicalNot, std::move(expr));
+        return makeUnaryExpr(detail::UnaryOpExprNode::Operator::LogicalNot, std::move(expr))
+            .into_underlying();
     }
 
     detail::BinaryOpExprNode::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp) {
