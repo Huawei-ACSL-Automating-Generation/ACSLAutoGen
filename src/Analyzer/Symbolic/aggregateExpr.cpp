@@ -222,7 +222,7 @@ namespace acslg::analyzer::symbolic {
 
         auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
         newQOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newQOR->pred_  = std::move(subedPred).into_underlying();
+        newQOR->pred_  = ExprChild{std::move(subedPred)};
         return newQOR;
     }
 
@@ -237,7 +237,7 @@ namespace acslg::analyzer::symbolic {
 
         auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
         newQOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newQOR->pred_  = std::move(subedPred).into_underlying();
+        newQOR->pred_  = ExprChild{std::move(subedPred)};
         return newQOR;
     }
 
@@ -253,7 +253,7 @@ namespace acslg::analyzer::symbolic {
 
         auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
         newQOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newQOR->pred_  = std::move(subedPred).into_underlying();
+        newQOR->pred_  = ExprChild{std::move(subedPred)};
         return newQOR;
     }
 
@@ -262,7 +262,7 @@ namespace acslg::analyzer::symbolic {
             return *this;
         OverRangeExpr::operator=(other);
         quant_ = other.quant_;
-        pred_  = other.pred_->clone().into_underlying();
+        pred_  = ExprChild{other.pred_.clone()};
         return *this;
     }
 

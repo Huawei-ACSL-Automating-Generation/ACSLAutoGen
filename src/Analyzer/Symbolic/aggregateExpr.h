@@ -216,7 +216,7 @@ namespace acslg::analyzer::symbolic {
 
         QuantifierOverRange(const QuantifierOverRange &other)
             : OverRangeExpr(other), quant_(other.quant_),
-              pred_(other.pred_->clone().into_underlying()) {}
+              pred_(other.pred_.clone()) {}
         QuantifierOverRange(QuantifierOverRange &&) = default;
         QuantifierOverRange &operator=(const QuantifierOverRange &);
         QuantifierOverRange &operator=(QuantifierOverRange &&) = default;
@@ -229,7 +229,7 @@ namespace acslg::analyzer::symbolic {
                             Type{ScalarKind::Bool, 8},
                             std::move(range),
                             indexName),
-              quant_(quant), pred_(std::move(pred)) {}
+              quant_(quant), pred_(ExprChild::fromConstOwned(std::move(pred))) {}
 
         // SymbolicExpr
         /// @brief Clone the quantified expression.
@@ -264,7 +264,7 @@ namespace acslg::analyzer::symbolic {
 
       private:
         Quantifier quant_;
-        utils::not_null<std::unique_ptr<const SymbolicExpr>> pred_;
+        ExprChild pred_;
     };
 
     class MaxMinOverRange : public OverRangeExpr, public Symbol {

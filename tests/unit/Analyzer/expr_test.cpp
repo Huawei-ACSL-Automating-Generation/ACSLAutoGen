@@ -7,6 +7,7 @@
 
 #include "ASTExtractor.h"
 #include "Context/context.h"
+#include "Symbolic/aggregateExpr.h"
 #include "Symbolic/expr.h"
 #include "testHelper.h"
 
@@ -677,6 +678,54 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_EQ(a, b);
         EXPECT_TRUE(a.isa<symbolic::UnknownExpr>());
+    }
+
+    TEST(QuantifierOverRangeRebuildTest, PredicateUsesExprChildAcrossCloneAndSubstitution) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        auto range = std::make_unique<symbolic::SymbolAddress>(
+            var->getType(),
+            std::make_unique<symbolic::VariableAddress>(var),
+            point);
+        range = range->withLength(
+                         std::make_unique<symbolic::detail::LiteralExprNode>(3))
+                    .into_underlying();
+        auto rangeBase = range->getBaseInfo();
+
+        auto pred = std::make_unique<symbolic::BinaryOpExpr>(
+            std::make_unique<symbolic::SymbolAddress::RangeIndex>("i"),
+            symbolic::BinaryOpExpr::Operator::LessThan,
+            std::make_unique<symbolic::detail::LiteralExprNode>(3));
+
+        std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
+        std::unique_ptr<const symbolic::SymbolicExpr> constPred = std::move(pred);
+        symbolic::QuantifierOverRange quantifier{
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
+                std::move(constRange)},
+            "i",
+            symbolic::QuantifierOverRange::Quantifier::ForAll,
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
+                std::move(constPred)}};
+
+        auto clone = quantifier.clone();
+        EXPECT_EQ(*clone, quantifier);
+
+        auto substituted = quantifier.getRangeIndexSubstituted(
+            rangeBase, symbolic::detail::LiteralExprNode{1});
+        EXPECT_NE(*substituted, quantifier);
     }
 
     TEST(ExprFacadeTest, LiteralAndOperatorsUseCurrentFactory) {
