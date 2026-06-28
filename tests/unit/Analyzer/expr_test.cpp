@@ -1238,6 +1238,13 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(field2.get(), factory.importExpr(*field2.get()).get().get());
         EXPECT_EQ(arrayAddr->getLength().value().get().get(),
                   factory.literal(uint64_t{2}).get().get());
+
+        auto structureClone = structureNode.clone();
+        auto *clonedStructure =
+            symbolic::cast<symbolic::Structure>(structureClone.get().get());
+        EXPECT_EQ(clonedStructure->getFieldValue(0).get(), field0.get());
+        EXPECT_EQ(clonedStructure->getFieldValue(1).get(), field1.get());
+        EXPECT_EQ(clonedStructure->getFieldValue(2).get(), field2.get());
     }
 
     TEST(ExprFactoryTest, AddressRebuildsReuseInternedRangeChildren) {

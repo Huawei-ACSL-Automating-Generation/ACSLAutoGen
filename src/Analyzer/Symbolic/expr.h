@@ -1097,7 +1097,7 @@ namespace acslg::analyzer::symbolic {
             std::ranges::transform(
                 other.fields_, std::back_inserter(fields_),
                 [](const ExprChild &field) -> ExprChild {
-                    return ExprChild{field.clone()};
+                    return field.copy();
                 });
         }
 
