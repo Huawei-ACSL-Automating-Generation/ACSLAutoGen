@@ -589,19 +589,18 @@ namespace acslg::analyzer::symbolic {
                 if (C == 1)
                     result = expr->clone();
                 else
-                    result = std::make_unique<BinaryOpExpr>(std::make_unique<detail::LiteralExprNode>(C),
-                                                            Multiply, expr->clone());
+                    result = makeBinaryExpr(makeLiteralExpr(static_cast<int64_t>(C)),
+                                            Multiply, expr->clone());
             } else {
                 unsigned absC = std::abs(C);
-                std::unique_ptr<SymbolicExpr> varExpr{nullptr};
+                utils::not_null<std::unique_ptr<SymbolicExpr>> varExpr =
+                    expr->clone();
                 if (absC != 1)
-                    varExpr = std::make_unique<BinaryOpExpr>(std::make_unique<detail::LiteralExprNode>(absC),
-                                                             Multiply, expr->clone());
-                else
-                    varExpr = expr->clone().into_underlying();
+                    varExpr = makeBinaryExpr(makeLiteralExpr(static_cast<int64_t>(absC)),
+                                             Multiply, expr->clone());
                 // Combine the current polynomial with the new term using the sign of the
                 // coefficient.
-                result = std::make_unique<BinaryOpExpr>(
+                result = makeBinaryExpr(
                     std::move(result.value()), (C > 0 ? Add : Subtract), std::move(varExpr));
             }
         }
@@ -609,11 +608,11 @@ namespace acslg::analyzer::symbolic {
             inhomo || result == std::nullopt) {
             if (result != std::nullopt) {
                 // Append the constant term to the linear combination.
-                result = std::make_unique<BinaryOpExpr>(
+                result = makeBinaryExpr(
                     std::move(result.value()), (inhomo > 0 ? Add : Subtract),
-                    std::make_unique<detail::LiteralExprNode>(std::abs(inhomo)));
+                    makeLiteralExpr(static_cast<int64_t>(std::abs(inhomo))));
             } else
-                result = std::make_unique<detail::LiteralExprNode>(inhomo);
+                result = makeLiteralExpr(static_cast<int64_t>(inhomo));
         }
         if (result == std::nullopt) {
             ERROR("Simplified expr is null! Something goes wrong.");
@@ -1339,9 +1338,10 @@ namespace acslg::analyzer::symbolic {
                 const bool expectTrue = (op_ == Op::Equal) ? (v == 1) : (v == 0);
                 if (expectTrue)
                     return boolExpr.clone().into_underlying();
-                return std::make_unique<UnaryOpExpr>(
+                return makeUnaryExpr(
                     detail::UnaryOpExprNode::Operator::LogicalNot,
-                    utils::not_null<std::unique_ptr<SymbolicExpr>>(boolExpr.clone()));
+                    boolExpr.clone())
+                    .into_underlying();
             };
 
             if (auto simplified = simplifyBoolCmp(*LHS, *RHS))
@@ -1379,7 +1379,7 @@ namespace acslg::analyzer::symbolic {
             }
         }
 
-        return std::make_unique<BinaryOpExpr>(std::move(LHS), op_, std::move(RHS));
+        return makeBinaryExpr(std::move(LHS), op_, std::move(RHS));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::simplifiedExpr() const {
@@ -1388,7 +1388,7 @@ namespace acslg::analyzer::symbolic {
         if (isLinear())
             return simplifiedExprIfLinear();
         auto subExpr = expr_->simplifiedExpr();
-        return std::make_unique<UnaryOpExpr>(op_, std::move(subExpr));
+        return makeUnaryExpr(op_, std::move(subExpr));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::simplifiedExpr() const {

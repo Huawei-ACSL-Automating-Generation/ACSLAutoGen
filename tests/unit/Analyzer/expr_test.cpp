@@ -705,6 +705,40 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedFacade.getValType(), targetType);
     }
 
+    TEST(ExprFactoryTest, ScopedSimplifiedLinearExprRebuildsThroughFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        auto varAddr = factory.variableAddress(var);
+        auto x       = factory.symbolValue(symbolic::deriveType(var->getType()),
+                                           varAddr, point);
+        auto two     = factory.literal(2);
+        auto sum     = factory.binary(x, symbolic::BinaryOpExpr::Operator::Add, two);
+
+        symbolic::ExprFactoryScope scope(factory);
+        auto simplified = sum->simplifiedExpr();
+        auto *rebuilt = symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
+
+        EXPECT_EQ(rebuilt->getLeft().get(),
+                  factory.importExpr(*rebuilt->getLeft().get()).get().get());
+        EXPECT_EQ(rebuilt->getRight().get(),
+                  factory.importExpr(*rebuilt->getRight().get()).get().get());
+        EXPECT_EQ(factory.importExpr(*simplified), factory.importExpr(*simplified->clone()));
+    }
+
     TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {
         symbolic::ExprFactory factory;
 
