@@ -82,6 +82,21 @@ namespace acslg::analyzer::symbolic {
                 utils::not_null<std::unique_ptr<const SymbolicExpr>>{std::move(constBody)},
                 std::move(fromPoint));
         }
+
+        ExprHandle makeMaxMinDefaultBody(ExprFactory &factory,
+                                         const SymbolAddress &range,
+                                         std::string_view indexName,
+                                         const SourcePoint &fromPoint) {
+            auto indexedRange = factory.withOffset(factory.importAddress(range),
+                                                   factory.rangeIndex(indexName));
+            indexedRange = factory.withoutLength(indexedRange);
+            std::unique_ptr<const Address> clonedRange =
+                indexedRange->addressClone().into_underlying();
+            std::optional<utils::not_null<std::unique_ptr<const Address>>> from{
+                utils::not_null<std::unique_ptr<const Address>>{std::move(clonedRange)}};
+            auto body = getSymbol(range.getPointeeType(), std::move(from), fromPoint);
+            return factory.importExpr(*body);
+        }
     } // namespace
 
     SumOverRange::Init SumOverRange::makeInit(
@@ -505,12 +520,7 @@ namespace acslg::analyzer::symbolic {
         SourcePoint fromPoint) {
         if (!range)
             ERROR("SumOverRange requires a non-null range.");
-        std::unique_ptr<const SymbolAddress> constRange = std::move(range);
-        auto aggregate = std::make_unique<SumOverRange>(
-            utils::not_null<std::unique_ptr<const SymbolAddress>>{std::move(constRange)},
-            indexName, std::move(fromPoint));
-        return importIfFactoryScoped(utils::not_null<std::unique_ptr<SymbolicExpr>>{
-            std::move(aggregate)});
+        return rebuildSumOverRange(*range, indexName, std::move(fromPoint));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeQuantifierOverRangeExpr(
@@ -520,15 +530,7 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> predicate) {
         if (!range)
             ERROR("QuantifierOverRange requires a non-null range.");
-        std::unique_ptr<const SymbolAddress> constRange = std::move(range);
-        std::unique_ptr<const SymbolicExpr> constPredicate =
-            std::move(predicate).into_underlying();
-        auto aggregate = std::make_unique<QuantifierOverRange>(
-            utils::not_null<std::unique_ptr<const SymbolAddress>>{std::move(constRange)},
-            indexName, quantifier,
-            utils::not_null<std::unique_ptr<const SymbolicExpr>>{std::move(constPredicate)});
-        return importIfFactoryScoped(utils::not_null<std::unique_ptr<SymbolicExpr>>{
-            std::move(aggregate)});
+        return rebuildQuantifierOverRange(*range, indexName, quantifier, std::move(predicate));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeMaxMinOverRangeExpr(
@@ -538,12 +540,18 @@ namespace acslg::analyzer::symbolic {
         SourcePoint fromPoint) {
         if (!range)
             ERROR("MaxMinOverRange requires a non-null range.");
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            auto body = makeMaxMinDefaultBody(factory, *range, indexName, fromPoint);
+            return factory.cloneExpr(factory.intern(std::make_unique<MaxMinOverRange>(
+                factory.importAddress(*range), indexName, extremum, body, std::move(fromPoint))));
+        }
+
         std::unique_ptr<const SymbolAddress> constRange = std::move(range);
         auto aggregate = std::make_unique<MaxMinOverRange>(
             utils::not_null<std::unique_ptr<const SymbolAddress>>{std::move(constRange)},
             indexName, extremum, std::move(fromPoint));
-        return importIfFactoryScoped(utils::not_null<std::unique_ptr<SymbolicExpr>>{
-            std::move(aggregate)});
+        return utils::not_null<std::unique_ptr<SymbolicExpr>>{std::move(aggregate)};
     }
 
     utils::not_null<std::unique_ptr<const SymbolicExpr>> MaxMinOverRange::makeDefaultExpr(
