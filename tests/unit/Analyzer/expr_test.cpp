@@ -1850,4 +1850,46 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(*updated->getFieldValue(0).get(), *replacement.get().get());
         EXPECT_EQ(*updated->getFieldValue(1).get(), *structure->getFieldValue(1).get());
     }
+
+    TEST(StructureRebuildTest, ScopedValueSubstitutionRebuildsFieldsThroughFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct S {
+                int a;
+                int b;
+            };
+
+            int f(void) {
+                struct S s;
+                return 0;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto structureExpr = symbolic::makeUnknownStructure(
+            var->getType(), std::make_unique<symbolic::VariableAddress>(var), point);
+        auto *structure = symbolic::cast<symbolic::Structure>(structureExpr.get().get());
+        auto replacement = factory.literal(42);
+
+        symbolic::SymbolicExpr::HashExprMap substitutions;
+        substitutions.emplace(structure->getFieldValue(0)->hash(),
+                              factory.cloneExpr(replacement));
+
+        auto substituted = structure->getSubstitutedValueExpr(substitutions);
+        const auto &substitutedStructure =
+            *symbolic::cast<symbolic::Structure>(substituted.get().get());
+
+        EXPECT_EQ(substitutedStructure.getFieldValue(0).get(), replacement.get().get());
+        EXPECT_EQ(substitutedStructure.getFieldValue(1).get(),
+                  factory.importExpr(*structure->getFieldValue(1)).get().get());
+    }
 } // namespace acslg::test::unit::analyzer
