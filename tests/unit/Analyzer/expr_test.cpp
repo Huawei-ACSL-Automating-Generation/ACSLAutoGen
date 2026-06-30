@@ -1319,6 +1319,57 @@ namespace acslg::test::unit::analyzer {
                   factory.structure(record, layout, factory.variableAddress(st), point));
     }
 
+    TEST(ExprFactoryTest, ScopedAddressSubstitutionRebuildsThroughFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct S {
+                int a;
+            };
+
+            void f(void) {
+                int x;
+                struct S s;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *x = e.findNthDecl<VarDecl>(1);
+        auto *s = e.findNthDecl<VarDecl>(2);
+        auto *record = e.findFirstDecl<RecordDecl>();
+        ASSERT_NE(x, nullptr);
+        ASSERT_NE(s, nullptr);
+        ASSERT_NE(record, nullptr);
+        ASSERT_TRUE(record->isCompleteDefinition());
+        record = record->getDefinition();
+        ASSERT_FALSE(record->fields().empty());
+        auto *firstField = *record->field_begin();
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto varAddr = factory.variableAddress(x);
+        auto rangeIndex = factory.rangeIndex("i");
+        auto indexedAddr = factory.symbolAddress(
+            x->getType(), varAddr, point, rangeIndex, rangeIndex);
+        auto index = factory.literal(int64_t{4});
+        auto rangeBase = indexedAddr.cast<symbolic::SymbolAddress>().getBaseInfo();
+
+        auto indexedClone = symbolic::cloneSymbolAddress(indexedAddr);
+        auto substitutedAddr =
+            indexedClone->getRangeIndexSubstituted(rangeBase, *index.get());
+        EXPECT_EQ(factory.importExpr(*substitutedAddr),
+                  factory.symbolAddress(x->getType(), varAddr, point, index, index).asExpr());
+
+        auto fieldAddr = factory.fieldAddress(
+            firstField->getType(), record, factory.variableAddress(s), 0);
+        auto fieldClone = symbolic::cloneFieldAddress(fieldAddr);
+        auto substitutedField =
+            fieldClone->getRangeIndexSubstituted(rangeBase, *index.get());
+        EXPECT_EQ(factory.importExpr(*substitutedField), fieldAddr.asExpr());
+    }
+
     TEST(ExprFactoryTest, AddressRebuildsReuseInternedRangeChildren) {
         ASTExtractor e;
         e.init(R"c(
