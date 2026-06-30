@@ -23,6 +23,65 @@ namespace acslg::analyzer::symbolic {
 
             return ExprFactoryScope::current().importAndCloneExpr(*expr);
         }
+
+        utils::not_null<std::unique_ptr<const SymbolAddress>> cloneConstRange(
+            const SymbolAddress &range) {
+            return utils::not_null<std::unique_ptr<const SymbolAddress>>{
+                std::make_unique<const SymbolAddress>(range)};
+        }
+
+        utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildSumOverRange(
+            const SymbolAddress &range,
+            std::string_view indexName,
+            SourcePoint fromPoint) {
+            if (ExprFactoryScope::hasCurrent()) {
+                auto &factory = ExprFactoryScope::current();
+                return factory.cloneExpr(factory.intern(std::make_unique<SumOverRange>(
+                    factory.importAddress(range), indexName, std::move(fromPoint))));
+            }
+
+            return std::make_unique<SumOverRange>(
+                cloneConstRange(range), indexName, std::move(fromPoint));
+        }
+
+        utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildQuantifierOverRange(
+            const SymbolAddress &range,
+            std::string_view indexName,
+            QuantifierOverRange::Quantifier quantifier,
+            utils::not_null<std::unique_ptr<SymbolicExpr>> predicate) {
+            if (ExprFactoryScope::hasCurrent()) {
+                auto &factory = ExprFactoryScope::current();
+                return factory.cloneExpr(factory.intern(std::make_unique<QuantifierOverRange>(
+                    factory.importAddress(range), indexName, quantifier,
+                    factory.importExpr(*predicate))));
+            }
+
+            std::unique_ptr<const SymbolicExpr> constPredicate =
+                std::move(predicate).into_underlying();
+            return std::make_unique<QuantifierOverRange>(
+                cloneConstRange(range), indexName, quantifier,
+                utils::not_null<std::unique_ptr<const SymbolicExpr>>{std::move(constPredicate)});
+        }
+
+        utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildMaxMinOverRange(
+            const SymbolAddress &range,
+            std::string_view indexName,
+            MaxMinOverRange::Extremum extremum,
+            utils::not_null<std::unique_ptr<SymbolicExpr>> body,
+            SourcePoint fromPoint) {
+            if (ExprFactoryScope::hasCurrent()) {
+                auto &factory = ExprFactoryScope::current();
+                return factory.cloneExpr(factory.intern(std::make_unique<MaxMinOverRange>(
+                    factory.importAddress(range), indexName, extremum, factory.importExpr(*body),
+                    std::move(fromPoint))));
+            }
+
+            std::unique_ptr<const SymbolicExpr> constBody = std::move(body).into_underlying();
+            return std::make_unique<MaxMinOverRange>(
+                cloneConstRange(range), indexName, extremum,
+                utils::not_null<std::unique_ptr<const SymbolicExpr>>{std::move(constBody)},
+                std::move(fromPoint));
+        }
     } // namespace
 
     SumOverRange::Init SumOverRange::makeInit(
@@ -172,9 +231,7 @@ namespace acslg::analyzer::symbolic {
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
-        return importIfFactoryScoped(
-            std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
-                                           indexName_, pathSubTo.getStartPoint()));
+        return rebuildSumOverRange(*subedRange, indexName_, pathSubTo.getStartPoint());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getRangeIndexSubstituted(
@@ -184,9 +241,7 @@ namespace acslg::analyzer::symbolic {
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
-        return importIfFactoryScoped(
-            std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
-                                           indexName_, fromPoint_));
+        return rebuildSumOverRange(*subedRange, indexName_, fromPoint_);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getSubstitutedValueExpr(
@@ -197,9 +252,7 @@ namespace acslg::analyzer::symbolic {
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
-        return importIfFactoryScoped(
-            std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
-                                           indexName_, fromPoint_));
+        return rebuildSumOverRange(*subedRange, indexName_, fromPoint_);
     }
 
     utils::expected<std::string, SymbolicExpr::GetACSLError> SumOverRange::doGetACSL(
@@ -259,10 +312,7 @@ namespace acslg::analyzer::symbolic {
         // Quantifier bodies need substitution as well so predicates refer to the new path labels.
         auto subedPred = pred_->getSubstitutedExpr(pathSubTo, pointToSub);
 
-        auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
-        newQOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
-        newQOR->pred_  = ExprChild{std::move(subedPred)};
-        return importIfFactoryScoped(std::move(newQOR));
+        return rebuildQuantifierOverRange(*subedRange, indexName_, quant_, std::move(subedPred));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getRangeIndexSubstituted(
@@ -274,10 +324,7 @@ namespace acslg::analyzer::symbolic {
             ERROR("Substituted expression should be a *range*");
         auto subedPred = pred_->getRangeIndexSubstituted(rangeBase, indexExpr);
 
-        auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
-        newQOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
-        newQOR->pred_  = ExprChild{std::move(subedPred)};
-        return importIfFactoryScoped(std::move(newQOR));
+        return rebuildQuantifierOverRange(*subedRange, indexName_, quant_, std::move(subedPred));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getSubstitutedValueExpr(
@@ -290,10 +337,7 @@ namespace acslg::analyzer::symbolic {
             ERROR("Substituted expression should be a *range*");
         auto subedPred = pred_->getSubstitutedValueExpr(hashExprMap);
 
-        auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
-        newQOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
-        newQOR->pred_  = ExprChild{std::move(subedPred)};
-        return importIfFactoryScoped(std::move(newQOR));
+        return rebuildQuantifierOverRange(*subedRange, indexName_, quant_, std::move(subedPred));
     }
 
     QuantifierOverRange &QuantifierOverRange::operator=(const QuantifierOverRange &other) {
@@ -387,12 +431,10 @@ namespace acslg::analyzer::symbolic {
 
         auto subedBody = expr_->getSubstitutedExpr(pathSubTo, pointToSub);
 
-        auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
-        newMMOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
-        newMMOR->expr_  = ExprChild{std::move(subedBody)};
         if (fromPoint_ == pointToSub)
             TODO();
-        return importIfFactoryScoped(std::move(newMMOR));
+        return rebuildMaxMinOverRange(*subedRange, indexName_, extremum_, std::move(subedBody),
+                                      fromPoint_);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getRangeIndexSubstituted(
@@ -404,10 +446,8 @@ namespace acslg::analyzer::symbolic {
             ERROR("Substituted expression should be a *range*");
         auto subedBody = expr_->getRangeIndexSubstituted(rangeBase, indexExpr);
 
-        auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
-        newMMOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
-        newMMOR->expr_  = ExprChild{std::move(subedBody)};
-        return importIfFactoryScoped(std::move(newMMOR));
+        return rebuildMaxMinOverRange(*subedRange, indexName_, extremum_, std::move(subedBody),
+                                      fromPoint_);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getSubstitutedValueExpr(
@@ -420,10 +460,8 @@ namespace acslg::analyzer::symbolic {
             ERROR("Substituted expression should be a *range*");
         auto subedBody = expr_->getSubstitutedValueExpr(hashExprMap);
 
-        auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
-        newMMOR->range_ = makeRangeChild(std::make_unique<const SymbolAddress>(*subedRange));
-        newMMOR->expr_  = ExprChild{std::move(subedBody)};
-        return importIfFactoryScoped(std::move(newMMOR));
+        return rebuildMaxMinOverRange(*subedRange, indexName_, extremum_, std::move(subedBody),
+                                      fromPoint_);
     }
 
     MaxMinOverRange &MaxMinOverRange::operator=(const MaxMinOverRange &other) {
