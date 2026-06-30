@@ -202,19 +202,19 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::getSubstitutedExpr(
         const Path &,
         const SourcePoint &) const {
-        return clone();
+        return importIfFactoryScoped(clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::
         getRangeIndexSubstituted(const SymbolAddrBaseInfo &, const SymbolicExpr &indexExpr) const {
-        return indexExpr.clone();
+        return importIfFactoryScoped(indexExpr.clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
-        return clone();
+            return importIfFactoryScoped(it->second->clone());
+        return importIfFactoryScoped(clone());
     }
 
     std::string SumOverRange::dump() const {

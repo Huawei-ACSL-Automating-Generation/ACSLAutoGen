@@ -791,6 +791,38 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(imported, k);
     }
 
+    TEST(ExprFactoryTest, ScopedRangeIndexSubstitutionPreservesFactoryChildren) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+        symbolic::SymbolAddrBaseInfo rangeBase{std::nullopt, point, var->getType()};
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto one = factory.literal(int64_t{1});
+        auto two = factory.literal(int64_t{2});
+        auto replacement =
+            factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
+
+        symbolic::SymbolAddress::RangeIndex legacy{"i"};
+        auto substituted = legacy.getRangeIndexSubstituted(rangeBase, *replacement.get());
+        const auto &node = *symbolic::cast<symbolic::BinaryOpExpr>(substituted.get().get());
+
+        EXPECT_EQ(node.getLeft().get(), one.get().get());
+        EXPECT_EQ(node.getRight().get(), two.get().get());
+    }
+
     TEST(ExprFactoryTest, ImportsLegacyAggregateChildrenAsHandles) {
         ASTExtractor e;
         e.init(R"c(
