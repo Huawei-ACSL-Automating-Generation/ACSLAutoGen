@@ -840,6 +840,41 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(node.getRight().get(), two.get().get());
     }
 
+    TEST(ExprFactoryTest, ScopedLeafNoOpSubstitutionImportsThroughFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+        symbolic::SymbolAddrBaseInfo rangeBase{std::nullopt, point, var->getType()};
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto literal = factory.literal(int64_t{7});
+        auto index = factory.literal(int64_t{0});
+        auto substitutedLiteral = literal->getRangeIndexSubstituted(rangeBase, *index.get());
+        EXPECT_EQ(factory.importExpr(*substitutedLiteral), literal);
+
+        symbolic::SymbolicExpr::HashExprMap emptySubstitutions;
+        auto valueSubstitutedLiteral = literal->getSubstitutedValueExpr(emptySubstitutions);
+        EXPECT_EQ(factory.importExpr(*valueSubstitutedLiteral), literal);
+
+        auto varAddr = factory.variableAddress(var);
+        auto substitutedAddr = varAddr->getRangeIndexSubstituted(rangeBase, *index.get());
+        const auto *addr = symbolic::cast<symbolic::Address>(substitutedAddr.get().get());
+        EXPECT_EQ(factory.importAddress(*addr), varAddr);
+    }
+
     TEST(ExprFactoryTest, ImportsLegacyAggregateChildrenAsHandles) {
         ASTExtractor e;
         e.init(R"c(

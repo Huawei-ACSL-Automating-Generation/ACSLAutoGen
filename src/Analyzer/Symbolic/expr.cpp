@@ -1829,21 +1829,21 @@ namespace acslg::analyzer::symbolic {
         const Path &,
         const SourcePoint &) const {
         // Nothing to substitute
-        return clone();
+        return importThroughCurrentFactory(clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::getSubstitutedExpr(
         const Path &,
         const SourcePoint &) const {
         // Nothing to substitute
-        return clone();
+        return importThroughCurrentFactory(clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> VariableAddress::getSubstitutedExpr(
         const Path &,
         const SourcePoint &) const {
         // Nothing to substitute
-        return clone();
+        return importThroughCurrentFactory(clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::getSubstitutedExpr(
@@ -1976,21 +1976,21 @@ namespace acslg::analyzer::symbolic {
         const SymbolAddrBaseInfo &,
         const SymbolicExpr &) const {
         // Nothing to substitute
-        return clone();
+        return importThroughCurrentFactory(clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &,
         const SymbolicExpr &) const {
         // Nothing to substitute
-        return clone();
+        return importThroughCurrentFactory(clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> VariableAddress::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &,
         const SymbolicExpr &) const {
         // Nothing to substitute
-        return clone();
+        return importThroughCurrentFactory(clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::getRangeIndexSubstituted(
@@ -2076,21 +2076,21 @@ namespace acslg::analyzer::symbolic {
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return importThroughCurrentFactory(it->second->clone());
-        return clone();
+        return importThroughCurrentFactory(clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return importThroughCurrentFactory(it->second->clone());
-        return clone();
+        return importThroughCurrentFactory(clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> VariableAddress::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return importThroughCurrentFactory(it->second->clone());
-        return clone();
+        return importThroughCurrentFactory(clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::getSubstitutedValueExpr(
