@@ -1247,6 +1247,78 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(clonedStructure->getFieldValue(2).get(), field2.get());
     }
 
+    TEST(ExprFactoryTest, ScopedGetSymbolBuildsThroughFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct S {
+                int a;
+            };
+
+            void f(void) {
+                int scalar;
+                int *ptr;
+                int arr[2];
+                struct S st;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *scalar = e.findNthDecl<VarDecl>(1);
+        auto *ptr = e.findNthDecl<VarDecl>(2);
+        auto *arr = e.findNthDecl<VarDecl>(3);
+        auto *st = e.findNthDecl<VarDecl>(4);
+        ASSERT_NE(scalar, nullptr);
+        ASSERT_NE(ptr, nullptr);
+        ASSERT_NE(arr, nullptr);
+        ASSERT_NE(st, nullptr);
+        ASSERT_TRUE(scalar->getType()->isIntegerType());
+        ASSERT_TRUE(ptr->getType()->isPointerType());
+        ASSERT_TRUE(arr->getType()->isArrayType());
+        ASSERT_TRUE(st->getType()->isStructureType());
+
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto makeFrom = [&](const VarDecl *var) {
+            std::unique_ptr<const symbolic::Address> addr =
+                factory.variableAddress(var)->addressClone().into_underlying();
+            return std::optional<
+                ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>>{
+                ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>{
+                    std::move(addr)}};
+        };
+
+        auto scalarSym = symbolic::getSymbol(scalar->getType(), makeFrom(scalar), point);
+        auto ptrSym = symbolic::getSymbol(ptr->getType(), makeFrom(ptr), point);
+        auto arrSym = symbolic::getSymbol(arr->getType(), makeFrom(arr), point);
+        auto stSym = symbolic::getSymbol(st->getType(), makeFrom(st), point);
+
+        EXPECT_EQ(factory.importExpr(*scalarSym),
+                  factory.symbolValue(symbolic::deriveType(scalar->getType()),
+                                      factory.variableAddress(scalar), point));
+        auto pointerType = llvm::cast<PointerType>(ptr->getType());
+        EXPECT_EQ(factory.importExpr(*ptrSym),
+                  factory.symbolAddress(pointerType->getPointeeType(),
+                                        factory.variableAddress(ptr), point)
+                      .asExpr());
+        auto arrayType = llvm::cast<ArrayType>(arr->getType());
+        EXPECT_EQ(factory.importExpr(*arrSym),
+                  factory.symbolAddress(arrayType->getElementType(),
+                                        factory.variableAddress(arr), point)
+                      .asExpr());
+
+        auto *record = st->getType()->getAsRecordDecl();
+        ASSERT_NE(record, nullptr);
+        ASSERT_TRUE(record->isCompleteDefinition());
+        record = record->getDefinition();
+        auto &layout = record->getASTContext().getASTRecordLayout(record);
+        EXPECT_EQ(factory.importExpr(*stSym),
+                  factory.structure(record, layout, factory.variableAddress(st), point));
+    }
+
     TEST(ExprFactoryTest, AddressRebuildsReuseInternedRangeChildren) {
         ASTExtractor e;
         e.init(R"c(
