@@ -2075,28 +2075,28 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importThroughCurrentFactory(it->second->clone());
         return clone();
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importThroughCurrentFactory(it->second->clone());
         return clone();
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> VariableAddress::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importThroughCurrentFactory(it->second->clone());
         return clone();
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importThroughCurrentFactory(it->second->clone());
         auto expr = fromAddr_->getSubstitutedValueExpr(hashExprMap);
         auto addr = dyn_cast<Address>(expr.get().get());
         if (addr == nullptr)
@@ -2108,7 +2108,7 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importThroughCurrentFactory(it->second->clone());
         if (fromAddr_) {
             auto subedExpr = fromAddr_.value()->getSubstitutedValueExpr(hashExprMap);
             auto addr      = dyn_cast<Address>(subedExpr.get().get());
@@ -2134,7 +2134,7 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> FieldAddress::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importThroughCurrentFactory(it->second->clone());
         auto subedExpr    = baseAddr_->getSubstitutedValueExpr(hashExprMap);
         auto realBaseAddr = dyn_cast<const Address>(subedExpr.get().get());
         if (realBaseAddr == nullptr)
@@ -2145,7 +2145,7 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importThroughCurrentFactory(it->second->clone());
         return makeBinaryExpr(left_->getSubstitutedValueExpr(hashExprMap), op_,
                               right_->getSubstitutedValueExpr(hashExprMap));
     }
@@ -2153,14 +2153,14 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importThroughCurrentFactory(it->second->clone());
         return makeUnaryExpr(op_, expr_->getSubstitutedValueExpr(hashExprMap));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
+            return importThroughCurrentFactory(it->second->clone());
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
             auto rebuilt = factory.importExpr(*this);

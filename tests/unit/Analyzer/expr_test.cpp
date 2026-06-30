@@ -705,6 +705,23 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedFacade.getValType(), targetType);
     }
 
+    TEST(ExprFactoryTest, ScopedValueSubstitutionHashHitImportsReplacement) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto one = factory.literal(int64_t{1});
+        auto two = factory.literal(int64_t{2});
+        auto original = factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
+        auto replacement =
+            factory.binary(two, symbolic::BinaryOpExpr::Operator::Subtract, one);
+
+        symbolic::SymbolicExpr::HashExprMap substitutions;
+        substitutions.emplace(original.hash(), factory.cloneExpr(replacement));
+
+        auto substituted = original->getSubstitutedValueExpr(substitutions);
+        EXPECT_EQ(factory.importExpr(*substituted), replacement);
+    }
+
     TEST(ExprFactoryTest, ScopedSimplifiedLinearExprRebuildsThroughFactory) {
         ASTExtractor e;
         e.init(R"c(
