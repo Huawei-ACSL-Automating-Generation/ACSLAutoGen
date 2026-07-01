@@ -2504,6 +2504,47 @@ namespace acslg::analyzer::symbolic {
               Type{ScalarKind::Structure, static_cast<unsigned>(layout.getSize().getQuantity()) *
                                               8 /*By default, char is 8-bit.*/}),
           Symbol(Kind::K_Structure), info_(Info{RD, layout}) {
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            auto fromHandle = factory.importAddress(*from);
+
+            fields_.reserve(info_.layout_.getFieldCount());
+            for (auto field : info_.definition_->fields()) {
+                auto index          = field->getFieldIndex();
+                clang::QualType fty = field->getType();
+                auto fieldAddr = factory.fieldAddress(fty, info_.definition_, fromHandle, index);
+
+                if (fty->isStructureType()) {
+                    auto nestedRD = fty->getAsRecordDecl();
+                    if (!nestedRD || !nestedRD->isCompleteDefinition())
+                        ERROR("Incomplete nested struct definition");
+                    nestedRD           = nestedRD->getDefinition();
+                    auto &nestedLayout = nestedRD->getASTContext().getASTRecordLayout(nestedRD);
+                    fields_.emplace_back(
+                        factory.structure(nestedRD, nestedLayout, fieldAddr, fromPoint));
+                } else if (fty->isPointerType()) {
+                    fields_.emplace_back(
+                        factory.symbolAddress(fty, std::optional<AddrHandle>{fieldAddr}, fromPoint)
+                            .asExpr());
+                } else if (fty->isArrayType()) {
+                    auto arrayType = llvm::cast<clang::ArrayType>(fty);
+                    auto elemTy    = arrayType->getElementType();
+                    std::optional<ExprHandle> length;
+                    if (auto *cat = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr()))
+                        length = factory.literal(cat->getSize().getZExtValue());
+                    fields_.emplace_back(
+                        factory.symbolAddress(elemTy, std::optional<AddrHandle>{fieldAddr},
+                                              fromPoint, std::nullopt, length)
+                            .asExpr());
+                } else {
+                    fields_.emplace_back(factory.symbolValue(deriveType(fty), fieldAddr, fromPoint));
+                }
+            }
+            if (fields_.size() != info_.layout_.getFieldCount())
+                UNREACHABLE();
+            return;
+        }
+
         fields_.reserve(info_.layout_.getFieldCount());
         for (auto field : info_.definition_->fields()) {
             auto index          = field->getFieldIndex();

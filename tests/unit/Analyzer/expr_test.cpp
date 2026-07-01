@@ -1499,6 +1499,77 @@ namespace acslg::test::unit::analyzer {
                   factory.structure(record, layout, factory.variableAddress(st), point));
     }
 
+    TEST(ExprFactoryTest, ScopedLegacyStructureConstructorUsesFactoryFields) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct Inner {
+                int z;
+            };
+
+            struct Outer {
+                int a;
+                int arr[3];
+                struct Inner inner;
+            };
+
+            void f(void) {
+                struct Outer st;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *st = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(st, nullptr);
+        ASSERT_TRUE(st->getType()->isStructureType());
+        auto *record = st->getType()->getAsRecordDecl();
+        ASSERT_NE(record, nullptr);
+        ASSERT_TRUE(record->isCompleteDefinition());
+        record = record->getDefinition();
+        auto &layout = record->getASTContext().getASTRecordLayout(record);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        std::unique_ptr<const symbolic::Address> from =
+            factory.variableAddress(st)->addressClone().into_underlying();
+        symbolic::Structure legacy{
+            record, layout,
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>{
+                std::move(from)},
+            point};
+
+        std::vector<const FieldDecl *> fields;
+        for (const auto *field : record->fields())
+            fields.push_back(field);
+        ASSERT_EQ(fields.size(), 3u);
+
+        auto fromHandle = factory.variableAddress(st);
+        auto field0Addr = factory.fieldAddress(fields[0]->getType(), record, fromHandle, 0);
+        auto expectedField0 =
+            factory.symbolValue(symbolic::deriveType(fields[0]->getType()), field0Addr, point);
+        EXPECT_EQ(legacy.getFieldValue(0).get(), expectedField0.get().get());
+
+        auto field1Addr = factory.fieldAddress(fields[1]->getType(), record, fromHandle, 1);
+        auto arrayType = llvm::cast<ArrayType>(fields[1]->getType());
+        auto expectedField1 = factory.symbolAddress(
+            arrayType->getElementType(), field1Addr, point, std::nullopt,
+            factory.literal(uint64_t{3}));
+        EXPECT_EQ(legacy.getFieldValue(1).get(), expectedField1.get().get());
+
+        auto field2Addr = factory.fieldAddress(fields[2]->getType(), record, fromHandle, 2);
+        auto *nestedRecord = fields[2]->getType()->getAsRecordDecl();
+        ASSERT_NE(nestedRecord, nullptr);
+        ASSERT_TRUE(nestedRecord->isCompleteDefinition());
+        nestedRecord = nestedRecord->getDefinition();
+        auto &nestedLayout =
+            nestedRecord->getASTContext().getASTRecordLayout(nestedRecord);
+        auto expectedField2 =
+            factory.structure(nestedRecord, nestedLayout, field2Addr, point);
+        EXPECT_EQ(legacy.getFieldValue(2).get(), expectedField2.get().get());
+    }
+
     TEST(ExprFactoryTest, ScopedAddressSubstitutionRebuildsThroughFactory) {
         ASTExtractor e;
         e.init(R"c(
