@@ -1536,6 +1536,12 @@ namespace acslg::analyzer::symbolic {
         friend Expr operator/(const Expr &lhs, const Expr &rhs) {
             return lhs.binary(BinaryOpExpr::Operator::Divide, rhs);
         }
+        friend Expr operator-(const Expr &expr) {
+            return expr.unary(UnaryOpExpr::Operator::Minus);
+        }
+        friend Expr operator!(const Expr &expr) {
+            return expr.logicalNot();
+        }
 
       private:
         void ensureSameFactory(const Expr &rhs) const {

@@ -1500,6 +1500,22 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(simplified.handle(), factory.literal(int64_t{3}));
     }
 
+    TEST(ExprFacadeTest, UnaryOperatorsUseCurrentFactory) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        symbolic::LiteralExpr one{1};
+        auto negated = -one;
+        auto notOne = !one;
+
+        EXPECT_EQ(negated, -symbolic::LiteralExpr{1});
+        EXPECT_EQ(notOne, !symbolic::LiteralExpr{1});
+        EXPECT_EQ(negated.cast<symbolic::UnaryOpExpr>().getOperator(),
+                  symbolic::UnaryOpExpr::Operator::Minus);
+        EXPECT_EQ(notOne.cast<symbolic::UnaryOpExpr>().getOperator(),
+                  symbolic::UnaryOpExpr::Operator::LogicalNot);
+    }
+
     TEST(ExprFactoryTest, AddressBuildersReuseEqualAddressNodes) {
         ASTExtractor e;
         e.init(R"c(
