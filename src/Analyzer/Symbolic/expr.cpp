@@ -1496,7 +1496,7 @@ namespace acslg::analyzer::symbolic {
         if (length_)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
-        return clone();
+        return importThroughCurrentFactory(clone());
     }
 
     std::unique_ptr<detail::LiteralExprNode> detail::LiteralExprNode::evalToConstExpr() const {
@@ -2220,8 +2220,7 @@ namespace acslg::analyzer::symbolic {
 
     std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> SymbolAddress::
         doTryEvalAsSymbolAddr() const {
-        auto result = std::make_unique<SymbolAddress>(*this);
-        return result;
+        return cloneSymbolAddress(*this);
     }
 
     SymbolicExpr::UsedMap SymbolValue::collectUsedSymbols() const { return {{hash(), this}}; }

@@ -1621,6 +1621,47 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(factory.importExpr(*substitutedField), fieldAddr.asExpr());
     }
 
+    TEST(ExprFactoryTest, ScopedTryEvalSymbolAddressImportsThroughFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        std::optional<
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>> noFrom;
+        std::optional<
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>> offset;
+        std::unique_ptr<const symbolic::SymbolicExpr> offsetExpr =
+            std::make_unique<symbolic::detail::LiteralExprNode>(4);
+        offset.emplace(
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
+                std::move(offsetExpr)});
+        std::optional<
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>> length;
+        symbolic::SymbolAddress legacy{var->getType(), std::move(noFrom), point,
+                                       std::move(offset), std::move(length)};
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto sizeBefore = factory.size();
+        auto evaluated = legacy.tryEvalAsSymbolAddr();
+        ASSERT_TRUE(evaluated);
+        EXPECT_GT(factory.size(), sizeBefore);
+        EXPECT_EQ(factory.importAddress(*evaluated.value()),
+                  factory.symbolAddress(var->getType(), std::nullopt, point,
+                                        factory.literal(4)));
+    }
+
     TEST(ExprFactoryTest, AddressRebuildsReuseInternedRangeChildren) {
         ASTExtractor e;
         e.init(R"c(
