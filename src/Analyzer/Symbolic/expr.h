@@ -1462,8 +1462,24 @@ namespace acslg::analyzer::symbolic {
         static Addr variable(utils::not_null<const clang::VarDecl *> from);
         static Addr symbol(clang::QualType pointeeType, SourcePoint fromPoint);
         static Addr symbol(clang::QualType pointeeType,
+                           SourcePoint fromPoint,
+                           const Expr &offset);
+        static Addr symbol(clang::QualType pointeeType,
+                           SourcePoint fromPoint,
+                           const Expr &offset,
+                           const Expr &length);
+        static Addr symbol(clang::QualType pointeeType,
                            const Addr &from,
                            SourcePoint fromPoint);
+        static Addr symbol(clang::QualType pointeeType,
+                           const Addr &from,
+                           SourcePoint fromPoint,
+                           const Expr &offset);
+        static Addr symbol(clang::QualType pointeeType,
+                           const Addr &from,
+                           SourcePoint fromPoint,
+                           const Expr &offset,
+                           const Expr &length);
 
         const Address &operator*() const { return *handle_; }
         const Address *operator->() const { return handle_.get().get(); }
@@ -1642,10 +1658,51 @@ namespace acslg::analyzer::symbolic {
     }
 
     inline Addr Addr::symbol(clang::QualType pointeeType,
+                             SourcePoint fromPoint,
+                             const Expr &offset) {
+        return Addr{offset.factory(),
+                    offset.factory().symbolAddress(pointeeType, std::nullopt, fromPoint,
+                                                   offset.handle())};
+    }
+
+    inline Addr Addr::symbol(clang::QualType pointeeType,
+                             SourcePoint fromPoint,
+                             const Expr &offset,
+                             const Expr &length) {
+        if (&offset.factory() != &length.factory())
+            ERROR("Cannot build address with range expressions from different factories.");
+        return Addr{offset.factory(),
+                    offset.factory().symbolAddress(pointeeType, std::nullopt, fromPoint,
+                                                   offset.handle(), length.handle())};
+    }
+
+    inline Addr Addr::symbol(clang::QualType pointeeType,
                              const Addr &from,
                              SourcePoint fromPoint) {
         return Addr{from.factory(),
                     from.factory().symbolAddress(pointeeType, from.handle(), fromPoint)};
+    }
+
+    inline Addr Addr::symbol(clang::QualType pointeeType,
+                             const Addr &from,
+                             SourcePoint fromPoint,
+                             const Expr &offset) {
+        from.ensureSameFactory(offset);
+        return Addr{from.factory(),
+                    from.factory().symbolAddress(pointeeType, from.handle(), fromPoint,
+                                                 offset.handle())};
+    }
+
+    inline Addr Addr::symbol(clang::QualType pointeeType,
+                             const Addr &from,
+                             SourcePoint fromPoint,
+                             const Expr &offset,
+                             const Expr &length) {
+        from.ensureSameFactory(offset);
+        from.ensureSameFactory(length);
+        return Addr{from.factory(),
+                    from.factory().symbolAddress(pointeeType, from.handle(), fromPoint,
+                                                 offset.handle(), length.handle())};
     }
 
     inline Addr Addr::withOffset(const Expr &offset) const {

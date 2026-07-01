@@ -1539,6 +1539,10 @@ namespace acslg::test::unit::analyzer {
         auto index = symbolic::Expr::rangeIndex("i");
         auto varAddr = symbolic::Addr::variable(var);
         auto symbolAddr = symbolic::Addr::symbol(var->getType(), varAddr, point);
+        symbolic::LiteralExpr length{3};
+        auto indexedSymbolAddr = symbolic::Addr::symbol(var->getType(), varAddr, point,
+                                                        index, length);
+        auto unbasedRangeAddr = symbolic::Addr::symbol(var->getType(), point, index, length);
         auto symbolValue = symbolic::Expr::symbolValue(
             symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::Int, 32},
             varAddr, point);
@@ -1550,6 +1554,12 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(varAddr.handle(), factory.variableAddress(var));
         EXPECT_TRUE(varAddr.isa<symbolic::VariableAddress>());
         EXPECT_EQ(symbolAddr.handle(), factory.symbolAddress(var->getType(), varAddr.handle(), point));
+        EXPECT_EQ(indexedSymbolAddr.handle(),
+                  factory.symbolAddress(var->getType(), varAddr.handle(), point,
+                                        index.handle(), length.handle()));
+        EXPECT_EQ(unbasedRangeAddr.handle(),
+                  factory.symbolAddress(var->getType(), std::nullopt, point,
+                                        index.handle(), length.handle()));
         EXPECT_EQ(symbolValue.handle(),
                   factory.symbolValue(symbolic::SymbolicExpr::Type{
                                           symbolic::SymbolicExpr::ScalarKind::Int, 32},
@@ -1698,6 +1708,7 @@ namespace acslg::test::unit::analyzer {
         }();
 
         ASSERT_DEATH({ (void)base.withOffset(offset); }, "");
+        ASSERT_DEATH({ (void)symbolic::Addr::symbol(var->getType(), base, point, offset); }, "");
     }
 
     TEST(ExprFactoryTest, AddressBuildersReuseEqualAddressNodes) {

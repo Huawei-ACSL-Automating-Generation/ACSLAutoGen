@@ -988,13 +988,12 @@ namespace acslg::analyzer {
                         // Handle structure pointees consistent with the existing symbolic memory
                         // layout.
                         if (elemTy->isStructureType()) {
-                            DEBUG("BSL_SAL_Calloc: structure type");
-                            auto &factory = context_.getExprFactory();
-                            auto addr =
-                                factory.symbolAddress(elemTy, std::nullopt, pointAfterCall,
-                                                      factory.literal(0))
-                                    ->addressClone()
-                                    .into_underlying();
+	                            DEBUG("BSL_SAL_Calloc: structure type");
+	                            auto &factory = context_.getExprFactory();
+	                            auto zero = symbolic::Expr{factory, factory.literal(0)};
+	                            auto addr = symbolic::Addr::symbol(elemTy, pointAfterCall, zero)
+	                                            ->addressClone()
+	                                            .into_underlying();
 
                             // Build a Structure whose fields (and nested structs) are Unknown, then
                             // write it.
