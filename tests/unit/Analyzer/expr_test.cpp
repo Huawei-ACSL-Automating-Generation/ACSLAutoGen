@@ -1570,6 +1570,54 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(legacy.getFieldValue(2).get(), expectedField2.get().get());
     }
 
+    TEST(ExprFactoryTest, ScopedMakeUnknownStructureUsesFactoryStructure) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct Inner {
+                int z;
+            };
+
+            struct Outer {
+                int a;
+                int arr[2];
+                struct Inner inner;
+            };
+
+            int f(void) {
+                struct Outer st;
+                return 0;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto *record = var->getType()->getAsRecordDecl();
+        ASSERT_NE(record, nullptr);
+        ASSERT_TRUE(record->isCompleteDefinition());
+        record = record->getDefinition();
+        auto &layout = record->getASTContext().getASTRecordLayout(record);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto sizeBefore = factory.size();
+        auto structureExpr = symbolic::makeUnknownStructure(
+            var->getType(), std::make_unique<symbolic::VariableAddress>(var), point);
+        EXPECT_GT(factory.size(), sizeBefore);
+
+        auto expected = factory.structure(record, layout, factory.variableAddress(var), point);
+        EXPECT_EQ(factory.importExpr(*structureExpr), expected);
+        const auto *structure =
+            symbolic::cast<symbolic::Structure>(structureExpr.get().get());
+        const auto &expectedStructure = expected.cast<symbolic::Structure>();
+        for (size_t i = 0; i < expectedStructure.getNumFields(); ++i)
+            EXPECT_EQ(structure->getFieldValue(i).get(),
+                      expectedStructure.getFieldValue(i).get());
+    }
+
     TEST(ExprFactoryTest, ScopedAddressSubstitutionRebuildsThroughFactory) {
         ASTExtractor e;
         e.init(R"c(

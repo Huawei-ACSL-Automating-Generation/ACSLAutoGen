@@ -635,6 +635,13 @@ namespace acslg::analyzer::symbolic {
         if (!RD || !RD->isCompleteDefinition())
             UNIMPLEMENT("Incomplete struct definition in makeUnknownStructure.");
         const auto &layout = RD->getASTContext().getASTRecordLayout(RD);
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return factory.cloneExpr(
+                factory.structure(RD, layout, factory.importAddress(*baseAddr),
+                                  std::move(fromPoint)));
+        }
+
         // Preserve a clone for field-address construction before moving baseAddr into Structure.
         auto baseAddrSeed = baseAddr->addressClone().into_underlying();
         auto st = std::make_unique<Structure>(RD, layout, std::move(baseAddr), fromPoint);
