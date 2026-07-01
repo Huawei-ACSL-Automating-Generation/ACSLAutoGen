@@ -1516,6 +1516,47 @@ namespace acslg::test::unit::analyzer {
                   symbolic::UnaryOpExpr::Operator::LogicalNot);
     }
 
+    TEST(ExprFacadeTest, LeafHelpersUseFactoryBackedFacades) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto unknown = symbolic::Expr::unknown();
+        auto index = symbolic::Expr::rangeIndex("i");
+        auto varAddr = symbolic::Addr::variable(var);
+        auto symbolAddr = symbolic::Addr::symbol(var->getType(), varAddr, point);
+        auto symbolValue = symbolic::Expr::symbolValue(
+            symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::Int, 32},
+            varAddr, point);
+
+        EXPECT_EQ(unknown.handle(), factory.unknown());
+        EXPECT_TRUE(unknown.isa<symbolic::UnknownExpr>());
+        EXPECT_EQ(index.handle(), factory.rangeIndex("i"));
+        EXPECT_TRUE(index.isa<symbolic::SymbolAddress::RangeIndex>());
+        EXPECT_EQ(varAddr.handle(), factory.variableAddress(var));
+        EXPECT_TRUE(varAddr.isa<symbolic::VariableAddress>());
+        EXPECT_EQ(symbolAddr.handle(), factory.symbolAddress(var->getType(), varAddr.handle(), point));
+        EXPECT_EQ(symbolValue.handle(),
+                  factory.symbolValue(symbolic::SymbolicExpr::Type{
+                                          symbolic::SymbolicExpr::ScalarKind::Int, 32},
+                                      varAddr.handle(), point));
+        EXPECT_TRUE(symbolValue.isa<symbolic::SymbolValue>());
+    }
+
     TEST(AddrFacadeTest, ImportsLegacyAddressThroughCurrentFactory) {
         ASTExtractor e;
         e.init(R"c(

@@ -1459,6 +1459,12 @@ namespace acslg::analyzer::symbolic {
             : Addr(ExprFactoryScope::current(),
                    ExprFactoryScope::current().importAddress(address)) {}
 
+        static Addr variable(utils::not_null<const clang::VarDecl *> from);
+        static Addr symbol(clang::QualType pointeeType, SourcePoint fromPoint);
+        static Addr symbol(clang::QualType pointeeType,
+                           const Addr &from,
+                           SourcePoint fromPoint);
+
         const Address &operator*() const { return *handle_; }
         const Address *operator->() const { return handle_.get().get(); }
         AddrHandle handle() const { return handle_; }
@@ -1510,6 +1516,20 @@ namespace acslg::analyzer::symbolic {
         explicit Expr(const SymbolicExpr &expr)
             : Expr(ExprFactoryScope::current(),
                    ExprFactoryScope::current().importExpr(expr)) {}
+
+        static Expr unknown() {
+            auto &factory = ExprFactoryScope::current();
+            return Expr{factory, factory.unknown()};
+        }
+        static Expr rangeIndex(std::string_view name) {
+            auto &factory = ExprFactoryScope::current();
+            return Expr{factory, factory.rangeIndex(name)};
+        }
+        static Expr symbolValue(SymbolicExpr::Type varType,
+                                const Addr &from,
+                                SourcePoint fromPoint) {
+            return Expr{from.factory(), from.factory().symbolValue(varType, from.handle(), fromPoint)};
+        }
 
         const SymbolicExpr &operator*() const { return *handle_; }
         const SymbolicExpr *operator->() const { return handle_.get().get(); }
@@ -1609,6 +1629,23 @@ namespace acslg::analyzer::symbolic {
 
     inline Expr Addr::asExpr() const {
         return Expr{factory(), handle_.asExpr()};
+    }
+
+    inline Addr Addr::variable(utils::not_null<const clang::VarDecl *> from) {
+        auto &factory = ExprFactoryScope::current();
+        return Addr{factory, factory.variableAddress(from)};
+    }
+
+    inline Addr Addr::symbol(clang::QualType pointeeType, SourcePoint fromPoint) {
+        auto &factory = ExprFactoryScope::current();
+        return Addr{factory, factory.symbolAddress(pointeeType, std::nullopt, fromPoint)};
+    }
+
+    inline Addr Addr::symbol(clang::QualType pointeeType,
+                             const Addr &from,
+                             SourcePoint fromPoint) {
+        return Addr{from.factory(),
+                    from.factory().symbolAddress(pointeeType, from.handle(), fromPoint)};
     }
 
     inline Addr Addr::withOffset(const Expr &offset) const {
