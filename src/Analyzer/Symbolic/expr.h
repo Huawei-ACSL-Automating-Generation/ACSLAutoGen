@@ -1449,6 +1449,49 @@ namespace acslg::analyzer::symbolic {
         static thread_local ExprFactory *current_;
     };
 
+    class Expr;
+
+    class Addr {
+      public:
+        Addr(ExprFactory &factory, AddrHandle handle) : factory_(&factory), handle_(handle) {}
+        explicit Addr(AddrHandle handle) : Addr(ExprFactoryScope::current(), handle) {}
+        explicit Addr(const Address &address)
+            : Addr(ExprFactoryScope::current(),
+                   ExprFactoryScope::current().importAddress(address)) {}
+
+        const Address &operator*() const { return *handle_; }
+        const Address *operator->() const { return handle_.get().get(); }
+        AddrHandle handle() const { return handle_; }
+        ExprFactory &factory() const { return *factory_; }
+
+        std::size_t hash() const { return handle_.hash(); }
+        std::string dump() const { return handle_.dump(); }
+        SymbolicExpr::Type getValType() const { return handle_.getValType(); }
+        auto getACSL(
+            const SymbolicExpr::GetACSLConfig &config,
+            std::optional<SourcePoint> currentPoint = std::nullopt) const {
+            return handle_.asExpr().getACSL(config, currentPoint);
+        }
+        auto getACSLOfValue(
+            const SymbolicExpr::GetACSLConfig &config,
+            std::optional<SourcePoint> currentPoint = std::nullopt) const {
+            return handle_->getACSLOfValue(config, currentPoint);
+        }
+        Expr asExpr() const;
+
+        template <typename T> bool isa() const { return handle_.isa<T>(); }
+        template <typename T> const T *dyn_cast() const { return handle_.dyn_cast<T>(); }
+        template <typename T> const T &cast() const { return handle_.cast<T>(); }
+
+        friend bool operator==(const Addr &lhs, const Addr &rhs) {
+            return lhs.factory_ == rhs.factory_ && lhs.handle_ == rhs.handle_;
+        }
+
+      private:
+        ExprFactory *factory_;
+        AddrHandle handle_;
+    };
+
     class Expr {
       public:
         Expr(ExprFactory &factory, ExprHandle handle) : factory_(&factory), handle_(handle) {}
@@ -1552,6 +1595,10 @@ namespace acslg::analyzer::symbolic {
         ExprFactory *factory_;
         ExprHandle handle_;
     };
+
+    inline Expr Addr::asExpr() const {
+        return Expr{factory(), handle_.asExpr()};
+    }
 
     class LiteralExpr : public Expr {
       public:

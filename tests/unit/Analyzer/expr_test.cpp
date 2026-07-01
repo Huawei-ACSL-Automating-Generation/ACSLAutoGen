@@ -1516,6 +1516,62 @@ namespace acslg::test::unit::analyzer {
                   symbolic::UnaryOpExpr::Operator::LogicalNot);
     }
 
+    TEST(AddrFacadeTest, ImportsLegacyAddressThroughCurrentFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto handle = factory.variableAddress(var);
+        symbolic::Addr addr{handle};
+        symbolic::VariableAddress legacy{var};
+        symbolic::Addr imported{legacy};
+
+        EXPECT_EQ(&addr.factory(), &factory);
+        EXPECT_EQ(addr.handle(), handle);
+        EXPECT_EQ(imported.handle(), handle);
+        EXPECT_EQ(addr, imported);
+        EXPECT_TRUE(addr.isa<symbolic::VariableAddress>());
+        EXPECT_EQ(addr.asExpr().handle(), handle.asExpr());
+    }
+
+    TEST(AddrFacadeTest, IdentityIncludesFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+
+        symbolic::ExprFactory leftFactory;
+        symbolic::ExprFactory rightFactory;
+
+        symbolic::Addr left = [&] {
+            symbolic::ExprFactoryScope scope(leftFactory);
+            return symbolic::Addr{leftFactory.variableAddress(var)};
+        }();
+        symbolic::Addr right = [&] {
+            symbolic::ExprFactoryScope scope(rightFactory);
+            return symbolic::Addr{rightFactory.variableAddress(var)};
+        }();
+
+        EXPECT_FALSE(left == right);
+        EXPECT_TRUE(left.handle().get()->equal(*right.handle().get()));
+    }
+
     TEST(ExprFactoryTest, AddressBuildersReuseEqualAddressNodes) {
         ASTExtractor e;
         e.init(R"c(
