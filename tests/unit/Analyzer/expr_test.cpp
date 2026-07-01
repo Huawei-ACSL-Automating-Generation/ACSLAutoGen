@@ -631,6 +631,16 @@ namespace acslg::test::unit::analyzer {
 
             int id_;
         };
+
+        class NonLinearBinaryProbe final : public symbolic::detail::BinaryOpExprNode {
+          public:
+            using symbolic::detail::BinaryOpExprNode::BinaryOpExprNode;
+
+            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+            callSimplifiedExprIfLinear() const {
+                return simplifiedExprIfLinear();
+            }
+        };
     } // namespace
 
     TEST(ExprFactoryTest, ReusesEqualNodesButSeparatesHashCollisions) {
@@ -822,6 +832,43 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(rebuilt->getRight().get(),
                   factory.importExpr(*rebuilt->getRight().get()).get().get());
         EXPECT_EQ(factory.importExpr(*simplified), factory.importExpr(*simplified->clone()));
+    }
+
+    TEST(ExprFactoryTest, ScopedSimplifiedNonLinearFallbackImportsThroughFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        std::unique_ptr<const symbolic::Address> from =
+            std::make_unique<symbolic::VariableAddress>(var);
+        auto x = std::make_unique<symbolic::SymbolValue>(
+            symbolic::deriveType(var->getType()),
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>{std::move(from)},
+            point);
+        NonLinearBinaryProbe legacyProduct{
+            x->clone(), symbolic::BinaryOpExpr::Operator::Multiply, x->clone()};
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto simplified = legacyProduct.callSimplifiedExprIfLinear();
+        auto *product = symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
+
+        EXPECT_EQ(product->getLeft().get(),
+                  factory.importExpr(*product->getLeft().get()).get().get());
+        EXPECT_EQ(product->getRight().get(),
+                  factory.importExpr(*product->getRight().get()).get().get());
+        EXPECT_EQ(factory.importExpr(*simplified), factory.importExpr(legacyProduct));
     }
 
     TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {

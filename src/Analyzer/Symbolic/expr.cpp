@@ -688,7 +688,7 @@ namespace acslg::analyzer::symbolic {
      */
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolicExpr::simplifiedExprIfLinear() const {
         if (!isLinear())
-            return clone();
+            return importThroughCurrentFactory(clone());
         auto [hashPtrMap, hashIdMap] = collectUsedSymbols(*this);
 
         auto linearExpr = toLinearExpr(hashIdMap);
