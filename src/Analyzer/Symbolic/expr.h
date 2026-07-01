@@ -37,6 +37,8 @@ namespace acslg::analyzer::symbolic {
     class SymbolAddress;
     class SymbolValue;
     class Symbol;
+    class ExprFactory;
+    class ExprFactoryScope;
     struct SymbolAddrBaseInfo;
 
     namespace detail {
@@ -375,11 +377,7 @@ namespace acslg::analyzer::symbolic {
             return clone();
         };
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> withValType(Type newType) const {
-            auto result = clone();
-            result->setValType(newType);
-            return result;
-        }
+        utils::not_null<std::unique_ptr<SymbolicExpr>> withValType(Type newType) const;
 
         using UsedMap   = std::unordered_map<size_t, utils::not_null<const Symbol *>>;
         using HashIdMap = std::unordered_map<size_t, size_t>;
@@ -542,7 +540,14 @@ namespace acslg::analyzer::symbolic {
         }
 
       private:
+        utils::not_null<std::unique_ptr<SymbolicExpr>> cloneWithValType(Type newType) const {
+            auto result = clone();
+            result->setValType(newType);
+            return result;
+        }
+
         void setValType(Type newType) { valueType_ = newType; }
+        friend class ExprFactory;
 
         /// @brief Try to evaluate the expression to an symbol address.
         /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
@@ -1370,7 +1375,7 @@ namespace acslg::analyzer::symbolic {
         ExprHandle importExpr(const SymbolicExpr &expr);
         AddrHandle importAddress(const Address &address);
         utils::not_null<std::unique_ptr<SymbolicExpr>> cloneExpr(ExprHandle expr) {
-            return expr->clone();
+            return expr->cloneWithValType(expr->getValType());
         }
         utils::not_null<std::unique_ptr<SymbolicExpr>> importAndCloneExpr(
             const SymbolicExpr &expr) {

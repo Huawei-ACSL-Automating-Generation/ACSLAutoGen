@@ -752,6 +752,27 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedFacade.getValType(), targetType);
     }
 
+    TEST(ExprFactoryTest, ScopedLegacyWithValTypeUsesFactory) {
+        symbolic::ExprFactory factory;
+
+        auto one = factory.literal(1);
+        auto two = factory.literal(2);
+        auto sum = factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
+        auto targetType = symbolic::SymbolicExpr::Type{
+            symbolic::SymbolicExpr::ScalarKind::UInt, 64};
+
+        symbolic::ExprFactoryScope scope(factory);
+        auto typedSum = sum->withValType(targetType);
+        auto expected = factory.withValType(sum, targetType);
+
+        EXPECT_EQ(factory.importExpr(*typedSum), expected);
+        EXPECT_EQ(typedSum->getValType(), targetType);
+        const auto *typedSumNode =
+            symbolic::cast<symbolic::BinaryOpExpr>(typedSum.get().get());
+        EXPECT_EQ(typedSumNode->getLeft().get(), one.get().get());
+        EXPECT_EQ(typedSumNode->getRight().get(), two.get().get());
+    }
+
     TEST(ExprFactoryTest, ScopedValueSubstitutionHashHitImportsReplacement) {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
