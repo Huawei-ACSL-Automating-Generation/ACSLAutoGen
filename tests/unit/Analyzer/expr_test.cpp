@@ -806,19 +806,18 @@ namespace acslg::test::unit::analyzer {
     TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {
         symbolic::ExprFactory factory;
 
-        auto legacy = std::make_unique<symbolic::BinaryOpExpr>(
-            std::make_unique<symbolic::UnaryOpExpr>(
-                symbolic::UnaryOpExpr::Operator::Minus,
-                std::make_unique<symbolic::detail::LiteralExprNode>(1)),
+        auto legacy = symbolic::makeBinaryExpr(
+            symbolic::makeUnaryExpr(symbolic::UnaryOpExpr::Operator::Minus,
+                                    symbolic::makeLiteralExpr(1)),
             symbolic::BinaryOpExpr::Operator::Add,
-            std::make_unique<symbolic::detail::LiteralExprNode>(2));
+            symbolic::makeLiteralExpr(2));
 
         auto imported = factory.importExpr(*legacy);
         auto repeated = factory.importExpr(*legacy->clone());
 
         EXPECT_EQ(imported, repeated);
-        auto one = factory.literal(1);
-        auto two = factory.literal(2);
+        auto one = factory.literal(int64_t{1});
+        auto two = factory.literal(int64_t{2});
 
         const auto &bin = imported.cast<symbolic::BinaryOpExpr>();
         EXPECT_EQ(bin.getRight().get(), two.get().get());
@@ -944,9 +943,7 @@ namespace acslg::test::unit::analyzer {
                 var->getType(),
                 std::make_unique<symbolic::VariableAddress>(var),
                 point);
-            range = range->withLength(
-                             std::make_unique<symbolic::detail::LiteralExprNode>(3))
-                        .into_underlying();
+            range = range->withLength(symbolic::makeLiteralExpr(3)).into_underlying();
             std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
             return ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
                 std::move(constRange)};
@@ -954,11 +951,12 @@ namespace acslg::test::unit::analyzer {
 
         auto makePred =
             []() -> ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>> {
-            auto pred = std::make_unique<symbolic::BinaryOpExpr>(
-                std::make_unique<symbolic::SymbolAddress::RangeIndex>("i"),
+            auto pred = symbolic::makeBinaryExpr(
+                symbolic::makeRangeIndexExpr("i"),
                 symbolic::BinaryOpExpr::Operator::LessThan,
-                std::make_unique<symbolic::detail::LiteralExprNode>(3));
-            std::unique_ptr<const symbolic::SymbolicExpr> constPred = std::move(pred);
+                symbolic::makeLiteralExpr(3));
+            std::unique_ptr<const symbolic::SymbolicExpr> constPred =
+                std::move(pred).into_underlying();
             return ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
                 std::move(constPred)};
         };
@@ -1690,7 +1688,7 @@ namespace acslg::test::unit::analyzer {
         std::optional<
             ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>> offset;
         std::unique_ptr<const symbolic::SymbolicExpr> offsetExpr =
-            std::make_unique<symbolic::detail::LiteralExprNode>(4);
+            symbolic::makeLiteralExpr(4).into_underlying();
         offset.emplace(
             ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
                 std::move(offsetExpr)});
@@ -1707,7 +1705,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_GT(factory.size(), sizeBefore);
         EXPECT_EQ(factory.importAddress(*evaluated.value()),
                   factory.symbolAddress(var->getType(), std::nullopt, point,
-                                        factory.literal(4)));
+                                        factory.literal(int64_t{4})));
     }
 
     TEST(ExprFactoryTest, AddressRebuildsReuseInternedRangeChildren) {
@@ -1811,9 +1809,9 @@ namespace acslg::test::unit::analyzer {
         std::unique_ptr<const symbolic::Address> from =
             std::make_unique<symbolic::VariableAddress>(var);
         std::unique_ptr<const symbolic::SymbolicExpr> offset =
-            std::make_unique<symbolic::detail::LiteralExprNode>(4);
+            symbolic::makeLiteralExpr(4).into_underlying();
         std::unique_ptr<const symbolic::SymbolicExpr> length =
-            std::make_unique<symbolic::detail::LiteralExprNode>(2);
+            symbolic::makeLiteralExpr(2).into_underlying();
         symbolic::SymbolAddress legacy{
             var->getType(),
             ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>{std::move(from)},
@@ -2057,8 +2055,7 @@ namespace acslg::test::unit::analyzer {
         auto originalField0 = structure->getFieldValue(0)->clone();
         auto originalField1 = structure->getFieldValue(1)->clone();
 
-        auto updated = structure->withFieldValue(
-            0, std::make_unique<symbolic::detail::LiteralExprNode>(42));
+        auto updated = structure->withFieldValue(0, symbolic::makeLiteralExpr(42));
 
         EXPECT_EQ(*structure->getFieldValue(0), *originalField0);
         EXPECT_EQ(*structure->getFieldValue(1), *originalField1);
