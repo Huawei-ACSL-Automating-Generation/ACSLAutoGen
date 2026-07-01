@@ -941,6 +941,49 @@ namespace acslg::test::unit::analyzer {
                                                   one, symbolic::BinaryOpExpr::Operator::Add, two));
     }
 
+    TEST(ExprFactoryTest, ScopedBooleanComparisonSimplificationImportsReturnedExpr) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        std::unique_ptr<const symbolic::Address> from =
+            std::make_unique<symbolic::VariableAddress>(var);
+        auto x = std::make_unique<symbolic::SymbolValue>(
+            symbolic::deriveType(var->getType()),
+            ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>{std::move(from)},
+            point);
+        auto predicate = symbolic::makeBinaryExpr(
+            x->clone(), symbolic::BinaryOpExpr::Operator::Equal, symbolic::makeLiteralExpr(0));
+        auto wrapped = symbolic::makeBinaryExpr(
+            std::move(predicate), symbolic::BinaryOpExpr::Operator::Equal,
+            symbolic::makeLiteralExpr(1));
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto simplified = wrapped->simplifiedExpr();
+        auto *returnedPredicate =
+            symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
+
+        auto expectedX = factory.importExpr(*x);
+        auto zero = factory.literal(int64_t{0});
+        EXPECT_EQ(returnedPredicate->getOperator(), symbolic::BinaryOpExpr::Operator::Equal);
+        EXPECT_EQ(returnedPredicate->getLeft().get(), expectedX.get().get());
+        EXPECT_EQ(returnedPredicate->getRight().get(), zero.get().get());
+        EXPECT_EQ(factory.importExpr(*simplified),
+                  factory.binary(expectedX, symbolic::BinaryOpExpr::Operator::Equal, zero));
+    }
+
     TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {
         symbolic::ExprFactory factory;
 

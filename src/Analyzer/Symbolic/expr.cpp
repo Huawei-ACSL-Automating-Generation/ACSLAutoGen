@@ -1459,7 +1459,7 @@ namespace acslg::analyzer::symbolic {
 
                 const bool expectTrue = (op_ == Op::Equal) ? (v == 1) : (v == 0);
                 if (expectTrue)
-                    return boolExpr.clone().into_underlying();
+                    return importThroughCurrentFactory(boolExpr.clone()).into_underlying();
                 return makeUnaryExpr(
                     detail::UnaryOpExprNode::Operator::LogicalNot,
                     boolExpr.clone())
