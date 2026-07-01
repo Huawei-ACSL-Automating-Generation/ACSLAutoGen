@@ -373,9 +373,7 @@ namespace acslg::analyzer::symbolic {
 
         /// @brief Get a simplified version of the expression.
         /// @return Simplified expression.
-        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const {
-            return clone();
-        };
+        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const;
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> withValType(Type newType) const;
 

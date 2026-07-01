@@ -641,6 +641,60 @@ namespace acslg::test::unit::analyzer {
                 return simplifiedExprIfLinear();
             }
         };
+
+        class BaseSimplifiedProbe final : public symbolic::SymbolicExpr {
+          public:
+            BaseSimplifiedProbe()
+                : SymbolicExpr(ExprKind::K_UnknownExpr, Type{ScalarKind::Void, 0}) {}
+
+            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> clone()
+                const override {
+                return std::make_unique<symbolic::BinaryOpExpr>(
+                    std::make_unique<symbolic::detail::LiteralExprNode>(1),
+                    symbolic::BinaryOpExpr::Operator::Add,
+                    std::make_unique<symbolic::detail::LiteralExprNode>(2));
+            }
+
+            std::string dump() const override { return "base-simplified-probe"; }
+
+            bool equal(const symbolic::SymbolicExpr &other) const override {
+                return symbolic::dyn_cast<const BaseSimplifiedProbe>(&other) != nullptr;
+            }
+
+            std::size_t hash() const override { return 314159; }
+
+            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> getSubstitutedExpr(
+                const Path &,
+                const symbolic::SourcePoint &) const override {
+                return clone();
+            }
+
+            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+            getRangeIndexSubstituted(
+                const symbolic::SymbolAddrBaseInfo &,
+                const symbolic::SymbolicExpr &) const override {
+                return clone();
+            }
+
+            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+            getSubstitutedValueExpr(
+                const symbolic::SymbolicExpr::HashExprMap &) const override {
+                return clone();
+            }
+
+            bool isLinear() const override { return false; }
+            int getMaxDegree() const override { return -1; }
+
+          private:
+            ::acslg::utils::expected<std::string, GetACSLError> doGetACSL(
+                const GetACSLConfig &,
+                std::unordered_set<symbolic::SourcePoint> &,
+                std::optional<symbolic::SourcePoint>,
+                unsigned,
+                bool) const override {
+                return dump();
+            }
+        };
     } // namespace
 
     TEST(ExprFactoryTest, ReusesEqualNodesButSeparatesHashCollisions) {
@@ -869,6 +923,22 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(product->getRight().get(),
                   factory.importExpr(*product->getRight().get()).get().get());
         EXPECT_EQ(factory.importExpr(*simplified), factory.importExpr(legacyProduct));
+    }
+
+    TEST(ExprFactoryTest, ScopedDefaultSimplifiedExprImportsCloneThroughFactory) {
+        BaseSimplifiedProbe legacy;
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto simplified = legacy.simplifiedExpr();
+        auto *sum = symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
+
+        auto one = factory.literal(1);
+        auto two = factory.literal(2);
+        EXPECT_EQ(sum->getLeft().get(), one.get().get());
+        EXPECT_EQ(sum->getRight().get(), two.get().get());
+        EXPECT_EQ(factory.importExpr(*simplified), factory.binary(
+                                                  one, symbolic::BinaryOpExpr::Operator::Add, two));
     }
 
     TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {

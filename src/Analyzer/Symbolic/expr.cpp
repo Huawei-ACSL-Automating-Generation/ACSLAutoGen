@@ -627,6 +627,10 @@ namespace acslg::analyzer::symbolic {
         return std::make_unique<UnknownExpr>();
     }
 
+    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolicExpr::simplifiedExpr() const {
+        return importThroughCurrentFactory(clone());
+    }
+
     /**
      * @brief Construct a symbolic structure value with all fields initialized to Unknown.
      * @param ty [in] Structure qualified type.
