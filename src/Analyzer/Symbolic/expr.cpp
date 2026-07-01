@@ -1851,7 +1851,7 @@ namespace acslg::analyzer::symbolic {
         const SourcePoint &pointToSub) const {
         auto &mem = pathSubTo.getMemoryState();
         if (getFromPoint() && getFromPoint().value() != pointToSub)
-            return clone();
+            return importThroughCurrentFactory(clone());
 
         auto subedExpr    = fromAddr_->getSubstitutedExpr(pathSubTo, pointToSub);
         auto realFromAddr = dyn_cast<const Address>(subedExpr.get().get());
@@ -1861,7 +1861,7 @@ namespace acslg::analyzer::symbolic {
         // Origin is an address-like handle; try reading from loop-entry memory.
         if (auto value = mem.read(*realFromAddr)) {
             // Replace current SymbolValue with the cloned value read from memory.
-            return value.value()->clone();
+            return importThroughCurrentFactory(value.value()->clone());
         } else {
             // Address originates from an address present on this path at loop
             // entry but hasn't been accessed -> construct a SymbolValue with
@@ -1877,12 +1877,14 @@ namespace acslg::analyzer::symbolic {
         const SourcePoint &pointToSub) const {
         auto &mem = pathSubTo.getMemoryState();
         if (getFromPoint() && getFromPoint().value() != pointToSub)
-            return clone();
+            return importThroughCurrentFactory(clone());
 
         if (fromAddr_ == std::nullopt) {
-            auto newAddr        = std::make_unique<SymbolAddress>(*this);
-            newAddr->fromPoint_ = pointToSub;
-            return newAddr;
+            std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> length;
+            if (length_)
+                length = length_.value()->clone();
+            return rebuildSymbolAddress(pointeeType_, std::nullopt, pointToSub,
+                                        offset_->clone(), std::move(length));
         }
 
         auto subedExpr    = fromAddr_.value()->getSubstitutedExpr(pathSubTo, pointToSub);

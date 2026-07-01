@@ -216,6 +216,20 @@ namespace acslg::test::unit::analyzer {
         ASSERT_EQ(*expr->getSubstitutedExpr(*path, point), *makeConstU64(42));
     }
 
+    TEST_F(SubstituteTest, ScopedVarReplacementImportsThroughFactory) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto var0Addr = makeVariableAddr(0);
+        mm.write(var0Addr, makeConstU64(42));
+
+        auto point   = getSourcePoint(0);
+        auto varNode = makeSymbolValue(0, point);
+        auto result  = varNode->getSubstitutedExpr(*path, point);
+
+        EXPECT_EQ(factory.importExpr(*result), factory.literal(uint64_t{42}));
+    }
+
     TEST_F(SubstituteTest, VarWithDifferentFromIsKeptUnchanged) {
         auto var0Addr = makeVariableAddr(0);
         mm.write(var0Addr, makeConstU64(7));
@@ -289,6 +303,39 @@ namespace acslg::test::unit::analyzer {
         auto otherPoint = getSourcePoint(1);
 
         ASSERT_EQ(*sym.getSubstitutedExpr(*path, otherPoint), sym);
+    }
+
+    TEST_F(SubstituteTest, ScopedFromPointMismatchImportsUnchangedSymbolAddr) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto originAddr = makeVariableAddr(8);
+        auto realAddr   = makeSimpleSymbolAddr(9);
+        mm.write(originAddr, realAddr.clone());
+
+        auto point = getSourcePoint(0);
+        auto sym   = makeRangeAddr(/*origin id*/ 8, makeConstU64(1), nullptr, point);
+
+        auto otherPoint = getSourcePoint(1);
+        auto result = sym.getSubstitutedExpr(*path, otherPoint);
+        auto *resultAddr = symbolic::cast<symbolic::Address>(result.get().get());
+
+        EXPECT_EQ(factory.importAddress(*resultAddr), factory.importAddress(sym));
+    }
+
+    TEST_F(SubstituteTest, ScopedNoBaseSymbolAddrSubstitutionUsesFactory) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto var = getVarDecl(0);
+        auto point = getSourcePoint(0);
+        symbolic::SymbolAddress sym{var->getType(), std::nullopt, point};
+
+        auto result = sym.getSubstitutedExpr(*path, point);
+        auto *resultAddr = symbolic::cast<symbolic::Address>(result.get().get());
+
+        EXPECT_EQ(factory.importAddress(*resultAddr),
+                  factory.symbolAddress(var->getType(), std::nullopt, point));
     }
 
     TEST_F(SubstituteTest, ResolvedValueNotAddressShouldError) {
