@@ -1572,6 +1572,93 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(left.handle().get()->equal(*right.handle().get()));
     }
 
+    TEST(AddrFacadeTest, RebuildHelpersUseOwningFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct S {
+                int a;
+                int b;
+            };
+
+            void f(void) {
+                struct S s;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto *record = e.findFirstDecl<RecordDecl>();
+        ASSERT_NE(record, nullptr);
+        ASSERT_TRUE(record->isCompleteDefinition());
+        record = record->getDefinition();
+        auto *firstField = *record->field_begin();
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        symbolic::Addr varAddr{factory.variableAddress(var)};
+        symbolic::Addr base{factory.symbolAddress(
+            var->getType(), std::optional<symbolic::AddrHandle>{varAddr.handle()}, point)};
+        symbolic::LiteralExpr offset{4};
+        symbolic::LiteralExpr length{3};
+        symbolic::Expr extra{factory.unknown()};
+
+        auto shifted = base.withOffset(offset);
+        auto ranged = shifted.withLength(length);
+        auto addedOffset = base.withAddedOffset(extra);
+        auto subtractedOffset = base.withSubtractedOffset(extra);
+        auto addedLength = base.withAddedLength(extra);
+        auto scalar = ranged.withoutLength();
+        auto field = varAddr.field(firstField->getType(), record, 0);
+
+        EXPECT_EQ(shifted.handle(), factory.withOffset(base.handle(), offset.handle()));
+        EXPECT_EQ(ranged.handle(), factory.withLength(shifted.handle(), length.handle()));
+        EXPECT_EQ(addedOffset.handle(), factory.withAddedOffset(base.handle(), extra.handle()));
+        EXPECT_EQ(subtractedOffset.handle(),
+                  factory.withSubtractedOffset(base.handle(), extra.handle()));
+        EXPECT_EQ(addedLength.handle(), factory.withAddedLength(base.handle(), extra.handle()));
+        EXPECT_EQ(scalar.handle(), factory.withoutLength(ranged.handle()));
+        EXPECT_EQ(field.handle(),
+                  factory.fieldAddress(firstField->getType(), record, varAddr.handle(), 0));
+    }
+
+    TEST(AddrFacadeTest, RebuildHelpersRejectDifferentFactories) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory leftFactory;
+        symbolic::ExprFactory rightFactory;
+
+        symbolic::Addr base = [&] {
+            symbolic::ExprFactoryScope scope(leftFactory);
+            return symbolic::Addr{leftFactory.symbolAddress(
+                var->getType(),
+                std::optional<symbolic::AddrHandle>{leftFactory.variableAddress(var)}, point)};
+        }();
+        symbolic::Expr offset = [&] {
+            symbolic::ExprFactoryScope scope(rightFactory);
+            return symbolic::Expr{symbolic::LiteralExpr{4}};
+        }();
+
+        ASSERT_DEATH({ (void)base.withOffset(offset); }, "");
+    }
+
     TEST(ExprFactoryTest, AddressBuildersReuseEqualAddressNodes) {
         ASTExtractor e;
         e.init(R"c(

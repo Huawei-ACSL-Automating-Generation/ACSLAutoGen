@@ -1478,6 +1478,15 @@ namespace acslg::analyzer::symbolic {
             return handle_->getACSLOfValue(config, currentPoint);
         }
         Expr asExpr() const;
+        Addr withOffset(const Expr &offset) const;
+        Addr withAddedOffset(const Expr &extra) const;
+        Addr withSubtractedOffset(const Expr &extra) const;
+        Addr withLength(const Expr &length) const;
+        Addr withAddedLength(const Expr &extra) const;
+        Addr withoutLength() const;
+        Addr field(clang::QualType pointeeType,
+                   const clang::RecordDecl *record,
+                   size_t fieldIndex) const;
 
         template <typename T> bool isa() const { return handle_.isa<T>(); }
         template <typename T> const T *dyn_cast() const { return handle_.dyn_cast<T>(); }
@@ -1488,6 +1497,8 @@ namespace acslg::analyzer::symbolic {
         }
 
       private:
+        void ensureSameFactory(const Expr &expr) const;
+
         ExprFactory *factory_;
         AddrHandle handle_;
     };
@@ -1598,6 +1609,46 @@ namespace acslg::analyzer::symbolic {
 
     inline Expr Addr::asExpr() const {
         return Expr{factory(), handle_.asExpr()};
+    }
+
+    inline Addr Addr::withOffset(const Expr &offset) const {
+        ensureSameFactory(offset);
+        return Addr{factory(), factory().withOffset(handle_, offset.handle())};
+    }
+
+    inline Addr Addr::withAddedOffset(const Expr &extra) const {
+        ensureSameFactory(extra);
+        return Addr{factory(), factory().withAddedOffset(handle_, extra.handle())};
+    }
+
+    inline Addr Addr::withSubtractedOffset(const Expr &extra) const {
+        ensureSameFactory(extra);
+        return Addr{factory(), factory().withSubtractedOffset(handle_, extra.handle())};
+    }
+
+    inline Addr Addr::withLength(const Expr &length) const {
+        ensureSameFactory(length);
+        return Addr{factory(), factory().withLength(handle_, length.handle())};
+    }
+
+    inline Addr Addr::withAddedLength(const Expr &extra) const {
+        ensureSameFactory(extra);
+        return Addr{factory(), factory().withAddedLength(handle_, extra.handle())};
+    }
+
+    inline Addr Addr::withoutLength() const {
+        return Addr{factory(), factory().withoutLength(handle_)};
+    }
+
+    inline Addr Addr::field(clang::QualType pointeeType,
+                            const clang::RecordDecl *record,
+                            size_t fieldIndex) const {
+        return Addr{factory(), factory().fieldAddress(pointeeType, record, handle_, fieldIndex)};
+    }
+
+    inline void Addr::ensureSameFactory(const Expr &expr) const {
+        if (factory_ != &expr.factory())
+            ERROR("Cannot rebuild address with expression from a different factory.");
     }
 
     class LiteralExpr : public Expr {
