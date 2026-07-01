@@ -1473,6 +1473,11 @@ namespace acslg::analyzer::symbolic {
         Expr withType(SymbolicExpr::Type newType) const {
             return Expr{factory(), factory().withValType(handle_, newType)};
         }
+        Expr simplified() const {
+            ExprFactoryScope scope(factory());
+            auto simplifiedExpr = handle_->simplifiedExpr();
+            return Expr{factory(), factory().importExpr(*simplifiedExpr)};
+        }
 
         template <typename T> bool isa() const { return handle_.isa<T>(); }
         template <typename T> const T *dyn_cast() const { return handle_.dyn_cast<T>(); }

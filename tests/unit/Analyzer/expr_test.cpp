@@ -1489,6 +1489,17 @@ namespace acslg::test::unit::analyzer {
                   symbolic::UnaryOpExpr::Operator::LogicalNot);
     }
 
+    TEST(ExprFacadeTest, SimplifiedReturnsFactoryBackedFacade) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        symbolic::Expr sum = symbolic::LiteralExpr{1} + symbolic::LiteralExpr{2};
+        symbolic::Expr simplified = sum.simplified();
+
+        EXPECT_EQ(&simplified.factory(), &factory);
+        EXPECT_EQ(simplified.handle(), factory.literal(int64_t{3}));
+    }
+
     TEST(ExprFactoryTest, AddressBuildersReuseEqualAddressNodes) {
         ASTExtractor e;
         e.init(R"c(
