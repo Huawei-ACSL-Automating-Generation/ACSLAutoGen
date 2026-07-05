@@ -2286,8 +2286,13 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
-        auto original = std::make_unique<symbolic::SymbolAddress>(
-            var->getType(), std::nullopt, point);
+        std::unique_ptr<symbolic::SymbolAddress> original;
+        {
+            symbolic::ExprFactory factory;
+            symbolic::ExprFactoryScope scope(factory);
+            auto originalAddr = symbolic::Addr::symbol(factory, var->getType(), point);
+            original = symbolic::cloneSymbolAddress(originalAddr.handle());
+        }
         auto withOffset =
             original->withOffset(symbolic::makeLiteralExpr(5));
         auto withLength =
@@ -2375,8 +2380,8 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        auto original = std::make_unique<symbolic::SymbolAddress>(
-            var->getType(), std::nullopt, point);
+        auto originalAddr = symbolic::Addr::symbol(factory, var->getType(), point);
+        auto original     = symbolic::cloneSymbolAddress(originalAddr.handle());
         auto offset = factory.literal(5);
         auto length = factory.literal(3);
         auto extra  = factory.unknown();
