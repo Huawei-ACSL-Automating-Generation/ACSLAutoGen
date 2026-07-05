@@ -1397,12 +1397,12 @@ namespace acslg::analyzer::symbolic {
             return offsetStr.error();
 
         // offset + length - 1
-        auto offsetPlusLength = makeBinaryExpr(getOffset()->clone(),
+        auto offsetPlusLength = buildBinaryExpr(getOffset()->clone(),
                                                detail::BinaryOpExprNode::Operator::Add,
                                                length_.value()->clone());
-        auto rightBound = makeBinaryExpr(std::move(offsetPlusLength),
+        auto rightBound = buildBinaryExpr(std::move(offsetPlusLength),
                                          detail::BinaryOpExprNode::Operator::Subtract,
-                                         makeLiteralExpr(1))
+                                         buildLiteralExpr(1))
                               ->simplifiedExpr();
         auto rightBoundStr =
             callGetACSL(*rightBound, config, usedPoints, currentPoint, rangePrec, true);
