@@ -2188,34 +2188,32 @@ namespace acslg::analyzer::symbolic {
         if (lhs == std::nullopt && rhs == std::nullopt)
             return std::nullopt;
 
-        std::unique_ptr<SymbolAddress> addr;
+        auto &factory = ExprFactoryScope::current();
+        AddrHandle addr = lhs ? factory.importAddress(*lhs.value())
+                              : factory.importAddress(*rhs.value());
         if (lhs) {
-            addr = std::move(lhs).value().into_underlying();
             if (!isValidOffsetOrLength(*right_))
                 return std::nullopt;
-            auto expr = right_->clone();
+            auto expr = factory.importExpr(*right_);
             switch (op_) {
                 using enum Operator;
-                case Add: addr = addr->withAddedOffset(std::move(expr)).into_underlying(); break;
-                case Subtract:
-                    addr = addr->withSubtractedOffset(std::move(expr)).into_underlying();
-                    break;
+                case Add: addr = factory.withAddedOffset(addr, expr); break;
+                case Subtract: addr = factory.withSubtractedOffset(addr, expr); break;
 
                 default: return std::nullopt;
             }
         } else {
-            addr = std::move(rhs).value().into_underlying();
             if (!isValidOffsetOrLength(*left_))
                 return std::nullopt;
-            auto expr = left_->clone();
+            auto expr = factory.importExpr(*left_);
             switch (op_) {
                 using enum Operator;
-                case Add: addr = addr->withAddedOffset(std::move(expr)).into_underlying(); break;
+                case Add: addr = factory.withAddedOffset(addr, expr); break;
                 case Subtract: return std::nullopt;
                 default: return std::nullopt;
             }
         }
-        return addr;
+        return cloneSymbolAddress(addr);
     }
 
     std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> SymbolAddress::
