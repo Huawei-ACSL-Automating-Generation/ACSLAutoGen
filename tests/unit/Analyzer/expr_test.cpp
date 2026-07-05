@@ -528,6 +528,13 @@ namespace acslg::test::unit::analyzer {
                                        BinaryOpExpr::Operator::Add,
                                        factory.importExpr(*addrRange.getLength().value()));
         EXPECT_EQ(factory.importExpr(*rightBound.value()), expected);
+
+        auto *rightBoundNode =
+            symbolic::cast<symbolic::BinaryOpExpr>(rightBound.value().get().get());
+        EXPECT_EQ(rightBoundNode->getLeft().get(),
+                  factory.importExpr(*addrRange.getOffset()).get().get());
+        EXPECT_EQ(rightBoundNode->getRight().get(),
+                  factory.importExpr(*addrRange.getLength().value()).get().get());
     }
 
     // Test usage of \\at(...) when predefinedLabels is set.

@@ -2366,8 +2366,11 @@ namespace acslg::analyzer::symbolic {
         // Not sure return which one is better, offset_+1 or nullopt.
         if (length_ == std::nullopt)
             return std::nullopt;
-        return buildBinaryExpr(offset_->clone(), detail::BinaryOpExprNode::Operator::Add,
-                              length_.value()->clone());
+        auto &factory = ExprFactoryScope::current();
+        auto rightBound = factory.binary(factory.importExpr(*offset_),
+                                         detail::BinaryOpExprNode::Operator::Add,
+                                         factory.importExpr(*length_.value()));
+        return factory.cloneExpr(rightBound);
     }
 
     SymbolAddrBaseInfo SymbolAddress::getBaseInfo() const {
