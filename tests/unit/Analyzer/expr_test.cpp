@@ -2091,19 +2091,12 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
-        std::optional<
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>> noFrom;
-        std::optional<
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>> offset;
-        std::unique_ptr<const symbolic::SymbolicExpr> offsetExpr =
-            symbolic::makeLiteralExpr(4).into_underlying();
-        offset.emplace(
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
-                std::move(offsetExpr)});
-        std::optional<
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>> length;
-        symbolic::SymbolAddress legacy{var->getType(), std::move(noFrom), point,
-                                       std::move(offset), std::move(length)};
+        symbolic::ExprFactory setupFactory;
+        auto legacyPtr = symbolic::cloneSymbolAddress(
+            symbolic::Addr::symbol(setupFactory, var->getType(), point)
+                .withOffset(symbolic::LiteralExpr{setupFactory, int64_t{4}})
+                .handle());
+        const auto &legacy = *legacyPtr;
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
