@@ -437,10 +437,10 @@ namespace acslg::analyzer::symbolic {
             return std::nullopt;
         };
         /**
-         * @brief Evaluate to a literal node when the expression is fully constant.
-         * @return Newly allocated literal or nullptr if not constant.
+         * @brief Evaluate to a factory-owned literal node when the expression is fully constant.
+         * @return Interned literal or nullptr if not constant.
          */
-        virtual std::unique_ptr<detail::LiteralExprNode> evalToConstExpr() const { return nullptr; }
+        virtual const detail::LiteralExprNode *evalToConstExpr() const { return nullptr; }
 
         /**
          * @brief Identify whether this expression represents an unknown value.
@@ -707,7 +707,7 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
-        std::unique_ptr<detail::LiteralExprNode> evalToConstExpr() const override;
+        const detail::LiteralExprNode *evalToConstExpr() const override;
 
         virtual bool equal(const SymbolicExpr &expr) const override;
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
@@ -815,7 +815,7 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
-        std::unique_ptr<detail::LiteralExprNode> evalToConstExpr() const override;
+        const detail::LiteralExprNode *evalToConstExpr() const override;
 
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override {
@@ -906,7 +906,7 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
-        std::unique_ptr<detail::LiteralExprNode> evalToConstExpr() const override;
+        const detail::LiteralExprNode *evalToConstExpr() const override;
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;

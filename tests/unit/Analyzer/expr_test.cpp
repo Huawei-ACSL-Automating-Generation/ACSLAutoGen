@@ -987,6 +987,25 @@ namespace acslg::test::unit::analyzer {
                   factory.binary(expectedX, symbolic::BinaryOpExpr::Operator::Equal, zero));
     }
 
+    TEST(ExprFactoryTest, ConstantEvalReturnsInternedLiteral) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto expr = factory.cloneExpr(
+            factory.binary(factory.literal(int64_t{1}),
+                           symbolic::BinaryOpExpr::Operator::Add,
+                           factory.literal(int64_t{2})));
+
+        auto *literal = expr->evalToConstExpr();
+
+        ASSERT_NE(literal, nullptr);
+        EXPECT_EQ(literal, factory.literal(int64_t{3}).get().get());
+        EXPECT_EQ(factory.importExpr(*literal), factory.literal(int64_t{3}));
+
+        auto simplified = expr->simplifiedExpr();
+        EXPECT_EQ(factory.importExpr(*simplified), factory.literal(int64_t{3}));
+    }
+
     TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {
         symbolic::ExprFactory factory;
 

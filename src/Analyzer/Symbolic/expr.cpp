@@ -211,27 +211,37 @@ namespace acslg::analyzer::symbolic {
             return (int64_t)x;
         }
 
-        inline std::unique_ptr<detail::LiteralExprNode> makeLiteralFromUnifiedType(Type t,
-                                                                       bool asBool,
-                                                                       uint64_t raw) {
+        inline const detail::LiteralExprNode *literalNode(ExprHandle handle) {
+            return cast<const detail::LiteralExprNode>(handle.get().get());
+        }
+
+        inline utils::not_null<std::unique_ptr<SymbolicExpr>> cloneConstLiteral(
+            const detail::LiteralExprNode &literal) {
+            return ExprFactoryScope::current().cloneExpr(ExprHandle{&literal});
+        }
+
+        inline const detail::LiteralExprNode *makeLiteralFromUnifiedType(Type t,
+                                                                         bool asBool,
+                                                                         uint64_t raw) {
+            auto &factory = ExprFactoryScope::current();
             if (asBool)
-                return std::make_unique<detail::LiteralExprNode>(asBool);
+                return literalNode(factory.literal(asBool));
 
             unsigned bw = t.bitWidth ? t.bitWidth : 64;
             if (t.kind == ScalarKind::UInt) {
                 uint64_t u = coerceU(bw, raw);
                 if (bw <= 16)
-                    return std::make_unique<detail::LiteralExprNode>((unsigned short)u);
+                    return literalNode(factory.literal((unsigned short)u));
                 if (bw <= 32)
-                    return std::make_unique<detail::LiteralExprNode>((unsigned int)u);
-                return std::make_unique<detail::LiteralExprNode>((uint64_t)u);
+                    return literalNode(factory.literal((unsigned int)u));
+                return literalNode(factory.literal((uint64_t)u));
             } else { // Int
                 int64_t s = coerceS(bw, raw);
                 if (bw <= 16)
-                    return std::make_unique<detail::LiteralExprNode>((short)s);
+                    return literalNode(factory.literal((short)s));
                 if (bw <= 32)
-                    return std::make_unique<detail::LiteralExprNode>((int)s);
-                return std::make_unique<detail::LiteralExprNode>((int64_t)s);
+                    return literalNode(factory.literal((int)s));
+                return literalNode(factory.literal((int64_t)s));
             }
         }
 
@@ -1416,8 +1426,7 @@ namespace acslg::analyzer::symbolic {
 
         // Try constant folding first.
         if (auto c = evalToConstExpr())
-            return utils::not_null<std::unique_ptr<SymbolicExpr>>(
-                std::unique_ptr<SymbolicExpr>(std::move(c)));
+            return cloneConstLiteral(*c);
 
         auto LHS = left_->simplifiedExpr();
         auto RHS = right_->simplifiedExpr();
@@ -1456,27 +1465,23 @@ namespace acslg::analyzer::symbolic {
         if (op_ == Op::LogicalAnd) {
             if (auto lc = LHS->evalToConstExpr()) {
                 if (!literalAsBool(*lc))
-                    return utils::not_null<std::unique_ptr<SymbolicExpr>>(
-                        std::unique_ptr<SymbolicExpr>(std::move(lc)));
+                    return cloneConstLiteral(*lc);
                 return RHS; // lhs is true
             }
             if (auto rc = RHS->evalToConstExpr()) {
                 if (!literalAsBool(*rc))
-                    return utils::not_null<std::unique_ptr<SymbolicExpr>>(
-                        std::unique_ptr<SymbolicExpr>(std::move(rc)));
+                    return cloneConstLiteral(*rc);
                 return LHS; // rhs is true
             }
         } else if (op_ == Op::LogicalOr) {
             if (auto lc = LHS->evalToConstExpr()) {
                 if (literalAsBool(*lc))
-                    return utils::not_null<std::unique_ptr<SymbolicExpr>>(
-                        std::unique_ptr<SymbolicExpr>(std::move(lc)));
+                    return cloneConstLiteral(*lc);
                 return RHS; // lhs is false
             }
             if (auto rc = RHS->evalToConstExpr()) {
                 if (literalAsBool(*rc))
-                    return utils::not_null<std::unique_ptr<SymbolicExpr>>(
-                        std::unique_ptr<SymbolicExpr>(std::move(rc)));
+                    return cloneConstLiteral(*rc);
                 return LHS; // rhs is false
             }
         }
@@ -1500,21 +1505,22 @@ namespace acslg::analyzer::symbolic {
         return importThroughCurrentFactory(clone());
     }
 
-    std::unique_ptr<detail::LiteralExprNode> detail::LiteralExprNode::evalToConstExpr() const {
+    const detail::LiteralExprNode *detail::LiteralExprNode::evalToConstExpr() const {
+        auto &factory = ExprFactoryScope::current();
         switch (type_) {
-            case LiteralType::Boolean: return std::make_unique<detail::LiteralExprNode>(data_.boolValue);
-            case LiteralType::Int: return std::make_unique<detail::LiteralExprNode>(data_.intValue);
-            case LiteralType::UnsignedInt: return std::make_unique<detail::LiteralExprNode>(data_.uintValue);
-            case LiteralType::Short: return std::make_unique<detail::LiteralExprNode>(data_.shortValue);
+            case LiteralType::Boolean: return literalNode(factory.literal(data_.boolValue));
+            case LiteralType::Int: return literalNode(factory.literal(data_.intValue));
+            case LiteralType::UnsignedInt: return literalNode(factory.literal(data_.uintValue));
+            case LiteralType::Short: return literalNode(factory.literal(data_.shortValue));
             case LiteralType::UnsignedShort:
-                return std::make_unique<detail::LiteralExprNode>(data_.ushortValue);
-            case LiteralType::Int64: return std::make_unique<detail::LiteralExprNode>(data_.int64Value);
-            case LiteralType::UInt64: return std::make_unique<detail::LiteralExprNode>(data_.uint64Value);
+                return literalNode(factory.literal(data_.ushortValue));
+            case LiteralType::Int64: return literalNode(factory.literal(data_.int64Value));
+            case LiteralType::UInt64: return literalNode(factory.literal(data_.uint64Value));
         }
         return nullptr;
     }
 
-    std::unique_ptr<detail::LiteralExprNode> detail::UnaryOpExprNode::evalToConstExpr() const {
+    const detail::LiteralExprNode *detail::UnaryOpExprNode::evalToConstExpr() const {
         auto C = expr_->evalToConstExpr();
         if (!C)
             return nullptr;
@@ -1526,7 +1532,7 @@ namespace acslg::analyzer::symbolic {
         switch (op_) {
             case Op::LogicalNot: {
                 bool r = !literalAsBool(*C);
-                return std::make_unique<detail::LiteralExprNode>(r);
+                return literalNode(ExprFactoryScope::current().literal(r));
             }
             case Op::BitwiseNot: {
                 uint64_t x = coerceU(bw, literalRawU(*C));
@@ -1554,7 +1560,7 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    std::unique_ptr<detail::LiteralExprNode> detail::BinaryOpExprNode::evalToConstExpr() const {
+    const detail::LiteralExprNode *detail::BinaryOpExprNode::evalToConstExpr() const {
         using BO = detail::BinaryOpExprNode::Operator;
 
         auto Lc = left_->evalToConstExpr();
@@ -1563,19 +1569,19 @@ namespace acslg::analyzer::symbolic {
 
         if (op_ == BO::LogicalAnd) {
             if (!literalAsBool(*Lc))
-                return std::make_unique<detail::LiteralExprNode>(false);
+                return literalNode(ExprFactoryScope::current().literal(false));
             auto Rc = right_->evalToConstExpr();
             if (!Rc)
                 return nullptr;
-            return std::make_unique<detail::LiteralExprNode>(literalAsBool(*Rc));
+            return literalNode(ExprFactoryScope::current().literal(literalAsBool(*Rc)));
         }
         if (op_ == BO::LogicalOr) {
             if (literalAsBool(*Lc))
-                return std::make_unique<detail::LiteralExprNode>(true);
+                return literalNode(ExprFactoryScope::current().literal(true));
             auto Rc = right_->evalToConstExpr();
             if (!Rc)
                 return nullptr;
-            return std::make_unique<detail::LiteralExprNode>(literalAsBool(*Rc));
+            return literalNode(ExprFactoryScope::current().literal(literalAsBool(*Rc)));
         }
 
         auto Rc = right_->evalToConstExpr();
@@ -1585,7 +1591,9 @@ namespace acslg::analyzer::symbolic {
         auto tgt = unify(left_->getValType(), right_->getValType());
         if (tgt.kind == ScalarKind::Void) {
             if (op_ == BO::Equal || op_ == BO::NotEqual) {
-                auto emitBool = [](bool b) { return std::make_unique<detail::LiteralExprNode>(b); };
+                auto emitBool = [](bool b) {
+                    return literalNode(ExprFactoryScope::current().literal(b));
+                };
                 bool eq = (literalRawU(*Lc) == literalRawU(*Rc));
                 return emitBool(op_ == BO::Equal ? eq : !eq);
             }
@@ -1593,7 +1601,9 @@ namespace acslg::analyzer::symbolic {
         }
         unsigned bw = tgt.bitWidth ? tgt.bitWidth : 64;
 
-        auto emitBool = [](bool b) { return std::make_unique<detail::LiteralExprNode>(b); };
+        auto emitBool = [](bool b) {
+            return literalNode(ExprFactoryScope::current().literal(b));
+        };
 
         if (tgt.kind == ScalarKind::UInt) {
             uint64_t L = coerceU(bw, literalRawU(*Lc));
