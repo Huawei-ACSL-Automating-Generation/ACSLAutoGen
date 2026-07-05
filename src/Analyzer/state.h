@@ -103,7 +103,7 @@ namespace acslg::analyzer {
          * and its associated symbolic expression in a flattened sequence.
          */
         struct flat_view;
-        /// @brief Default construct an empty memory model.
+        /// @brief Default construct an empty memory model bound to the active expression factory.
         MemoryModel();
         explicit MemoryModel(symbolic::ExprFactory &factory);
         /// @brief Copy construct, duplicating all stored symbolic ranges.
@@ -249,7 +249,6 @@ namespace acslg::analyzer {
         StoredValue importValue(const symbolic::SymbolicExpr &value);
         StoredValue copyStoredValueFrom(const MemoryModel &other, StoredValue value);
 
-        std::unique_ptr<symbolic::ExprFactory> ownedFactory_;
         symbolic::ExprFactory *factory_;
     };
 

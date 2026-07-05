@@ -1801,12 +1801,7 @@ namespace acslg::analyzer {
     }
 
     MemoryModel::MemoryModel() {
-        if (symbolic::ExprFactoryScope::hasCurrent()) {
-            factory_ = &symbolic::ExprFactoryScope::current();
-        } else {
-            ownedFactory_ = std::make_unique<symbolic::ExprFactory>();
-            factory_      = ownedFactory_.get();
-        }
+        factory_ = &symbolic::ExprFactoryScope::current();
     }
 
     MemoryModel::MemoryModel(symbolic::ExprFactory &factory) : factory_(&factory) {}
@@ -1822,7 +1817,7 @@ namespace acslg::analyzer {
         return importValue(*value);
     }
 
-    MemoryModel::MemoryModel(const MemoryModel &other) : MemoryModel() {
+    MemoryModel::MemoryModel(const MemoryModel &other) : MemoryModel(other.factory()) {
         for (auto &[addr, value] : other.memoryMap_variableAddr_) {
             memoryMap_variableAddr_.emplace(addr, copyStoredValueFrom(other, value));
         }
