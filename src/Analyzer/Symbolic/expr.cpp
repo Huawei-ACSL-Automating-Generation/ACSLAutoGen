@@ -518,7 +518,8 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return factory.cloneExpr(factory.unary(op, factory.importExpr(*expr)));
+            Expr operand{factory, factory.importExpr(*expr)};
+            return factory.cloneExpr(operand.unary(op).handle());
         }
         return std::make_unique<UnaryOpExpr>(op, std::move(expr));
     }
@@ -529,8 +530,9 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> rhs) {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return factory.cloneExpr(
-                factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
+            Expr lhsExpr{factory, factory.importExpr(*lhs)};
+            Expr rhsExpr{factory, factory.importExpr(*rhs)};
+            return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
         }
         return std::make_unique<BinaryOpExpr>(std::move(lhs), op, std::move(rhs));
     }
@@ -2328,8 +2330,9 @@ namespace acslg::analyzer::symbolic {
             ERROR("Invalid offset.");
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return cloneSymbolAddress(
-                factory.withOffset(factory.importAddress(*this), factory.importExpr(*offset)));
+            Addr addr{factory, factory.importAddress(*this)};
+            Expr offsetExpr{factory, factory.importExpr(*offset)};
+            return cloneSymbolAddress(addr.withOffset(offsetExpr).handle());
         }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ = ExprChild{std::move(offset)};
@@ -2342,8 +2345,9 @@ namespace acslg::analyzer::symbolic {
             ERROR("Invalid offset.");
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return cloneSymbolAddress(factory.withAddedOffset(
-                factory.importAddress(*this), factory.importExpr(*extra)));
+            Addr addr{factory, factory.importAddress(*this)};
+            Expr extraExpr{factory, factory.importExpr(*extra)};
+            return cloneSymbolAddress(addr.withAddedOffset(extraExpr).handle());
         }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ =
@@ -2360,8 +2364,9 @@ namespace acslg::analyzer::symbolic {
             ERROR("Invalid offset.");
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return cloneSymbolAddress(factory.withSubtractedOffset(
-                factory.importAddress(*this), factory.importExpr(*extra)));
+            Addr addr{factory, factory.importAddress(*this)};
+            Expr extraExpr{factory, factory.importExpr(*extra)};
+            return cloneSymbolAddress(addr.withSubtractedOffset(extraExpr).handle());
         }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ =
@@ -2375,9 +2380,9 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withResetOffset() const {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return cloneSymbolAddress(factory.withOffset(
-                factory.importAddress(*this),
-                factory.literal(static_cast<int64_t>(ZERO_OFFSET))));
+            Addr addr{factory, factory.importAddress(*this)};
+            LiteralExpr zero{factory, static_cast<int64_t>(ZERO_OFFSET)};
+            return cloneSymbolAddress(addr.withOffset(zero).handle());
         }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ = ExprChild{makeLiteralExpr(static_cast<int64_t>(ZERO_OFFSET))};
@@ -2390,8 +2395,9 @@ namespace acslg::analyzer::symbolic {
             ERROR("Invalid Length.");
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return cloneSymbolAddress(
-                factory.withLength(factory.importAddress(*this), factory.importExpr(*len)));
+            Addr addr{factory, factory.importAddress(*this)};
+            Expr length{factory, factory.importExpr(*len)};
+            return cloneSymbolAddress(addr.withLength(length).handle());
         }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->length_.emplace(std::move(len));
@@ -2404,8 +2410,9 @@ namespace acslg::analyzer::symbolic {
             ERROR("Invalid offset.");
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return cloneSymbolAddress(factory.withAddedLength(
-                factory.importAddress(*this), factory.importExpr(*extra)));
+            Addr addr{factory, factory.importAddress(*this)};
+            Expr extraExpr{factory, factory.importExpr(*extra)};
+            return cloneSymbolAddress(addr.withAddedLength(extraExpr).handle());
         }
         auto result = std::make_unique<SymbolAddress>(*this);
         if (length_ == std::nullopt) {
@@ -2427,7 +2434,8 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withoutLength() const {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return cloneSymbolAddress(factory.withoutLength(factory.importAddress(*this)));
+            Addr addr{factory, factory.importAddress(*this)};
+            return cloneSymbolAddress(addr.withoutLength().handle());
         }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->length_ = std::nullopt;
@@ -2555,7 +2563,7 @@ namespace acslg::analyzer::symbolic {
                     auto *cat      = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr());
                     auto arrayAddr = Addr::symbol(elemTy, fieldAddr, fromPoint);
                     if (cat) {
-                        Expr length{factory, factory.literal(cat->getSize().getZExtValue())};
+                        LiteralExpr length{factory, cat->getSize().getZExtValue()};
                         arrayAddr = arrayAddr.withLength(length);
                     }
                     fields_.emplace_back(arrayAddr.asExpr().handle());

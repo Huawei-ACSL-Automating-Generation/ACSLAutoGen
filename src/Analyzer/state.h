@@ -278,31 +278,28 @@ namespace acslg::analyzer {
             if (len == 0)
                 ERROR("Length should not be 0, something goes wrong.");
 
-	            auto &factory = owner.factory();
-	            std::optional<symbolic::Addr> from;
-	            if (base.fromAddr_)
-	                from.emplace(factory, factory.importAddress(*base.fromAddr_.value()));
+            auto &factory = owner.factory();
+            std::optional<symbolic::Addr> from;
+            if (base.fromAddr_)
+                from.emplace(factory, factory.importAddress(*base.fromAddr_.value()));
 
-	            auto offset = symbolic::Expr{factory, factory.literal(off)};
-	            auto addr =
-	                [&]() {
-	                    if (len == 1) {
-	                        if (from)
-	                            return symbolic::Addr::symbol(base.pointeeType_, *from,
-	                                                          base.fromPoint_, offset);
-	                        return symbolic::Addr::symbol(base.pointeeType_, base.fromPoint_,
-	                                                      offset);
-	                    }
+            symbolic::LiteralExpr offset{factory, off};
+            auto addr = [&]() {
+                if (len == 1) {
+                    if (from)
+                        return symbolic::Addr::symbol(base.pointeeType_, *from,
+                                                      base.fromPoint_, offset);
+                    return symbolic::Addr::symbol(base.pointeeType_, base.fromPoint_, offset);
+                }
 
-	                    auto length = symbolic::Expr{factory, factory.literal(len)};
-	                    if (from)
-	                        return symbolic::Addr::symbol(base.pointeeType_, *from,
-	                                                      base.fromPoint_, offset, length);
-	                    return symbolic::Addr::symbol(base.pointeeType_, base.fromPoint_,
-	                                                  offset, length);
-	                }();
-	            return addr->addressClone().into_underlying();
-	        }
+                symbolic::LiteralExpr length{factory, len};
+                if (from)
+                    return symbolic::Addr::symbol(base.pointeeType_, *from, base.fromPoint_,
+                                                  offset, length);
+                return symbolic::Addr::symbol(base.pointeeType_, base.fromPoint_, offset, length);
+            }();
+            return addr->addressClone().into_underlying();
+        }
 
         /// Helper to access variable address map from owner
         template <class Owner> static auto &var_addr_map(Owner &mm) {
