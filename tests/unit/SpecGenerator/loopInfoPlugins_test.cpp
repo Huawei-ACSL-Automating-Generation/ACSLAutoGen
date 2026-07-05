@@ -32,6 +32,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.patternInfo, nullopt);
         auto &patternInfo = loopInfo.patternInfo.value();
@@ -209,6 +210,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.indexInfo, nullopt);
         auto &indexInfo = loopInfo.indexInfo.value();
@@ -236,6 +238,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.indexInfo, nullopt);
         auto &indexInfo = loopInfo.indexInfo.value();
@@ -265,6 +268,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.indexInfo, nullopt);
         auto &indexInfo = loopInfo.indexInfo.value();
@@ -322,6 +326,7 @@ namespace acslg::test::unit::spec_generator {
     }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_EQ(continueFlag, false);
         EXPECT_EQ(loopInfo.indexInfo, nullopt);
     }
@@ -356,6 +361,7 @@ namespace acslg::test::unit::spec_generator {
 }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.indexInfo, nullopt);
         auto &indexInfo = loopInfo.indexInfo.value();

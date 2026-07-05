@@ -42,6 +42,28 @@ namespace acslg::analyzer::symbolic {
         return current_ != nullptr;
     }
 
+    ExprHandle ExprFactory::intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node) {
+        const auto hash = node->hash();
+        auto &bucket    = interned_[hash];
+
+        ExprFactoryScope scope(*this);
+        for (const auto *existing : bucket) {
+            if (*existing == *node)
+                return ExprHandle{existing};
+        }
+
+        auto *raw = node.get().get();
+        owned_.push_back(std::move(node).into_underlying());
+        bucket.push_back(raw);
+        return ExprHandle{raw};
+    }
+
+    AddrHandle ExprFactory::internAddress(utils::not_null<std::unique_ptr<Address>> node) {
+        std::unique_ptr<SymbolicExpr> exprNode = std::move(node).into_underlying();
+        auto handle = intern(utils::not_null<std::unique_ptr<SymbolicExpr>>{std::move(exprNode)});
+        return AddrHandle{cast<const Address>(handle.get().get())};
+    }
+
     ExprHandle ExprFactory::withValType(ExprHandle expr, SymbolicExpr::Type newType) {
         if (expr->getValType() == newType)
             return expr;
@@ -439,35 +461,26 @@ namespace acslg::analyzer::symbolic {
         }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> buildLiteralExpr(int64_t value) {
-            if (ExprFactoryScope::hasCurrent()) {
-                auto &factory = ExprFactoryScope::current();
-                return factory.cloneExpr(LiteralExpr(factory, value).handle());
-            }
-            return makeLiteralExpr(value);
+            auto &factory = ExprFactoryScope::current();
+            return factory.cloneExpr(LiteralExpr(factory, value).handle());
         }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> buildBinaryExpr(
             utils::not_null<std::unique_ptr<SymbolicExpr>> lhs,
             BinaryOpExpr::Operator op,
             utils::not_null<std::unique_ptr<SymbolicExpr>> rhs) {
-            if (ExprFactoryScope::hasCurrent()) {
-                auto &factory = ExprFactoryScope::current();
-                Expr lhsExpr{factory, factory.importExpr(*lhs)};
-                Expr rhsExpr{factory, factory.importExpr(*rhs)};
-                return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
-            }
-            return makeBinaryExpr(std::move(lhs), op, std::move(rhs));
+            auto &factory = ExprFactoryScope::current();
+            Expr lhsExpr{factory, factory.importExpr(*lhs)};
+            Expr rhsExpr{factory, factory.importExpr(*rhs)};
+            return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
         }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> buildUnaryExpr(
             UnaryOpExpr::Operator op,
             utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-            if (ExprFactoryScope::hasCurrent()) {
-                auto &factory = ExprFactoryScope::current();
-                Expr operand{factory, factory.importExpr(*expr)};
-                return factory.cloneExpr(operand.unary(op).handle());
-            }
-            return makeUnaryExpr(op, std::move(expr));
+            auto &factory = ExprFactoryScope::current();
+            Expr operand{factory, factory.importExpr(*expr)};
+            return factory.cloneExpr(operand.unary(op).handle());
         }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildSymbolAddress(

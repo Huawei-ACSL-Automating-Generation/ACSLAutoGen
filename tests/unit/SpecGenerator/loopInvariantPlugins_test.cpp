@@ -36,6 +36,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("mx"));
         ASSERT_EQ(normalPostInfo.memoryMap.size(), 1);
@@ -55,6 +56,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("cnt"));
         // EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. \\at\(n, [^)]+\) - 1\])"));
@@ -95,6 +97,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("i"));
         EXPECT_THAT(*spec, HasSubstr("cnt"));
@@ -139,6 +142,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("i"));
         EXPECT_THAT(*spec, HasSubstr("cnt"));
@@ -205,6 +209,7 @@ namespace acslg::test::unit::spec_generator {
 }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("aa"));
         EXPECT_THAT(*spec, HasSubstr("bb"));
@@ -256,6 +261,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("mx"));
         ASSERT_EQ(normalPostInfo.memoryMap.size(), 1);
@@ -311,6 +317,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("i"));
         ASSERT_EQ(normalPostInfo.memoryMap.size(), 1);
@@ -355,6 +362,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -370,6 +378,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -385,6 +394,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -406,6 +416,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -423,6 +434,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -441,6 +453,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_EQ(res.acsl, nullopt);
     }
 
@@ -461,6 +474,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -477,6 +491,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -515,6 +530,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -550,6 +566,7 @@ namespace acslg::test::unit::spec_generator {
     }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -583,6 +600,7 @@ namespace acslg::test::unit::spec_generator {
     }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -617,6 +635,7 @@ namespace acslg::test::unit::spec_generator {
     }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -651,6 +670,7 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
 }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -710,6 +730,7 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
 }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -747,6 +768,7 @@ int arraySearch(int *a, int x, int n) {
     }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -797,6 +819,7 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
 }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);

@@ -1403,26 +1403,9 @@ namespace acslg::analyzer::symbolic {
                              SourcePoint fromPoint);
         ExprHandle withField(ExprHandle structure, size_t index, ExprHandle value);
 
-        ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node) {
-            const auto hash = node->hash();
-            auto &bucket    = interned_[hash];
-            for (const auto *existing : bucket) {
-                if (*existing == *node)
-                    return ExprHandle{existing};
-            }
+        ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node);
 
-            auto *raw = node.get().get();
-            owned_.push_back(std::move(node).into_underlying());
-            bucket.push_back(raw);
-            return ExprHandle{raw};
-        }
-
-        AddrHandle internAddress(utils::not_null<std::unique_ptr<Address>> node) {
-            std::unique_ptr<SymbolicExpr> exprNode = std::move(node).into_underlying();
-            auto handle = intern(utils::not_null<std::unique_ptr<SymbolicExpr>>{
-                std::move(exprNode)});
-            return AddrHandle{cast<const Address>(handle.get().get())};
-        }
+        AddrHandle internAddress(utils::not_null<std::unique_ptr<Address>> node);
 
         size_t size() const { return owned_.size(); }
 

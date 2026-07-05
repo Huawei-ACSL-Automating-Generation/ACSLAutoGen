@@ -2301,6 +2301,8 @@ namespace acslg::test::unit::analyzer {
             auto originalAddr = symbolic::Addr::symbol(factory, var->getType(), point);
             original = symbolic::cloneSymbolAddress(originalAddr.handle());
         }
+        symbolic::ExprFactory rebuildFactory;
+        symbolic::ExprFactoryScope rebuildScope(rebuildFactory);
         auto withOffset =
             original->withOffset(symbolic::makeLiteralExpr(5));
         auto withLength =

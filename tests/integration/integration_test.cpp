@@ -174,6 +174,7 @@ namespace acslg::test::integration {
             },
             ::testing::ExitedWithCode(0), "");
         auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
         ASSERT_EQ(*getReturnExprOfFirstPath(*postState)->simplifiedExpr(),
                   *analyzer::symbolic::detail::LiteralExprNode{0}.simplifiedExpr());
     }
@@ -196,6 +197,7 @@ namespace acslg::test::integration {
             },
             ::testing::ExitedWithCode(0), "");
         auto postState = getPostStateOfFirstLoop(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
         auto &paths    = postState->getPaths();
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
@@ -235,6 +237,7 @@ namespace acslg::test::integration {
             },
             ::testing::ExitedWithCode(0), "");
         auto postState = getPostStateOfFirstLoop(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
         auto &paths    = postState->getPaths();
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
@@ -278,6 +281,7 @@ namespace acslg::test::integration {
             },
             ::testing::ExitedWithCode(0), "");
         auto postState = getPostStateOfFirstLoop(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
         auto &paths    = postState->getPaths();
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
@@ -491,7 +495,9 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
+        auto result = getReturnExprOfFirstPath(*postState)->simplifiedExpr();
         ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
                                        resultStr);
         EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
@@ -522,7 +528,9 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
+        auto result = getReturnExprOfFirstPath(*postState)->simplifiedExpr();
         ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
                                        resultStr);
         EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
@@ -551,7 +559,9 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
+        auto result = getReturnExprOfFirstPath(*postState)->simplifiedExpr();
         ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
                                        resultStr);
         EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("*x.x"), HasSubstr("+ *x.x")),
@@ -581,7 +591,9 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
+        auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
+        auto result = getReturnExprOfFirstPath(*postState)->simplifiedExpr();
         ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
                                        resultStr);
         EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("*a.x"), HasSubstr("+ *a.x")),
@@ -632,6 +644,7 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
 }
     )";
         auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
 
         for (auto &path : postState->getPaths()) {
             string symbolAddrs;

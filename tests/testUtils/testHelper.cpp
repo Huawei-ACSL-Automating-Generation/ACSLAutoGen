@@ -16,12 +16,31 @@ namespace acslg::test::utils {
     using namespace spec_generator;
     using namespace ::acslg::utils;
 
+    namespace {
+        symbolic::ExprFactory *lastExprFactory = nullptr;
+        std::unique_ptr<symbolic::ExprFactoryScope> lastExprFactoryScope;
+
+        void rememberExprFactory(ACSLGContext &context) {
+            lastExprFactoryScope.reset();
+            lastExprFactory = &context.getExprFactory();
+            lastExprFactoryScope =
+                std::make_unique<symbolic::ExprFactoryScope>(*lastExprFactory);
+        }
+    } // namespace
+
+    symbolic::ExprFactory &getLastExprFactory() {
+        if (lastExprFactory == nullptr)
+            ERROR("No test ExprFactory has been initialized.");
+        return *lastExprFactory;
+    }
+
     optional<string> doPluginOnFirstFunc(const string &code, const string &pid) {
         static ASTExtractor e;
         static optional<ACSLGContext> context{};
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
         symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
@@ -50,6 +69,8 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         ACSLAnalyzer analyzer(context.value());
         analyzer.analyzeFunctions();
         for (auto &str : context.value().getInsertedStrings()) {
@@ -64,6 +85,7 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
         symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
@@ -95,6 +117,8 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func = e.findFirstDecl<FunctionDecl>();
         auto symbolicState =
             make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
@@ -116,6 +140,7 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
         symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
@@ -167,6 +192,7 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
         symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
@@ -210,6 +236,7 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
         symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());

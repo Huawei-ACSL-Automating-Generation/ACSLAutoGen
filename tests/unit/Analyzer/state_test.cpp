@@ -295,6 +295,7 @@ namespace acslg::test::unit::analyzer {
             }
         )c");
 
+        symbolic::ExprFactoryScope scope(postState->getExprFactory());
         auto result = getReturnExprOfFirstPath(*postState)->simplifiedExpr();
         auto *lit   = symbolic::cast<symbolic::detail::LiteralExprNode>(result.get().get());
         EXPECT_EQ(lit->getLiteralValue(), 12);
