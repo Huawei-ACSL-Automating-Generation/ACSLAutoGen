@@ -2468,7 +2468,10 @@ namespace acslg::test::unit::analyzer {
         auto originalField0 = structure->getFieldValue(0)->clone();
         auto originalField1 = structure->getFieldValue(1)->clone();
 
-        auto updated = structure->withFieldValue(0, symbolic::makeLiteralExpr(42));
+        auto updated = [&]() {
+            symbolic::ExprFactoryScope scope(factory);
+            return structure->withFieldValue(0, symbolic::makeLiteralExpr(42));
+        }();
 
         EXPECT_EQ(*structure->getFieldValue(0), *originalField0);
         EXPECT_EQ(*structure->getFieldValue(1), *originalField1);

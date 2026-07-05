@@ -2408,14 +2408,9 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) const {
         if (index >= fields_.size())
             ERROR("Out-of-bounds access");
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            return cloneStructure(factory.withField(
-                factory.importExpr(*this), index, factory.importExpr(*expr)));
-        }
-        auto result = std::make_unique<Structure>(*this);
-        result->fields_[index] = ExprChild{std::move(expr)};
-        return result;
+        auto &factory = ExprFactoryScope::current();
+        return cloneStructure(factory.withField(
+            factory.importExpr(*this), index, factory.importExpr(*expr)));
     }
 
     Structure::Structure(Info info, std::vector<ExprHandle> fields)
@@ -2440,53 +2435,14 @@ namespace acslg::analyzer::symbolic {
               Type{ScalarKind::Structure, static_cast<unsigned>(layout.getSize().getQuantity()) *
                                               8 /*By default, char is 8-bit.*/}),
           Symbol(Kind::K_Structure), info_(Info{RD, layout}) {
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            Addr fromAddr{factory, factory.importAddress(*from)};
-
-            fields_.reserve(info_.layout_.getFieldCount());
-            for (auto field : info_.definition_->fields()) {
-                auto index          = field->getFieldIndex();
-                clang::QualType fty = field->getType();
-                auto fieldAddr = fromAddr.field(fty, info_.definition_, index);
-
-                if (fty->isStructureType()) {
-                    auto nestedRD = fty->getAsRecordDecl();
-                    if (!nestedRD || !nestedRD->isCompleteDefinition())
-                        ERROR("Incomplete nested struct definition");
-                    nestedRD           = nestedRD->getDefinition();
-                    auto &nestedLayout = nestedRD->getASTContext().getASTRecordLayout(nestedRD);
-                    fields_.emplace_back(
-                        factory.structure(nestedRD, nestedLayout, fieldAddr.handle(), fromPoint));
-                } else if (fty->isPointerType()) {
-                    fields_.emplace_back(Addr::symbol(fty, fieldAddr, fromPoint).asExpr().handle());
-                } else if (fty->isArrayType()) {
-                    auto arrayType = llvm::cast<clang::ArrayType>(fty);
-                    auto elemTy    = arrayType->getElementType();
-                    auto *cat      = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr());
-                    auto arrayAddr = Addr::symbol(elemTy, fieldAddr, fromPoint);
-                    if (cat) {
-                        LiteralExpr length{factory, cat->getSize().getZExtValue()};
-                        arrayAddr = arrayAddr.withLength(length);
-                    }
-                    fields_.emplace_back(arrayAddr.asExpr().handle());
-                } else {
-                    fields_.emplace_back(
-                        Expr::symbolValue(deriveType(fty), fieldAddr, fromPoint).handle());
-                }
-            }
-            if (fields_.size() != info_.layout_.getFieldCount())
-                UNREACHABLE();
-            return;
-        }
+        auto &factory = ExprFactoryScope::current();
+        Addr fromAddr{factory, factory.importAddress(*from)};
 
         fields_.reserve(info_.layout_.getFieldCount());
         for (auto field : info_.definition_->fields()) {
             auto index          = field->getFieldIndex();
             clang::QualType fty = field->getType();
-
-            auto fieldAddr = std::make_unique<FieldAddress>(
-                fty, info_.definition_, from->addressClone().into_underlying(), index);
+            auto fieldAddr = fromAddr.field(fty, info_.definition_, index);
 
             if (fty->isStructureType()) {
                 auto nestedRD = fty->getAsRecordDecl();
@@ -2494,34 +2450,23 @@ namespace acslg::analyzer::symbolic {
                     ERROR("Incomplete nested struct definition");
                 nestedRD           = nestedRD->getDefinition();
                 auto &nestedLayout = nestedRD->getASTContext().getASTRecordLayout(nestedRD);
-                auto nested        = std::make_unique<Structure>(nestedRD, nestedLayout,
-                                                                 std::move(fieldAddr), fromPoint);
-                fields_.emplace_back(std::move(nested));
+                fields_.emplace_back(
+                    factory.structure(nestedRD, nestedLayout, fieldAddr.handle(), fromPoint));
             } else if (fty->isPointerType()) {
-                std::unique_ptr<const Address> fromField = std::move(fieldAddr);
-                std::optional<utils::not_null<std::unique_ptr<const Address>>> fromArg{
-                    utils::not_null<std::unique_ptr<const Address>>{std::move(fromField)}};
-                fields_.emplace_back(rebuildSymbolAddress(
-                    fty, std::move(fromArg), fromPoint,
-                    buildLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)),
-                    std::nullopt));
+                fields_.emplace_back(Addr::symbol(fty, fieldAddr, fromPoint).asExpr().handle());
             } else if (fty->isArrayType()) {
                 auto arrayType = llvm::cast<clang::ArrayType>(fty);
                 auto elemTy    = arrayType->getElementType();
-                std::unique_ptr<const Address> fromField = std::move(fieldAddr);
-                std::optional<utils::not_null<std::unique_ptr<const Address>>> fromArg{
-                    utils::not_null<std::unique_ptr<const Address>>{std::move(fromField)}};
-                std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> lengthArg;
-                if (auto *cat = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr())) {
-                    lengthArg = buildLiteralExpr(static_cast<int64_t>(cat->getSize().getZExtValue()));
+                auto *cat      = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr());
+                auto arrayAddr = Addr::symbol(elemTy, fieldAddr, fromPoint);
+                if (cat) {
+                    LiteralExpr length{factory, cat->getSize().getZExtValue()};
+                    arrayAddr = arrayAddr.withLength(length);
                 }
-                fields_.emplace_back(rebuildSymbolAddress(
-                    elemTy, std::move(fromArg), fromPoint,
-                    buildLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)),
-                    std::move(lengthArg)));
+                fields_.emplace_back(arrayAddr.asExpr().handle());
             } else {
-                auto vty = deriveType(fty);
-                fields_.emplace_back(rebuildSymbolValue(vty, *fieldAddr, fromPoint));
+                fields_.emplace_back(
+                    Expr::symbolValue(deriveType(fty), fieldAddr, fromPoint).handle());
             }
         }
         if (fields_.size() != info_.layout_.getFieldCount())
