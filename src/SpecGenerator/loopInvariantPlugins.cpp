@@ -629,10 +629,11 @@ namespace acslg::spec_generator {
                     auto result = rebuildSymbolAddress(
                         *symbolAddr,
                         [](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withOffset(
-                                address,
-                                factory.literal(
-                                    static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)));
+                            symb::Addr addr{factory, address};
+                            symb::LiteralExpr zero{
+                                factory,
+                                static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)};
+                            return addr.withOffset(zero).handle();
                         },
                         [](const symb::SymbolAddress &address) {
                             return address
@@ -645,7 +646,9 @@ namespace acslg::spec_generator {
                     auto resultWithLength = rebuildSymbolAddress(
                         result,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withLength(address, factory.importExpr(*lengthExpr));
+                            symb::Addr addr{factory, address};
+                            symb::Expr length{factory, factory.importExpr(*lengthExpr)};
+                            return addr.withLength(length).handle();
                         },
                         [&lengthExpr](const symb::SymbolAddress &address) {
                             return address.withLength(lengthExpr->clone()).into_underlying();
@@ -669,8 +672,10 @@ namespace acslg::spec_generator {
                         auto result = rebuildSymbolAddress(
                             *symbolAddr,
                             [&pattern](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                return factory.withOffset(
-                                    address, factory.importExpr(*pattern.value().initialValue));
+                                symb::Addr addr{factory, address};
+                                symb::Expr offset{
+                                    factory, factory.importExpr(*pattern.value().initialValue)};
+                                return addr.withOffset(offset).handle();
                             },
                             [&pattern](const symb::SymbolAddress &address) {
                                 return address.withOffset(pattern.value().initialValue->clone())
@@ -682,7 +687,9 @@ namespace acslg::spec_generator {
                         auto resultWithLength = rebuildSymbolAddress(
                             result,
                             [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                return factory.withLength(address, factory.importExpr(*lengthExpr));
+                                symb::Addr addr{factory, address};
+                                symb::Expr length{factory, factory.importExpr(*lengthExpr)};
+                                return addr.withLength(length).handle();
                             },
                             [&lengthExpr](const symb::SymbolAddress &address) {
                                 return address.withLength(lengthExpr->clone()).into_underlying();
@@ -1414,10 +1421,11 @@ namespace acslg::spec_generator {
                     rebuildSymbolAddress(
                         *arrayAddr,
                         [](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withOffset(
-                                address,
-                                factory.literal(
-                                    static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)));
+                            symb::Addr addr{factory, address};
+                            symb::LiteralExpr zero{
+                                factory,
+                                static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)};
+                            return addr.withOffset(zero).handle();
                         },
                         [](const symb::SymbolAddress &address) {
                             return address.withResetOffset().into_underlying();
@@ -1429,8 +1437,10 @@ namespace acslg::spec_generator {
                         rebuildSymbolAddress(
                             *arrayRange,
                             [&](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                return factory.withLength(
-                                    address, factory.importExpr(*indexInfo.indexBound));
+                                symb::Addr addr{factory, address};
+                                symb::Expr length{
+                                    factory, factory.importExpr(*indexInfo.indexBound)};
+                                return addr.withLength(length).handle();
                             },
                             [&](const symb::SymbolAddress &address) {
                                 return address.withLength(indexInfo.indexBound->clone())
@@ -1444,8 +1454,9 @@ namespace acslg::spec_generator {
                         rebuildSymbolAddress(
                             *arrayRange,
                             [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                return factory.withLength(address,
-                                                          factory.importExpr(*lengthExpr));
+                                symb::Addr addr{factory, address};
+                                symb::Expr length{factory, factory.importExpr(*lengthExpr)};
+                                return addr.withLength(length).handle();
                             },
                             [&lengthExpr](const symb::SymbolAddress &address) {
                                 return address.withLength(lengthExpr->clone()).into_underlying();
@@ -1742,8 +1753,10 @@ namespace acslg::spec_generator {
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withOffset(
-                                address, factory.importExpr(*indexInfo.indexSymbolicValue));
+                            symb::Addr addr{factory, address};
+                            symb::Expr offset{
+                                factory, factory.importExpr(*indexInfo.indexSymbolicValue)};
+                            return addr.withOffset(offset).handle();
                         },
                         [&](const symb::SymbolAddress &address) {
                             return address.withOffset(indexInfo.indexSymbolicValue->clone())
@@ -1755,7 +1768,9 @@ namespace acslg::spec_generator {
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withLength(address, factory.importExpr(*lengthExpr));
+                            symb::Addr addr{factory, address};
+                            symb::Expr length{factory, factory.importExpr(*lengthExpr)};
+                            return addr.withLength(length).handle();
                         },
                         [&lengthExpr](const symb::SymbolAddress &address) {
                             return address.withLength(lengthExpr->clone()).into_underlying();
@@ -1765,8 +1780,10 @@ namespace acslg::spec_generator {
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withOffset(address,
-                                                      factory.importExpr(*indexInfo.indexBound));
+                            symb::Addr addr{factory, address};
+                            symb::Expr offset{factory,
+                                              factory.importExpr(*indexInfo.indexBound)};
+                            return addr.withOffset(offset).handle();
                         },
                         [&](const symb::SymbolAddress &address) {
                             return address.withOffset(indexInfo.indexBound->clone())
@@ -1778,7 +1795,9 @@ namespace acslg::spec_generator {
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withLength(address, factory.importExpr(*lengthExpr));
+                            symb::Addr addr{factory, address};
+                            symb::Expr length{factory, factory.importExpr(*lengthExpr)};
+                            return addr.withLength(length).handle();
                         },
                         [&lengthExpr](const symb::SymbolAddress &address) {
                             return address.withLength(lengthExpr->clone()).into_underlying();
