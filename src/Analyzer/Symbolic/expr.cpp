@@ -2010,21 +2010,13 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            auto rebuilt = factory.importExpr(*this);
-            for (size_t i = 0; i < fields_.size(); ++i) {
-                auto field = fields_[i]->getSubstitutedExpr(pathSubTo, pointToSub);
-                rebuilt = factory.withField(rebuilt, i, factory.importExpr(*field));
-            }
-            return factory.cloneExpr(rebuilt);
+        auto &factory = ExprFactoryScope::current();
+        auto rebuilt = factory.importExpr(*this);
+        for (size_t i = 0; i < fields_.size(); ++i) {
+            auto field = fields_[i]->getSubstitutedExpr(pathSubTo, pointToSub);
+            rebuilt = factory.withField(rebuilt, i, factory.importExpr(*field));
         }
-
-        auto newSt = std::make_unique<Structure>(*this);
-        for (auto &field : newSt->fields_) {
-            field = ExprChild{field->getSubstitutedExpr(pathSubTo, pointToSub)};
-        }
-        return newSt;
+        return factory.cloneExpr(rebuilt);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::getRangeIndexSubstituted(
@@ -2109,21 +2101,13 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            auto rebuilt = factory.importExpr(*this);
-            for (size_t i = 0; i < fields_.size(); ++i) {
-                auto field = fields_[i]->getRangeIndexSubstituted(rangeBase, indexExpr);
-                rebuilt = factory.withField(rebuilt, i, factory.importExpr(*field));
-            }
-            return factory.cloneExpr(rebuilt);
+        auto &factory = ExprFactoryScope::current();
+        auto rebuilt = factory.importExpr(*this);
+        for (size_t i = 0; i < fields_.size(); ++i) {
+            auto field = fields_[i]->getRangeIndexSubstituted(rangeBase, indexExpr);
+            rebuilt = factory.withField(rebuilt, i, factory.importExpr(*field));
         }
-
-        auto newSt = std::make_unique<Structure>(*this);
-        for (auto &field : newSt->fields_) {
-            field = ExprChild{field->getRangeIndexSubstituted(rangeBase, indexExpr)};
-        }
-        return newSt;
+        return factory.cloneExpr(rebuilt);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::getSubstitutedValueExpr(
@@ -2214,21 +2198,13 @@ namespace acslg::analyzer::symbolic {
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return importThroughCurrentFactory(it->second->clone());
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            auto rebuilt = factory.importExpr(*this);
-            for (size_t i = 0; i < fields_.size(); ++i) {
-                auto field = fields_[i]->getSubstitutedValueExpr(hashExprMap);
-                rebuilt = factory.withField(rebuilt, i, factory.importExpr(*field));
-            }
-            return factory.cloneExpr(rebuilt);
+        auto &factory = ExprFactoryScope::current();
+        auto rebuilt = factory.importExpr(*this);
+        for (size_t i = 0; i < fields_.size(); ++i) {
+            auto field = fields_[i]->getSubstitutedValueExpr(hashExprMap);
+            rebuilt = factory.withField(rebuilt, i, factory.importExpr(*field));
         }
-
-        auto newSt = std::make_unique<Structure>(*this);
-        for (auto &field : newSt->fields_) {
-            field = ExprChild{field->getSubstitutedValueExpr(hashExprMap)};
-        }
-        return newSt;
+        return factory.cloneExpr(rebuilt);
     }
 
     std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> detail::BinaryOpExprNode::
