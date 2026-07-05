@@ -2603,23 +2603,30 @@ namespace acslg::analyzer::symbolic {
                                                                  std::move(fieldAddr), fromPoint);
                 fields_.emplace_back(std::move(nested));
             } else if (fty->isPointerType()) {
-                auto addr = std::make_unique<SymbolAddress>(fty, std::move(fieldAddr), fromPoint);
-                fields_.emplace_back(std::move(addr));
+                std::unique_ptr<const Address> fromField = std::move(fieldAddr);
+                std::optional<utils::not_null<std::unique_ptr<const Address>>> fromArg{
+                    utils::not_null<std::unique_ptr<const Address>>{std::move(fromField)}};
+                fields_.emplace_back(rebuildSymbolAddress(
+                    fty, std::move(fromArg), fromPoint,
+                    makeLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)),
+                    std::nullopt));
             } else if (fty->isArrayType()) {
                 auto arrayType = llvm::cast<clang::ArrayType>(fty);
                 auto elemTy    = arrayType->getElementType();
-                auto addr = std::make_unique<SymbolAddress>(elemTy, std::move(fieldAddr), fromPoint);
+                std::unique_ptr<const Address> fromField = std::move(fieldAddr);
+                std::optional<utils::not_null<std::unique_ptr<const Address>>> fromArg{
+                    utils::not_null<std::unique_ptr<const Address>>{std::move(fromField)}};
+                std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> lengthArg;
                 if (auto *cat = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr())) {
-                    auto len =
-                        std::make_unique<detail::LiteralExprNode>(cat->getSize().getZExtValue());
-                    addr = addr->withLength(std::move(len)).into_underlying();
+                    lengthArg = makeLiteralExpr(cat->getSize().getZExtValue());
                 }
-                fields_.emplace_back(std::move(addr));
+                fields_.emplace_back(rebuildSymbolAddress(
+                    elemTy, std::move(fromArg), fromPoint,
+                    makeLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)),
+                    std::move(lengthArg)));
             } else {
                 auto vty = deriveType(fty);
-                auto symbolValue =
-                    std::make_unique<SymbolValue>(vty, std::move(fieldAddr), fromPoint);
-                fields_.emplace_back(std::move(symbolValue));
+                fields_.emplace_back(rebuildSymbolValue(vty, *fieldAddr, fromPoint));
             }
         }
         if (fields_.size() != info_.layout_.getFieldCount())
