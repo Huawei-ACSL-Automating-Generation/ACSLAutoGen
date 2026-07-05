@@ -14,23 +14,17 @@ namespace acslg::spec_generator {
         using OwnedSymbolicExpr = utils::not_null<std::unique_ptr<symb::SymbolicExpr>>;
 
         OwnedSymbolicExpr buildLiteral(int64_t value) {
-            if (symb::ExprFactoryScope::hasCurrent()) {
-                auto &factory = symb::ExprFactoryScope::current();
-                return factory.cloneExpr(symb::LiteralExpr(factory, value).handle());
-            }
-            return symb::makeLiteralExpr(value);
+            auto &factory = symb::ExprFactoryScope::current();
+            return factory.cloneExpr(symb::LiteralExpr(factory, value).handle());
         }
 
         OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
                                       symb::BinaryOpExpr::Operator op,
                                       OwnedSymbolicExpr rhs) {
-            if (symb::ExprFactoryScope::hasCurrent()) {
-                auto &factory = symb::ExprFactoryScope::current();
-                symb::Expr lhsExpr{factory, factory.importExpr(*lhs)};
-                symb::Expr rhsExpr{factory, factory.importExpr(*rhs)};
-                return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
-            }
-            return symb::makeBinaryExpr(std::move(lhs), op, std::move(rhs));
+            auto &factory = symb::ExprFactoryScope::current();
+            symb::Expr lhsExpr{factory, factory.importExpr(*lhs)};
+            symb::Expr rhsExpr{factory, factory.importExpr(*rhs)};
+            return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
         }
 
         OwnedSymbolicExpr buildMaxLoopCountExpr(const LoopInfo::Pattern &pattern,

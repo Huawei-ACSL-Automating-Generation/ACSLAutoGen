@@ -22,6 +22,7 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         preState->init();
@@ -63,6 +64,7 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         preState->init();
@@ -114,6 +116,7 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         Stmt *loopStmt;
@@ -164,6 +167,7 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         Stmt *loopStmt;
@@ -206,6 +210,7 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         Stmt *loopStmt;

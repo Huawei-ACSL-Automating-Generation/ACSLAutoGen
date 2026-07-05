@@ -912,6 +912,8 @@ namespace acslg::analyzer {
         auto getFunction() const -> const auto & { return func_; }
         /// @brief Access the shared context.
         auto getContext() const -> const auto & { return context_; }
+        /// @brief Access the expression factory owned by the shared context.
+        auto getExprFactory() const -> auto & { return context_.getExprFactory(); }
         /// @brief Access the starting source point.
         auto getStartPoint() const -> const auto & { return startPoint_; }
 

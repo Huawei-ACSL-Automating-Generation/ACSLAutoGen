@@ -108,40 +108,28 @@ namespace acslg::spec_generator {
         using symb::cloneSymbolAddress;
 
         OwnedSymbolicExpr buildLiteral(int64_t value) {
-            if (symb::ExprFactoryScope::hasCurrent()) {
-                auto &factory = symb::ExprFactoryScope::current();
-                return factory.cloneExpr(symb::LiteralExpr(factory, value).handle());
-            }
-            return symb::makeLiteralExpr(value);
+            auto &factory = symb::ExprFactoryScope::current();
+            return factory.cloneExpr(symb::LiteralExpr(factory, value).handle());
         }
 
         OwnedSymbolicExpr buildUnary(symb::UnaryOpExpr::Operator op, OwnedSymbolicExpr expr) {
-            if (symb::ExprFactoryScope::hasCurrent()) {
-                auto &factory = symb::ExprFactoryScope::current();
-                symb::Expr operand{factory, factory.importExpr(*expr)};
-                return factory.cloneExpr(operand.unary(op).handle());
-            }
-            return symb::makeUnaryExpr(op, std::move(expr));
+            auto &factory = symb::ExprFactoryScope::current();
+            symb::Expr operand{factory, factory.importExpr(*expr)};
+            return factory.cloneExpr(operand.unary(op).handle());
         }
 
         OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
                                       symb::BinaryOpExpr::Operator op,
                                       OwnedSymbolicExpr rhs) {
-            if (symb::ExprFactoryScope::hasCurrent()) {
-                auto &factory = symb::ExprFactoryScope::current();
-                symb::Expr lhsExpr{factory, factory.importExpr(*lhs)};
-                symb::Expr rhsExpr{factory, factory.importExpr(*rhs)};
-                return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
-            }
-            return symb::makeBinaryExpr(std::move(lhs), op, std::move(rhs));
+            auto &factory = symb::ExprFactoryScope::current();
+            symb::Expr lhsExpr{factory, factory.importExpr(*lhs)};
+            symb::Expr rhsExpr{factory, factory.importExpr(*rhs)};
+            return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
         }
 
         OwnedSymbolicExpr buildRangeIndex(std::string_view name) {
-            if (symb::ExprFactoryScope::hasCurrent()) {
-                auto &factory = symb::ExprFactoryScope::current();
-                return factory.cloneExpr(factory.rangeIndex(name));
-            }
-            return symb::makeRangeIndexExpr(name);
+            auto &factory = symb::ExprFactoryScope::current();
+            return factory.cloneExpr(factory.rangeIndex(name));
         }
 
         bool stmtHasNonAffineOps(const clang::Stmt *stmt) {

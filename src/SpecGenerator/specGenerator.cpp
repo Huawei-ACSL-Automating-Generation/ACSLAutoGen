@@ -125,6 +125,7 @@ namespace acslg::spec_generator {
         const analyzer::ProgramState &pre,
         const analyzer::ProgramState &post,
         std::string_view groupName) {
+        symb::ExprFactoryScope exprScope(pre.getExprFactory());
         auto plugins     = getPlugins<FunctionContractPlugin>(groupName);
         std::string spec = ACSL_HEAD.to_string();
 
@@ -156,6 +157,7 @@ namespace acslg::spec_generator {
                                             const analyzer::ProgramState &loopEntry,
                                             const clang::Stmt *loopStmt,
                                             std::string_view groupName) {
+        symb::ExprFactoryScope exprScope(preState.getExprFactory());
         auto plugins = getPlugins<LoopInfoPlugin>(groupName);
 
         LoopInfo loopInfo{loopStmt};
@@ -180,6 +182,7 @@ namespace acslg::spec_generator {
                               const analyzer::ProgramState &loopEntry,
                               LoopInfo &loopInfo,
                               std::string_view groupName) {
+        symb::ExprFactoryScope exprScope(preState.getExprFactory());
         auto plugins = getPlugins<LoopInfoPlugin>(groupName);
 
         for (auto &plugin : plugins) {
@@ -207,6 +210,7 @@ namespace acslg::spec_generator {
                                                       const LoopInfo &loopInfo,
                                                       std::string_view piGroupName,
                                                       std::string_view psGroupName) {
+        symb::ExprFactoryScope exprScope(preState.getExprFactory());
         auto piPlugins = getPlugins<PathInsensitiveLoopInvPlugin>(piGroupName);
         auto psPlugins = getPlugins<PathSensitiveLoopInvPlugin>(psGroupName);
         std::vector<std::unique_ptr<analyzer::Path>> invariants;
