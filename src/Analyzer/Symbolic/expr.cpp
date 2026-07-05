@@ -683,41 +683,10 @@ namespace acslg::analyzer::symbolic {
         if (!RD || !RD->isCompleteDefinition())
             UNIMPLEMENT("Incomplete struct definition in makeUnknownStructure.");
         const auto &layout = RD->getASTContext().getASTRecordLayout(RD);
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            return factory.cloneExpr(
-                factory.structure(RD, layout, factory.importAddress(*baseAddr),
-                                  std::move(fromPoint)));
-        }
-
-        // Preserve a clone for field-address construction before moving baseAddr into Structure.
-        auto baseAddrSeed = baseAddr->addressClone().into_underlying();
-        auto st = std::make_unique<Structure>(RD, layout, std::move(baseAddr), fromPoint);
-
-        size_t idx = 0;
-        for (const clang::FieldDecl *FD : RD->fields()) {
-            clang::QualType fty = FD->getType();
-            auto makeFieldAddr = [&]() {
-                return utils::not_null<std::unique_ptr<const Address>>{
-                    std::unique_ptr<const Address>(std::make_unique<FieldAddress>(
-                        fty, RD, baseAddrSeed->addressClone().into_underlying(),
-                        idx))};
-            };
-
-            if (fty->isStructureType()) {
-                // Recursively build unknown sub-structures so nested fields are initialized.
-                auto nested = makeUnknownStructure(fty, makeFieldAddr(), fromPoint);
-                st = st->withFieldValue(idx, std::move(nested)).into_underlying();
-            } else {
-                // Tie field values to their field address so later lookups can recover provenance.
-                auto fieldSym = getSymbol(fty, std::make_optional(makeFieldAddr()), fromPoint);
-                st = st->withFieldValue(idx, std::move(fieldSym)).into_underlying();
-            }
-            ++idx;
-        }
-
-        return utils::not_null<std::unique_ptr<SymbolicExpr>>{
-            std::unique_ptr<SymbolicExpr>(std::move(st))};
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+            factory.structure(RD, layout, factory.importAddress(*baseAddr),
+                              std::move(fromPoint)));
     }
 
     /**
