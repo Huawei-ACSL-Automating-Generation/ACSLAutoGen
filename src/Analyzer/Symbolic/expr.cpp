@@ -455,8 +455,6 @@ namespace acslg::analyzer::symbolic {
     namespace {
         utils::not_null<std::unique_ptr<SymbolicExpr>> importThroughCurrentFactory(
             utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-            if (!ExprFactoryScope::hasCurrent())
-                return expr;
             return ExprFactoryScope::current().importAndCloneExpr(*expr);
         }
 
