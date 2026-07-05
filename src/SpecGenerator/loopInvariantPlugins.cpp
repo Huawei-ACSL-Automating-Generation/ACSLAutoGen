@@ -109,7 +109,6 @@ namespace acslg::spec_generator {
         using symb::makeBinaryExpr;
         using symb::makeLiteralExpr;
         using symb::makeRangeIndexExpr;
-        using symb::makeSymbolAddress;
         using symb::makeUnaryExpr;
 
         bool stmtHasNonAffineOps(const clang::Stmt *stmt) {
@@ -1189,6 +1188,20 @@ namespace acslg::spec_generator {
                     if (expr == nullptr)
                         return false;
 
+                    auto makeArrayAddress = [&](clang::QualType type, const symb::Address &base) {
+                        auto fromPoint =
+                            entryAndCurrentInfo.symbolicLoopEntry->getStartPoint();
+                        if (symb::ExprFactoryScope::hasCurrent()) {
+                            auto &factory = symb::ExprFactoryScope::current();
+                            symb::Addr baseAddr{factory, factory.importAddress(base)};
+                            return cloneSymbolAddress(
+                                symb::Addr::symbol(type, baseAddr, fromPoint).handle());
+                        }
+
+                        return symb::makeSymbolAddress(
+                            type, base.addressClone().into_underlying(), fromPoint);
+                    };
+
                     if (auto arraySub = dyn_cast_if_present<clang::ArraySubscriptExpr>(
                             expr->IgnoreParenImpCasts())) {
                         // p[i]
@@ -1203,10 +1216,7 @@ namespace acslg::spec_generator {
                                 param_array = acslExpected.value().first;
                                 if (auto *symbolAddr =
                                         symb::dyn_cast<symb::Address>(addr.value().get().get()))
-                                    arrayAddr = makeSymbolAddress(
-                                        arraySub->getType(),
-                                        symbolAddr->addressClone().into_underlying(),
-                                        entryAndCurrentInfo.symbolicLoopEntry->getStartPoint());
+                                    arrayAddr = makeArrayAddress(arraySub->getType(), *symbolAddr);
                                 return true;
                             }
                         return false;
@@ -1229,10 +1239,7 @@ namespace acslg::spec_generator {
                                     param_array = acslExpected.value().first;
                                     if (auto *symbolAddr =
                                             symb::dyn_cast<symb::Address>(addr.value().get().get()))
-                                        arrayAddr = makeSymbolAddress(
-                                            unary->getType(),
-                                            symbolAddr->addressClone().into_underlying(),
-                                            entryAndCurrentInfo.symbolicLoopEntry->getStartPoint());
+                                        arrayAddr = makeArrayAddress(unary->getType(), *symbolAddr);
                                     return true;
                                 }
                             return false;
@@ -1253,10 +1260,7 @@ namespace acslg::spec_generator {
                                 param_array = acslExpected.value().first;
                                 if (auto *symbolAddr =
                                         symb::dyn_cast<symb::Address>(addr.value().get().get()))
-                                    arrayAddr = makeSymbolAddress(
-                                        declRef->getType(),
-                                        symbolAddr->addressClone().into_underlying(),
-                                        entryAndCurrentInfo.symbolicLoopEntry->getStartPoint());
+                                    arrayAddr = makeArrayAddress(declRef->getType(), *symbolAddr);
                                 return true;
                             }
                             return false;
