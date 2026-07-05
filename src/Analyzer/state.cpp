@@ -596,39 +596,40 @@ namespace acslg::analyzer {
                     llvm::APInt ap          = lit->getValue();
                     clang::QualType litType = lit->getType();
                     auto &factory           = context_.getExprFactory();
-                    symbolic::ExprHandle result = factory.literal(0);
+                    symbolic::Expr result = symbolic::LiteralExpr{factory, 0};
 
                     if (litType->isBooleanType()) {
-                        result = factory.literal(static_cast<bool>(ap.getZExtValue()));
+                        result = symbolic::LiteralExpr{factory,
+                                                       static_cast<bool>(ap.getZExtValue())};
                     } else if (litType->isUnsignedIntegerType()) {
                         if (ap.getBitWidth() <= 8)
-                            result = factory.literal(
-                                static_cast<unsigned char>(ap.getZExtValue()));
+                            result = symbolic::LiteralExpr{
+                                factory, static_cast<unsigned char>(ap.getZExtValue())};
                         else if (ap.getBitWidth() <= 16)
-                            result = factory.literal(
-                                static_cast<unsigned short>(ap.getZExtValue()));
+                            result = symbolic::LiteralExpr{
+                                factory, static_cast<unsigned short>(ap.getZExtValue())};
                         else if (ap.getBitWidth() <= 32)
-                            result = factory.literal(
-                                static_cast<unsigned int>(ap.getZExtValue()));
+                            result = symbolic::LiteralExpr{
+                                factory, static_cast<unsigned int>(ap.getZExtValue())};
                         else if (ap.getBitWidth() <= 64)
-                            result = factory.literal(
-                                static_cast<uint64_t>(ap.getZExtValue()));
+                            result = symbolic::LiteralExpr{
+                                factory, static_cast<uint64_t>(ap.getZExtValue())};
                         else
                             UNIMPLEMENT("Unsupported unsigned integer literal with bit width > 64: "
                                         << ap.getBitWidth());
                     } else {
                         if (ap.getBitWidth() <= 8)
-                            result = factory.literal(
-                                static_cast<char>(ap.getSExtValue()));
+                            result = symbolic::LiteralExpr{factory,
+                                                           static_cast<char>(ap.getSExtValue())};
                         else if (ap.getBitWidth() <= 16)
-                            result = factory.literal(
-                                static_cast<short>(ap.getSExtValue()));
+                            result = symbolic::LiteralExpr{factory,
+                                                           static_cast<short>(ap.getSExtValue())};
                         else if (ap.getBitWidth() <= 32)
-                            result = factory.literal(
-                                static_cast<int>(ap.getSExtValue()));
+                            result = symbolic::LiteralExpr{factory,
+                                                           static_cast<int>(ap.getSExtValue())};
                         else if (ap.getBitWidth() <= 64)
-                            result = factory.literal(
-                                static_cast<int64_t>(ap.getSExtValue()));
+                            result = symbolic::LiteralExpr{factory,
+                                                           static_cast<int64_t>(ap.getSExtValue())};
                         else
                             UNIMPLEMENT("Unsupported signed integer literal with bit width > 64: "
                                         << ap.getBitWidth());
@@ -636,7 +637,7 @@ namespace acslg::analyzer {
 
                     Formulas exprs;
                     exprs.reserve(1);
-                    exprs.push_back(result->clone());
+                    exprs.push_back(factory.cloneExpr(result.handle()));
 
                     return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
                             std::move(exprs)};
@@ -662,9 +663,10 @@ namespace acslg::analyzer {
                         for (size_t j = 0; j < rhsCount; ++j) {
                             auto rhsExpr = std::move(rhs.second[j]);
 
-                            auto exprHandle = factory.binary(factory.importExpr(*lhsExpr), op,
-                                                             factory.importExpr(*rhsExpr));
-                            outExprs.emplace_back(exprHandle->clone());
+                            symbolic::Expr lhsFacade{factory, factory.importExpr(*lhsExpr)};
+                            symbolic::Expr rhsFacade{factory, factory.importExpr(*rhsExpr)};
+                            outExprs.emplace_back(
+                                factory.cloneExpr(lhsFacade.binary(op, rhsFacade).handle()));
 
                             if (i == 0 && j == 0)
                                 continue;

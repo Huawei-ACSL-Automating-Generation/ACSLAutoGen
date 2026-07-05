@@ -1763,10 +1763,21 @@ namespace acslg::analyzer::symbolic {
         explicit LiteralExpr(unsigned short value) : Expr(make(value)) {}
         explicit LiteralExpr(int64_t value) : Expr(make(value)) {}
         explicit LiteralExpr(uint64_t value) : Expr(make(value)) {}
+        LiteralExpr(ExprFactory &factory, bool value) : Expr(make(factory, value)) {}
+        LiteralExpr(ExprFactory &factory, int value) : Expr(make(factory, value)) {}
+        LiteralExpr(ExprFactory &factory, unsigned int value) : Expr(make(factory, value)) {}
+        LiteralExpr(ExprFactory &factory, short value) : Expr(make(factory, value)) {}
+        LiteralExpr(ExprFactory &factory, unsigned short value) : Expr(make(factory, value)) {}
+        LiteralExpr(ExprFactory &factory, int64_t value) : Expr(make(factory, value)) {}
+        LiteralExpr(ExprFactory &factory, uint64_t value) : Expr(make(factory, value)) {}
 
       private:
         template <typename T> static Expr make(T value) {
             auto &factory = ExprFactoryScope::current();
+            return make(factory, value);
+        }
+
+        template <typename T> static Expr make(ExprFactory &factory, T value) {
             return Expr{factory, factory.literal(value)};
         }
     };
