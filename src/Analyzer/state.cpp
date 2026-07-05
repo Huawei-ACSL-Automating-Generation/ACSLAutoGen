@@ -769,10 +769,11 @@ namespace acslg::analyzer {
                         auto &factory = context_.getExprFactory();
                         auto baseAddrHandle = factory.importAddress(*addr);
                         for (size_t i = 0; i < idx.second.size(); ++i) {
-                            auto newAddrHandle =
-                                factory.withOffset(baseAddrHandle,
-                                                   factory.importExpr(*idx.second[i]));
-                            auto newAddr = newAddrHandle->addressClone().into_underlying();
+                            symbolic::Addr baseAddr{factory, baseAddrHandle};
+                            symbolic::Expr idxExpr{factory,
+                                                   factory.importExpr(*idx.second[i])};
+                            auto newAddr =
+                                baseAddr.withOffset(idxExpr)->addressClone().into_underlying();
                             if (auto value = memoryState_.read(*newAddr); value == std::nullopt) {
                                 auto elemType = arrSub->getType();
                                 auto symbol =
@@ -1049,11 +1050,15 @@ namespace acslg::analyzer {
                         // Normalize to base address (offset = 0) for consistent memory handling.
                         auto freedAddr = std::move(*maybeAddr);
                         auto &factory = context_.getExprFactory();
-                        auto freedAddrHandle =
-                            factory.withOffset(factory.importAddress(*freedAddr),
-                                               factory.literal(static_cast<int64_t>(
-                                                   symbolic::SymbolAddress::ZERO_OFFSET)));
-                        freedAddr = cloneSymbolAddress(freedAddrHandle);
+                        symbolic::Addr normalizedFreedAddr{
+                            factory, factory.importAddress(*freedAddr)};
+                        auto normalizedFreedAddrHandle =
+                            normalizedFreedAddr
+                                .withOffset(symbolic::LiteralExpr{
+                                    factory, static_cast<int64_t>(
+                                                 symbolic::SymbolAddress::ZERO_OFFSET)})
+                                .handle();
+                        freedAddr = cloneSymbolAddress(normalizedFreedAddrHandle);
 
                         // Overwrite freed memory with an UnknownExpr (symbolic tombstone).
                         // This prevents later reads from reusing stale symbolic values.
@@ -1410,16 +1415,17 @@ namespace acslg::analyzer {
                                     ERROR("memoryState_ doesn't contain addr.");
                                 // compute new = old +/- 1
                                 auto &factory = context_.getExprFactory();
-                                auto one      = factory.literal(1);
+                                symbolic::LiteralExpr one{factory, 1};
                                 auto binOp  = (op == PreInc || op == PostInc)
                                                   ? symbolic::BinaryOpExpr::Operator::Add
                                                   : symbolic::BinaryOpExpr::Operator::Subtract;
-                                auto newValHandle = factory.binary(
-                                    factory.importExpr(*oldVal.value()), binOp, one);
-                                auto newVal = newValHandle->clone();
+                                symbolic::Expr oldValExpr{
+                                    factory, factory.importExpr(*oldVal.value())};
+                                auto newValExpr = oldValExpr.binary(binOp, one);
+                                auto newVal     = newValExpr->clone();
                                 // return pre vs post
                                 if (op == PreInc || op == PreDec)
-                                    outExprs.emplace_back(newValHandle->clone());
+                                    outExprs.emplace_back(newValExpr->clone());
                                 else {
                                     outExprs.emplace_back(oldVal.value()->clone());
                                 }
@@ -2682,10 +2688,11 @@ namespace acslg::analyzer {
                     Path::EvalResult rhs = lhsPath.evalExpr(binOp->getRHS());
 
                     for (size_t j = 0; j < rhs.second.size(); ++j) {
-                        auto exprHandle =
-                            factory.binary(factory.importExpr(*lhs.second[i]), op,
-                                           factory.importExpr(*rhs.second[j]));
-                        outExprs.emplace_back(exprHandle->clone());
+                        symbolic::Expr lhsExpr{factory,
+                                               factory.importExpr(*lhs.second[i])};
+                        symbolic::Expr rhsExpr{factory,
+                                               factory.importExpr(*rhs.second[j])};
+                        outExprs.emplace_back(lhsExpr.binary(op, rhsExpr)->clone());
 
                         if (i != 0 || j != 0)
                             outPaths.emplace_back(std::move(rhs.first[j - 1]));
@@ -3043,18 +3050,16 @@ namespace acslg::analyzer {
                 auto eqState     = current->clone();
                 auto &factory    = context_.getExprFactory();
 
-                auto condExprEq = factory.binary(factory.importExpr(*symValue),
-                                                 symbolic::BinaryOpExpr::Operator::Equal,
-                                                 factory.importExpr(*caseSymExpr));
+                symbolic::Expr symExpr{factory, factory.importExpr(*symValue)};
+                symbolic::Expr caseExpr{factory, factory.importExpr(*caseSymExpr)};
+                auto condExprEq = symExpr.equalTo(caseExpr);
                 for (auto &p : eqState->paths_)
                     p->insertPathCondition(condExprEq->clone());
 
                 for (auto *s : stmts)
                     eqState->step(s);
 
-                auto condExprNe = factory.binary(factory.importExpr(*symValue),
-                                                 symbolic::BinaryOpExpr::Operator::NotEqual,
-                                                 factory.importExpr(*caseSymExpr));
+                auto condExprNe = symExpr.notEqualTo(caseExpr);
                 for (auto &p : current->paths_)
                     p->insertPathCondition(condExprNe->clone());
 
