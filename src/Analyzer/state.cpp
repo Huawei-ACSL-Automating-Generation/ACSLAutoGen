@@ -1340,10 +1340,8 @@ namespace acslg::analyzer {
                             // false branch
                             auto falsePath   = condPath->clone();
                             auto &factory    = context_.getExprFactory();
-                            auto negatedCond =
-                                factory.unary(symbolic::UnaryOpExpr::Operator::LogicalNot,
-                                              factory.importExpr(*condExpr))
-                                    ->clone();
+                            symbolic::Expr condFacade{factory, factory.importExpr(*condExpr)};
+                            auto negatedCond = factory.cloneExpr(condFacade.logicalNot().handle());
                             falsePath->insertPathCondition(std::move(negatedCond));
 
                             EvalResult falseVal = falsePath->evalExpr(condOp->getFalseExpr());
@@ -1450,8 +1448,9 @@ namespace acslg::analyzer {
                                 outExprs.emplace_back(addr->addressClone().into_underlying());
                             } else {
                                 auto &factory = context_.getExprFactory();
+                                symbolic::Expr operandExpr{factory, factory.importExpr(*unExpr)};
                                 outExprs.emplace_back(
-                                    factory.cloneExpr(factory.unary(op, factory.importExpr(*unExpr))));
+                                    factory.cloneExpr(operandExpr.unary(op).handle()));
                             }
                         }();
                         if (i > 0)
