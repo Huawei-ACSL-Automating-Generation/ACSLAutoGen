@@ -366,32 +366,23 @@ namespace acslg::analyzer {
         using OwnedSymbolicExpr = utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>;
 
         OwnedSymbolicExpr buildLiteral(int64_t value) {
-            if (symbolic::ExprFactoryScope::hasCurrent()) {
-                auto &factory = symbolic::ExprFactoryScope::current();
-                return factory.cloneExpr(symbolic::LiteralExpr(factory, value).handle());
-            }
-            return symbolic::makeLiteralExpr(value);
+            auto &factory = symbolic::ExprFactoryScope::current();
+            return factory.cloneExpr(symbolic::LiteralExpr(factory, value).handle());
         }
 
         OwnedSymbolicExpr buildUnary(symbolic::UnaryOpExpr::Operator op, OwnedSymbolicExpr expr) {
-            if (symbolic::ExprFactoryScope::hasCurrent()) {
-                auto &factory = symbolic::ExprFactoryScope::current();
-                symbolic::Expr operand{factory, factory.importExpr(*expr)};
-                return factory.cloneExpr(operand.unary(op).handle());
-            }
-            return symbolic::makeUnaryExpr(op, std::move(expr));
+            auto &factory = symbolic::ExprFactoryScope::current();
+            symbolic::Expr operand{factory, factory.importExpr(*expr)};
+            return factory.cloneExpr(operand.unary(op).handle());
         }
 
         OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
                                       symbolic::BinaryOpExpr::Operator op,
                                       OwnedSymbolicExpr rhs) {
-            if (symbolic::ExprFactoryScope::hasCurrent()) {
-                auto &factory = symbolic::ExprFactoryScope::current();
-                symbolic::Expr lhsExpr{factory, factory.importExpr(*lhs)};
-                symbolic::Expr rhsExpr{factory, factory.importExpr(*rhs)};
-                return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
-            }
-            return symbolic::makeBinaryExpr(std::move(lhs), op, std::move(rhs));
+            auto &factory = symbolic::ExprFactoryScope::current();
+            symbolic::Expr lhsExpr{factory, factory.importExpr(*lhs)};
+            symbolic::Expr rhsExpr{factory, factory.importExpr(*rhs)};
+            return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
         }
 
         void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm) {
