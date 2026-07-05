@@ -1549,19 +1549,20 @@ namespace acslg::analyzer {
                             ERROR("ConstantExpr subExpr produced multiple results");
                         auto resultTy = symbolic::deriveType(ce->getType());
                         auto &factory = context_.getExprFactory();
-                        sub.second[0] =
-                            factory.withValType(factory.importExpr(*sub.second[0]), resultTy)
-                                ->clone();
+                        symbolic::Expr subExpr{factory, factory.importExpr(*sub.second[0])};
+                        sub.second[0] = factory.cloneExpr(subExpr.withType(resultTy).handle());
                         return {std::move(sub.first), std::move(sub.second)};
                     }
                     auto resultTy = symbolic::deriveType(ce->getType());
                     auto &factory = context_.getExprFactory();
                     auto lit =
                         v.isSigned()
-                            ? factory.literal(static_cast<int64_t>(v.getSExtValue()))
-                            : factory.literal(static_cast<uint64_t>(v.getZExtValue()));
+                            ? symbolic::LiteralExpr{factory,
+                                                    static_cast<int64_t>(v.getSExtValue())}
+                            : symbolic::LiteralExpr{factory,
+                                                    static_cast<uint64_t>(v.getZExtValue())};
                     EvalResult r;
-                    r.second.emplace_back(factory.withValType(lit, resultTy)->clone());
+                    r.second.emplace_back(factory.cloneExpr(lit.withType(resultTy).handle()));
                     return r;
                 })
                 .Case<clang::UnaryExprOrTypeTraitExpr>(
@@ -1599,10 +1600,10 @@ namespace acslg::analyzer {
                         // Materialize a literal of the expression’s result type (typically size_t).
                         auto resultTy = symbolic::deriveType(uett->getType());
                         auto &factory = context_.getExprFactory();
-                        auto lit      = factory.literal(value);
+                        auto lit      = symbolic::LiteralExpr{factory, value};
 
                         EvalResult r;
-                        r.second.emplace_back(factory.withValType(lit, resultTy)->clone());
+                        r.second.emplace_back(factory.cloneExpr(lit.withType(resultTy).handle()));
                         return r;
                     })
 
