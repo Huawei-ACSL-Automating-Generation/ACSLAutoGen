@@ -2533,13 +2533,13 @@ namespace acslg::analyzer::symbolic {
           Symbol(Kind::K_Structure), info_(Info{RD, layout}) {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            auto fromHandle = factory.importAddress(*from);
+            Addr fromAddr{factory, factory.importAddress(*from)};
 
             fields_.reserve(info_.layout_.getFieldCount());
             for (auto field : info_.definition_->fields()) {
                 auto index          = field->getFieldIndex();
                 clang::QualType fty = field->getType();
-                auto fieldAddr = factory.fieldAddress(fty, info_.definition_, fromHandle, index);
+                auto fieldAddr = fromAddr.field(fty, info_.definition_, index);
 
                 if (fty->isStructureType()) {
                     auto nestedRD = fty->getAsRecordDecl();
@@ -2548,23 +2548,22 @@ namespace acslg::analyzer::symbolic {
                     nestedRD           = nestedRD->getDefinition();
                     auto &nestedLayout = nestedRD->getASTContext().getASTRecordLayout(nestedRD);
                     fields_.emplace_back(
-                        factory.structure(nestedRD, nestedLayout, fieldAddr, fromPoint));
+                        factory.structure(nestedRD, nestedLayout, fieldAddr.handle(), fromPoint));
                 } else if (fty->isPointerType()) {
-                    fields_.emplace_back(
-                        factory.symbolAddress(fty, std::optional<AddrHandle>{fieldAddr}, fromPoint)
-                            .asExpr());
+                    fields_.emplace_back(Addr::symbol(fty, fieldAddr, fromPoint).asExpr().handle());
                 } else if (fty->isArrayType()) {
                     auto arrayType = llvm::cast<clang::ArrayType>(fty);
                     auto elemTy    = arrayType->getElementType();
-                    std::optional<ExprHandle> length;
-                    if (auto *cat = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr()))
-                        length = factory.literal(cat->getSize().getZExtValue());
-                    fields_.emplace_back(
-                        factory.symbolAddress(elemTy, std::optional<AddrHandle>{fieldAddr},
-                                              fromPoint, std::nullopt, length)
-                            .asExpr());
+                    auto *cat      = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr());
+                    auto arrayAddr = Addr::symbol(elemTy, fieldAddr, fromPoint);
+                    if (cat) {
+                        Expr length{factory, factory.literal(cat->getSize().getZExtValue())};
+                        arrayAddr = arrayAddr.withLength(length);
+                    }
+                    fields_.emplace_back(arrayAddr.asExpr().handle());
                 } else {
-                    fields_.emplace_back(factory.symbolValue(deriveType(fty), fieldAddr, fromPoint));
+                    fields_.emplace_back(
+                        Expr::symbolValue(deriveType(fty), fieldAddr, fromPoint).handle());
                 }
             }
             if (fields_.size() != info_.layout_.getFieldCount())
