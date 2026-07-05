@@ -274,10 +274,11 @@ namespace acslg::analyzer {
                 auto idxEval    = evalExpr(arr->getIdx());
                 if (idxEval.second.size() != 1)
                     ERROR("This location does not support control flow branches.");
-                auto &factory     = context_.getExprFactory();
-                auto resultHandle = factory.withAddedOffset(
-                    factory.importAddress(*symbolAddr), factory.importExpr(*idxEval.second[0]));
-                auto resultAddr = resultHandle->addressClone().into_underlying();
+                auto &factory = context_.getExprFactory();
+                symbolic::Addr baseAddrFacade{factory, factory.importAddress(*symbolAddr)};
+                symbolic::Expr idxExpr{factory, factory.importExpr(*idxEval.second[0])};
+                auto resultAddr =
+                    baseAddrFacade.withAddedOffset(idxExpr)->addressClone().into_underlying();
                 if (!memoryState_.contains(*resultAddr)) {
                     auto newSymbol = getSymbol(
                         arr->getType(), resultAddr->addressClone().into_underlying(), startPoint_);
@@ -726,8 +727,8 @@ namespace acslg::analyzer {
                     if (const auto *enumDecl =
                             dyn_cast<clang::EnumConstantDecl>(declRef->getDecl())) {
                         llvm::APSInt value = enumDecl->getInitVal();
-                        auto litExpr = context_.getExprFactory().literal(
-                            static_cast<int>(value.getSExtValue()));
+                        symbolic::LiteralExpr litExpr{context_.getExprFactory(),
+                                                      static_cast<int>(value.getSExtValue())};
                         Formulas exprs;
                         exprs.push_back(litExpr->clone());
                         return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
@@ -870,7 +871,8 @@ namespace acslg::analyzer {
                         auto sizeExpr = evalNoBranch(call->getArg(0));
                         if (auto c = sizeExpr->tryEvalAsConstant(); c && *c == 0) {
                             Formulas exprs;
-                            exprs.emplace_back(context_.getExprFactory().literal(0)->clone());
+                            symbolic::LiteralExpr zero{context_.getExprFactory(), 0};
+                            exprs.emplace_back(zero->clone());
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
@@ -1117,8 +1119,9 @@ namespace acslg::analyzer {
                             } else if (sz > 1) {
                                 if (raw % sz != 0)
                                     UNIMPLEMENT("memcpy size is not a multiple of element size.");
-                                lengthExpr =
-                                    context_.getExprFactory().literal(raw / sz)->clone();
+                                symbolic::LiteralExpr lengthLiteral{
+                                    context_.getExprFactory(), raw / sz};
+                                lengthExpr = lengthLiteral->clone();
                             }
                         } else if (sz > 1) {
                             lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
@@ -1132,18 +1135,21 @@ namespace acslg::analyzer {
                             return Path::EvalResult(std::move(empty), std::move(exprs));
 
                         auto &factory = context_.getExprFactory();
-                        auto destRangeHandle = factory.withLength(
-                            factory.importAddress(*destAddr.value()),
-                            factory.importExpr(*lengthExpr));
-                        auto destRange = destRangeHandle->addressClone().into_underlying();
+                        symbolic::Addr destBase{factory,
+                                                factory.importAddress(*destAddr.value())};
+                        symbolic::Expr length{factory, factory.importExpr(*lengthExpr)};
+                        auto destRange =
+                            destBase.withLength(length)->addressClone().into_underlying();
 
-                        auto srcBaseHandle =
-                            factory.withoutLength(factory.importAddress(*srcAddr.value()));
+                        symbolic::Addr srcBase{factory,
+                                               factory.importAddress(*srcAddr.value())};
+                        auto srcBaseWithoutLength = srcBase.withoutLength();
                         symbolic::SymbolAddress::RangeIndex rangeIndex{"i"};
-                        auto srcIndexedHandle =
-                            factory.withAddedOffset(srcBaseHandle,
-                                                    factory.importExpr(rangeIndex));
-                        auto srcIndexed = srcIndexedHandle->addressClone().into_underlying();
+                        symbolic::Expr rangeIndexExpr{factory, factory.importExpr(rangeIndex)};
+                        auto srcIndexed =
+                            srcBaseWithoutLength.withAddedOffset(rangeIndexExpr)
+                                ->addressClone()
+                                .into_underlying();
 
                         auto valueExpr = symbolic::getSymbol(
                             elemTy, srcIndexed->addressClone().into_underlying(), startPoint_);
@@ -1215,8 +1221,9 @@ namespace acslg::analyzer {
                             } else if (sz > 1) {
                                 if (raw % sz != 0)
                                     UNIMPLEMENT("memset_s size is not a multiple of element size.");
-                                lengthExpr =
-                                    context_.getExprFactory().literal(raw / sz)->clone();
+                                symbolic::LiteralExpr lengthLiteral{
+                                    context_.getExprFactory(), raw / sz};
+                                lengthExpr = lengthLiteral->clone();
                             }
                         } else if (sz > 1) {
                             lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
@@ -1231,9 +1238,10 @@ namespace acslg::analyzer {
 
                         if (elemTy->isStructureType()) {
                             auto &factory = context_.getExprFactory();
-                            auto destBaseHandle =
-                                factory.withoutLength(factory.importAddress(*destAddr.value()));
-                            auto destBase = destBaseHandle->addressClone().into_underlying();
+                            symbolic::Addr destAddrFacade{
+                                factory, factory.importAddress(*destAddr.value())};
+                            auto destBase =
+                                destAddrFacade.withoutLength()->addressClone().into_underlying();
                             auto structVal = symbolic::makeUnknownStructure(
                                 elemTy, destBase->addressClone().into_underlying(), pointAfterCall);
                             memoryState_.write(*destBase, std::move(structVal));
@@ -1241,10 +1249,11 @@ namespace acslg::analyzer {
                         }
 
                         auto &factory = context_.getExprFactory();
-                        auto destRangeHandle = factory.withLength(
-                            factory.importAddress(*destAddr.value()),
-                            factory.importExpr(*lengthExpr));
-                        auto destRange = destRangeHandle->addressClone().into_underlying();
+                        symbolic::Addr destBase{factory,
+                                                factory.importAddress(*destAddr.value())};
+                        symbolic::Expr length{factory, factory.importExpr(*lengthExpr)};
+                        auto destRange =
+                            destBase.withLength(length)->addressClone().into_underlying();
                         memoryState_.write(
                             *destRange, symbolic::UnknownExpr::makeUnknown().into_underlying());
                         return Path::EvalResult(std::move(empty), std::move(exprs));
