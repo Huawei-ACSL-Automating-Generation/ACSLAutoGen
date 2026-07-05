@@ -1460,6 +1460,9 @@ namespace acslg::analyzer::symbolic {
                    ExprFactoryScope::current().importAddress(address)) {}
 
         static Addr variable(utils::not_null<const clang::VarDecl *> from);
+        static Addr symbol(ExprFactory &factory,
+                           clang::QualType pointeeType,
+                           SourcePoint fromPoint);
         static Addr symbol(clang::QualType pointeeType, SourcePoint fromPoint);
         static Addr symbol(clang::QualType pointeeType,
                            SourcePoint fromPoint,
@@ -1652,9 +1655,15 @@ namespace acslg::analyzer::symbolic {
         return Addr{factory, factory.variableAddress(from)};
     }
 
+    inline Addr Addr::symbol(ExprFactory &factory,
+                             clang::QualType pointeeType,
+                             SourcePoint fromPoint) {
+        return Addr{factory, factory.symbolAddress(pointeeType, std::nullopt, fromPoint)};
+    }
+
     inline Addr Addr::symbol(clang::QualType pointeeType, SourcePoint fromPoint) {
         auto &factory = ExprFactoryScope::current();
-        return Addr{factory, factory.symbolAddress(pointeeType, std::nullopt, fromPoint)};
+        return symbol(factory, pointeeType, fromPoint);
     }
 
     inline Addr Addr::symbol(clang::QualType pointeeType,

@@ -550,9 +550,8 @@ namespace acslg::analyzer::symbolic {
                                                  SymbolicExpr::Type varType,
                                                  std::unique_ptr<Address> from,
                                                  SourcePoint fromPoint) {
-        auto fromHandle = factory.importAddress(*from);
-        return cloneSymbolValue(
-            factory.symbolValue(varType, fromHandle, std::move(fromPoint)));
+        Addr fromAddr{factory, factory.importAddress(*from)};
+        return cloneSymbolValue(Expr::symbolValue(varType, fromAddr, std::move(fromPoint)).handle());
     }
 
     std::unique_ptr<SymbolAddress> cloneSymbolAddress(AddrHandle address) {
@@ -568,8 +567,7 @@ namespace acslg::analyzer::symbolic {
     std::unique_ptr<SymbolAddress> makeSymbolAddress(ExprFactory &factory,
                                                      clang::QualType pointeeType,
                                                      SourcePoint fromPoint) {
-        return cloneSymbolAddress(
-            factory.symbolAddress(pointeeType, std::nullopt, std::move(fromPoint)));
+        return cloneSymbolAddress(Addr::symbol(factory, pointeeType, std::move(fromPoint)).handle());
     }
 
     std::unique_ptr<SymbolAddress> makeSymbolAddress(clang::QualType pointeeType,
@@ -577,9 +575,9 @@ namespace acslg::analyzer::symbolic {
                                                      SourcePoint fromPoint) {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            auto fromHandle = factory.importAddress(*from);
+            Addr fromAddr{factory, factory.importAddress(*from)};
             return cloneSymbolAddress(
-                factory.symbolAddress(pointeeType, fromHandle, std::move(fromPoint)));
+                Addr::symbol(pointeeType, fromAddr, std::move(fromPoint)).handle());
         }
 
         std::unique_ptr<const Address> constFrom = std::move(from);
@@ -608,9 +606,9 @@ namespace acslg::analyzer::symbolic {
                                                    const clang::RecordDecl *record,
                                                    std::unique_ptr<Address> base,
                                                    size_t fieldIndex) {
-        auto baseHandle = factory.importAddress(*base);
-        return cloneFieldAddress(
-            factory.fieldAddress(pointeeType, record, baseHandle, fieldIndex));
+        auto fieldAddr =
+            Addr{factory, factory.importAddress(*base)}.field(pointeeType, record, fieldIndex);
+        return cloneFieldAddress(fieldAddr.handle());
     }
 
     std::unique_ptr<Structure> cloneStructure(ExprHandle structure) {
