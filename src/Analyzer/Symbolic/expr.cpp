@@ -449,18 +449,26 @@ namespace acslg::analyzer::symbolic {
             std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> length) {
             if (ExprFactoryScope::hasCurrent()) {
                 auto &factory = ExprFactoryScope::current();
-                std::optional<AddrHandle> fromHandle;
+                std::optional<Addr> fromAddr;
                 if (from)
-                    fromHandle = factory.importAddress(*from.value());
+                    fromAddr.emplace(factory, factory.importAddress(*from.value()));
 
-                std::optional<ExprHandle> lengthHandle;
-                if (length)
-                    lengthHandle = factory.importExpr(*length.value());
+                Expr offsetExpr{factory, factory.importExpr(*offset)};
+                auto rebuilt = [&]() -> Addr {
+                    if (length) {
+                        Expr lengthExpr{factory, factory.importExpr(*length.value())};
+                        if (fromAddr)
+                            return Addr::symbol(pointeeType, *fromAddr, fromPoint, offsetExpr,
+                                                lengthExpr);
+                        return Addr::symbol(pointeeType, fromPoint, offsetExpr, lengthExpr);
+                    }
 
-                return factory.cloneExpr(
-                    factory.symbolAddress(pointeeType, fromHandle, std::move(fromPoint),
-                                          factory.importExpr(*offset), lengthHandle)
-                        .asExpr());
+                    if (fromAddr)
+                        return Addr::symbol(pointeeType, *fromAddr, fromPoint, offsetExpr);
+                    return Addr::symbol(pointeeType, fromPoint, offsetExpr);
+                }();
+
+                return factory.cloneExpr(rebuilt.asExpr().handle());
             }
 
             std::unique_ptr<const SymbolicExpr> constOffset =
@@ -488,10 +496,9 @@ namespace acslg::analyzer::symbolic {
             size_t fieldIndex) {
             if (ExprFactoryScope::hasCurrent()) {
                 auto &factory = ExprFactoryScope::current();
-                return factory.cloneExpr(
-                    factory.fieldAddress(pointeeType, record, factory.importAddress(base),
-                                         fieldIndex)
-                        .asExpr());
+                auto fieldAddr = Addr{factory, factory.importAddress(base)}.field(
+                    pointeeType, record, fieldIndex);
+                return factory.cloneExpr(fieldAddr.asExpr().handle());
             }
 
             return std::make_unique<FieldAddress>(pointeeType, record,
