@@ -555,7 +555,9 @@ namespace acslg::analyzer::symbolic {
         SourcePoint fromPoint) {
         if (!range)
             ERROR("SumOverRange requires a non-null range.");
-        return rebuildSumOverRange(*range, indexName, std::move(fromPoint));
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(makeSumOverRangeHandle(
+            factory, *range, indexName, std::move(fromPoint)));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeQuantifierOverRangeExpr(
@@ -565,7 +567,9 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> predicate) {
         if (!range)
             ERROR("QuantifierOverRange requires a non-null range.");
-        return rebuildQuantifierOverRange(*range, indexName, quantifier, std::move(predicate));
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(makeQuantifierOverRangeHandle(
+            factory, *range, indexName, quantifier, *predicate));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeMaxMinOverRangeExpr(
@@ -575,18 +579,10 @@ namespace acslg::analyzer::symbolic {
         SourcePoint fromPoint) {
         if (!range)
             ERROR("MaxMinOverRange requires a non-null range.");
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            auto body = makeMaxMinDefaultBody(factory, *range, indexName, fromPoint);
-            return factory.cloneExpr(makeMaxMinOverRangeHandle(
-                factory, *range, indexName, extremum, body, std::move(fromPoint)));
-        }
-
-        std::unique_ptr<const SymbolAddress> constRange = std::move(range);
-        auto aggregate = std::make_unique<MaxMinOverRange>(
-            utils::not_null<std::unique_ptr<const SymbolAddress>>{std::move(constRange)},
-            indexName, extremum, std::move(fromPoint));
-        return utils::not_null<std::unique_ptr<SymbolicExpr>>{std::move(aggregate)};
+        auto &factory = ExprFactoryScope::current();
+        auto body = makeMaxMinDefaultBody(factory, *range, indexName, fromPoint);
+        return factory.cloneExpr(makeMaxMinOverRangeHandle(
+            factory, *range, indexName, extremum, body, std::move(fromPoint)));
     }
 
     utils::not_null<std::unique_ptr<const SymbolicExpr>> MaxMinOverRange::makeDefaultExpr(
