@@ -2391,7 +2391,7 @@ namespace acslg::analyzer::symbolic {
         }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ =
-            ExprChild{makeBinaryExpr(offset_->clone(),
+            ExprChild{buildBinaryExpr(offset_->clone(),
                                       detail::BinaryOpExprNode::Operator::Add,
                                       std::move(extra))
                           ->simplifiedExpr()};
@@ -2410,7 +2410,7 @@ namespace acslg::analyzer::symbolic {
         }
         auto result = std::make_unique<SymbolAddress>(*this);
         result->offset_ =
-            ExprChild{makeBinaryExpr(offset_->clone(),
+            ExprChild{buildBinaryExpr(offset_->clone(),
                                       detail::BinaryOpExprNode::Operator::Subtract,
                                       std::move(extra))
                           ->simplifiedExpr()};
@@ -2425,7 +2425,7 @@ namespace acslg::analyzer::symbolic {
             return cloneSymbolAddress(addr.withOffset(zero).handle());
         }
         auto result = std::make_unique<SymbolAddress>(*this);
-        result->offset_ = ExprChild{makeLiteralExpr(static_cast<int64_t>(ZERO_OFFSET))};
+        result->offset_ = ExprChild{buildLiteralExpr(static_cast<int64_t>(ZERO_OFFSET))};
         return result;
     }
 
@@ -2457,14 +2457,14 @@ namespace acslg::analyzer::symbolic {
         auto result = std::make_unique<SymbolAddress>(*this);
         if (length_ == std::nullopt) {
             result->length_.emplace(
-                ExprChild{makeBinaryExpr(makeLiteralExpr(1),
+                ExprChild{buildBinaryExpr(buildLiteralExpr(1),
                                           detail::BinaryOpExprNode::Operator::Add,
                                           std::move(extra))
                               ->simplifiedExpr()});
             return result;
         }
         result->length_ =
-            ExprChild{makeBinaryExpr(length_.value()->clone(),
+            ExprChild{buildBinaryExpr(length_.value()->clone(),
                                       detail::BinaryOpExprNode::Operator::Add,
                                       std::move(extra))
                           ->simplifiedExpr()};
@@ -2491,7 +2491,7 @@ namespace acslg::analyzer::symbolic {
         // Not sure return which one is better, offset_+1 or nullopt.
         if (length_ == std::nullopt)
             return std::nullopt;
-        return makeBinaryExpr(offset_->clone(), detail::BinaryOpExprNode::Operator::Add,
+        return buildBinaryExpr(offset_->clone(), detail::BinaryOpExprNode::Operator::Add,
                               length_.value()->clone());
     }
 
@@ -2640,7 +2640,7 @@ namespace acslg::analyzer::symbolic {
                     utils::not_null<std::unique_ptr<const Address>>{std::move(fromField)}};
                 fields_.emplace_back(rebuildSymbolAddress(
                     fty, std::move(fromArg), fromPoint,
-                    makeLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)),
+                    buildLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)),
                     std::nullopt));
             } else if (fty->isArrayType()) {
                 auto arrayType = llvm::cast<clang::ArrayType>(fty);
@@ -2650,11 +2650,11 @@ namespace acslg::analyzer::symbolic {
                     utils::not_null<std::unique_ptr<const Address>>{std::move(fromField)}};
                 std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> lengthArg;
                 if (auto *cat = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr())) {
-                    lengthArg = makeLiteralExpr(cat->getSize().getZExtValue());
+                    lengthArg = buildLiteralExpr(static_cast<int64_t>(cat->getSize().getZExtValue()));
                 }
                 fields_.emplace_back(rebuildSymbolAddress(
                     elemTy, std::move(fromArg), fromPoint,
-                    makeLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)),
+                    buildLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)),
                     std::move(lengthArg)));
             } else {
                 auto vty = deriveType(fty);
@@ -3053,12 +3053,12 @@ namespace acslg::analyzer::symbolic {
             auto pointerType = llvm::cast<clang::PointerType>(type);
             return rebuildSymbolAddress(
                 pointerType->getPointeeType(), std::move(from), std::move(fromPoint),
-                makeLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)), std::nullopt);
+                buildLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)), std::nullopt);
         } else if (type->isArrayType()) {
             auto arrayType = llvm::cast<clang::ArrayType>(type);
             return rebuildSymbolAddress(
                 arrayType->getElementType(), std::move(from), std::move(fromPoint),
-                makeLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)), std::nullopt);
+                buildLiteralExpr(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)), std::nullopt);
         } else if (type->isStructureType()) {
             if (from == std::nullopt)
                 ERROR("Structure should *from* an `Address`.");
