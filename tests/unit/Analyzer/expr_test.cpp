@@ -903,17 +903,15 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
-        std::unique_ptr<const symbolic::Address> from =
-            std::make_unique<symbolic::VariableAddress>(var);
-        auto x = std::make_unique<symbolic::SymbolValue>(
-            symbolic::deriveType(var->getType()),
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>{std::move(from)},
-            point);
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto from = symbolic::Addr::variable(var);
+        auto x = factory.cloneExpr(
+            symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
+                .handle());
         NonLinearBinaryProbe legacyProduct{
             x->clone(), symbolic::BinaryOpExpr::Operator::Multiply, x->clone()};
 
-        symbolic::ExprFactory factory;
-        symbolic::ExprFactoryScope scope(factory);
         auto simplified = legacyProduct.callSimplifiedExprIfLinear();
         auto *product = symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
 
@@ -953,20 +951,18 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
-        std::unique_ptr<const symbolic::Address> from =
-            std::make_unique<symbolic::VariableAddress>(var);
-        auto x = std::make_unique<symbolic::SymbolValue>(
-            symbolic::deriveType(var->getType()),
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>{std::move(from)},
-            point);
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto from = symbolic::Addr::variable(var);
+        auto x = factory.cloneExpr(
+            symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
+                .handle());
         auto predicate = symbolic::makeBinaryExpr(
             x->clone(), symbolic::BinaryOpExpr::Operator::Equal, symbolic::makeLiteralExpr(0));
         auto wrapped = symbolic::makeBinaryExpr(
             std::move(predicate), symbolic::BinaryOpExpr::Operator::Equal,
             symbolic::makeLiteralExpr(1));
 
-        symbolic::ExprFactory factory;
-        symbolic::ExprFactoryScope scope(factory);
         auto simplified = wrapped->simplifiedExpr();
         auto *returnedPredicate =
             symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
