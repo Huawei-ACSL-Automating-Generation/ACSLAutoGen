@@ -2944,49 +2944,51 @@ namespace acslg::analyzer::symbolic {
         return fromAddr == *from.value();
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> getSymbol(
-        clang::QualType type,
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
-        SourcePoint fromPoint) {
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            std::optional<AddrHandle> fromHandle;
-            if (from)
-                fromHandle = factory.importAddress(*from.value());
+	    utils::not_null<std::unique_ptr<SymbolicExpr>> getSymbol(
+	        clang::QualType type,
+	        std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
+	        SourcePoint fromPoint) {
+	        if (ExprFactoryScope::hasCurrent()) {
+	            auto &factory = ExprFactoryScope::current();
+	            std::optional<Addr> fromAddr;
+	            if (from)
+	                fromAddr.emplace(factory, factory.importAddress(*from.value()));
 
-            if (type->isPointerType()) {
-                auto pointerType = llvm::cast<clang::PointerType>(type);
-                return factory.cloneExpr(
-                    factory.symbolAddress(pointerType->getPointeeType(), fromHandle,
-                                          std::move(fromPoint))
-                        .asExpr());
-            }
+	            if (type->isPointerType()) {
+	                auto pointerType = llvm::cast<clang::PointerType>(type);
+	                auto addr = fromAddr ? Addr::symbol(pointerType->getPointeeType(), *fromAddr,
+	                                                    std::move(fromPoint))
+	                                     : Addr::symbol(pointerType->getPointeeType(),
+	                                                    std::move(fromPoint));
+	                return factory.cloneExpr(addr.asExpr().handle());
+	            }
 
-            if (type->isArrayType()) {
-                auto arrayType = llvm::cast<clang::ArrayType>(type);
-                return factory.cloneExpr(
-                    factory.symbolAddress(arrayType->getElementType(), fromHandle,
-                                          std::move(fromPoint))
-                        .asExpr());
-            }
+	            if (type->isArrayType()) {
+	                auto arrayType = llvm::cast<clang::ArrayType>(type);
+	                auto addr = fromAddr ? Addr::symbol(arrayType->getElementType(), *fromAddr,
+	                                                    std::move(fromPoint))
+	                                     : Addr::symbol(arrayType->getElementType(),
+	                                                    std::move(fromPoint));
+	                return factory.cloneExpr(addr.asExpr().handle());
+	            }
 
-            if (type->isStructureType()) {
-                if (!fromHandle)
-                    ERROR("Structure should *from* an `Address`.");
-                auto *RD = type->getAsRecordDecl();
-                if (!RD || !RD->isCompleteDefinition())
-                    ERROR("Incomplete struct definition");
-                RD           = RD->getDefinition();
-                auto &layout = RD->getASTContext().getASTRecordLayout(RD);
-                return factory.cloneExpr(
-                    factory.structure(RD, layout, fromHandle.value(), std::move(fromPoint)));
-            }
+	            if (type->isStructureType()) {
+	                if (!fromAddr)
+	                    ERROR("Structure should *from* an `Address`.");
+	                auto *RD = type->getAsRecordDecl();
+	                if (!RD || !RD->isCompleteDefinition())
+	                    ERROR("Incomplete struct definition");
+	                RD           = RD->getDefinition();
+	                auto &layout = RD->getASTContext().getASTRecordLayout(RD);
+	                return factory.cloneExpr(
+	                    factory.structure(RD, layout, fromAddr->handle(), std::move(fromPoint)));
+	            }
 
-            if (!fromHandle)
-                ERROR("SymbolValue should *from* an `Address`.");
-            return factory.cloneExpr(
-                factory.symbolValue(deriveType(type), fromHandle.value(), std::move(fromPoint)));
-        }
+	            if (!fromAddr)
+	                ERROR("SymbolValue should *from* an `Address`.");
+	            return factory.cloneExpr(
+	                Expr::symbolValue(deriveType(type), *fromAddr, std::move(fromPoint)).handle());
+	        }
 
         if (type->isPointerType()) {
             auto pointerType = llvm::cast<clang::PointerType>(type);
