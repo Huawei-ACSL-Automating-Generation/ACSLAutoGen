@@ -881,13 +881,13 @@ namespace acslg::test::unit::analyzer {
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
         symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
         auto varAddr = factory.variableAddress(var);
         auto x       = factory.symbolValue(symbolic::deriveType(var->getType()),
                                            varAddr, point);
         auto two     = factory.literal(2);
         auto sum     = factory.binary(x, symbolic::BinaryOpExpr::Operator::Add, two);
 
-        symbolic::ExprFactoryScope scope(factory);
         auto simplified = sum->simplifiedExpr();
         auto *rebuilt = symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
 
@@ -1043,6 +1043,18 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_EQ(a, b);
         EXPECT_TRUE(a.isa<symbolic::UnknownExpr>());
+    }
+
+    TEST(ExprFactoryTest, LegacyUnknownBuilderUsesCurrentFactory) {
+        ASSERT_FALSE(symbolic::ExprFactoryScope::hasCurrent());
+        ASSERT_DEATH({ (void)symbolic::UnknownExpr::makeUnknown(); }, "");
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto unknown = symbolic::UnknownExpr::makeUnknown();
+
+        EXPECT_EQ(factory.importExpr(*unknown), factory.unknown());
     }
 
     TEST(ExprFactoryTest, RangeIndexBuilderAndImportReuseNode) {
@@ -2151,6 +2163,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
         symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
         auto varAddr = factory.variableAddress(var);
         auto zero    = factory.literal(0);
         auto length  = factory.literal(3);

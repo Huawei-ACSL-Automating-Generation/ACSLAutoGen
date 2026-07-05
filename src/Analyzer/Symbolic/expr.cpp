@@ -640,12 +640,13 @@ namespace acslg::analyzer::symbolic {
         return cloneStructure(factory.structure(record, layout, fromHandle, std::move(fromPoint)));
     }
 
-    /**
-     * @brief Factory for creating an unknown symbolic value placeholder.
-     * @return Newly allocated UnknownExpr wrapped in not_null unique_ptr.
-     */
     utils::not_null<std::unique_ptr<UnknownExpr>> UnknownExpr::makeUnknown() {
-        return std::make_unique<UnknownExpr>();
+        auto &factory = ExprFactoryScope::current();
+        auto cloned = factory.cloneExpr(factory.unknown()).into_underlying();
+        auto unknown = dyn_cast<UnknownExpr>(cloned);
+        if (!unknown)
+            UNREACHABLE();
+        return utils::not_null<std::unique_ptr<UnknownExpr>>{std::move(unknown)};
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolicExpr::simplifiedExpr() const {

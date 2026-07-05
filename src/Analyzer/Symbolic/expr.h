@@ -956,8 +956,8 @@ namespace acslg::analyzer::symbolic {
             return expr->getKind() == ExprKind::K_UnknownExpr;
         }
 
-        /// @brief Create a unknown symbolic expression.
-        /// @return Unique pointer to a Unknown expression.
+        /// @brief Create an unknown symbolic expression through the active factory.
+        /// @return Unique pointer to an Unknown expression.
         static utils::not_null<std::unique_ptr<UnknownExpr>> makeUnknown();
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
