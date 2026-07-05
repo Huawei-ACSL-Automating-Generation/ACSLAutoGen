@@ -2327,118 +2327,63 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> offset) const {
         if (!isValidOffsetOrLength(*offset))
             ERROR("Invalid offset.");
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            Addr addr{factory, factory.importAddress(*this)};
-            Expr offsetExpr{factory, factory.importExpr(*offset)};
-            return cloneSymbolAddress(addr.withOffset(offsetExpr).handle());
-        }
-        auto result = std::make_unique<SymbolAddress>(*this);
-        result->offset_ = ExprChild{std::move(offset)};
-        return result;
+        auto &factory = ExprFactoryScope::current();
+        Addr addr{factory, factory.importAddress(*this)};
+        Expr offsetExpr{factory, factory.importExpr(*offset)};
+        return cloneSymbolAddress(addr.withOffset(offsetExpr).handle());
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withAddedOffset(
         utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            Addr addr{factory, factory.importAddress(*this)};
-            Expr extraExpr{factory, factory.importExpr(*extra)};
-            return cloneSymbolAddress(addr.withAddedOffset(extraExpr).handle());
-        }
-        auto result = std::make_unique<SymbolAddress>(*this);
-        result->offset_ =
-            ExprChild{buildBinaryExpr(offset_->clone(),
-                                      detail::BinaryOpExprNode::Operator::Add,
-                                      std::move(extra))
-                          ->simplifiedExpr()};
-        return result;
+        auto &factory = ExprFactoryScope::current();
+        Addr addr{factory, factory.importAddress(*this)};
+        Expr extraExpr{factory, factory.importExpr(*extra)};
+        return cloneSymbolAddress(addr.withAddedOffset(extraExpr).handle());
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withSubtractedOffset(
         utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            Addr addr{factory, factory.importAddress(*this)};
-            Expr extraExpr{factory, factory.importExpr(*extra)};
-            return cloneSymbolAddress(addr.withSubtractedOffset(extraExpr).handle());
-        }
-        auto result = std::make_unique<SymbolAddress>(*this);
-        result->offset_ =
-            ExprChild{buildBinaryExpr(offset_->clone(),
-                                      detail::BinaryOpExprNode::Operator::Subtract,
-                                      std::move(extra))
-                          ->simplifiedExpr()};
-        return result;
+        auto &factory = ExprFactoryScope::current();
+        Addr addr{factory, factory.importAddress(*this)};
+        Expr extraExpr{factory, factory.importExpr(*extra)};
+        return cloneSymbolAddress(addr.withSubtractedOffset(extraExpr).handle());
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withResetOffset() const {
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            Addr addr{factory, factory.importAddress(*this)};
-            LiteralExpr zero{factory, static_cast<int64_t>(ZERO_OFFSET)};
-            return cloneSymbolAddress(addr.withOffset(zero).handle());
-        }
-        auto result = std::make_unique<SymbolAddress>(*this);
-        result->offset_ = ExprChild{buildLiteralExpr(static_cast<int64_t>(ZERO_OFFSET))};
-        return result;
+        auto &factory = ExprFactoryScope::current();
+        Addr addr{factory, factory.importAddress(*this)};
+        LiteralExpr zero{factory, static_cast<int64_t>(ZERO_OFFSET)};
+        return cloneSymbolAddress(addr.withOffset(zero).handle());
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withLength(
         utils::not_null<std::unique_ptr<SymbolicExpr>> len) const {
         if (!isValidOffsetOrLength(*len))
             ERROR("Invalid Length.");
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            Addr addr{factory, factory.importAddress(*this)};
-            Expr length{factory, factory.importExpr(*len)};
-            return cloneSymbolAddress(addr.withLength(length).handle());
-        }
-        auto result = std::make_unique<SymbolAddress>(*this);
-        result->length_.emplace(std::move(len));
-        return result;
+        auto &factory = ExprFactoryScope::current();
+        Addr addr{factory, factory.importAddress(*this)};
+        Expr length{factory, factory.importExpr(*len)};
+        return cloneSymbolAddress(addr.withLength(length).handle());
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withAddedLength(
         utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
         if (!isValidOffsetOrLength(*extra))
             ERROR("Invalid offset.");
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            Addr addr{factory, factory.importAddress(*this)};
-            Expr extraExpr{factory, factory.importExpr(*extra)};
-            return cloneSymbolAddress(addr.withAddedLength(extraExpr).handle());
-        }
-        auto result = std::make_unique<SymbolAddress>(*this);
-        if (length_ == std::nullopt) {
-            result->length_.emplace(
-                ExprChild{buildBinaryExpr(buildLiteralExpr(1),
-                                          detail::BinaryOpExprNode::Operator::Add,
-                                          std::move(extra))
-                              ->simplifiedExpr()});
-            return result;
-        }
-        result->length_ =
-            ExprChild{buildBinaryExpr(length_.value()->clone(),
-                                      detail::BinaryOpExprNode::Operator::Add,
-                                      std::move(extra))
-                          ->simplifiedExpr()};
-        return result;
+        auto &factory = ExprFactoryScope::current();
+        Addr addr{factory, factory.importAddress(*this)};
+        Expr extraExpr{factory, factory.importExpr(*extra)};
+        return cloneSymbolAddress(addr.withAddedLength(extraExpr).handle());
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withoutLength() const {
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            Addr addr{factory, factory.importAddress(*this)};
-            return cloneSymbolAddress(addr.withoutLength().handle());
-        }
-        auto result = std::make_unique<SymbolAddress>(*this);
-        result->length_ = std::nullopt;
-        return result;
+        auto &factory = ExprFactoryScope::current();
+        Addr addr{factory, factory.importAddress(*this)};
+        return cloneSymbolAddress(addr.withoutLength().handle());
     }
 
     size_t SymbolAddrBaseInfo::hash() const {
