@@ -108,7 +108,6 @@ namespace acslg::analyzer {
         using symbolic::cloneVariableAddress;
         using symbolic::makeFieldAddress;
         using symbolic::makeStructure;
-        using symbolic::makeSymbolAddress;
         using symbolic::makeVariableAddress;
     } // namespace
 
@@ -734,9 +733,11 @@ namespace acslg::analyzer {
                                 WARN("DeclRefExpr to pointer '"
                                      << varDecl->getNameAsString()
                                      << "' has non-address value; fabricating symbolic address.");
-                                auto addr = makeSymbolAddress(context_.getExprFactory(),
-                                                              varDecl->getType()->getPointeeType(),
-                                                              startPoint_);
+                                auto addr = cloneSymbolAddress(
+                                    symbolic::Addr::symbol(context_.getExprFactory(),
+                                                           varDecl->getType()->getPointeeType(),
+                                                           startPoint_)
+                                        .handle());
                                 varExpr = std::move(addr);
                             }
                         }
@@ -911,8 +912,10 @@ namespace acslg::analyzer {
                         auto pointAfterCall = symbolic::SourcePoint::fromStmtAfter(
                             call, context_.getSourceManager(), context_.getLangOptions());
                         auto pointeeTy = retTy->getPointeeType();
-                        auto addr =
-                            makeSymbolAddress(context_.getExprFactory(), pointeeTy, pointAfterCall);
+                        auto addr = cloneSymbolAddress(
+                            symbolic::Addr::symbol(context_.getExprFactory(), pointeeTy,
+                                                   pointAfterCall)
+                                .handle());
 
                         Formulas exprs;
                         exprs.emplace_back(std::move(addr));
@@ -990,8 +993,10 @@ namespace acslg::analyzer {
 
                             // Allocate a fresh symbolic address anchored at the current allocation
                             // site.
-                            auto addr = makeSymbolAddress(context_.getExprFactory(), elemTy,
-                                                          pointAfterCall);
+                            auto addr = cloneSymbolAddress(
+                                symbolic::Addr::symbol(context_.getExprFactory(), elemTy,
+                                                       pointAfterCall)
+                                    .handle());
 
                             // Note: The length is temporarily omitted since it conceptually
                             // represents the legal bound of accessible memory, rather than a
@@ -1536,9 +1541,12 @@ namespace acslg::analyzer {
                         if (baseAddr == std::nullopt) {
                             WARN("LHS of '->' is not an address; fabricating symbolic pointer to "
                                  "continue.");
-                            auto newAddr = makeSymbolAddress(
-                                context_.getExprFactory(),
-                                memberExpr->getBase()->getType()->getPointeeType(), startPoint_);
+                            auto newAddr = cloneSymbolAddress(
+                                symbolic::Addr::symbol(
+                                    context_.getExprFactory(),
+                                    memberExpr->getBase()->getType()->getPointeeType(),
+                                    startPoint_)
+                                    .handle());
                             baseAddr = utils::not_null<std::unique_ptr<symbolic::SymbolAddress>>{
                                 std::move(newAddr)};
                         }
