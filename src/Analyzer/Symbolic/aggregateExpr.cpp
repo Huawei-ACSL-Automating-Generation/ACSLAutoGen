@@ -18,30 +18,16 @@ namespace acslg::analyzer::symbolic {
     namespace {
         utils::not_null<std::unique_ptr<SymbolicExpr>> importIfFactoryScoped(
             utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-            if (!ExprFactoryScope::hasCurrent())
-                return expr;
-
             return ExprFactoryScope::current().importAndCloneExpr(*expr);
-        }
-
-        utils::not_null<std::unique_ptr<const SymbolAddress>> cloneConstRange(
-            const SymbolAddress &range) {
-            return utils::not_null<std::unique_ptr<const SymbolAddress>>{
-                std::make_unique<const SymbolAddress>(range)};
         }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildSumOverRange(
             const SymbolAddress &range,
             std::string_view indexName,
             SourcePoint fromPoint) {
-            if (ExprFactoryScope::hasCurrent()) {
-                auto &factory = ExprFactoryScope::current();
-                return factory.cloneExpr(makeSumOverRangeHandle(
-                    factory, range, indexName, std::move(fromPoint)));
-            }
-
-            return std::make_unique<SumOverRange>(
-                cloneConstRange(range), indexName, std::move(fromPoint));
+            auto &factory = ExprFactoryScope::current();
+            return factory.cloneExpr(makeSumOverRangeHandle(
+                factory, range, indexName, std::move(fromPoint)));
         }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildQuantifierOverRange(
@@ -49,17 +35,9 @@ namespace acslg::analyzer::symbolic {
             std::string_view indexName,
             QuantifierOverRange::Quantifier quantifier,
             utils::not_null<std::unique_ptr<SymbolicExpr>> predicate) {
-            if (ExprFactoryScope::hasCurrent()) {
-                auto &factory = ExprFactoryScope::current();
-                return factory.cloneExpr(makeQuantifierOverRangeHandle(
-                    factory, range, indexName, quantifier, *predicate));
-            }
-
-            std::unique_ptr<const SymbolicExpr> constPredicate =
-                std::move(predicate).into_underlying();
-            return std::make_unique<QuantifierOverRange>(
-                cloneConstRange(range), indexName, quantifier,
-                utils::not_null<std::unique_ptr<const SymbolicExpr>>{std::move(constPredicate)});
+            auto &factory = ExprFactoryScope::current();
+            return factory.cloneExpr(makeQuantifierOverRangeHandle(
+                factory, range, indexName, quantifier, *predicate));
         }
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildMaxMinOverRange(
@@ -68,17 +46,9 @@ namespace acslg::analyzer::symbolic {
             MaxMinOverRange::Extremum extremum,
             utils::not_null<std::unique_ptr<SymbolicExpr>> body,
             SourcePoint fromPoint) {
-            if (ExprFactoryScope::hasCurrent()) {
-                auto &factory = ExprFactoryScope::current();
-                return factory.cloneExpr(makeMaxMinOverRangeHandle(
-                    factory, range, indexName, extremum, *body, std::move(fromPoint)));
-            }
-
-            std::unique_ptr<const SymbolicExpr> constBody = std::move(body).into_underlying();
-            return std::make_unique<MaxMinOverRange>(
-                cloneConstRange(range), indexName, extremum,
-                utils::not_null<std::unique_ptr<const SymbolicExpr>>{std::move(constBody)},
-                std::move(fromPoint));
+            auto &factory = ExprFactoryScope::current();
+            return factory.cloneExpr(makeMaxMinOverRangeHandle(
+                factory, range, indexName, extremum, *body, std::move(fromPoint)));
         }
 
         ExprHandle makeMaxMinDefaultBody(ExprFactory &factory,

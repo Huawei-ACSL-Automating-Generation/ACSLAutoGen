@@ -849,7 +849,9 @@ namespace acslg::test::unit::analyzer {
         }
     }
     TEST_F(MemoryModelTest, ConstRange_RangeIndexSubedCorrectly) {
-        MemoryModel mm;
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        MemoryModel mm(factory);
         const unsigned baseId = 10;
 
         // A: [0,10) -> i
