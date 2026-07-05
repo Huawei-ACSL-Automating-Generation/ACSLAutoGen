@@ -468,24 +468,6 @@ namespace acslg::analyzer::symbolic {
             return ExprFactoryScope::current().importAndCloneExpr(*expr);
         }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> buildBinaryExpr(
-            utils::not_null<std::unique_ptr<SymbolicExpr>> lhs,
-            BinaryOpExpr::Operator op,
-            utils::not_null<std::unique_ptr<SymbolicExpr>> rhs) {
-            auto &factory = ExprFactoryScope::current();
-            Expr lhsExpr{factory, factory.importExpr(*lhs)};
-            Expr rhsExpr{factory, factory.importExpr(*rhs)};
-            return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
-        }
-
-        utils::not_null<std::unique_ptr<SymbolicExpr>> buildUnaryExpr(
-            UnaryOpExpr::Operator op,
-            utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-            auto &factory = ExprFactoryScope::current();
-            Expr operand{factory, factory.importExpr(*expr)};
-            return factory.cloneExpr(operand.unary(op).handle());
-        }
-
         utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildSymbolAddress(
             clang::QualType pointeeType,
             std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
@@ -1973,14 +1955,19 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
-        return buildBinaryExpr(left_->getSubstitutedExpr(pathSubTo, pointToSub), op_,
-                              right_->getSubstitutedExpr(pathSubTo, pointToSub));
+        auto lhs = left_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto rhs = right_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+            factory.binary(factory.importExpr(*lhs), op_, factory.importExpr(*rhs)));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
-        return buildUnaryExpr(op_, expr_->getSubstitutedExpr(pathSubTo, pointToSub));
+        auto subExpr = expr_->getSubstitutedExpr(pathSubTo, pointToSub);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(factory.unary(op_, factory.importExpr(*subExpr)));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedExpr(
@@ -2064,14 +2051,19 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
-        return buildBinaryExpr(left_->getRangeIndexSubstituted(rangeBase, indexExpr), op_,
-                              right_->getRangeIndexSubstituted(rangeBase, indexExpr));
+        auto lhs = left_->getRangeIndexSubstituted(rangeBase, indexExpr);
+        auto rhs = right_->getRangeIndexSubstituted(rangeBase, indexExpr);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+            factory.binary(factory.importExpr(*lhs), op_, factory.importExpr(*rhs)));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
-        return buildUnaryExpr(op_, expr_->getRangeIndexSubstituted(rangeBase, indexExpr));
+        auto subExpr = expr_->getRangeIndexSubstituted(rangeBase, indexExpr);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(factory.unary(op_, factory.importExpr(*subExpr)));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getRangeIndexSubstituted(
@@ -2159,15 +2151,20 @@ namespace acslg::analyzer::symbolic {
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return importThroughCurrentFactory(it->second->clone());
-        return buildBinaryExpr(left_->getSubstitutedValueExpr(hashExprMap), op_,
-                              right_->getSubstitutedValueExpr(hashExprMap));
+        auto lhs = left_->getSubstitutedValueExpr(hashExprMap);
+        auto rhs = right_->getSubstitutedValueExpr(hashExprMap);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+            factory.binary(factory.importExpr(*lhs), op_, factory.importExpr(*rhs)));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return importThroughCurrentFactory(it->second->clone());
-        return buildUnaryExpr(op_, expr_->getSubstitutedValueExpr(hashExprMap));
+        auto subExpr = expr_->getSubstitutedValueExpr(hashExprMap);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(factory.unary(op_, factory.importExpr(*subExpr)));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedValueExpr(
