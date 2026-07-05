@@ -35,6 +35,17 @@ namespace acslg::test::unit::analyzer {
             return nullptr;
         }
 
+        ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+        makeStructureCloneWithFacade(symbolic::ExprFactory &factory,
+                                     clang::QualType type,
+                                     ::acslg::utils::not_null<const clang::VarDecl *> var,
+                                     symbolic::SourcePoint point) {
+            auto *record = type->getAsRecordDecl()->getDefinition();
+            auto &layout = record->getASTContext().getASTRecordLayout(record);
+            auto from    = symbolic::Addr::variable(var);
+            return factory.cloneExpr(factory.structure(record, layout, from.handle(), point));
+        }
+
         class SourcePointTest : public ::testing::Test {
           protected:
             ASTExtractor e;
@@ -1998,7 +2009,9 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactoryScope scope(factory);
         auto sizeBefore = factory.size();
         auto structureExpr = symbolic::makeUnknownStructure(
-            var->getType(), std::make_unique<symbolic::VariableAddress>(var), point);
+            var->getType(),
+            symbolic::cloneVariableAddress(symbolic::Addr::variable(var).handle()),
+            point);
         EXPECT_GT(factory.size(), sizeBefore);
 
         auto expected = factory.structure(record, layout, factory.variableAddress(var), point);
@@ -2201,22 +2214,18 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
-        std::unique_ptr<const symbolic::Address> from =
-            std::make_unique<symbolic::VariableAddress>(var);
-        std::unique_ptr<const symbolic::SymbolicExpr> offset =
-            symbolic::makeLiteralExpr(4).into_underlying();
-        std::unique_ptr<const symbolic::SymbolicExpr> length =
-            symbolic::makeLiteralExpr(2).into_underlying();
-        symbolic::SymbolAddress legacy{
-            var->getType(),
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>{std::move(from)},
-            point,
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
-                std::move(offset)},
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
-                std::move(length)}};
-
         symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto legacyPtr = symbolic::cloneSymbolAddress(
+            symbolic::Addr::symbol(
+                var->getType(),
+                symbolic::Addr::variable(var),
+                point,
+                symbolic::LiteralExpr{factory, int64_t{4}},
+                symbolic::LiteralExpr{factory, int64_t{2}})
+                .handle());
+        const auto &legacy = *legacyPtr;
+
         auto importedA = factory.importExpr(legacy);
         auto importedB = factory.importExpr(legacy);
         auto importedAddress = factory.importAddress(legacy);
@@ -2253,8 +2262,11 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
-        auto legacyExpr = symbolic::makeUnknownStructure(
-            var->getType(), std::make_unique<symbolic::VariableAddress>(var), point);
+        symbolic::ExprFactory setupFactory;
+        auto legacyExpr = [&]() {
+            symbolic::ExprFactoryScope setupScope(setupFactory);
+            return makeStructureCloneWithFacade(setupFactory, var->getType(), var, point);
+        }();
         auto *legacyStructure = symbolic::cast<symbolic::Structure>(legacyExpr.get().get());
 
         symbolic::ExprFactory factory;
@@ -2449,8 +2461,11 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
-        auto structureExpr = symbolic::makeUnknownStructure(
-            var->getType(), std::make_unique<symbolic::VariableAddress>(var), point);
+        symbolic::ExprFactory factory;
+        auto structureExpr = [&]() {
+            symbolic::ExprFactoryScope scope(factory);
+            return makeStructureCloneWithFacade(factory, var->getType(), var, point);
+        }();
         auto *structure = symbolic::cast<symbolic::Structure>(structureExpr.get().get());
         auto originalField0 = structure->getFieldValue(0)->clone();
         auto originalField1 = structure->getFieldValue(1)->clone();
@@ -2491,8 +2506,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        auto structureExpr = symbolic::makeUnknownStructure(
-            var->getType(), std::make_unique<symbolic::VariableAddress>(var), point);
+        auto structureExpr = makeStructureCloneWithFacade(factory, var->getType(), var, point);
         auto *structure = symbolic::cast<symbolic::Structure>(structureExpr.get().get());
         auto replacement = factory.literal(42);
 
@@ -2531,8 +2545,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        auto structureExpr = symbolic::makeUnknownStructure(
-            var->getType(), std::make_unique<symbolic::VariableAddress>(var), point);
+        auto structureExpr = makeStructureCloneWithFacade(factory, var->getType(), var, point);
         auto *structure = symbolic::cast<symbolic::Structure>(structureExpr.get().get());
         auto replacement = factory.literal(42);
 
