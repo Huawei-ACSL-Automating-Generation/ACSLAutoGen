@@ -649,10 +649,9 @@ namespace acslg::test::unit::analyzer {
 
             ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> clone()
                 const override {
-                return std::make_unique<symbolic::BinaryOpExpr>(
-                    std::make_unique<symbolic::detail::LiteralExprNode>(1),
-                    symbolic::BinaryOpExpr::Operator::Add,
-                    std::make_unique<symbolic::detail::LiteralExprNode>(2));
+                return symbolic::makeBinaryExpr(
+                    symbolic::makeLiteralExpr(1), symbolic::BinaryOpExpr::Operator::Add,
+                    symbolic::makeLiteralExpr(2));
             }
 
             std::string dump() const override { return "base-simplified-probe"; }
@@ -931,14 +930,11 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto simplified = legacy.simplifiedExpr();
-        auto *sum = symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
+        auto expected = symbolic::makeBinaryExpr(
+            symbolic::makeLiteralExpr(1), symbolic::BinaryOpExpr::Operator::Add,
+            symbolic::makeLiteralExpr(2));
 
-        auto one = factory.literal(1);
-        auto two = factory.literal(2);
-        EXPECT_EQ(sum->getLeft().get(), one.get().get());
-        EXPECT_EQ(sum->getRight().get(), two.get().get());
-        EXPECT_EQ(factory.importExpr(*simplified), factory.binary(
-                                                  one, symbolic::BinaryOpExpr::Operator::Add, two));
+        EXPECT_EQ(factory.importExpr(*simplified), factory.importExpr(*expected));
     }
 
     TEST(ExprFactoryTest, ScopedBooleanComparisonSimplificationImportsReturnedExpr) {
