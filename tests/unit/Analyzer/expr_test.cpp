@@ -1812,6 +1812,34 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
     }
 
+    TEST(ExprFactoryTest, LegacySymbolAddressDefaultOffsetUsesCurrentFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        ASSERT_FALSE(symbolic::ExprFactoryScope::hasCurrent());
+        ASSERT_DEATH({ symbolic::SymbolAddress addr(var->getType(), std::nullopt, point); }, "");
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        symbolic::SymbolAddress addr(var->getType(), std::nullopt, point);
+
+        EXPECT_EQ(addr.getOffset().get(), factory.literal(int64_t{0}).get().get());
+        EXPECT_EQ(factory.importAddress(addr),
+                  factory.symbolAddress(var->getType(), std::nullopt, point));
+    }
+
     TEST(ExprFactoryTest, StructureBuilderInitializesFieldHandles) {
         ASTExtractor e;
         e.init(R"c(

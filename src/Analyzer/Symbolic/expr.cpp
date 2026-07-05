@@ -540,6 +540,24 @@ namespace acslg::analyzer::symbolic {
             return factory.cloneExpr(
                 Expr::symbolValue(varType, fromAddr, std::move(fromPoint)).handle());
         }
+
+        ExprChild makeDefaultSymbolAddressOffsetChild() {
+            auto &factory = ExprFactoryScope::current();
+            return ExprChild{factory.literal(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET))};
+        }
+
+        ExprChild makeSymbolAddressOffsetChild(
+            std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> offset) {
+            if (offset != std::nullopt)
+                return ExprChild::fromConstOwned(std::move(offset.value()));
+            return makeDefaultSymbolAddressOffsetChild();
+        }
+
+        ExprChild makeSymbolAddressOffsetChild(std::optional<ExprHandle> offset) {
+            if (offset != std::nullopt)
+                return ExprChild{offset.value()};
+            return makeDefaultSymbolAddressOffsetChild();
+        }
     } // namespace
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeLiteralExpr(int64_t value) {
@@ -2255,10 +2273,8 @@ namespace acslg::analyzer::symbolic {
         : Address(SymbolicExpr::ExprKind::K_SymbolAddress,
                   SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                   pointeeType),
-          Symbol(Kind::K_SymbolAddress), offset_(std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET)),
+          Symbol(Kind::K_SymbolAddress), offset_(makeSymbolAddressOffsetChild(std::move(offset))),
           fromAddr_(std::move(from)), fromPoint_(fromPoint), length_(std::nullopt) {
-        if (offset != std::nullopt)
-            offset_ = ExprChild::fromConstOwned(std::move(offset.value()));
         if (length != std::nullopt)
             length_.emplace(ExprChild::fromConstOwned(std::move(length.value())));
     }
@@ -2272,10 +2288,8 @@ namespace acslg::analyzer::symbolic {
         : Address(SymbolicExpr::ExprKind::K_SymbolAddress,
                   SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                   pointeeType),
-          Symbol(Kind::K_SymbolAddress), offset_(std::make_unique<detail::LiteralExprNode>(ZERO_OFFSET)),
+          Symbol(Kind::K_SymbolAddress), offset_(makeSymbolAddressOffsetChild(offset)),
           fromAddr_(std::move(from)), fromPoint_(fromPoint), length_(std::nullopt) {
-        if (offset != std::nullopt)
-            offset_ = ExprChild{offset.value()};
         if (length != std::nullopt)
             length_.emplace(length.value());
     }
