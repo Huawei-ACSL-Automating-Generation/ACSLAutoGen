@@ -12,8 +12,26 @@ namespace acslg::spec_generator {
 
     namespace {
         using OwnedSymbolicExpr = utils::not_null<std::unique_ptr<symb::SymbolicExpr>>;
-        using symb::makeBinaryExpr;
-        using symb::makeLiteralExpr;
+
+        OwnedSymbolicExpr buildLiteral(int64_t value) {
+            if (symb::ExprFactoryScope::hasCurrent()) {
+                auto &factory = symb::ExprFactoryScope::current();
+                return factory.cloneExpr(symb::LiteralExpr(factory, value).handle());
+            }
+            return symb::makeLiteralExpr(value);
+        }
+
+        OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
+                                      symb::BinaryOpExpr::Operator op,
+                                      OwnedSymbolicExpr rhs) {
+            if (symb::ExprFactoryScope::hasCurrent()) {
+                auto &factory = symb::ExprFactoryScope::current();
+                symb::Expr lhsExpr{factory, factory.importExpr(*lhs)};
+                symb::Expr rhsExpr{factory, factory.importExpr(*rhs)};
+                return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
+            }
+            return symb::makeBinaryExpr(std::move(lhs), op, std::move(rhs));
+        }
 
         OwnedSymbolicExpr buildMaxLoopCountExpr(const LoopInfo::Pattern &pattern,
                                                 const symb::SymbolicExpr &boundValue,
@@ -22,14 +40,14 @@ namespace acslg::spec_generator {
 
             auto result =
                 pattern.step > 0
-                    ? makeBinaryExpr(makeBinaryExpr(boundValue.clone(), Add,
-                                                    makeLiteralExpr(pattern.step - 1)),
-                                     Subtract, pattern.initialValue->clone())
-                    : makeBinaryExpr(pattern.initialValue->clone(), Subtract,
-                                     makeBinaryExpr(boundValue.clone(), Add,
-                                                    makeLiteralExpr(pattern.step + 1)));
+                    ? buildBinary(buildBinary(boundValue.clone(), Add,
+                                              buildLiteral(pattern.step - 1)),
+                                  Subtract, pattern.initialValue->clone())
+                    : buildBinary(pattern.initialValue->clone(), Subtract,
+                                  buildBinary(boundValue.clone(), Add,
+                                              buildLiteral(pattern.step + 1)));
             if (includeClosedBound)
-                result = makeBinaryExpr(std::move(result), Add, makeLiteralExpr(1));
+                result = buildBinary(std::move(result), Add, buildLiteral(1));
             return result;
         }
     } // namespace
@@ -609,7 +627,7 @@ namespace acslg::spec_generator {
                         unaryExpr);
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
-                boundValue = makeLiteralExpr(0);
+                boundValue = buildLiteral(0);
 
                 if (indexPattern == std::nullopt || boundValue == std::nullopt)
                     UNREACHABLE();
@@ -678,7 +696,7 @@ namespace acslg::spec_generator {
                     entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(refExpr);
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
-                boundValue = makeLiteralExpr(0);
+                boundValue = buildLiteral(0);
 
                 if (indexPattern == std::nullopt || boundValue == std::nullopt)
                     UNREACHABLE();
