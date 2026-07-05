@@ -47,9 +47,10 @@ namespace acslg::analyzer {
             if (!record || !record->isCompleteDefinition())
                 ERROR("Expected complete structure type.");
             record = record->getDefinition();
-            return symbolic::makeStructure(
-                factory, record, record->getASTContext().getASTRecordLayout(record),
-                std::move(base), point);
+            auto from = symbolic::Addr{factory, factory.importAddress(*base)};
+            return symbolic::cloneStructure(factory.structure(
+                record, record->getASTContext().getASTRecordLayout(record), from.handle(),
+                point));
         }
 
         bool containsLocalVar(const symbolic::SymbolicExpr &expr,
