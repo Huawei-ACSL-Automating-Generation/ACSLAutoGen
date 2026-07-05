@@ -502,6 +502,21 @@ namespace acslg::analyzer::symbolic {
                                                   base.addressClone().into_underlying(),
                                                   fieldIndex);
         }
+
+        utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildSymbolValue(
+            SymbolicExpr::Type varType,
+            const Address &from,
+            SourcePoint fromPoint) {
+            if (ExprFactoryScope::hasCurrent()) {
+                auto &factory = ExprFactoryScope::current();
+                Addr fromAddr{factory, factory.importAddress(from)};
+                return factory.cloneExpr(
+                    Expr::symbolValue(varType, fromAddr, std::move(fromPoint)).handle());
+            }
+
+            return std::make_unique<SymbolValue>(
+                varType, from.addressClone().into_underlying(), std::move(fromPoint));
+        }
     } // namespace
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeLiteralExpr(int64_t value) {
@@ -1891,9 +1906,7 @@ namespace acslg::analyzer::symbolic {
             // Address originates from an address present on this path at loop
             // entry but hasn't been accessed -> construct a SymbolValue with
             // corrext fromAddr and pointToSub.
-            return importThroughCurrentFactory(std::make_unique<SymbolValue>(
-                getValType(), realFromAddr->addressClone().into_underlying(),
-                pathSubTo.getStartPoint()));
+            return rebuildSymbolValue(getValType(), *realFromAddr, pathSubTo.getStartPoint());
         }
     }
 
@@ -2027,8 +2040,7 @@ namespace acslg::analyzer::symbolic {
         auto addr = dyn_cast<Address>(expr.get().get());
         if (addr == nullptr)
             UNREACHABLE();
-        return importThroughCurrentFactory(std::make_unique<SymbolValue>(
-            getValType(), addr->addressClone().into_underlying(), fromPoint_));
+        return rebuildSymbolValue(getValType(), *addr, fromPoint_);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getRangeIndexSubstituted(
@@ -2128,8 +2140,7 @@ namespace acslg::analyzer::symbolic {
         auto addr = dyn_cast<Address>(expr.get().get());
         if (addr == nullptr)
             UNREACHABLE();
-        return importThroughCurrentFactory(std::make_unique<SymbolValue>(
-            getValType(), addr->addressClone().into_underlying(), fromPoint_));
+        return rebuildSymbolValue(getValType(), *addr, fromPoint_);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getSubstitutedValueExpr(
