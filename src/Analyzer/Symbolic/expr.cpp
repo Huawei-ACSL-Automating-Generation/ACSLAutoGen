@@ -588,8 +588,6 @@ namespace acslg::analyzer::symbolic {
     }
 
     std::unique_ptr<SymbolAddress> cloneSymbolAddress(const SymbolAddress &address) {
-        if (!ExprFactoryScope::hasCurrent())
-            return std::make_unique<SymbolAddress>(address);
         return cloneSymbolAddress(ExprFactoryScope::current().importAddress(address));
     }
 
@@ -602,18 +600,10 @@ namespace acslg::analyzer::symbolic {
     std::unique_ptr<SymbolAddress> makeSymbolAddress(clang::QualType pointeeType,
                                                      std::unique_ptr<Address> from,
                                                      SourcePoint fromPoint) {
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            Addr fromAddr{factory, factory.importAddress(*from)};
-            return cloneSymbolAddress(
-                Addr::symbol(pointeeType, fromAddr, std::move(fromPoint)).handle());
-        }
-
-        std::unique_ptr<const Address> constFrom = std::move(from);
-        return std::make_unique<SymbolAddress>(
-            pointeeType,
-            utils::not_null<std::unique_ptr<const Address>>{std::move(constFrom)},
-            std::move(fromPoint));
+        auto &factory = ExprFactoryScope::current();
+        Addr fromAddr{factory, factory.importAddress(*from)};
+        return cloneSymbolAddress(
+            Addr::symbol(pointeeType, fromAddr, std::move(fromPoint)).handle());
     }
 
     std::unique_ptr<VariableAddress> cloneVariableAddress(AddrHandle address) {
