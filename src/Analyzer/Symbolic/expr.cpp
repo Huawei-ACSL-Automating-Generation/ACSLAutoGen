@@ -1446,6 +1446,7 @@ namespace acslg::analyzer::symbolic {
 
         auto LHS = left_->simplifiedExpr();
         auto RHS = right_->simplifiedExpr();
+        auto &factory = ExprFactoryScope::current();
 
         using Op = detail::BinaryOpExprNode::Operator;
         // Normalize comparisons against boolean literals to avoid chained equality like `x == 0 == 1`.
@@ -1464,10 +1465,11 @@ namespace acslg::analyzer::symbolic {
 
                 const bool expectTrue = (op_ == Op::Equal) ? (v == 1) : (v == 0);
                 if (expectTrue)
-                    return importThroughCurrentFactory(boolExpr.clone()).into_underlying();
-                return buildUnaryExpr(
-                    detail::UnaryOpExprNode::Operator::LogicalNot,
-                    boolExpr.clone())
+                    return factory.cloneExpr(factory.importExpr(boolExpr)).into_underlying();
+                return factory.cloneExpr(
+                                  factory.unary(
+                                      detail::UnaryOpExprNode::Operator::LogicalNot,
+                                      factory.importExpr(boolExpr)))
                     .into_underlying();
             };
 
@@ -1502,7 +1504,8 @@ namespace acslg::analyzer::symbolic {
             }
         }
 
-        return buildBinaryExpr(std::move(LHS), op_, std::move(RHS));
+        return factory.cloneExpr(
+            factory.binary(factory.importExpr(*LHS), op_, factory.importExpr(*RHS)));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::simplifiedExpr() const {
@@ -1511,7 +1514,8 @@ namespace acslg::analyzer::symbolic {
         if (isLinear())
             return simplifiedExprIfLinear();
         auto subExpr = expr_->simplifiedExpr();
-        return buildUnaryExpr(op_, std::move(subExpr));
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(factory.unary(op_, factory.importExpr(*subExpr)));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::simplifiedExpr() const {
@@ -2692,7 +2696,10 @@ namespace acslg::analyzer::symbolic {
 
     std::unique_ptr<SymbolicExpr> createLNotExpr(
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-        return buildUnaryExpr(detail::UnaryOpExprNode::Operator::LogicalNot, std::move(expr))
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+                          factory.unary(detail::UnaryOpExprNode::Operator::LogicalNot,
+                                        factory.importExpr(*expr)))
             .into_underlying();
     }
 
