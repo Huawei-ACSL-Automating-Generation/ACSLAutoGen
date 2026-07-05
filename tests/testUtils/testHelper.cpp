@@ -248,7 +248,8 @@ namespace acslg::test::utils {
     FixtureWithCode::FixtureWithCode()
         : e(code), defaultPoint(symbolic::SourcePoint::fromFuncDecl(e.findFirstDecl<FunctionDecl>(),
                                                                     e.getSourceManager(),
-                                                                    e.getLangOptions())) {
+                                                                    e.getLangOptions())),
+          exprScope_(exprFactory_) {
         for (auto d : e.getASTContext().getTranslationUnitDecl()->decls()) {
             if (auto vd = dyn_cast<VarDecl>(d))
                 varDecls.push_back(vd);

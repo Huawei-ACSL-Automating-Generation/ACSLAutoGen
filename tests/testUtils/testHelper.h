@@ -126,6 +126,7 @@ namespace acslg::test::utils {
         std::unordered_map<unsigned int, size_t> funcIdCountMap{};
 
         analyzer::symbolic::ExprFactory exprFactory_;
+        analyzer::symbolic::ExprFactoryScope exprScope_;
     };
 
 #define EXPECT_OK_AND_FIRST_EQ(expr, expected_first)                                               \
