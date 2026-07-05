@@ -16,7 +16,7 @@
 
 namespace acslg::analyzer::symbolic {
     namespace {
-        utils::not_null<std::unique_ptr<SymbolicExpr>> importIfFactoryScoped(
+        utils::not_null<std::unique_ptr<SymbolicExpr>> importThroughCurrentFactory(
             utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
             return ExprFactoryScope::current().importAndCloneExpr(*expr);
         }
@@ -207,19 +207,19 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::getSubstitutedExpr(
         const Path &,
         const SourcePoint &) const {
-        return importIfFactoryScoped(clone());
+        return importThroughCurrentFactory(clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::
         getRangeIndexSubstituted(const SymbolAddrBaseInfo &, const SymbolicExpr &indexExpr) const {
-        return importIfFactoryScoped(indexExpr.clone());
+        return importThroughCurrentFactory(indexExpr.clone());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importIfFactoryScoped(it->second->clone());
-        return importIfFactoryScoped(clone());
+            return importThroughCurrentFactory(it->second->clone());
+        return importThroughCurrentFactory(clone());
     }
 
     std::string SumOverRange::dump() const {
@@ -245,7 +245,7 @@ namespace acslg::analyzer::symbolic {
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
         if (fromPoint_ != pointToSub)
-            return importIfFactoryScoped(clone());
+            return importThroughCurrentFactory(clone());
         // Substitute only when the label matches; otherwise preserve the original expression.
         auto subedExpr  = range().getSubstitutedExpr(pathSubTo, pointToSub);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
@@ -267,7 +267,7 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importIfFactoryScoped(it->second->clone());
+            return importThroughCurrentFactory(it->second->clone());
         auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
@@ -350,7 +350,7 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importIfFactoryScoped(it->second->clone());
+            return importThroughCurrentFactory(it->second->clone());
         auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
@@ -473,7 +473,7 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importIfFactoryScoped(it->second->clone());
+            return importThroughCurrentFactory(it->second->clone());
         auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
         auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
