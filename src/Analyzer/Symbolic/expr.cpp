@@ -535,40 +535,29 @@ namespace acslg::analyzer::symbolic {
     } // namespace
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeLiteralExpr(int64_t value) {
-        if (ExprFactoryScope::hasCurrent())
-            return ExprFactoryScope::current().cloneExpr(ExprFactoryScope::current().literal(value));
-        return std::make_unique<detail::LiteralExprNode>(value);
+        return ExprFactoryScope::current().cloneExpr(ExprFactoryScope::current().literal(value));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeUnaryExpr(
         UnaryOpExpr::Operator op,
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            Expr operand{factory, factory.importExpr(*expr)};
-            return factory.cloneExpr(operand.unary(op).handle());
-        }
-        return std::make_unique<UnaryOpExpr>(op, std::move(expr));
+        auto &factory = ExprFactoryScope::current();
+        Expr operand{factory, factory.importExpr(*expr)};
+        return factory.cloneExpr(operand.unary(op).handle());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeBinaryExpr(
         utils::not_null<std::unique_ptr<SymbolicExpr>> lhs,
         BinaryOpExpr::Operator op,
         utils::not_null<std::unique_ptr<SymbolicExpr>> rhs) {
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            Expr lhsExpr{factory, factory.importExpr(*lhs)};
-            Expr rhsExpr{factory, factory.importExpr(*rhs)};
-            return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
-        }
-        return std::make_unique<BinaryOpExpr>(std::move(lhs), op, std::move(rhs));
+        auto &factory = ExprFactoryScope::current();
+        Expr lhsExpr{factory, factory.importExpr(*lhs)};
+        Expr rhsExpr{factory, factory.importExpr(*rhs)};
+        return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeRangeIndexExpr(std::string_view name) {
-        if (ExprFactoryScope::hasCurrent())
-            return ExprFactoryScope::current().cloneExpr(
-                ExprFactoryScope::current().rangeIndex(name));
-        return std::make_unique<SymbolAddress::RangeIndex>(name);
+        return ExprFactoryScope::current().cloneExpr(ExprFactoryScope::current().rangeIndex(name));
     }
 
     std::unique_ptr<SymbolValue> cloneSymbolValue(ExprHandle value) {

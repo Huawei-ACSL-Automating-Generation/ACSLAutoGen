@@ -990,11 +990,14 @@ namespace acslg::test::unit::analyzer {
     TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {
         symbolic::ExprFactory factory;
 
-        auto legacy = symbolic::makeBinaryExpr(
-            symbolic::makeUnaryExpr(symbolic::UnaryOpExpr::Operator::Minus,
-                                    symbolic::makeLiteralExpr(1)),
-            symbolic::BinaryOpExpr::Operator::Add,
-            symbolic::makeLiteralExpr(2));
+        auto legacy = [&]() {
+            symbolic::ExprFactoryScope scope(factory);
+            return symbolic::makeBinaryExpr(
+                symbolic::makeUnaryExpr(symbolic::UnaryOpExpr::Operator::Minus,
+                                        symbolic::makeLiteralExpr(1)),
+                symbolic::BinaryOpExpr::Operator::Add,
+                symbolic::makeLiteralExpr(2));
+        }();
 
         auto imported = factory.importExpr(*legacy);
         auto repeated = factory.importExpr(*legacy->clone());
