@@ -38,6 +38,20 @@ namespace acslg::analyzer {
             return std::nullopt;
         }
 
+        std::unique_ptr<symbolic::Structure> makeStructureForBase(
+            symbolic::ExprFactory &factory,
+            clang::QualType type,
+            std::unique_ptr<symbolic::Address> base,
+            symbolic::SourcePoint point) {
+            auto *record = type->getAsRecordDecl();
+            if (!record || !record->isCompleteDefinition())
+                ERROR("Expected complete structure type.");
+            record = record->getDefinition();
+            return symbolic::makeStructure(
+                factory, record, record->getASTContext().getASTRecordLayout(record),
+                std::move(base), point);
+        }
+
         bool containsLocalVar(const symbolic::SymbolicExpr &expr,
                               const std::unordered_set<const clang::VarDecl *> &locals) {
             auto [usedSymbols, unusedSymbols] = symbolic::SymbolicExpr::collectUsedSymbols(expr);
@@ -1002,8 +1016,9 @@ namespace acslg::analyzer {
 
                             // Build a Structure whose fields (and nested structs) are Unknown, then
                             // write it.
-                            auto structVal = symbolic::makeUnknownStructure(
-                                elemTy, addr->addressClone().into_underlying(), pointAfterCall);
+                            auto structVal = makeStructureForBase(
+                                factory, elemTy, addr->addressClone().into_underlying(),
+                                pointAfterCall);
                             memoryState_.write(*addr, std::move(structVal));
 
                             Formulas exprs;
@@ -1242,8 +1257,9 @@ namespace acslg::analyzer {
                                 factory, factory.importAddress(*destAddr.value())};
                             auto destBase =
                                 destAddrFacade.withoutLength()->addressClone().into_underlying();
-                            auto structVal = symbolic::makeUnknownStructure(
-                                elemTy, destBase->addressClone().into_underlying(), pointAfterCall);
+                            auto structVal = makeStructureForBase(
+                                factory, elemTy, destBase->addressClone().into_underlying(),
+                                pointAfterCall);
                             memoryState_.write(*destBase, std::move(structVal));
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
