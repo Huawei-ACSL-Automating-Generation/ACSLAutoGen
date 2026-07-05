@@ -949,11 +949,11 @@ namespace acslg::analyzer {
                             // Form the total-size expression by multiplying the two arguments.
                             using Op = symbolic::BinaryOpExpr::Operator;
                             auto &factory = context_.getExprFactory();
+                            symbolic::Expr arg0Expr{factory, factory.importExpr(*a0)};
+                            symbolic::Expr arg1Expr{factory, factory.importExpr(*a1)};
                             auto totalSizeBytes =
                                 utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>{
-                                    factory.binary(factory.importExpr(*a0), Op::Multiply,
-                                                   factory.importExpr(*a1))
-                                        ->clone()
+                                    factory.cloneExpr(arg0Expr.binary(Op::Multiply, arg1Expr).handle())
                                         .into_underlying()};
 
                             // Remove exactly one multiplicative factor equal to sizeof(T) to obtain
@@ -990,12 +990,12 @@ namespace acslg::analyzer {
                         // Handle structure pointees consistent with the existing symbolic memory
                         // layout.
                         if (elemTy->isStructureType()) {
-	                            DEBUG("BSL_SAL_Calloc: structure type");
-	                            auto &factory = context_.getExprFactory();
-	                            auto zero = symbolic::Expr{factory, factory.literal(0)};
-	                            auto addr = symbolic::Addr::symbol(elemTy, pointAfterCall, zero)
-	                                            ->addressClone()
-	                                            .into_underlying();
+                            DEBUG("BSL_SAL_Calloc: structure type");
+                            auto &factory = context_.getExprFactory();
+                            auto zero     = symbolic::LiteralExpr{factory, 0};
+                            auto addr     = symbolic::Addr::symbol(elemTy, pointAfterCall, zero)
+                                            ->addressClone()
+                                            .into_underlying();
 
                             // Build a Structure whose fields (and nested structs) are Unknown, then
                             // write it.
