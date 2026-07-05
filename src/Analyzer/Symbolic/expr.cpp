@@ -112,29 +112,26 @@ namespace acslg::analyzer::symbolic {
         }
 
         if (auto *sum = dyn_cast<SumOverRange>(&expr)) {
-            auto range = importAddress(sum->getRange());
             auto fromPoint = sum->getFromPoint();
             if (!fromPoint)
                 ERROR("SumOverRange must have a source point.");
-            return intern(std::make_unique<SumOverRange>(
-                range, sum->getIndexName(), fromPoint.value()));
+            return makeSumOverRangeHandle(
+                *this, sum->getRange(), sum->getIndexName(), fromPoint.value());
         }
 
         if (auto *quantifier = dyn_cast<QuantifierOverRange>(&expr)) {
-            auto range = importAddress(quantifier->getRange());
-            auto pred = importExpr(quantifier->getPredicate());
-            return intern(std::make_unique<QuantifierOverRange>(
-                range, quantifier->getIndexName(), quantifier->getQuantifier(), pred));
+            return makeQuantifierOverRangeHandle(
+                *this, quantifier->getRange(), quantifier->getIndexName(),
+                quantifier->getQuantifier(), quantifier->getPredicate());
         }
 
         if (auto *maxMin = dyn_cast<MaxMinOverRange>(&expr)) {
-            auto range = importAddress(maxMin->getRange());
-            auto body = importExpr(maxMin->getExpr());
             auto fromPoint = maxMin->getFromPoint();
             if (!fromPoint)
                 ERROR("MaxMinOverRange must have a source point.");
-            return intern(std::make_unique<MaxMinOverRange>(
-                range, maxMin->getIndexName(), maxMin->getExtremum(), body, fromPoint.value()));
+            return makeMaxMinOverRangeHandle(
+                *this, maxMin->getRange(), maxMin->getIndexName(), maxMin->getExtremum(),
+                maxMin->getExpr(), fromPoint.value());
         }
 
         return intern(expr.clone());
