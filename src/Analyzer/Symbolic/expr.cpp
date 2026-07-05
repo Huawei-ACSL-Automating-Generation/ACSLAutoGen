@@ -459,6 +459,17 @@ namespace acslg::analyzer::symbolic {
             return makeBinaryExpr(std::move(lhs), op, std::move(rhs));
         }
 
+        utils::not_null<std::unique_ptr<SymbolicExpr>> buildUnaryExpr(
+            UnaryOpExpr::Operator op,
+            utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
+            if (ExprFactoryScope::hasCurrent()) {
+                auto &factory = ExprFactoryScope::current();
+                Expr operand{factory, factory.importExpr(*expr)};
+                return factory.cloneExpr(operand.unary(op).handle());
+            }
+            return makeUnaryExpr(op, std::move(expr));
+        }
+
         utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildSymbolAddress(
             clang::QualType pointeeType,
             std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
@@ -1500,7 +1511,7 @@ namespace acslg::analyzer::symbolic {
                 const bool expectTrue = (op_ == Op::Equal) ? (v == 1) : (v == 0);
                 if (expectTrue)
                     return importThroughCurrentFactory(boolExpr.clone()).into_underlying();
-                return makeUnaryExpr(
+                return buildUnaryExpr(
                     detail::UnaryOpExprNode::Operator::LogicalNot,
                     boolExpr.clone())
                     .into_underlying();
@@ -1541,7 +1552,7 @@ namespace acslg::analyzer::symbolic {
             }
         }
 
-        return makeBinaryExpr(std::move(LHS), op_, std::move(RHS));
+        return buildBinaryExpr(std::move(LHS), op_, std::move(RHS));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::simplifiedExpr() const {
@@ -1550,7 +1561,7 @@ namespace acslg::analyzer::symbolic {
         if (isLinear())
             return simplifiedExprIfLinear();
         auto subExpr = expr_->simplifiedExpr();
-        return makeUnaryExpr(op_, std::move(subExpr));
+        return buildUnaryExpr(op_, std::move(subExpr));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::simplifiedExpr() const {
@@ -2003,14 +2014,14 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
-        return makeBinaryExpr(left_->getSubstitutedExpr(pathSubTo, pointToSub), op_,
+        return buildBinaryExpr(left_->getSubstitutedExpr(pathSubTo, pointToSub), op_,
                               right_->getSubstitutedExpr(pathSubTo, pointToSub));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getSubstitutedExpr(
         const Path &pathSubTo,
         const SourcePoint &pointToSub) const {
-        return makeUnaryExpr(op_, expr_->getSubstitutedExpr(pathSubTo, pointToSub));
+        return buildUnaryExpr(op_, expr_->getSubstitutedExpr(pathSubTo, pointToSub));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedExpr(
@@ -2102,14 +2113,14 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
-        return makeBinaryExpr(left_->getRangeIndexSubstituted(rangeBase, indexExpr), op_,
+        return buildBinaryExpr(left_->getRangeIndexSubstituted(rangeBase, indexExpr), op_,
                               right_->getRangeIndexSubstituted(rangeBase, indexExpr));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getRangeIndexSubstituted(
         const SymbolAddrBaseInfo &rangeBase,
         const SymbolicExpr &indexExpr) const {
-        return makeUnaryExpr(op_, expr_->getRangeIndexSubstituted(rangeBase, indexExpr));
+        return buildUnaryExpr(op_, expr_->getRangeIndexSubstituted(rangeBase, indexExpr));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getRangeIndexSubstituted(
@@ -2205,7 +2216,7 @@ namespace acslg::analyzer::symbolic {
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return importThroughCurrentFactory(it->second->clone());
-        return makeBinaryExpr(left_->getSubstitutedValueExpr(hashExprMap), op_,
+        return buildBinaryExpr(left_->getSubstitutedValueExpr(hashExprMap), op_,
                               right_->getSubstitutedValueExpr(hashExprMap));
     }
 
@@ -2213,7 +2224,7 @@ namespace acslg::analyzer::symbolic {
         const HashExprMap &hashExprMap) const {
         if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
             return importThroughCurrentFactory(it->second->clone());
-        return makeUnaryExpr(op_, expr_->getSubstitutedValueExpr(hashExprMap));
+        return buildUnaryExpr(op_, expr_->getSubstitutedValueExpr(hashExprMap));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedValueExpr(
@@ -2861,7 +2872,7 @@ namespace acslg::analyzer::symbolic {
 
     std::unique_ptr<SymbolicExpr> createLNotExpr(
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-        return makeUnaryExpr(detail::UnaryOpExprNode::Operator::LogicalNot, std::move(expr))
+        return buildUnaryExpr(detail::UnaryOpExprNode::Operator::LogicalNot, std::move(expr))
             .into_underlying();
     }
 
