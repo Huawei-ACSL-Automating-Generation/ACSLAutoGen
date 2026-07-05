@@ -95,8 +95,7 @@ namespace acslg::spec_generator {
         symb::SymbolAddress rebuildSymbolAddress(const symb::SymbolAddress &address,
                                                  FactoryRebuild &&factoryRebuild,
                                                  LegacyRebuild &&legacyRebuild) {
-            if (!symb::ExprFactoryScope::hasCurrent())
-                return *std::forward<LegacyRebuild>(legacyRebuild)(address);
+            (void)legacyRebuild;
 
             auto &factory = symb::ExprFactoryScope::current();
             auto rebuilt  = std::forward<FactoryRebuild>(factoryRebuild)(
@@ -1212,15 +1211,10 @@ namespace acslg::spec_generator {
                     auto makeArrayAddress = [&](clang::QualType type, const symb::Address &base) {
                         auto fromPoint =
                             entryAndCurrentInfo.symbolicLoopEntry->getStartPoint();
-                        if (symb::ExprFactoryScope::hasCurrent()) {
-                            auto &factory = symb::ExprFactoryScope::current();
-                            symb::Addr baseAddr{factory, factory.importAddress(base)};
-                            return cloneSymbolAddress(
-                                symb::Addr::symbol(type, baseAddr, fromPoint).handle());
-                        }
-
-                        return symb::makeSymbolAddress(
-                            type, base.addressClone().into_underlying(), fromPoint);
+                        auto &factory = symb::ExprFactoryScope::current();
+                        symb::Addr baseAddr{factory, factory.importAddress(base)};
+                        return cloneSymbolAddress(
+                            symb::Addr::symbol(type, baseAddr, fromPoint).handle());
                     };
 
                     if (auto arraySub = dyn_cast_if_present<clang::ArraySubscriptExpr>(
