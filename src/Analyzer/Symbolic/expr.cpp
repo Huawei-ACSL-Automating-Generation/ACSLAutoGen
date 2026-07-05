@@ -438,6 +438,27 @@ namespace acslg::analyzer::symbolic {
             return ExprFactoryScope::current().importAndCloneExpr(*expr);
         }
 
+        utils::not_null<std::unique_ptr<SymbolicExpr>> buildLiteralExpr(int64_t value) {
+            if (ExprFactoryScope::hasCurrent()) {
+                auto &factory = ExprFactoryScope::current();
+                return factory.cloneExpr(LiteralExpr(factory, value).handle());
+            }
+            return makeLiteralExpr(value);
+        }
+
+        utils::not_null<std::unique_ptr<SymbolicExpr>> buildBinaryExpr(
+            utils::not_null<std::unique_ptr<SymbolicExpr>> lhs,
+            BinaryOpExpr::Operator op,
+            utils::not_null<std::unique_ptr<SymbolicExpr>> rhs) {
+            if (ExprFactoryScope::hasCurrent()) {
+                auto &factory = ExprFactoryScope::current();
+                Expr lhsExpr{factory, factory.importExpr(*lhs)};
+                Expr rhsExpr{factory, factory.importExpr(*rhs)};
+                return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
+            }
+            return makeBinaryExpr(std::move(lhs), op, std::move(rhs));
+        }
+
         utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildSymbolAddress(
             clang::QualType pointeeType,
             std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
@@ -730,18 +751,18 @@ namespace acslg::analyzer::symbolic {
                 if (C == 1)
                     result = expr->clone();
                 else
-                    result = makeBinaryExpr(makeLiteralExpr(static_cast<int64_t>(C)),
+                    result = buildBinaryExpr(buildLiteralExpr(static_cast<int64_t>(C)),
                                             Multiply, expr->clone());
             } else {
                 unsigned absC = std::abs(C);
                 utils::not_null<std::unique_ptr<SymbolicExpr>> varExpr =
                     expr->clone();
                 if (absC != 1)
-                    varExpr = makeBinaryExpr(makeLiteralExpr(static_cast<int64_t>(absC)),
+                    varExpr = buildBinaryExpr(buildLiteralExpr(static_cast<int64_t>(absC)),
                                              Multiply, expr->clone());
                 // Combine the current polynomial with the new term using the sign of the
                 // coefficient.
-                result = makeBinaryExpr(
+                result = buildBinaryExpr(
                     std::move(result.value()), (C > 0 ? Add : Subtract), std::move(varExpr));
             }
         }
@@ -749,11 +770,11 @@ namespace acslg::analyzer::symbolic {
             inhomo || result == std::nullopt) {
             if (result != std::nullopt) {
                 // Append the constant term to the linear combination.
-                result = makeBinaryExpr(
+                result = buildBinaryExpr(
                     std::move(result.value()), (inhomo > 0 ? Add : Subtract),
-                    makeLiteralExpr(static_cast<int64_t>(std::abs(inhomo))));
+                    buildLiteralExpr(static_cast<int64_t>(std::abs(inhomo))));
             } else
-                result = makeLiteralExpr(static_cast<int64_t>(inhomo));
+                result = buildLiteralExpr(static_cast<int64_t>(inhomo));
         }
         if (result == std::nullopt) {
             ERROR("Simplified expr is null! Something goes wrong.");
