@@ -87,9 +87,9 @@ namespace acslg::analyzer::symbolic {
                                          const SymbolAddress &range,
                                          std::string_view indexName,
                                          const SourcePoint &fromPoint) {
-            auto indexedRange = factory.withOffset(factory.importAddress(range),
-                                                   factory.rangeIndex(indexName));
-            indexedRange = factory.withoutLength(indexedRange);
+            auto indexedRange = Addr{factory, factory.importAddress(range)}
+                                    .withOffset(Expr::rangeIndex(indexName));
+            indexedRange = indexedRange.withoutLength();
             std::unique_ptr<const Address> clonedRange =
                 indexedRange->addressClone().into_underlying();
             std::optional<utils::not_null<std::unique_ptr<const Address>>> from{
