@@ -30,14 +30,54 @@ namespace acslg::analyzer::symbolic {
                 std::make_unique<const SymbolAddress>(range)};
         }
 
+        ExprHandle makeSumOverRangeHandle(ExprFactory &factory,
+                                          const SymbolAddress &range,
+                                          std::string_view indexName,
+                                          SourcePoint fromPoint) {
+            return factory.intern(std::make_unique<SumOverRange>(
+                factory.importAddress(range), indexName, std::move(fromPoint)));
+        }
+
+        ExprHandle makeQuantifierOverRangeHandle(
+            ExprFactory &factory,
+            const SymbolAddress &range,
+            std::string_view indexName,
+            QuantifierOverRange::Quantifier quantifier,
+            const SymbolicExpr &predicate) {
+            return factory.intern(std::make_unique<QuantifierOverRange>(
+                factory.importAddress(range), indexName, quantifier,
+                factory.importExpr(predicate)));
+        }
+
+        ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
+                                             const SymbolAddress &range,
+                                             std::string_view indexName,
+                                             MaxMinOverRange::Extremum extremum,
+                                             ExprHandle body,
+                                             SourcePoint fromPoint) {
+            return factory.intern(std::make_unique<MaxMinOverRange>(
+                factory.importAddress(range), indexName, extremum, body, std::move(fromPoint)));
+        }
+
+        ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
+                                             const SymbolAddress &range,
+                                             std::string_view indexName,
+                                             MaxMinOverRange::Extremum extremum,
+                                             const SymbolicExpr &body,
+                                             SourcePoint fromPoint) {
+            return makeMaxMinOverRangeHandle(
+                factory, range, indexName, extremum, factory.importExpr(body),
+                std::move(fromPoint));
+        }
+
         utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildSumOverRange(
             const SymbolAddress &range,
             std::string_view indexName,
             SourcePoint fromPoint) {
             if (ExprFactoryScope::hasCurrent()) {
                 auto &factory = ExprFactoryScope::current();
-                return factory.cloneExpr(factory.intern(std::make_unique<SumOverRange>(
-                    factory.importAddress(range), indexName, std::move(fromPoint))));
+                return factory.cloneExpr(makeSumOverRangeHandle(
+                    factory, range, indexName, std::move(fromPoint)));
             }
 
             return std::make_unique<SumOverRange>(
@@ -51,9 +91,8 @@ namespace acslg::analyzer::symbolic {
             utils::not_null<std::unique_ptr<SymbolicExpr>> predicate) {
             if (ExprFactoryScope::hasCurrent()) {
                 auto &factory = ExprFactoryScope::current();
-                return factory.cloneExpr(factory.intern(std::make_unique<QuantifierOverRange>(
-                    factory.importAddress(range), indexName, quantifier,
-                    factory.importExpr(*predicate))));
+                return factory.cloneExpr(makeQuantifierOverRangeHandle(
+                    factory, range, indexName, quantifier, *predicate));
             }
 
             std::unique_ptr<const SymbolicExpr> constPredicate =
@@ -71,9 +110,8 @@ namespace acslg::analyzer::symbolic {
             SourcePoint fromPoint) {
             if (ExprFactoryScope::hasCurrent()) {
                 auto &factory = ExprFactoryScope::current();
-                return factory.cloneExpr(factory.intern(std::make_unique<MaxMinOverRange>(
-                    factory.importAddress(range), indexName, extremum, factory.importExpr(*body),
-                    std::move(fromPoint))));
+                return factory.cloneExpr(makeMaxMinOverRangeHandle(
+                    factory, range, indexName, extremum, *body, std::move(fromPoint)));
             }
 
             std::unique_ptr<const SymbolicExpr> constBody = std::move(body).into_underlying();
@@ -543,8 +581,8 @@ namespace acslg::analyzer::symbolic {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
             auto body = makeMaxMinDefaultBody(factory, *range, indexName, fromPoint);
-            return factory.cloneExpr(factory.intern(std::make_unique<MaxMinOverRange>(
-                factory.importAddress(*range), indexName, extremum, body, std::move(fromPoint))));
+            return factory.cloneExpr(makeMaxMinOverRangeHandle(
+                factory, *range, indexName, extremum, body, std::move(fromPoint)));
         }
 
         std::unique_ptr<const SymbolAddress> constRange = std::move(range);
