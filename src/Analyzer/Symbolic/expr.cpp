@@ -1354,16 +1354,19 @@ namespace acslg::analyzer::symbolic {
         if (!offsetStr)
             return offsetStr.error();
 
+        auto &factory = ExprFactoryScope::current();
+
         // offset + length - 1
-        auto offsetPlusLength = buildBinaryExpr(getOffset()->clone(),
-                                               detail::BinaryOpExprNode::Operator::Add,
-                                               length_.value()->clone());
-        auto rightBound = buildBinaryExpr(std::move(offsetPlusLength),
-                                         detail::BinaryOpExprNode::Operator::Subtract,
-                                         buildLiteralExpr(1))
-                              ->simplifiedExpr();
+        auto offsetPlusLength =
+            factory.simplifiedBinary(factory.importExpr(*getOffset()),
+                                     detail::BinaryOpExprNode::Operator::Add,
+                                     factory.importExpr(*length_.value()));
+        auto rightBound =
+            factory.simplifiedBinary(offsetPlusLength,
+                                     detail::BinaryOpExprNode::Operator::Subtract,
+                                     factory.literal(int64_t{1}));
         auto rightBoundStr =
-            callGetACSL(*rightBound, config, usedPoints, currentPoint, rangePrec, true);
+            callGetACSL(*rightBound.get(), config, usedPoints, currentPoint, rangePrec, true);
         if (!rightBoundStr)
             return rightBoundStr.error();
 
