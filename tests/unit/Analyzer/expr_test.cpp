@@ -1110,14 +1110,16 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
         auto makeRange =
             [&]() -> ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>> {
-            auto range = std::make_unique<symbolic::SymbolAddress>(
-                var->getType(),
-                std::make_unique<symbolic::VariableAddress>(var),
-                point);
-            range = range->withLength(symbolic::makeLiteralExpr(3)).into_underlying();
-            std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
+            auto from  = symbolic::Addr::variable(var);
+            auto range = symbolic::Addr::symbol(var->getType(), from, point)
+                             .withLength(symbolic::LiteralExpr{factory, int64_t{3}});
+            std::unique_ptr<const symbolic::SymbolAddress> constRange =
+                symbolic::cloneSymbolAddress(range.handle());
             return ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
                 std::move(constRange)};
         };
@@ -1139,8 +1141,6 @@ namespace acslg::test::unit::analyzer {
             makeRange(), "i", symbolic::QuantifierOverRange::Quantifier::ForAll, makePred()};
         symbolic::MaxMinOverRange max{
             makeRange(), "i", symbolic::MaxMinOverRange::Extremum::Max, point};
-
-        symbolic::ExprFactory factory;
 
         auto importedSum = factory.importExpr(sum);
         auto sumRange    = factory.importExpr(sum.getRange());
