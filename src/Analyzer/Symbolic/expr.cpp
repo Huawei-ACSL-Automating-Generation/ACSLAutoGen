@@ -468,11 +468,6 @@ namespace acslg::analyzer::symbolic {
             return ExprFactoryScope::current().importAndCloneExpr(*expr);
         }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> buildLiteralExpr(int64_t value) {
-            auto &factory = ExprFactoryScope::current();
-            return factory.cloneExpr(LiteralExpr(factory, value).handle());
-        }
-
         utils::not_null<std::unique_ptr<SymbolicExpr>> buildBinaryExpr(
             utils::not_null<std::unique_ptr<SymbolicExpr>> lhs,
             BinaryOpExpr::Operator op,
@@ -704,8 +699,9 @@ namespace acslg::analyzer::symbolic {
             return importThroughCurrentFactory(clone());
         auto [hashPtrMap, hashIdMap] = collectUsedSymbols(*this);
 
+        auto &factory   = ExprFactoryScope::current();
         auto linearExpr = toLinearExpr(hashIdMap);
-        std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> result{};
+        std::optional<ExprHandle> result{};
 
         using enum detail::BinaryOpExprNode::Operator;
         for (auto [hash, symbol] : hashPtrMap) {
@@ -718,37 +714,35 @@ namespace acslg::analyzer::symbolic {
             if (result == std::nullopt) {
                 // Seed the accumulator with the first non-zero term.
                 if (C == 1)
-                    result = expr->clone();
+                    result = factory.importExpr(*expr);
                 else
-                    result = buildBinaryExpr(buildLiteralExpr(static_cast<int64_t>(C)),
-                                            Multiply, expr->clone());
+                    result = factory.binary(factory.literal(static_cast<int64_t>(C)),
+                                            Multiply, factory.importExpr(*expr));
             } else {
                 unsigned absC = std::abs(C);
-                utils::not_null<std::unique_ptr<SymbolicExpr>> varExpr =
-                    expr->clone();
+                ExprHandle varExpr = factory.importExpr(*expr);
                 if (absC != 1)
-                    varExpr = buildBinaryExpr(buildLiteralExpr(static_cast<int64_t>(absC)),
-                                             Multiply, expr->clone());
+                    varExpr = factory.binary(factory.literal(static_cast<int64_t>(absC)),
+                                             Multiply, factory.importExpr(*expr));
                 // Combine the current polynomial with the new term using the sign of the
                 // coefficient.
-                result = buildBinaryExpr(
-                    std::move(result.value()), (C > 0 ? Add : Subtract), std::move(varExpr));
+                result = factory.binary(result.value(), (C > 0 ? Add : Subtract), varExpr);
             }
         }
         if (auto inhomo = linearExpr.inhomogeneous_term().get_si();
             inhomo || result == std::nullopt) {
             if (result != std::nullopt) {
                 // Append the constant term to the linear combination.
-                result = buildBinaryExpr(
-                    std::move(result.value()), (inhomo > 0 ? Add : Subtract),
-                    buildLiteralExpr(static_cast<int64_t>(std::abs(inhomo))));
+                result = factory.binary(
+                    result.value(), (inhomo > 0 ? Add : Subtract),
+                    factory.literal(static_cast<int64_t>(std::abs(inhomo))));
             } else
-                result = buildLiteralExpr(static_cast<int64_t>(inhomo));
+                result = factory.literal(static_cast<int64_t>(inhomo));
         }
         if (result == std::nullopt) {
             ERROR("Simplified expr is null! Something goes wrong.");
         }
-        return std::move(result.value());
+        return factory.cloneExpr(result.value());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::clone() const {
