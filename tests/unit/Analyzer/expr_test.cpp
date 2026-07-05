@@ -1194,6 +1194,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
         symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
         auto rangeHandle = factory.symbolAddress(
             var->getType(), factory.variableAddress(var), point);
         rangeHandle = factory.withOffset(rangeHandle, factory.rangeIndex("i"));
@@ -1233,6 +1234,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
         symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
         auto rangeHandle = factory.symbolAddress(
             var->getType(), factory.variableAddress(var), point);
         rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
@@ -1280,6 +1282,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
         symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
         auto rangeHandle = factory.symbolAddress(
             var->getType(), factory.variableAddress(var), point);
         rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
