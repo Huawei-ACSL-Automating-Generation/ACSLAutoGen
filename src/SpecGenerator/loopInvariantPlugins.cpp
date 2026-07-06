@@ -660,13 +660,14 @@ namespace acslg::spec_generator {
                                 factory.literal(
                                     static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)));
                         });
-                    auto lengthExpr = !indexInfo.preciseLoopCount->isUnknown()
-                                          ? indexInfo.preciseLoopCount->simplifiedExpr()
-                                          : indexInfo.maxLoopCount->simplifiedExpr();
+                    auto loopCount =
+                        !indexInfo.preciseLoopCount->isUnknown() ? indexInfo.preciseLoopCount
+                                                                 : indexInfo.maxLoopCount;
+                    auto lengthExpr = symb::Expr{factory, loopCount}.simplified();
                     auto resultWithLength = rebuildSymbolAddress(
                         result,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withLength(address, factory.importExpr(*lengthExpr));
+                            return factory.withLength(address, lengthExpr.handle());
                         });
                     return resultWithLength;
                 }
@@ -691,13 +692,14 @@ namespace acslg::spec_generator {
                                     address,
                                     factory.importExpr(*pattern.value().initialValue));
                             });
-                        auto lengthExpr = !indexInfo.preciseLoopCount->isUnknown()
-                                              ? indexInfo.preciseLoopCount->simplifiedExpr()
-                                              : indexInfo.maxLoopCount->simplifiedExpr();
+                        auto loopCount =
+                            !indexInfo.preciseLoopCount->isUnknown() ? indexInfo.preciseLoopCount
+                                                                     : indexInfo.maxLoopCount;
+                        auto lengthExpr = symb::Expr{factory, loopCount}.simplified();
                         auto resultWithLength = rebuildSymbolAddress(
                             result,
                             [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                return factory.withLength(address, factory.importExpr(*lengthExpr));
+                                return factory.withLength(address, lengthExpr.handle());
                             });
                         return resultWithLength;
                     } else {
@@ -1103,6 +1105,7 @@ namespace acslg::spec_generator {
             auto &entryAndCurrentInfo = loopInfo.entryAndCurrentInfo.value();
             auto &indexInfo           = loopInfo.indexInfo.value();
             auto &patternInfo         = loopInfo.patternInfo.value();
+            auto &factory             = symb::ExprFactoryScope::current();
 
             if (entryAndCurrentInfo.symbolicLoopEntry->getPaths().size() != 1) {
                 ERROR("symbolicLoopEntry has something wrong, check the SetLoopEntryPlugin?");
@@ -1422,13 +1425,14 @@ namespace acslg::spec_generator {
                 } else {
                     // Negative-step ranges keep the existing offset behavior; only length is
                     // rebuilt here.
-                    auto lengthExpr = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue),
-                                                  Subtract, cloneExpr(*indexInfo.indexBound));
+                    symb::Expr indexSymbolic{factory, indexInfo.indexSymbolicValue};
+                    symb::Expr indexBound{factory, indexInfo.indexBound};
+                    auto lengthExpr = indexSymbolic - indexBound;
                     arrayRange = cloneSymbolAddress(
                         rebuildSymbolAddress(
                             *arrayRange,
                             [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                return factory.withLength(address, factory.importExpr(*lengthExpr));
+                                return factory.withLength(address, lengthExpr.handle());
                             }));
                 }
 
@@ -1560,6 +1564,7 @@ namespace acslg::spec_generator {
             auto &entryAndCurrentInfo = loopInfo.entryAndCurrentInfo.value();
             auto &indexInfo           = loopInfo.indexInfo.value();
             auto &patternInfo         = loopInfo.patternInfo.value();
+            auto &factory             = symb::ExprFactoryScope::current();
 
             if (entryAndCurrentInfo.symbolicLoopEntry->getPaths().size() != 1) {
                 ERROR("symbolicLoopEntry has something wrong, check the SetLoopEntryPlugin?");
@@ -1725,13 +1730,14 @@ namespace acslg::spec_generator {
                             return factory.withOffset(
                                 address, factory.importExpr(*indexInfo.indexSymbolicValue));
                         }));
-                auto lengthExpr = buildBinary(cloneExpr(*indexInfo.indexBound), Subtract,
-                                              cloneExpr(*indexInfo.indexSymbolicValue));
+                symb::Expr indexBound{factory, indexInfo.indexBound};
+                symb::Expr indexSymbolic{factory, indexInfo.indexSymbolicValue};
+                auto lengthExpr = indexBound - indexSymbolic;
                 arrayRange = cloneSymbolAddress(
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withLength(address, factory.importExpr(*lengthExpr));
+                            return factory.withLength(address, lengthExpr.handle());
                         }));
             } else {
                 arrayRange = cloneSymbolAddress(
@@ -1741,13 +1747,14 @@ namespace acslg::spec_generator {
                             return factory.withOffset(
                                 address, factory.importExpr(*indexInfo.indexBound));
                         }));
-                auto lengthExpr = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue),
-                                              Subtract, cloneExpr(*indexInfo.indexBound));
+                symb::Expr indexSymbolic{factory, indexInfo.indexSymbolicValue};
+                symb::Expr indexBound{factory, indexInfo.indexBound};
+                auto lengthExpr = indexSymbolic - indexBound;
                 arrayRange = cloneSymbolAddress(
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withLength(address, factory.importExpr(*lengthExpr));
+                            return factory.withLength(address, lengthExpr.handle());
                         }));
             }
             normalPathInfo.pathState = analyzer::Path::PathState::Step;
