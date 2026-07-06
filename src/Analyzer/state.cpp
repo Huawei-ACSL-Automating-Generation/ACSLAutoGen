@@ -1893,7 +1893,7 @@ namespace acslg::analyzer {
         const symbolic::Address &addr) const {
         if (auto varAddr = symbolic::dyn_cast<const symbolic::VariableAddress>(&addr)) {
             if (memoryMap_variableAddr_.contains(*varAddr))
-                return memoryMap_variableAddr_.at(*varAddr)->clone();
+                return cloneExpr(factory(), *memoryMap_variableAddr_.at(*varAddr));
             return std::nullopt;
         } else if (auto symbolAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
             auto baseInfo = symbolAddr->getBaseInfo();
@@ -1937,12 +1937,12 @@ namespace acslg::analyzer {
                 auto it = addrValueMap.find(fakeRange);
                 if (it == addrValueMap.end())
                     return std::nullopt;
-                return it->second->clone();
+                return cloneExpr(factory(), *it->second);
             }
             auto it = addrValueMap.find(*symbolAddr);
             if (it == addrValueMap.end())
                 return std::nullopt;
-            return it->second->clone();
+            return cloneExpr(factory(), *it->second);
         } else if (auto fieldAddr = symbolic::dyn_cast<const symbolic::FieldAddress>(&addr)) {
             auto &baseAddr = fieldAddr->getBaseAddr();
             auto &index    = fieldAddr->getFieldIndex();
@@ -1952,7 +1952,7 @@ namespace acslg::analyzer {
             auto baseSt = symbolic::dyn_cast<const symbolic::Structure>(baseValue.value().get().get());
             if (baseSt == nullptr)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
-            return baseSt->getFieldValue(index)->clone();
+            return cloneExpr(factory(), *baseSt->getFieldValue(index));
         }
         UNREACHABLE();
     }
