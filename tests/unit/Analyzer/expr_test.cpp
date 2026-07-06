@@ -1218,8 +1218,9 @@ namespace acslg::test::unit::analyzer {
             factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
 
         symbolic::SymbolAddress::RangeIndex legacy{"i"};
-        auto substituted = legacy.getRangeIndexSubstituted(rangeBase, *replacement.get());
-        const auto &node = *symbolic::cast<symbolic::BinaryOpExpr>(substituted.get().get());
+        auto substituted =
+            symbolic::getRangeIndexSubstitutedHandle(factory, legacy, rangeBase, replacement);
+        const auto &node = substituted.cast<symbolic::BinaryOpExpr>();
 
         EXPECT_EQ(node.getLeft().get(), one.get().get());
         EXPECT_EQ(node.getRight().get(), two.get().get());
@@ -1230,15 +1231,17 @@ namespace acslg::test::unit::analyzer {
             factory.symbolAddress(var->getType(), varAddr, point, rangeIndex, rangeIndex);
         auto indexedValue = factory.symbolValue(
             symbolic::deriveType(var->getType()), indexedFrom, point);
-        auto valueClone = symbolic::cloneSymbolValue(indexedValue);
         auto indexedRangeBase =
             indexedFrom.cast<symbolic::SymbolAddress>().getBaseInfo();
-        auto substitutedValue =
-            valueClone->getRangeIndexSubstituted(indexedRangeBase, *replacement.get());
+        auto substitutedValue = symbolic::getRangeIndexSubstitutedHandle(
+            factory, *indexedValue, indexedRangeBase, replacement);
         auto expectedFrom =
             factory.symbolAddress(var->getType(), varAddr, point, replacement, replacement);
-        EXPECT_EQ(factory.importExpr(*substitutedValue),
-                  factory.symbolValue(symbolic::deriveType(var->getType()), expectedFrom, point));
+        EXPECT_EQ(substitutedValue.get().get(),
+                  factory
+                      .symbolValue(symbolic::deriveType(var->getType()), expectedFrom, point)
+                      .get()
+                      .get());
     }
 
     TEST(ExprFactoryTest, ScopedLeafNoOpSubstitutionImportsThroughFactory) {
@@ -1524,10 +1527,9 @@ namespace acslg::test::unit::analyzer {
         auto sumRange = makeRange();
         auto rangeBase = sumRange->getBaseInfo();
         symbolic::SumOverRange sum{makeConstRange(std::move(sumRange)), "i", point};
-        auto index = symbolic::makeLiteralExpr(1);
-        auto substitutedSum = sum.getRangeIndexSubstituted(rangeBase, *index);
-        const auto &sumNode =
-            *symbolic::cast<symbolic::SumOverRange>(substitutedSum.get().get());
+        auto substitutedSum =
+            symbolic::getRangeIndexSubstitutedHandle(factory, sum, rangeBase, one);
+        const auto &sumNode = substitutedSum.cast<symbolic::SumOverRange>();
         EXPECT_EQ(sumNode.getRange().getOffset().get(), one.get().get());
         ASSERT_TRUE(sumNode.getRange().getLength());
         EXPECT_EQ(sumNode.getRange().getLength().value().get().get(), three.get().get());
@@ -1539,9 +1541,10 @@ namespace acslg::test::unit::analyzer {
             symbolic::QuantifierOverRange::Quantifier::ForAll,
             ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
                 symbolic::makeRangeIndexExpr("i").into_underlying()}};
-        auto substitutedQuantifier = quantifier.getRangeIndexSubstituted(rangeBase, *index);
+        auto substitutedQuantifier =
+            symbolic::getRangeIndexSubstitutedHandle(factory, quantifier, rangeBase, one);
         const auto &quantifierNode =
-            *symbolic::cast<symbolic::QuantifierOverRange>(substitutedQuantifier.get().get());
+            substitutedQuantifier.cast<symbolic::QuantifierOverRange>();
         EXPECT_EQ(&quantifierNode.getPredicate(), one.get().get());
 
         auto maxRange = makeRange();
@@ -1552,9 +1555,9 @@ namespace acslg::test::unit::analyzer {
             ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
                 symbolic::makeRangeIndexExpr("i").into_underlying()},
             point};
-        auto substitutedMax = max.getRangeIndexSubstituted(rangeBase, *index);
-        const auto &maxNode =
-            *symbolic::cast<symbolic::MaxMinOverRange>(substitutedMax.get().get());
+        auto substitutedMax =
+            symbolic::getRangeIndexSubstitutedHandle(factory, max, rangeBase, one);
+        const auto &maxNode = substitutedMax.cast<symbolic::MaxMinOverRange>();
         EXPECT_EQ(&maxNode.getExpr(), one.get().get());
     }
 

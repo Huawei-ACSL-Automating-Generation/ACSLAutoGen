@@ -600,6 +600,10 @@ namespace acslg::analyzer::symbolic {
     ExprHandle getSubstitutedValueHandle(ExprFactory &factory,
                                          const SymbolicExpr &expr,
                                          const HashExprHandleMap &hashToExprMap);
+    ExprHandle getRangeIndexSubstitutedHandle(ExprFactory &factory,
+                                              const SymbolicExpr &expr,
+                                              const SymbolAddrBaseInfo &rangeBase,
+                                              ExprHandle indexExpr);
     class ExprChild {
       public:
         explicit ExprChild(ExprHandle handle) : handle_(handle) {}
