@@ -1031,7 +1031,7 @@ namespace acslg::analyzer {
     struct InvsAndPostStates {
         std::optional<std::string> invs;
         using MemoryMapAndPathConds = std::pair<
-            symbolic::AddressBoxMap<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>,
+            symbolic::AddressBoxMap<symbolic::ExprHandle>,
             std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>;
         std::vector<MemoryMapAndPathConds> normalPostStates;
         std::vector<std::vector<MemoryMapAndPathConds>> interruptPostStates;

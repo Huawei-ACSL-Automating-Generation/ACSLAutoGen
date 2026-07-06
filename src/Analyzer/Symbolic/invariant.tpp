@@ -42,7 +42,7 @@ namespace acslg::analyzer {
             const VarManager &vm);
 
         using AddrValueAndCondsPair = std::pair<
-            symbolic::AddressBoxMap<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>,
+            symbolic::AddressBoxMap<symbolic::ExprHandle>,
             std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>;
         AddrValueAndCondsPair buildPostState(const ppl::C_Polyhedron &poly,
                                              const Path &initPath,

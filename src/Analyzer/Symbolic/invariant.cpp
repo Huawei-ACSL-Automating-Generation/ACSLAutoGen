@@ -1119,9 +1119,7 @@ namespace acslg::analyzer {
                                              const Path &initPath,
                                              const VarManager &vm) {
             using namespace Parma_Polyhedra_Library;
-            using R = std::pair<
-                symbolic::AddressBoxMap<utils::not_null<unique_ptr<symbolic::SymbolicExpr>>>,
-                std::vector<utils::not_null<unique_ptr<symbolic::SymbolicExpr>>>>;
+            auto &factory = symbolic::ExprFactoryScope::current();
             auto n    = vm.numVars;
             auto half = n / 2;
 
@@ -1206,15 +1204,14 @@ namespace acslg::analyzer {
                 }
             }
 
-            symbolic::AddressBoxMap<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>
-                newVars;
+            symbolic::AddressBoxMap<symbolic::ExprHandle> newVars;
             std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> conds;
 
             for (size_t i = 0; i < half; ++i) {
                 auto varDecl = vm.varDecls.at(i);
                 auto &addr   = initPath.getVarAddr().at(varDecl);
                 if (resolvedExprs.contains(i)) {
-                    auto [_, ok] = newVars.emplace(*addr, cloneExpr(*resolvedExprs.at(i)));
+                    auto [_, ok] = newVars.emplace(*addr, factory.importExpr(*resolvedExprs.at(i)));
                     if (!ok)
                         UNREACHABLE();
                 }
@@ -1282,7 +1279,7 @@ namespace acslg::analyzer {
 
                 conds.push_back(std::move(cond));
             }
-            return R{std::move(newVars), std::move(conds)};
+            return AddrValueAndCondsPair{std::move(newVars), std::move(conds)};
         }
     } // namespace details
 } // namespace acslg::analyzer

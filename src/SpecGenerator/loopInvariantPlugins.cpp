@@ -427,17 +427,9 @@ namespace acslg::spec_generator {
                     imported.emplace(detail::importPostExprThroughCurrentFactory(*cond));
                 return imported;
             };
-            auto importMemoryMap = [](auto memoryMap) {
-                PostMemoryMap imported;
-                imported.reserve(memoryMap.size());
-                for (const auto &[addr, value] : memoryMap)
-                    imported.emplace(addr, detail::importPostExprThroughCurrentFactory(*value));
-                return imported;
-            };
-
             std::vector<PostPSInfo> normalPostPSInfos;
             for (auto &postInfo : normalPostInfos)
-                normalPostPSInfos.emplace_back(importMemoryMap(std::move(postInfo.first)),
+                normalPostPSInfos.emplace_back(std::move(postInfo.first),
                                                importPathConds(std::move(postInfo.second)),
                                                analyzer::Path::PathState::Step, std::nullopt);
 
@@ -451,12 +443,12 @@ namespace acslg::spec_generator {
                 for (auto &postInfo : postInfos) {
                     if (interruptPath->getPathState() == analyzer::Path::PathState::Return)
                         infos.emplace_back(
-                            importMemoryMap(std::move(postInfo.first)),
+                            std::move(postInfo.first),
                             importPathConds(std::move(postInfo.second)),
                             analyzer::Path::PathState::Return,
                             detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                     else
-                        infos.emplace_back(importMemoryMap(std::move(postInfo.first)),
+                        infos.emplace_back(std::move(postInfo.first),
                                            importPathConds(std::move(postInfo.second)),
                                            interruptPath->getPathState(), std::nullopt);
                 }
@@ -554,17 +546,9 @@ namespace acslg::spec_generator {
                     imported.emplace(detail::importPostExprThroughCurrentFactory(*cond));
                 return imported;
             };
-            auto importMemoryMap = [](auto memoryMap) {
-                PostMemoryMap imported;
-                imported.reserve(memoryMap.size());
-                for (const auto &[addr, value] : memoryMap)
-                    imported.emplace(addr, detail::importPostExprThroughCurrentFactory(*value));
-                return imported;
-            };
-
             std::vector<PostPSInfo> normalPostPSInfos;
             for (auto &postInfo : normalPostInfos)
-                normalPostPSInfos.emplace_back(importMemoryMap(std::move(postInfo.first)),
+                normalPostPSInfos.emplace_back(std::move(postInfo.first),
                                                importPathConds(std::move(postInfo.second)),
                                                analyzer::Path::PathState::Step, std::nullopt);
 
@@ -578,12 +562,12 @@ namespace acslg::spec_generator {
                 for (auto &postInfo : postInfos) {
                     if (interruptPath->getPathState() == analyzer::Path::PathState::Return)
                         infos.emplace_back(
-                            importMemoryMap(std::move(postInfo.first)),
+                            std::move(postInfo.first),
                             importPathConds(std::move(postInfo.second)),
                             analyzer::Path::PathState::Return,
                             detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                     else
-                        infos.emplace_back(importMemoryMap(std::move(postInfo.first)),
+                        infos.emplace_back(std::move(postInfo.first),
                                            importPathConds(std::move(postInfo.second)),
                                            interruptPath->getPathState(), std::nullopt);
                 }
