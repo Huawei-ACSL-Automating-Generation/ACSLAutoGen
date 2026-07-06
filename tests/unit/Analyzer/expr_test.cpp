@@ -227,11 +227,15 @@ namespace acslg::test::unit::analyzer {
         auto var0Addr = makeVariableAddr(0);
         mm.write(var0Addr, makeConstU64(42));
 
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
         auto point   = getSourcePoint(0);
         auto varNode = makeSymbolValue(0, point);
-        auto expr    = makeNotNull(unique_ptr<SymbolicExpr>(varNode.release()));
+        auto result =
+            symbolic::getSubstitutedExprHandle(factory, *varNode, *path, point);
 
-        ASSERT_EQ(*expr->getSubstitutedExpr(*path, point), *makeConstU64(42));
+        ASSERT_EQ(result.get().get(), factory.literal(uint64_t{42}).get().get());
     }
 
     TEST_F(SubstituteTest, ScopedVarReplacementImportsThroughFactory) {
@@ -243,9 +247,10 @@ namespace acslg::test::unit::analyzer {
 
         auto point   = getSourcePoint(0);
         auto varNode = makeSymbolValue(0, point);
-        auto result  = varNode->getSubstitutedExpr(*path, point);
+        auto result =
+            symbolic::getSubstitutedExprHandle(factory, *varNode, *path, point);
 
-        EXPECT_EQ(factory.importExpr(*result), factory.literal(uint64_t{42}));
+        EXPECT_EQ(result.get().get(), factory.literal(uint64_t{42}).get().get());
     }
 
     TEST_F(SubstituteTest, PathSubstitutionHandleReplacesSymbolValueThroughFactory) {
@@ -273,9 +278,10 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto exprBefore = cloneWithFactory(factory, *varNode);
-        auto expr       = makeNotNull(unique_ptr<SymbolicExpr>(varNode.release()));
+        auto result =
+            symbolic::getSubstitutedExprHandle(factory, *varNode, *path, getSourcePoint(42));
 
-        ASSERT_EQ(*expr->getSubstitutedExpr(*path, getSourcePoint(42)), *exprBefore);
+        ASSERT_EQ(*result, *exprBefore);
     }
 
     TEST_F(SubstituteTest, CompositeExprIsSubstitutedRecursively) {
@@ -290,8 +296,11 @@ namespace acslg::test::unit::analyzer {
         auto bVar = makeSymbolValue(2, point);
         auto expr = makeNotNull(makeAdd(std::move(aVar), std::move(bVar)));
 
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
         auto expected = makeAdd(makeConstU64(1), makeConstU64(2));
-        ASSERT_EQ(*expr->getSubstitutedExpr(*path, point), *expected);
+        auto result = symbolic::getSubstitutedExprHandle(factory, *expr, *path, point);
+        ASSERT_EQ(*result, *expected);
     }
 
     TEST_F(SubstituteTest, PathSubstitutionHandleRebuildsCompositeExpression) {
@@ -332,19 +341,28 @@ namespace acslg::test::unit::analyzer {
         // expect: realAddr (g4) + 7
         auto expected = makePointAddr(/*real id*/ 4, /*off*/ 7).simplifiedExpr();
 
-        ASSERT_EQ(*sym.getSubstitutedExpr(*path, point)->simplifiedExpr(), *expected);
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, point);
+        ASSERT_EQ(*result->simplifiedExpr(), *expected);
     }
 
     TEST_F(SubstituteTest, SymbolAddrUnresolvedReturnsClone) {
         auto sym = makeSimpleSymbolAddr(/*origin id*/ 6);
 
-        ASSERT_EQ(*sym.getSubstitutedExpr(*path, defaultPoint), sym);
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, defaultPoint);
+        ASSERT_EQ(*result, sym);
     }
 
     TEST_F(SubstituteTest, NonSymbolAddrIsCloned) {
         auto varAddr = makeVariableAddr(7);
 
-        ASSERT_EQ(*varAddr.getSubstitutedExpr(*path, defaultPoint), varAddr);
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto result = symbolic::getSubstitutedExprHandle(factory, varAddr, *path, defaultPoint);
+        ASSERT_EQ(*result, varAddr);
     }
 
     TEST_F(SubstituteTest, FromPointMismatchReturnsUnchangedSymbolAddr) {
@@ -357,7 +375,10 @@ namespace acslg::test::unit::analyzer {
 
         auto otherPoint = getSourcePoint(1);
 
-        ASSERT_EQ(*sym.getSubstitutedExpr(*path, otherPoint), sym);
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, otherPoint);
+        ASSERT_EQ(*result, sym);
     }
 
     TEST_F(SubstituteTest, ScopedFromPointMismatchImportsUnchangedSymbolAddr) {
@@ -372,7 +393,7 @@ namespace acslg::test::unit::analyzer {
         auto sym   = makeRangeAddr(/*origin id*/ 8, makeConstU64(1), nullptr, point);
 
         auto otherPoint = getSourcePoint(1);
-        auto result = sym.getSubstitutedExpr(*path, otherPoint);
+        auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, otherPoint);
         auto *resultAddr = symbolic::cast<symbolic::Address>(result.get().get());
 
         EXPECT_EQ(factory.importAddress(*resultAddr), factory.importAddress(sym));
@@ -386,7 +407,7 @@ namespace acslg::test::unit::analyzer {
         auto point = getSourcePoint(0);
         symbolic::SymbolAddress sym{var->getType(), std::nullopt, point};
 
-        auto result = sym.getSubstitutedExpr(*path, point);
+        auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, point);
         auto *resultAddr = symbolic::cast<symbolic::Address>(result.get().get());
 
         EXPECT_EQ(factory.importAddress(*resultAddr),
@@ -400,7 +421,9 @@ namespace acslg::test::unit::analyzer {
         auto point = getSourcePoint(0);
         auto sym   = makeRangeAddr(/*origin id*/ 10, makeConstU64(0), nullptr, point);
 
-        ASSERT_DEATH(sym.getSubstitutedExpr(*path, point), "");
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        ASSERT_DEATH(symbolic::getSubstitutedExprHandle(factory, sym, *path, point), "");
         SUCCEED();
     }
 
