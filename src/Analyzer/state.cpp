@@ -100,7 +100,7 @@ namespace acslg::analyzer {
 
             if (containsLocalVar(expr, locals))
                 return nullptr;
-            return expr.clone().into_underlying();
+            return factory.cloneExpr(factory.importExpr(expr)).into_underlying();
         }
 
         utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> buildUnknown(
@@ -587,8 +587,10 @@ namespace acslg::analyzer {
                     else
                         nc.path = std::move(newPaths[j - 1]).into_underlying();
                     nc.args.reserve(evalArg.args.size() + 1);
+                    auto &factory = p->getContext().getExprFactory();
                     for (auto &a : evalArg.args)
-                        nc.args.emplace_back(a->clone().into_underlying());
+                        nc.args.emplace_back(
+                            factory.cloneExpr(factory.importExpr(*a)).into_underlying());
                     nc.args.emplace_back(std::move(values[j]).into_underlying());
                     next.emplace_back(std::move(nc));
                 }

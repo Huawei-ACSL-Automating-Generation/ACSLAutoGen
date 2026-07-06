@@ -765,6 +765,7 @@ namespace acslg::analyzer {
         auto getMutMemoryState() -> auto & { return memoryState_; }
         auto getReturnExpr() const -> const auto & { return returnExpr_; }
         auto getPathState() const -> const auto & { return currentState_; }
+        auto getContext() -> auto & { return context_; }
         auto getContext() const -> const auto & { return context_; }
         auto getStartPoint() const -> const auto & { return startPoint_; }
 
