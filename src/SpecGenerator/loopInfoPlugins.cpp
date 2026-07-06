@@ -147,7 +147,7 @@ namespace acslg::spec_generator {
                     if (auto rootDecl = addr.get().getFromRoot();
                         rootDecl == std::nullopt || !preVA.contains(rootDecl.value()))
                         continue; // skip locals that do not appear at loop entry
-                    if (auto preValue = preMS.read(addr)) {
+                    if (auto preValue = preMS.readHandle(addr)) {
                         if (*preValue.value() == *currentExpr)
                             continue; // unchanged relative to entry snapshot
                     } else {
@@ -155,7 +155,7 @@ namespace acslg::spec_generator {
                             continue; // unchanged relative to entry snapshot
                     }
                     std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> entryExpr;
-                    if (auto preValue = preMS.read(addr)) {
+                    if (auto preValue = preMS.readHandle(addr)) {
                         entryExpr = cloneExpr(*preValue.value());
                     } else {
                         auto [hashAddrMap, _] =
