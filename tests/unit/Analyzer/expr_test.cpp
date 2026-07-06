@@ -36,6 +36,12 @@ namespace acslg::test::unit::analyzer {
         }
 
         ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+        cloneWithFactory(symbolic::ExprFactory &factory,
+                         const symbolic::SymbolicExpr &expr) {
+            return factory.cloneExpr(factory.importExpr(expr));
+        }
+
+        ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         makeStructureCloneWithFacade(symbolic::ExprFactory &factory,
                                      clang::QualType type,
                                      ::acslg::utils::not_null<const clang::VarDecl *> var,
@@ -248,7 +254,9 @@ namespace acslg::test::unit::analyzer {
         auto point   = getSourcePoint(0);
         auto varNode = makeSymbolValue(0, point);
 
-        auto exprBefore = varNode->clone();
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto exprBefore = cloneWithFactory(factory, *varNode);
         auto expr       = makeNotNull(unique_ptr<SymbolicExpr>(varNode.release()));
 
         ASSERT_EQ(*expr->getSubstitutedExpr(*path, getSourcePoint(42)), *exprBefore);
@@ -902,7 +910,8 @@ namespace acslg::test::unit::analyzer {
                   factory.importExpr(*rebuilt->getLeft().get()).get().get());
         EXPECT_EQ(rebuilt->getRight().get(),
                   factory.importExpr(*rebuilt->getRight().get()).get().get());
-        EXPECT_EQ(factory.importExpr(*simplified), factory.importExpr(*simplified->clone()));
+        EXPECT_EQ(factory.importExpr(*simplified),
+                  factory.importExpr(*cloneWithFactory(factory, *simplified)));
     }
 
     TEST(ExprFactoryTest, ScopedSimplifiedNonLinearFallbackImportsThroughFactory) {
@@ -928,7 +937,8 @@ namespace acslg::test::unit::analyzer {
             symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
                 .handle());
         NonLinearBinaryProbe legacyProduct{
-            x->clone(), symbolic::BinaryOpExpr::Operator::Multiply, x->clone()};
+            cloneWithFactory(factory, *x), symbolic::BinaryOpExpr::Operator::Multiply,
+            cloneWithFactory(factory, *x)};
 
         auto simplified = legacyProduct.callSimplifiedExprIfLinear();
         auto *product = symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
@@ -976,7 +986,8 @@ namespace acslg::test::unit::analyzer {
             symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
                 .handle());
         auto predicate = symbolic::makeBinaryExpr(
-            x->clone(), symbolic::BinaryOpExpr::Operator::Equal, symbolic::makeLiteralExpr(0));
+            cloneWithFactory(factory, *x), symbolic::BinaryOpExpr::Operator::Equal,
+            symbolic::makeLiteralExpr(0));
         auto wrapped = symbolic::makeBinaryExpr(
             std::move(predicate), symbolic::BinaryOpExpr::Operator::Equal,
             symbolic::makeLiteralExpr(1));
@@ -2566,8 +2577,8 @@ namespace acslg::test::unit::analyzer {
             return makeStructureCloneWithFacade(factory, var->getType(), var, point);
         }();
         auto *structure = symbolic::cast<symbolic::Structure>(structureExpr.get().get());
-        auto originalField0 = structure->getFieldValue(0)->clone();
-        auto originalField1 = structure->getFieldValue(1)->clone();
+        auto originalField0 = cloneWithFactory(factory, *structure->getFieldValue(0));
+        auto originalField1 = cloneWithFactory(factory, *structure->getFieldValue(1));
 
         auto updated = [&]() {
             symbolic::ExprFactoryScope scope(factory);
