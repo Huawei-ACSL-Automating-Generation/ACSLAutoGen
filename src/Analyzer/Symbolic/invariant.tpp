@@ -17,7 +17,7 @@ namespace acslg::analyzer {
         ppl::C_Polyhedron buildIdentityPoly(const VarManager &vm);
         ppl::C_Polyhedron convertFormulaToPoly(const Formulas &assertions, const VarManager &vm);
         Formulas cloneFormulas(const Formulas &input);
-        std::vector<Formulas> negateFormulas(Formulas input);
+        std::vector<Formulas> negateFormulas(const Formulas &input);
         ppl::C_Polyhedron buildPathPoly(const Path &path, const VarManager &vm, bool init = false);
         ppl::C_Polyhedron primedPolyhedron(const ppl::C_Polyhedron &poly, const VarManager &vm);
         Formulas preprocessConjConds(const Formulas &conjConds);
@@ -114,7 +114,7 @@ namespace acslg::analyzer {
         auto baseConditionPoly   = details::convertFormulaToPoly(assertions, vm);
         auto primedConditionPoly = details::primedPolyhedron(baseConditionPoly, vm);
 
-        auto negatedConds = details::negateFormulas(details::cloneFormulas(assertions));
+        auto negatedConds = details::negateFormulas(assertions);
 
         // === Precompute negated polyhedra
         std::vector<Parma_Polyhedra_Library::C_Polyhedron> negatedCondPolys;

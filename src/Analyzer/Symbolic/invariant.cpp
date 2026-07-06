@@ -365,6 +365,8 @@ namespace acslg::analyzer {
     namespace details {
         using OwnedSymbolicExpr = utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>;
 
+        Formulas cloneFormulas(const Formulas &input);
+
         OwnedSymbolicExpr buildLiteral(int64_t value) {
             auto &factory = symbolic::ExprFactoryScope::current();
             return factory.cloneExpr(factory.literal(value));
@@ -564,7 +566,7 @@ namespace acslg::analyzer {
             return poly;
         }
 
-        std::vector<Formulas> negateFormulas(Formulas input) {
+        std::vector<Formulas> negateOwnedFormulas(Formulas input) {
             using Op = symbolic::detail::BinaryOpExprNode::Operator;
 
             std::vector<Formulas> result;
@@ -643,6 +645,10 @@ namespace acslg::analyzer {
             }
 
             return result;
+        }
+
+        std::vector<Formulas> negateFormulas(const Formulas &input) {
+            return negateOwnedFormulas(cloneFormulas(input));
         }
 
         void appendPreprocessedConjCond(const symbolic::SymbolicExpr &cond, Formulas &result) {
