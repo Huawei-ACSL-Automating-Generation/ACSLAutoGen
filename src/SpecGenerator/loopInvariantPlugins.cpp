@@ -113,6 +113,11 @@ namespace acslg::spec_generator {
             return factory.cloneExpr(factory.unknown());
         }
 
+        OwnedSymbolicExpr cloneExpr(const symb::SymbolicExpr &expr) {
+            auto &factory = symb::ExprFactoryScope::current();
+            return factory.cloneExpr(factory.importExpr(expr));
+        }
+
         OwnedSymbolicExpr buildUnary(symb::UnaryOpExpr::Operator op, OwnedSymbolicExpr expr) {
             auto &factory = symb::ExprFactoryScope::current();
             return factory.cloneExpr(factory.unary(op, factory.importExpr(*expr)));
@@ -319,36 +324,36 @@ namespace acslg::spec_generator {
             // - i != n can also be normalized into a one-sided inequality when step direction is
             //   known (as a coarse "out-of-range" condition)
             std::unique_ptr<symb::SymbolicExpr> loopCond;
-            auto lhs = indexInfo.indexSymbolicValue->clone();
-            auto rhs = indexInfo.indexBound->clone();
             switch (indexInfo.op) {
                 using enum clang::BinaryOperatorKind;
                 using enum symb::BinaryOpExpr::Operator;
                 case BO_LT: {
                     // Normalize strict inequalities to non-strict to simplify invariant printing.
-                    auto newRHS = buildBinary(rhs->clone(), Subtract, buildLiteral(1));
-                    loopCond = buildBinary(lhs->clone(), LessEqual, std::move(newRHS))
+                    auto newRHS =
+                        buildBinary(cloneExpr(*indexInfo.indexBound), Subtract, buildLiteral(1));
+                    loopCond = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), LessEqual,
+                                           std::move(newRHS))
                                    .into_underlying();
                     break;
                 }
                 case BO_GT: {
-                    auto newRHS = buildBinary(rhs->clone(), Add, buildLiteral(1));
-                    loopCond = buildBinary(lhs->clone(), GreaterEqual, std::move(newRHS))
+                    auto newRHS =
+                        buildBinary(cloneExpr(*indexInfo.indexBound), Add, buildLiteral(1));
+                    loopCond = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), GreaterEqual,
+                                           std::move(newRHS))
                                    .into_underlying();
                     break;
                 }
                 case BO_LE:
                     loopCond =
-                        buildBinary(lhs->clone(), LessEqual,
-                                       utils::not_null<std::unique_ptr<symb::SymbolicExpr>>{
-                                           std::move(rhs)})
+                        buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), LessEqual,
+                                    cloneExpr(*indexInfo.indexBound))
                             .into_underlying();
                     break;
                 case BO_GE:
                     loopCond =
-                        buildBinary(lhs->clone(), GreaterEqual,
-                                       utils::not_null<std::unique_ptr<symb::SymbolicExpr>>{
-                                           std::move(rhs)})
+                        buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), GreaterEqual,
+                                    cloneExpr(*indexInfo.indexBound))
                             .into_underlying();
                     break;
                 case BO_NE: {
@@ -356,15 +361,16 @@ namespace acslg::spec_generator {
                     // - step < 0 (decreasing): i != bound is normalized as i >= bound+1
                     // - step > 0 (increasing): i != bound is normalized as i <= bound-1
                     if (indexInfo.indexPattern.step < 0) {
-                        auto rhsPlus1 = buildBinary(rhs->clone(), Add, buildLiteral(1));
-                        loopCond = buildBinary(lhs->clone(), GreaterEqual,
-                                                  std::move(rhsPlus1))
+                        auto rhsPlus1 =
+                            buildBinary(cloneExpr(*indexInfo.indexBound), Add, buildLiteral(1));
+                        loopCond = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue),
+                                               GreaterEqual, std::move(rhsPlus1))
                                        .into_underlying();
                     } else if (indexInfo.indexPattern.step > 0) {
-                        auto rhsMinus1 =
-                            buildBinary(rhs->clone(), Subtract, buildLiteral(1));
-                        loopCond = buildBinary(lhs->clone(), LessEqual,
-                                                  std::move(rhsMinus1))
+                        auto rhsMinus1 = buildBinary(
+                            cloneExpr(*indexInfo.indexBound), Subtract, buildLiteral(1));
+                        loopCond = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), LessEqual,
+                                               std::move(rhsMinus1))
                                        .into_underlying();
                     } else {
                         UNREACHABLE();
