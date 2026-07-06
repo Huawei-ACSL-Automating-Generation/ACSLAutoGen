@@ -468,16 +468,6 @@ namespace acslg::analyzer::symbolic {
             return ExprFactoryScope::current().importAndCloneExpr(*expr);
         }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildSymbolValue(
-            SymbolicExpr::Type varType,
-            const Address &from,
-            SourcePoint fromPoint) {
-            auto &factory = ExprFactoryScope::current();
-            Addr fromAddr{factory, factory.importAddress(from)};
-            return factory.cloneExpr(
-                Expr::symbolValue(varType, fromAddr, std::move(fromPoint)).handle());
-        }
-
         ExprChild makeDefaultSymbolAddressOffsetChild() {
             auto &factory = ExprFactoryScope::current();
             return ExprChild{factory.literal(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET))};
@@ -1839,7 +1829,10 @@ namespace acslg::analyzer::symbolic {
             // Address originates from an address present on this path at loop
             // entry but hasn't been accessed -> construct a SymbolValue with
             // corrext fromAddr and pointToSub.
-            return rebuildSymbolValue(getValType(), *realFromAddr, pathSubTo.getStartPoint());
+            auto &factory = ExprFactoryScope::current();
+            return factory.cloneExpr(
+                factory.symbolValue(getValType(), factory.importAddress(*realFromAddr),
+                                    pathSubTo.getStartPoint()));
         }
     }
 
@@ -1981,7 +1974,9 @@ namespace acslg::analyzer::symbolic {
         auto addr = dyn_cast<Address>(expr.get().get());
         if (addr == nullptr)
             UNREACHABLE();
-        return rebuildSymbolValue(getValType(), *addr, fromPoint_);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+            factory.symbolValue(getValType(), factory.importAddress(*addr), fromPoint_));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getRangeIndexSubstituted(
@@ -2090,7 +2085,9 @@ namespace acslg::analyzer::symbolic {
         auto addr = dyn_cast<Address>(expr.get().get());
         if (addr == nullptr)
             UNREACHABLE();
-        return rebuildSymbolValue(getValType(), *addr, fromPoint_);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+            factory.symbolValue(getValType(), factory.importAddress(*addr), fromPoint_));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getSubstitutedValueExpr(

@@ -1109,6 +1109,22 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_EQ(node.getLeft().get(), one.get().get());
         EXPECT_EQ(node.getRight().get(), two.get().get());
+
+        auto varAddr = factory.variableAddress(var);
+        auto rangeIndex = factory.rangeIndex("i");
+        auto indexedFrom =
+            factory.symbolAddress(var->getType(), varAddr, point, rangeIndex, rangeIndex);
+        auto indexedValue = factory.symbolValue(
+            symbolic::deriveType(var->getType()), indexedFrom, point);
+        auto valueClone = symbolic::cloneSymbolValue(indexedValue);
+        auto indexedRangeBase =
+            indexedFrom.cast<symbolic::SymbolAddress>().getBaseInfo();
+        auto substitutedValue =
+            valueClone->getRangeIndexSubstituted(indexedRangeBase, *replacement.get());
+        auto expectedFrom =
+            factory.symbolAddress(var->getType(), varAddr, point, replacement, replacement);
+        EXPECT_EQ(factory.importExpr(*substitutedValue),
+                  factory.symbolValue(symbolic::deriveType(var->getType()), expectedFrom, point));
     }
 
     TEST(ExprFactoryTest, ScopedLeafNoOpSubstitutionImportsThroughFactory) {
