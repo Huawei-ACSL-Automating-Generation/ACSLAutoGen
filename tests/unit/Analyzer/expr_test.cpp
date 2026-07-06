@@ -1068,6 +1068,29 @@ namespace acslg::test::unit::analyzer {
                   symbolic::detail::LiteralExprNode::LiteralType::UInt64);
     }
 
+    TEST(ExprFactoryTest, ScopedLegacyOperationCloneImportsChildren) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto legacyBinary = make_unique<symbolic::BinaryOpExpr>(
+            make_unique<symbolic::detail::LiteralExprNode>(int64_t{1}),
+            symbolic::BinaryOpExpr::Operator::Add,
+            make_unique<symbolic::detail::LiteralExprNode>(int64_t{2}));
+        auto clonedBinary = legacyBinary->clone();
+        auto &binary = *symbolic::cast<symbolic::BinaryOpExpr>(clonedBinary.get().get());
+
+        EXPECT_EQ(binary.getLeft().get(), factory.literal(int64_t{1}).get().get());
+        EXPECT_EQ(binary.getRight().get(), factory.literal(int64_t{2}).get().get());
+
+        auto legacyUnary = make_unique<symbolic::UnaryOpExpr>(
+            symbolic::UnaryOpExpr::Operator::Minus,
+            make_unique<symbolic::detail::LiteralExprNode>(int64_t{3}));
+        auto clonedUnary = legacyUnary->clone();
+        auto &unary = *symbolic::cast<symbolic::UnaryOpExpr>(clonedUnary.get().get());
+
+        EXPECT_EQ(unary.getSub().get(), factory.literal(int64_t{3}).get().get());
+    }
+
     TEST(ExprFactoryTest, UnknownBuilderReusesUnknownNode) {
         symbolic::ExprFactory factory;
 
