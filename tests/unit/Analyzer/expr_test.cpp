@@ -1317,6 +1317,8 @@ namespace acslg::test::unit::analyzer {
 
         auto clone = sum.clone();
         EXPECT_EQ(*clone, sum);
+        const auto &clonedSum = *symbolic::cast<symbolic::SumOverRange>(clone.get().get());
+        EXPECT_EQ(&clonedSum.getRange(), rangeHandle.get().get());
 
         auto index = symbolic::makeLiteralExpr(1);
         auto substituted = sum.getRangeIndexSubstituted(rangeBase, *index);
@@ -1365,6 +1367,11 @@ namespace acslg::test::unit::analyzer {
 
         auto clone = quantifier.clone();
         EXPECT_EQ(*clone, quantifier);
+        const auto &clonedQuantifier =
+            *symbolic::cast<symbolic::QuantifierOverRange>(clone.get().get());
+        EXPECT_EQ(&clonedQuantifier.getRange(), rangeHandle.get().get());
+        EXPECT_EQ(&clonedQuantifier.getPredicate(),
+                  factory.importExpr(quantifier.getPredicate()).get().get());
 
         auto index = symbolic::makeLiteralExpr(1);
         auto substituted = quantifier.getRangeIndexSubstituted(rangeBase, *index);
@@ -1405,6 +1412,9 @@ namespace acslg::test::unit::analyzer {
 
         auto clone = max.clone();
         EXPECT_EQ(*clone, max);
+        const auto &clonedMax = *symbolic::cast<symbolic::MaxMinOverRange>(clone.get().get());
+        EXPECT_EQ(&clonedMax.getRange(), rangeHandle.get().get());
+        EXPECT_EQ(&clonedMax.getExpr(), factory.importExpr(max.getExpr()).get().get());
 
         auto index = symbolic::makeLiteralExpr(1);
         auto substituted = max.getRangeIndexSubstituted(rangeBase, *index);

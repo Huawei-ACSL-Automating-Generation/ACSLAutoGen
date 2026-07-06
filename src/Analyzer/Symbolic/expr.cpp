@@ -80,6 +80,22 @@ namespace acslg::analyzer::symbolic {
         return cloneWithValType(newType);
     }
 
+    utils::not_null<std::unique_ptr<SymbolicExpr>> ExprChild::clone() const {
+        if (ExprFactoryScope::hasCurrent()) {
+            auto &factory = ExprFactoryScope::current();
+            return factory.importAndCloneExpr(*get());
+        }
+        return get()->clone();
+    }
+
+    ExprChild ExprChild::copy() const {
+        if (ExprFactoryScope::hasCurrent())
+            return ExprChild{ExprFactoryScope::current().importExpr(*get())};
+        if (handle_)
+            return ExprChild{*handle_};
+        return ExprChild{owned_->get()->clone()};
+    }
+
     AddrHandle ExprFactory::importAddress(const Address &address) {
         return AddrHandle{cast<const Address>(importExpr(address).get().get())};
     }
