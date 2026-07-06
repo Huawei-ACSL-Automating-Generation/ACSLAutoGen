@@ -370,6 +370,11 @@ namespace acslg::analyzer {
             return factory.cloneExpr(factory.literal(value));
         }
 
+        OwnedSymbolicExpr cloneExpr(const symbolic::SymbolicExpr &expr) {
+            auto &factory = symbolic::ExprFactoryScope::current();
+            return factory.cloneExpr(factory.importExpr(expr));
+        }
+
         OwnedSymbolicExpr buildUnary(symbolic::UnaryOpExpr::Operator op, OwnedSymbolicExpr expr) {
             auto &factory = symbolic::ExprFactoryScope::current();
             return factory.cloneExpr(factory.unary(op, factory.importExpr(*expr)));
@@ -584,18 +589,18 @@ namespace acslg::analyzer {
                     // @WindOctober: try to optimize clone.
                     switch (bin->getOperator()) {
                         case Op::LessEqual: {
-                            auto newRHS = buildBinary(rhs->clone(), Op::Add,
+                            auto newRHS = buildBinary(cloneExpr(*rhs), Op::Add,
                                                          buildLiteral(1));
-                            current[i] = buildBinary(lhs->clone(), Op::GreaterEqual,
+                            current[i] = buildBinary(cloneExpr(*lhs), Op::GreaterEqual,
                                                         std::move(newRHS));
                             worklist.push({std::move(current), i + 1});
                             expanded = true;
                             break;
                         }
                         case Op::GreaterEqual: {
-                            auto newRHS = buildBinary(rhs->clone(), Op::Subtract,
+                            auto newRHS = buildBinary(cloneExpr(*rhs), Op::Subtract,
                                                          buildLiteral(1));
-                            current[i] = buildBinary(lhs->clone(), Op::LessEqual,
+                            current[i] = buildBinary(cloneExpr(*lhs), Op::LessEqual,
                                                         std::move(newRHS));
                             worklist.push({std::move(current), i + 1});
                             expanded = true;
@@ -603,12 +608,12 @@ namespace acslg::analyzer {
                         }
                         case Op::Equal: {
                             auto leExpr = buildBinary(
-                                lhs->clone(), Op::LessEqual,
-                                buildBinary(rhs->clone(), Op::Subtract, buildLiteral(1)));
+                                cloneExpr(*lhs), Op::LessEqual,
+                                buildBinary(cloneExpr(*rhs), Op::Subtract, buildLiteral(1)));
 
                             auto geExpr = buildBinary(
-                                lhs->clone(), Op::GreaterEqual,
-                                buildBinary(rhs->clone(), Op::Add, buildLiteral(1)));
+                                cloneExpr(*lhs), Op::GreaterEqual,
+                                buildBinary(cloneExpr(*rhs), Op::Add, buildLiteral(1)));
 
                             Formulas branch;
                             branch.reserve(current.size());
@@ -616,7 +621,7 @@ namespace acslg::analyzer {
                                 if (j == i)
                                     branch.push_back(std::move(leExpr));
                                 else
-                                    branch.push_back(current[j]->clone());
+                                    branch.push_back(cloneExpr(*current[j]));
                             }
 
                             current[i] = std::move(geExpr);
@@ -644,7 +649,7 @@ namespace acslg::analyzer {
             Formulas copied;
             copied.reserve(conjConds.size());
             for (const auto &cond : conjConds) {
-                copied.push_back(cond->clone());
+                copied.push_back(cloneExpr(*cond));
             }
             return preprocessConjConds(copied);
         }
@@ -663,23 +668,23 @@ namespace acslg::analyzer {
                             continue;
                         }
                         case GreaterThan: {
-                            auto newRHS = buildBinary(rhs->clone(), Add, buildLiteral(1));
-                            result.push_back(buildBinary(lhs->clone(), GreaterEqual,
+                            auto newRHS = buildBinary(cloneExpr(*rhs), Add, buildLiteral(1));
+                            result.push_back(buildBinary(cloneExpr(*lhs), GreaterEqual,
                                                             std::move(newRHS)));
                             break;
                         }
                         case LessThan: {
-                            auto newRHS = buildBinary(rhs->clone(), Subtract,
+                            auto newRHS = buildBinary(cloneExpr(*rhs), Subtract,
                                                          buildLiteral(1));
-                            result.push_back(buildBinary(lhs->clone(), LessEqual,
+                            result.push_back(buildBinary(cloneExpr(*lhs), LessEqual,
                                                             std::move(newRHS)));
                             break;
                         }
                         case LogicalAnd: {
                             Formulas twoConds;
                             twoConds.reserve(2);
-                            twoConds.push_back(lhs->clone());
-                            twoConds.push_back(rhs->clone());
+                            twoConds.push_back(cloneExpr(*lhs));
+                            twoConds.push_back(cloneExpr(*rhs));
                             auto reTwoConds = preprocessConjConds(twoConds);
                             result.insert(result.end(), std::make_move_iterator(reTwoConds.begin()),
                                           std::make_move_iterator(reTwoConds.end()));
@@ -688,7 +693,7 @@ namespace acslg::analyzer {
                         case GreaterEqual:
                         case LessEqual:
                         case Equal: {
-                            result.push_back(cond->clone());
+                            result.push_back(cloneExpr(*cond));
                             break;
                         }
                         default: continue;
@@ -697,7 +702,7 @@ namespace acslg::analyzer {
                     if (unary->getOperator() != symbolic::detail::UnaryOpExprNode::Operator::LogicalNot)
                         continue;
                     Formulas oneExpr;
-                    oneExpr.push_back(unary->getSub()->clone());
+                    oneExpr.push_back(cloneExpr(*unary->getSub()));
                     auto reOneExpr = preprocessConjConds(oneExpr);
                     if (reOneExpr.size() != 1)
                         continue;
@@ -707,16 +712,16 @@ namespace acslg::analyzer {
                     switch (uneqExpr->getOperator()) {
                         using enum symbolic::detail::BinaryOpExprNode::Operator;
                         case LessEqual: {
-                            auto newRHS = buildBinary(uneqExpr->getRight()->clone(), Add,
+                            auto newRHS = buildBinary(cloneExpr(*uneqExpr->getRight()), Add,
                                                          buildLiteral(1));
-                            result.push_back(buildBinary(uneqExpr->getLeft()->clone(),
+                            result.push_back(buildBinary(cloneExpr(*uneqExpr->getLeft()),
                                                             GreaterEqual, std::move(newRHS)));
                             break;
                         }
                         case GreaterEqual: {
-                            auto newRHS = buildBinary(uneqExpr->getRight()->clone(),
+                            auto newRHS = buildBinary(cloneExpr(*uneqExpr->getRight()),
                                                          Subtract, buildLiteral(1));
-                            result.push_back(buildBinary(uneqExpr->getLeft()->clone(),
+                            result.push_back(buildBinary(cloneExpr(*uneqExpr->getLeft()),
                                                             LessEqual, std::move(newRHS)));
                             break;
                         }
@@ -982,7 +987,7 @@ namespace acslg::analyzer {
             Formulas result;
             result.reserve(input.size());
             for (const auto &expr : input) {
-                result.push_back(expr->clone());
+                result.push_back(cloneExpr(*expr));
             }
             return result;
         }
@@ -1169,7 +1174,7 @@ namespace acslg::analyzer {
 
                         symbolic::SymbolicExpr *base = resolvedExprs.at(idx).get().get();
 
-                        auto term = base->clone();
+                        auto term = cloneExpr(*base);
                         if (coeff != 1) {
                             term = buildBinary(
                                 buildLiteral(coeff.get_si()),
@@ -1207,7 +1212,7 @@ namespace acslg::analyzer {
                 auto varDecl = vm.varDecls.at(i);
                 auto &addr   = initPath.getVarAddr().at(varDecl);
                 if (resolvedExprs.contains(i)) {
-                    auto [_, ok] = newVars.emplace(*addr, resolvedExprs.at(i)->clone());
+                    auto [_, ok] = newVars.emplace(*addr, cloneExpr(*resolvedExprs.at(i)));
                     if (!ok)
                         UNREACHABLE();
                 }
@@ -1230,7 +1235,7 @@ namespace acslg::analyzer {
                         continue;
                     }
 
-                    auto term = base->clone();
+                    auto term = cloneExpr(*base);
                     if (c != 1) {
                         term = buildBinary(
                             buildLiteral(c.get_si()),
