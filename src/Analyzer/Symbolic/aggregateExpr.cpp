@@ -227,9 +227,7 @@ namespace acslg::analyzer::symbolic {
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        return importThroughCurrentFactory(*this);
+        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
     }
 
     std::string SumOverRange::dump() const {
@@ -276,13 +274,7 @@ namespace acslg::analyzer::symbolic {
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
-        auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        return rebuildSumOverRange(*subedRange, indexName_, fromPoint_);
+        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
     }
 
     utils::expected<std::string, SymbolicExpr::GetACSLError> SumOverRange::doGetACSL(
@@ -359,15 +351,7 @@ namespace acslg::analyzer::symbolic {
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
-        auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        auto subedPred = pred_->getSubstitutedValueExpr(hashExprMap);
-
-        return rebuildQuantifierOverRange(*subedRange, indexName_, quant_, std::move(subedPred));
+        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
     }
 
     QuantifierOverRange &QuantifierOverRange::operator=(const QuantifierOverRange &other) {
@@ -482,16 +466,7 @@ namespace acslg::analyzer::symbolic {
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        auto subedExpr  = range().getSubstitutedValueExpr(hashExprMap);
-        auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        auto subedBody = expr_->getSubstitutedValueExpr(hashExprMap);
-
-        return rebuildMaxMinOverRange(*subedRange, indexName_, extremum_, std::move(subedBody),
-                                      fromPoint_);
+        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
     }
 
     MaxMinOverRange &MaxMinOverRange::operator=(const MaxMinOverRange &other) {

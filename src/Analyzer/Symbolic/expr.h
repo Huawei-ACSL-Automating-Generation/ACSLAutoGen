@@ -605,6 +605,9 @@ namespace acslg::analyzer::symbolic {
     ExprHandle getSubstitutedValueHandle(ExprFactory &factory,
                                          const SymbolicExpr &expr,
                                          const HashExprHandleMap &hashToExprMap);
+    utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExprThroughHandles(
+        const SymbolicExpr &expr,
+        const SymbolicExpr::HashExprMap &hashToExprMap);
 
     class ExprChild {
       public:
