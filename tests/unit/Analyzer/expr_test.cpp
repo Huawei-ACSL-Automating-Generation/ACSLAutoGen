@@ -914,6 +914,49 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(substituted.get().get(), expected.get().get());
     }
 
+    TEST(ExprFactoryTest, ValueSubstitutionHandleMapRebuildsAggregateThroughFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+
+        auto base = factory.variableAddress(var);
+        auto range = factory.symbolAddress(var->getType(), base, point,
+                                           factory.literal(int64_t{0}),
+                                           factory.literal(int64_t{3}));
+        auto one = factory.literal(int64_t{1});
+        auto two = factory.literal(int64_t{2});
+        auto three = factory.literal(int64_t{3});
+        auto pred = factory.binary(one, symbolic::BinaryOpExpr::Operator::LessThan, two);
+        auto expectedPred =
+            factory.binary(three, symbolic::BinaryOpExpr::Operator::LessThan, two);
+        auto original = symbolic::makeQuantifierOverRangeHandle(
+            factory, range.cast<symbolic::SymbolAddress>(), "i",
+            symbolic::QuantifierOverRange::Quantifier::ForAll, *pred);
+        auto expected = symbolic::makeQuantifierOverRangeHandle(
+            factory, range.cast<symbolic::SymbolAddress>(), "i",
+            symbolic::QuantifierOverRange::Quantifier::ForAll, *expectedPred);
+
+        symbolic::HashExprHandleMap substitutions;
+        substitutions.emplace(one.hash(), three);
+
+        auto substituted =
+            symbolic::getSubstitutedValueHandle(factory, *original, substitutions);
+        EXPECT_EQ(substituted.get().get(), expected.get().get());
+    }
+
     TEST(ExprFactoryTest, ScopedSimplifiedLinearExprRebuildsThroughFactory) {
         ASTExtractor e;
         e.init(R"c(

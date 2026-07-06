@@ -105,6 +105,15 @@ namespace acslg::analyzer::symbolic {
                 UNREACHABLE();
             }
 
+            const SymbolAddress &requireRange(ExprHandle handle) const {
+                if (auto *range = handle.dyn_cast<const SymbolAddress>()) {
+                    if (range->getLength() == std::nullopt)
+                        ERROR("Substituted expression should be a *range*");
+                    return *range;
+                }
+                UNREACHABLE();
+            }
+
             ExprHandle run(const SymbolicExpr &expr) const {
                 if (auto it = substitutions.find(expr.hash()); it != substitutions.end())
                     return it->second;
@@ -160,6 +169,23 @@ namespace acslg::analyzer::symbolic {
                         rebuilt = factory.withField(rebuilt, i,
                                                     run(*structure->getFieldValue(i)));
                     return rebuilt;
+                }
+                if (auto *sum = dyn_cast<const SumOverRange>(&expr)) {
+                    return makeSumOverRangeHandle(factory, requireRange(run(sum->getRange())),
+                                                  sum->getIndexName(),
+                                                  sum->getFromPoint().value());
+                }
+                if (auto *quantifier = dyn_cast<const QuantifierOverRange>(&expr)) {
+                    return makeQuantifierOverRangeHandle(
+                        factory, requireRange(run(quantifier->getRange())),
+                        quantifier->getIndexName(), quantifier->getQuantifier(),
+                        *run(quantifier->getPredicate()));
+                }
+                if (auto *maxMin = dyn_cast<const MaxMinOverRange>(&expr)) {
+                    return makeMaxMinOverRangeHandle(
+                        factory, requireRange(run(maxMin->getRange())),
+                        maxMin->getIndexName(), maxMin->getExtremum(),
+                        run(maxMin->getExpr()), maxMin->getFromPoint().value());
                 }
 
                 return legacyFallback(expr);
