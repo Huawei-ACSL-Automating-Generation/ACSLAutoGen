@@ -1061,6 +1061,18 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(factory.importExpr(*simplified), factory.importExpr(*expected));
     }
 
+    TEST(ExprFactoryTest, SimplifiedExprHandleReturnsInternedNode) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto expr = factory.binary(factory.literal(int64_t{1}),
+                                   symbolic::BinaryOpExpr::Operator::Add,
+                                   factory.literal(int64_t{2}));
+
+        auto simplified = symbolic::simplifiedExprHandle(factory, *expr);
+
+        EXPECT_EQ(simplified, factory.literal(int64_t{3}));
+    }
+
     TEST(ExprFactoryTest, ScopedBooleanComparisonSimplificationImportsReturnedExpr) {
         ASTExtractor e;
         e.init(R"c(

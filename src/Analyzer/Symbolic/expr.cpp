@@ -963,6 +963,11 @@ namespace acslg::analyzer::symbolic {
         return utils::not_null<std::unique_ptr<UnknownExpr>>{std::move(unknown)};
     }
 
+    ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr) {
+        ExprFactoryScope scope(factory);
+        return factory.importExpr(*expr.simplifiedExpr());
+    }
+
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolicExpr::simplifiedExpr() const {
         return importThroughCurrentFactory(*this);
     }

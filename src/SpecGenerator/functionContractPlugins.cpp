@@ -23,7 +23,8 @@ namespace acslg::spec_generator {
         const std::string IND2 = "    ";
 
         symb::Expr simplifyExpr(const symb::SymbolicExpr &expr) {
-            return symb::Expr{expr}.simplified();
+            auto &factory = symb::ExprFactoryScope::current();
+            return symb::Expr{factory, symb::simplifiedExprHandle(factory, expr)};
         }
 
         // Frama-C does not resolve ACSL logic labels derived from internal C labels
@@ -348,7 +349,7 @@ namespace acslg::spec_generator {
 
                 // result
                 if (auto &ret = path.getReturnExpr()) {
-                    auto simplifiedRet = ret.value()->simplifiedExpr();
+                    auto simplifiedRet = simplifyExpr(*ret.value());
                     if (!referencesNonContractVisibleLocals(*simplifiedRet, FD))
                     if (auto expected = simplifiedRet->getACSL(
                             {.noStateLabelFunctionAt = true,
@@ -420,7 +421,7 @@ namespace acslg::spec_generator {
                         .noStateLabelFunctionAt = true, .predefinedLabels = {{oldPoint, "Old"}}};
                     if (referencesNonContractVisibleLocals(addr.get(), FD))
                         continue;
-                    auto simplifiedRhs = value->simplifiedExpr();
+                    auto simplifiedRhs = simplifyExpr(*value);
                     if (referencesNonContractVisibleLocals(*simplifiedRhs, FD))
                         continue;
                     auto lhsOpt = addr.get().getACSLOfValue(cfg);
@@ -536,7 +537,7 @@ namespace acslg::spec_generator {
             for (auto &cond : conds) {
                 if (cond->isUnknown())
                     continue;
-                auto simplified = cond->simplifiedExpr();
+                auto simplified = simplifyExpr(*cond);
                 if (referencesNonContractVisibleLocals(*simplified, FD))
                     continue;
                 auto rf = simplified->getACSL({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
@@ -546,8 +547,7 @@ namespace acslg::spec_generator {
                 // labels; we currently drop them because we cannot express usedPoints in requires.
                 if (!rf.value().second.empty())
                     continue;
-                auto &target =
-                    symb::isa<symb::OverRangeExpr>(simplified.get()) ? assumeStr : requireStr;
+                auto &target = simplified.isa<symb::OverRangeExpr>() ? assumeStr : requireStr;
                 if (!target.empty())
                     target += " && ";
                 target += rf.value().first;

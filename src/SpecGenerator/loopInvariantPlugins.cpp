@@ -1479,11 +1479,13 @@ namespace acslg::spec_generator {
             auto &indexInfo = loopInfo.indexInfo.value();
 
             // Yes, the expression of the loop variant is maxLoopCount. :)
+            auto &factory = symb::ExprFactoryScope::current();
+            auto simplifiedMaxLoopCount =
+                symb::simplifiedExprHandle(factory, *indexInfo.maxLoopCount);
             auto acslExpected =
-                indexInfo.maxLoopCount->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true});
+                simplifiedMaxLoopCount.getACSL({.noStateLabelFunctionAt = true});
             if (!acslExpected) {
-                WARN("Variant {" + indexInfo.maxLoopCount->simplifiedExpr()->dump() +
-                     "} getACSL failed.");
+                WARN("Variant {" + simplifiedMaxLoopCount.dump() + "} getACSL failed.");
                 return GenResultType{.acsl                         = std::nullopt,
                                      .acslUsedPoints               = {},
                                      .globalNormalPathPostInfo     = {},

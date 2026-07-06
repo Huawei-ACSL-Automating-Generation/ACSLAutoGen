@@ -590,6 +590,7 @@ namespace acslg::analyzer::symbolic {
                                               const SymbolicExpr &expr,
                                               const SymbolAddrBaseInfo &rangeBase,
                                               ExprHandle indexExpr);
+    ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr);
     class ExprChild {
       public:
         explicit ExprChild(ExprHandle handle) : handle_(handle) {}
@@ -1485,9 +1486,7 @@ namespace acslg::analyzer::symbolic {
             return Expr{factory(), factory().withValType(handle_, newType)};
         }
         Expr simplified() const {
-            ExprFactoryScope scope(factory());
-            auto simplifiedExpr = handle_->simplifiedExpr();
-            return Expr{factory(), factory().importExpr(*simplifiedExpr)};
+            return Expr{factory(), simplifiedExprHandle(factory(), *handle_)};
         }
 
         template <typename T> bool isa() const { return handle_.isa<T>(); }
