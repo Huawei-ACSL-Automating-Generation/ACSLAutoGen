@@ -108,22 +108,20 @@ namespace acslg::spec_generator {
 
         OwnedSymbolicExpr buildLiteral(int64_t value) {
             auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(symb::LiteralExpr(factory, value).handle());
+            return factory.cloneExpr(factory.literal(value));
         }
 
         OwnedSymbolicExpr buildUnary(symb::UnaryOpExpr::Operator op, OwnedSymbolicExpr expr) {
             auto &factory = symb::ExprFactoryScope::current();
-            symb::Expr operand{factory, factory.importExpr(*expr)};
-            return factory.cloneExpr(operand.unary(op).handle());
+            return factory.cloneExpr(factory.unary(op, factory.importExpr(*expr)));
         }
 
         OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
                                       symb::BinaryOpExpr::Operator op,
                                       OwnedSymbolicExpr rhs) {
             auto &factory = symb::ExprFactoryScope::current();
-            symb::Expr lhsExpr{factory, factory.importExpr(*lhs)};
-            symb::Expr rhsExpr{factory, factory.importExpr(*rhs)};
-            return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
+            return factory.cloneExpr(
+                factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
         }
 
         OwnedSymbolicExpr buildRangeIndex(std::string_view name) {

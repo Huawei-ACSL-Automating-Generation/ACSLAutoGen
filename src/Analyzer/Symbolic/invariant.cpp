@@ -367,22 +367,20 @@ namespace acslg::analyzer {
 
         OwnedSymbolicExpr buildLiteral(int64_t value) {
             auto &factory = symbolic::ExprFactoryScope::current();
-            return factory.cloneExpr(symbolic::LiteralExpr(factory, value).handle());
+            return factory.cloneExpr(factory.literal(value));
         }
 
         OwnedSymbolicExpr buildUnary(symbolic::UnaryOpExpr::Operator op, OwnedSymbolicExpr expr) {
             auto &factory = symbolic::ExprFactoryScope::current();
-            symbolic::Expr operand{factory, factory.importExpr(*expr)};
-            return factory.cloneExpr(operand.unary(op).handle());
+            return factory.cloneExpr(factory.unary(op, factory.importExpr(*expr)));
         }
 
         OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
                                       symbolic::BinaryOpExpr::Operator op,
                                       OwnedSymbolicExpr rhs) {
             auto &factory = symbolic::ExprFactoryScope::current();
-            symbolic::Expr lhsExpr{factory, factory.importExpr(*lhs)};
-            symbolic::Expr rhsExpr{factory, factory.importExpr(*rhs)};
-            return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
+            return factory.cloneExpr(
+                factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
         }
 
         void dump(const Parma_Polyhedra_Library::C_Polyhedron &poly, const VarManager &vm) {

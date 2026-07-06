@@ -15,16 +15,15 @@ namespace acslg::spec_generator {
 
         OwnedSymbolicExpr buildLiteral(int64_t value) {
             auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(symb::LiteralExpr(factory, value).handle());
+            return factory.cloneExpr(factory.literal(value));
         }
 
         OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
                                       symb::BinaryOpExpr::Operator op,
                                       OwnedSymbolicExpr rhs) {
             auto &factory = symb::ExprFactoryScope::current();
-            symb::Expr lhsExpr{factory, factory.importExpr(*lhs)};
-            symb::Expr rhsExpr{factory, factory.importExpr(*rhs)};
-            return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
+            return factory.cloneExpr(
+                factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
         }
 
         OwnedSymbolicExpr buildMaxLoopCountExpr(const LoopInfo::Pattern &pattern,
