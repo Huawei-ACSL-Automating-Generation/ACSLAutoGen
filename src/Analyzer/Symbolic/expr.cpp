@@ -468,35 +468,6 @@ namespace acslg::analyzer::symbolic {
             return ExprFactoryScope::current().importAndCloneExpr(*expr);
         }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildSymbolAddress(
-            clang::QualType pointeeType,
-            std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
-            SourcePoint fromPoint,
-            utils::not_null<std::unique_ptr<SymbolicExpr>> offset,
-            std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> length) {
-            auto &factory = ExprFactoryScope::current();
-            std::optional<Addr> fromAddr;
-            if (from)
-                fromAddr.emplace(factory, factory.importAddress(*from.value()));
-
-            Expr offsetExpr{factory, factory.importExpr(*offset)};
-            auto rebuilt = [&]() -> Addr {
-                if (length) {
-                    Expr lengthExpr{factory, factory.importExpr(*length.value())};
-                    if (fromAddr)
-                        return Addr::symbol(pointeeType, *fromAddr, fromPoint, offsetExpr,
-                                            lengthExpr);
-                    return Addr::symbol(pointeeType, fromPoint, offsetExpr, lengthExpr);
-                }
-
-                if (fromAddr)
-                    return Addr::symbol(pointeeType, *fromAddr, fromPoint, offsetExpr);
-                return Addr::symbol(pointeeType, fromPoint, offsetExpr);
-            }();
-
-            return factory.cloneExpr(rebuilt.asExpr().handle());
-        }
-
         utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildFieldAddress(
             clang::QualType pointeeType,
             const clang::RecordDecl *record,
@@ -1891,11 +1862,14 @@ namespace acslg::analyzer::symbolic {
             return importThroughCurrentFactory(clone());
 
         if (fromAddr_ == std::nullopt) {
-            std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> length;
+            auto &factory = ExprFactoryScope::current();
+            std::optional<ExprHandle> length;
             if (length_)
-                length = length_.value()->clone();
-            return rebuildSymbolAddress(pointeeType_, std::nullopt, pointToSub,
-                                        offset_->clone(), std::move(length));
+                length = factory.importExpr(*length_.value());
+            return factory.cloneExpr(
+                factory.symbolAddress(pointeeType_, std::nullopt, pointToSub,
+                                      factory.importExpr(*offset_), length)
+                    .asExpr());
         }
 
         auto subedExpr    = fromAddr_.value()->getSubstitutedExpr(pathSubTo, pointToSub);
@@ -1922,23 +1896,27 @@ namespace acslg::analyzer::symbolic {
                 ERROR("This expr should be a `SymbolAddress");
 
             // Apply substituted offset to the concrete address.
-            auto concreteAddr = std::move(realAddr).value();
-            concreteAddr      = concreteAddr->withAddedOffset(std::move(offset));
+            auto &factory = ExprFactoryScope::current();
+            Addr concreteAddr{factory, factory.importAddress(*realAddr.value())};
+            concreteAddr = concreteAddr.withAddedOffset(Expr{factory, factory.importExpr(*offset)});
 
             if (length) {
-                concreteAddr = concreteAddr->withLength(std::move(length).value());
+                concreteAddr =
+                    concreteAddr.withLength(Expr{factory, factory.importExpr(*length.value())});
             }
-            // Return the underlying concrete address (std::unique_ptr<Address>).
-            return std::move(concreteAddr).into_underlying();
+            return factory.cloneExpr(concreteAddr.asExpr().handle());
         } else {
             // The origin hasn't been accessed at loop entry -> construct a
             // SymbolAddress with corrext fromAddr and fromPoint.
-            std::unique_ptr<const Address> from = realFromAddr->addressClone().into_underlying();
-            std::optional<utils::not_null<std::unique_ptr<const Address>>> fromArg{
-                utils::not_null<std::unique_ptr<const Address>>{std::move(from)}};
-            return rebuildSymbolAddress(pointeeType_, std::move(fromArg),
-                                        pathSubTo.getStartPoint(), std::move(offset),
-                                        std::move(length));
+            auto &factory = ExprFactoryScope::current();
+            std::optional<ExprHandle> lengthHandle;
+            if (length)
+                lengthHandle = factory.importExpr(*length.value());
+            return factory.cloneExpr(
+                factory.symbolAddress(pointeeType_, factory.importAddress(*realFromAddr),
+                                      pathSubTo.getStartPoint(), factory.importExpr(*offset),
+                                      lengthHandle)
+                    .asExpr());
         };
     }
 
@@ -2022,20 +2000,28 @@ namespace acslg::analyzer::symbolic {
             if (addr == nullptr)
                 UNREACHABLE();
 
-            std::unique_ptr<const Address> from = addr->addressClone().into_underlying();
-            std::optional<utils::not_null<std::unique_ptr<const Address>>> fromArg{
-                utils::not_null<std::unique_ptr<const Address>>{std::move(from)}};
-            std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> lengthArg;
+            auto &factory = ExprFactoryScope::current();
+            std::optional<ExprHandle> lengthArg;
             if (length_)
-                lengthArg = length_.value()->getRangeIndexSubstituted(rangeBase, indexExpr);
+                lengthArg =
+                    factory.importExpr(*length_.value()->getRangeIndexSubstituted(rangeBase,
+                                                                                  indexExpr));
 
-            return rebuildSymbolAddress(
-                pointeeType_, std::move(fromArg), fromPoint_,
-                offset_->getRangeIndexSubstituted(rangeBase, indexExpr), std::move(lengthArg));
+            return factory.cloneExpr(
+                factory.symbolAddress(
+                           pointeeType_, factory.importAddress(*addr), fromPoint_,
+                           factory.importExpr(
+                               *offset_->getRangeIndexSubstituted(rangeBase, indexExpr)),
+                           lengthArg)
+                    .asExpr());
         }
-        return rebuildSymbolAddress(
-            pointeeType_, std::nullopt, fromPoint_,
-            offset_->getRangeIndexSubstituted(rangeBase, indexExpr), std::nullopt);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+            factory.symbolAddress(
+                       pointeeType_, std::nullopt, fromPoint_,
+                       factory.importExpr(*offset_->getRangeIndexSubstituted(rangeBase, indexExpr)),
+                       std::nullopt)
+                .asExpr());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> FieldAddress::getRangeIndexSubstituted(
@@ -2120,20 +2106,26 @@ namespace acslg::analyzer::symbolic {
             if (addr == nullptr)
                 UNREACHABLE();
 
-            std::unique_ptr<const Address> from = addr->addressClone().into_underlying();
-            std::optional<utils::not_null<std::unique_ptr<const Address>>> fromArg{
-                utils::not_null<std::unique_ptr<const Address>>{std::move(from)}};
-            std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> lengthArg;
+            auto &factory = ExprFactoryScope::current();
+            std::optional<ExprHandle> lengthArg;
             if (length_)
-                lengthArg = length_.value()->getSubstitutedValueExpr(hashExprMap);
+                lengthArg =
+                    factory.importExpr(*length_.value()->getSubstitutedValueExpr(hashExprMap));
 
-            return rebuildSymbolAddress(
-                pointeeType_, std::move(fromArg), fromPoint_,
-                offset_->getSubstitutedValueExpr(hashExprMap), std::move(lengthArg));
+            return factory.cloneExpr(
+                factory.symbolAddress(
+                           pointeeType_, factory.importAddress(*addr), fromPoint_,
+                           factory.importExpr(*offset_->getSubstitutedValueExpr(hashExprMap)),
+                           lengthArg)
+                    .asExpr());
         }
-        return rebuildSymbolAddress(pointeeType_, std::nullopt, fromPoint_,
-                                    offset_->getSubstitutedValueExpr(hashExprMap),
-                                    std::nullopt);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+            factory.symbolAddress(
+                       pointeeType_, std::nullopt, fromPoint_,
+                       factory.importExpr(*offset_->getSubstitutedValueExpr(hashExprMap)),
+                       std::nullopt)
+                .asExpr());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> FieldAddress::getSubstitutedValueExpr(
