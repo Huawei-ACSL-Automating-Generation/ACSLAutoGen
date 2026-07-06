@@ -869,7 +869,7 @@ namespace acslg::analyzer {
                             auto ER = this->evalExpr(e);
                             if (ER.second.size() != 1 || !ER.first.empty())
                                 ERROR("__builtin_expect argument must not branch or fork.");
-                            return ER.second[0]->clone();
+                            return cloneExpr(context_.getExprFactory(), *ER.second[0]);
                         };
                         Formulas exprs;
                         exprs.emplace_back(evalNoBranch(call->getArg(0)));
@@ -908,14 +908,14 @@ namespace acslg::analyzer {
                             auto ER = this->evalExpr(e);
                             if (ER.second.size() != 1 || !ER.first.empty())
                                 ERROR("BSL_SAL_Malloc argument must not branch or fork.");
-                            return ER.second[0]->clone();
+                            return cloneExpr(context_.getExprFactory(), *ER.second[0]);
                         };
 
                         auto sizeExpr = evalNoBranch(call->getArg(0));
                         if (auto c = sizeExpr->tryEvalAsConstant(); c && *c == 0) {
                             Formulas exprs;
                             symbolic::LiteralExpr zero{context_.getExprFactory(), 0};
-                            exprs.emplace_back(zero->clone());
+                            exprs.emplace_back(cloneExpr(context_.getExprFactory(), *zero));
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
@@ -987,7 +987,7 @@ namespace acslg::analyzer {
                                 auto ER = this->evalExpr(e);
                                 if (ER.second.size() != 1 || !ER.first.empty())
                                     ERROR("BSL_SAL_Calloc arguments must not branch or fork.");
-                                return ER.second[0]->clone();
+                                return cloneExpr(context_.getExprFactory(), *ER.second[0]);
                             };
                             auto a0 = evalNoBranch(call->getArg(0));
                             auto a1 = evalNoBranch(call->getArg(1));
@@ -1076,7 +1076,7 @@ namespace acslg::analyzer {
                             auto ER = this->evalExpr(e);
                             if (ER.second.size() != 1 || !ER.first.empty())
                                 ERROR("BSL_SAL_Free argument must not branch or fork.");
-                            return ER.second[0]->clone();
+                            return cloneExpr(context_.getExprFactory(), *ER.second[0]);
                         };
 
                         // Expect exactly one argument: the pointer to free.
@@ -1128,7 +1128,7 @@ namespace acslg::analyzer {
                             auto ER = this->evalExpr(e);
                             if (ER.second.size() != 1 || !ER.first.empty())
                                 ERROR("memcpy arguments must not branch or fork.");
-                            return ER.second[0]->clone();
+                            return cloneExpr(context_.getExprFactory(), *ER.second[0]);
                         };
 
                         auto destExpr  = evalNoBranch(destArg);
@@ -1155,7 +1155,7 @@ namespace acslg::analyzer {
                         if (sz == 0)
                             UNIMPLEMENT("memcpy requires a non-zero element size.");
 
-                        auto lengthExpr = countExpr->clone();
+                        auto lengthExpr = cloneExpr(context_.getExprFactory(), *countExpr);
                         bool noCopy     = false;
                         if (auto *lit =
                                 symbolic::dyn_cast<symbolic::detail::LiteralExprNode>(lengthExpr.get().get())) {
@@ -1167,7 +1167,7 @@ namespace acslg::analyzer {
                                     UNIMPLEMENT("memcpy size is not a multiple of element size.");
                                 symbolic::LiteralExpr lengthLiteral{
                                     context_.getExprFactory(), raw / sz};
-                                lengthExpr = lengthLiteral->clone();
+                                lengthExpr = cloneExpr(context_.getExprFactory(), *lengthLiteral);
                             }
                         } else if (sz > 1) {
                             lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
@@ -1175,7 +1175,7 @@ namespace acslg::analyzer {
                         }
 
                         Formulas exprs;
-                        exprs.emplace_back(destExpr->clone());
+                        exprs.emplace_back(cloneExpr(context_.getExprFactory(), *destExpr));
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         if (noCopy)
                             return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -1223,7 +1223,7 @@ namespace acslg::analyzer {
                             auto ER = this->evalExpr(e);
                             if (ER.second.size() != 1 || !ER.first.empty())
                                 ERROR("memset_s arguments must not branch or fork.");
-                            return ER.second[0]->clone();
+                            return cloneExpr(context_.getExprFactory(), *ER.second[0]);
                         };
 
                         auto destExpr  = evalNoBranch(call->getArg(0));
@@ -1257,7 +1257,7 @@ namespace acslg::analyzer {
                         if (sz == 0)
                             UNIMPLEMENT("memset_s requires a non-zero element size.");
 
-                        auto lengthExpr = countExpr->clone();
+                        auto lengthExpr = cloneExpr(context_.getExprFactory(), *countExpr);
                         bool noSet      = false;
                         if (auto *lit =
                                 symbolic::dyn_cast<symbolic::detail::LiteralExprNode>(lengthExpr.get().get())) {
@@ -1269,7 +1269,7 @@ namespace acslg::analyzer {
                                     UNIMPLEMENT("memset_s size is not a multiple of element size.");
                                 symbolic::LiteralExpr lengthLiteral{
                                     context_.getExprFactory(), raw / sz};
-                                lengthExpr = lengthLiteral->clone();
+                                lengthExpr = cloneExpr(context_.getExprFactory(), *lengthLiteral);
                             }
                         } else if (sz > 1) {
                             lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
@@ -1277,7 +1277,7 @@ namespace acslg::analyzer {
                         }
 
                         Formulas exprs;
-                        exprs.emplace_back(destExpr->clone());
+                        exprs.emplace_back(cloneExpr(context_.getExprFactory(), *destExpr));
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         if (noSet)
                             return Path::EvalResult(std::move(empty), std::move(exprs));
