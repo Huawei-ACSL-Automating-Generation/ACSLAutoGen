@@ -245,6 +245,8 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_EQ(indexInfo.indexBound, factory.importExpr(*indexInfo.indexBound));
         EXPECT_EQ(indexInfo.preciseLoopCount, factory.importExpr(*indexInfo.preciseLoopCount));
         EXPECT_EQ(indexInfo.maxLoopCount, factory.importExpr(*indexInfo.maxLoopCount));
+        EXPECT_EQ(indexInfo.indexRealAddr, factory.importAddress(*indexInfo.indexRealAddr));
+        EXPECT_EQ(indexInfo.indexSymbolicAddr, factory.importAddress(*indexInfo.indexSymbolicAddr));
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
         EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));

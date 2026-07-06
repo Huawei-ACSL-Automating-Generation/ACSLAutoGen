@@ -96,9 +96,8 @@ namespace acslg::spec_generator {
         // SetIndexPlugin
         struct IndexInfo {
             utils::not_null<const clang::Expr *> indexExpr;
-            utils::not_null<std::unique_ptr<analyzer::symbolic::Address>>
-                indexRealAddr; // index's sole address on pre-state
-            utils::not_null<std::unique_ptr<analyzer::symbolic::Address>> indexSymbolicAddr;
+            analyzer::symbolic::AddrHandle indexRealAddr; // index's sole address on pre-state
+            analyzer::symbolic::AddrHandle indexSymbolicAddr;
             analyzer::symbolic::ExprHandle indexSymbolicValue; // Varibale or Address
             clang::BinaryOperator::Opcode op;
             analyzer::symbolic::ExprHandle indexBound; // exclusive bound

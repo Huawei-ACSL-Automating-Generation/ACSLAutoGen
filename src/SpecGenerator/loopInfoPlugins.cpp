@@ -727,8 +727,9 @@ namespace acslg::spec_generator {
             auto &factory = symb::ExprFactoryScope::current();
             loopInfo.indexInfo =
                 LoopInfo::IndexInfo{.indexExpr          = std::move(indexExpr.value()),
-                                    .indexRealAddr      = std::move(indexRealAddr.value()),
-                                    .indexSymbolicAddr  = std::move(indexSymbolicAddr.value()),
+                                    .indexRealAddr      = factory.importAddress(*indexRealAddr.value()),
+                                    .indexSymbolicAddr =
+                                        factory.importAddress(*indexSymbolicAddr.value()),
                                     .indexSymbolicValue = factory.importExpr(*indexValue.value()),
                                     .op                 = std::move(opCode.value()),
                                     .indexBound         = factory.importExpr(*boundValue.value()),
