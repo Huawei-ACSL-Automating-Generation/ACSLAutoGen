@@ -702,6 +702,7 @@ namespace acslg::analyzer::symbolic {
         }
 
         LiteralType getLiteralType() const { return type_; }
+        ExprHandle importInto(ExprFactory &factory) const;
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;

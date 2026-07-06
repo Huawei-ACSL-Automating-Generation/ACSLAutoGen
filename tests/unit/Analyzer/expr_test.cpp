@@ -4,6 +4,7 @@
 #include <gmock/gmock.h>
 #include <clang/AST/AST.h>
 #include <clang/AST/Decl.h>
+#include <limits>
 
 #include "ASTExtractor.h"
 #include "Context/context.h"
@@ -1051,6 +1052,20 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactoryScope scope(factory);
         symbolic::Expr facade{*legacy};
         EXPECT_EQ(facade.handle(), imported);
+    }
+
+    TEST(ExprFactoryTest, ImportsLegacyUInt64LiteralWithoutValueNarrowing) {
+        symbolic::ExprFactory factory;
+        const auto large = std::numeric_limits<std::uint64_t>::max();
+        symbolic::detail::LiteralExprNode legacy{large};
+
+        auto imported = factory.importExpr(legacy);
+        auto expected = factory.literal(large);
+
+        EXPECT_EQ(imported, expected);
+        EXPECT_EQ(imported.get().get(), expected.get().get());
+        EXPECT_EQ(imported.cast<symbolic::detail::LiteralExprNode>().getLiteralType(),
+                  symbolic::detail::LiteralExprNode::LiteralType::UInt64);
     }
 
     TEST(ExprFactoryTest, UnknownBuilderReusesUnknownNode) {
