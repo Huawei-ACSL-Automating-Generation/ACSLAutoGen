@@ -68,7 +68,17 @@ namespace acslg::spec_generator {
             auto &factory = symb::ExprFactoryScope::current();
             return factory.cloneExpr(factory.unknown());
         }
+
+        utils::not_null<std::unique_ptr<const symb::SymbolicExpr>> clonePatternExpr(
+            const symb::SymbolicExpr &expr) {
+            auto &factory = symb::ExprFactoryScope::current();
+            return utils::not_null<std::unique_ptr<const symb::SymbolicExpr>>{
+                factory.cloneExpr(factory.importExpr(expr)).into_underlying()};
+        }
     } // namespace
+
+    LoopInfo::Pattern::Pattern(const Pattern &other)
+        : initialValue(clonePatternExpr(*other.initialValue)), step(other.step) {}
 
     /**
      * @brief Deep-assign from another pattern by cloning its symbolic value.
@@ -78,7 +88,7 @@ namespace acslg::spec_generator {
     LoopInfo::Pattern &LoopInfo::Pattern::operator=(const Pattern &other) {
         if (this == &other)
             return *this;
-        initialValue = other.initialValue->clone().into_underlying();
+        initialValue = clonePatternExpr(*other.initialValue);
         step         = other.step;
         return *this;
     }

@@ -53,8 +53,7 @@ namespace acslg::spec_generator {
                     int64_t st)
                 : initialValue(std::move(init)), step(st) {}
             /// @brief Copy-construct with deep-cloned symbolic value.
-            Pattern(const Pattern &other)
-                : initialValue(other.initialValue->clone().into_underlying()), step(other.step) {}
+            Pattern(const Pattern &other);
             Pattern &operator=(const Pattern &other);
             Pattern(Pattern &&other)            = default;
             Pattern &operator=(Pattern &&other) = default;

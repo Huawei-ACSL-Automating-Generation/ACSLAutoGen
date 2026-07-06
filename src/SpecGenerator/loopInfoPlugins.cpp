@@ -31,6 +31,13 @@ namespace acslg::spec_generator {
                 factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
         }
 
+        utils::not_null<std::unique_ptr<const symb::SymbolicExpr>> clonePatternExpr(
+            const symb::SymbolicExpr &expr) {
+            auto &factory = symb::ExprFactoryScope::current();
+            return utils::not_null<std::unique_ptr<const symb::SymbolicExpr>>{
+                factory.cloneExpr(factory.importExpr(expr)).into_underlying()};
+        }
+
         OwnedSymbolicExpr buildMaxLoopCountExpr(const LoopInfo::Pattern &pattern,
                                                 const symb::SymbolicExpr &boundValue,
                                                 bool includeClosedBound) {
@@ -179,8 +186,7 @@ namespace acslg::spec_generator {
                                     entryExpr.value()->toLinearExpr(hashIdMap);
                         diff.all_homogeneous_terms_are_zero()) {
                         auto step = diff.inhomogeneous_term().get_si();
-                        patterns.emplace(
-                            addr, Pattern{entryExpr.value()->clone().into_underlying(), step});
+                        patterns.emplace(addr, Pattern{clonePatternExpr(*entryExpr.value()), step});
                     } else {
                         patterns.emplace(addr, std::nullopt);
                     }
