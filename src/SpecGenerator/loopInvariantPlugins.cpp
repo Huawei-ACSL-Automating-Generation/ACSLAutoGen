@@ -836,7 +836,8 @@ namespace acslg::spec_generator {
             std::unordered_set<size_t> insertedACSL{};
             for (auto &addr : assignedAddrs) {
                 for (auto &path : loopEntry.getPaths()) {
-                    auto concreteAddrExpr = addr.get().getSubstitutedExpr(*path, loopEntryPoint);
+                    auto concreteAddrExpr =
+                        symb::getSubstitutedExprHandle(factory, addr.get(), *path, loopEntryPoint);
                     auto concreteAddr =
                         symb::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
                     if (concreteAddr == nullptr)
@@ -934,6 +935,7 @@ namespace acslg::spec_generator {
             }
 
             auto loopEntryPoint = entryAndCurrentInfo.symbolicLoopEntry->getStartPoint();
+            auto &factory       = symb::ExprFactoryScope::current();
 
             auto isLocal = [&](const symb::Address &addr) {
                 auto root = addr.getFromRoot();
@@ -983,7 +985,8 @@ namespace acslg::spec_generator {
             std::unordered_set<size_t> insertedACSL{};
             for (auto &addr : assignedAddrs) {
                 for (auto &path : loopEntry.getPaths()) {
-                    auto concreteAddrExpr = addr.get().getSubstitutedExpr(*path, loopEntryPoint);
+                    auto concreteAddrExpr =
+                        symb::getSubstitutedExprHandle(factory, addr.get(), *path, loopEntryPoint);
                     auto concreteAddr =
                         symb::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
                     if (concreteAddr == nullptr)
@@ -1615,16 +1618,18 @@ namespace acslg::spec_generator {
             // - Otherwise return nullopt (meaning the initial value may differ across entry paths)
             auto sameValueOnRealEntries = [&](const symb::SymbolicExpr &expr)
                 -> std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> {
-                std::unique_ptr<symb::SymbolicExpr> commonValue{nullptr};
+                std::optional<symb::ExprHandle> commonValue;
                 for (auto &entry : loopEntry.getPaths()) {
-                    auto subedExpr = expr.getSubstitutedExpr(
-                        *entry, loopInfo.entryAndCurrentInfo->loopEntryPoint);
-                    if (commonValue == nullptr)
-                        commonValue = std::move(subedExpr).into_underlying();
-                    else if (*commonValue != *subedExpr)
+                    auto subedExpr = symb::getSubstitutedExprHandle(
+                        factory, expr, *entry, loopInfo.entryAndCurrentInfo->loopEntryPoint);
+                    if (commonValue == std::nullopt)
+                        commonValue = subedExpr;
+                    else if (*commonValue.value() != *subedExpr)
                         return std::nullopt;
                 }
-                return commonValue;
+                if (commonValue == std::nullopt)
+                    return std::nullopt;
+                return factory.cloneExpr(commonValue.value());
             }; // sameValueOnRealEntries ends
 
             symb::HashExprHandleMap hashExprMapForSub{};
