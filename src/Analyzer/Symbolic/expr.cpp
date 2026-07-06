@@ -185,6 +185,150 @@ namespace acslg::analyzer::symbolic {
         return Substituter{factory, hashToExprMap}.run(expr);
     }
 
+    ExprHandle getSubstitutedExprHandle(ExprFactory &factory,
+                                        const SymbolicExpr &expr,
+                                        const Path &pathSubTo,
+                                        const SourcePoint &pointToSub) {
+        ExprFactoryScope scope(factory);
+
+        struct Substituter {
+            ExprFactory &factory;
+            const Path &pathSubTo;
+            const SourcePoint &pointToSub;
+
+            AddrHandle requireAddress(ExprHandle handle) const {
+                if (auto *addr = handle.dyn_cast<const Address>())
+                    return factory.importAddress(*addr);
+                UNREACHABLE();
+            }
+
+            const SymbolAddress &requireRange(ExprHandle handle) const {
+                if (auto *range = handle.dyn_cast<const SymbolAddress>()) {
+                    if (range->getLength() == std::nullopt)
+                        ERROR("Substituted expression should be a *range*");
+                    return *range;
+                }
+                ERROR("Substituted expression should be a *range*");
+            }
+
+            ExprHandle simplified(ExprHandle handle) const {
+                return factory.importExpr(*handle->simplifiedExpr());
+            }
+
+            ExprHandle run(const SymbolicExpr &expr) const {
+                if (auto *literal = dyn_cast<const detail::LiteralExprNode>(&expr))
+                    return literal->importInto(factory);
+                if (isa<UnknownExpr>(&expr))
+                    return factory.unknown();
+                if (auto *rangeIndex = dyn_cast<const SymbolAddress::RangeIndex>(&expr))
+                    return factory.rangeIndex(rangeIndex->getName());
+                if (auto *varAddr = dyn_cast<const VariableAddress>(&expr))
+                    return factory.variableAddress(varAddr->getFrom()).asExpr();
+                if (auto *fieldAddr = dyn_cast<const FieldAddress>(&expr)) {
+                    auto base = requireAddress(run(*fieldAddr->getBaseAddr()));
+                    return factory
+                        .fieldAddress(fieldAddr->getPointeeType(),
+                                      fieldAddr->getDefinition(), base,
+                                      fieldAddr->getFieldIndex())
+                        .asExpr();
+                }
+                if (auto *symbolValue = dyn_cast<const SymbolValue>(&expr)) {
+                    auto fromPoint = symbolValue->getFromPoint();
+                    if (fromPoint && fromPoint.value() != pointToSub)
+                        return factory.importExpr(expr);
+
+                    auto fromAddr = symbolValue->getFromAddr();
+                    if (fromAddr == std::nullopt)
+                        UNREACHABLE();
+                    auto realFromAddr = requireAddress(run(*fromAddr.value()));
+                    if (auto value = pathSubTo.getMemoryState().readHandle(*realFromAddr))
+                        return factory.importExpr(*value.value());
+
+                    return factory.symbolValue(symbolValue->getValType(), realFromAddr,
+                                               pathSubTo.getStartPoint());
+                }
+                if (auto *symbolAddr = dyn_cast<const SymbolAddress>(&expr)) {
+                    auto fromPoint = symbolAddr->getFromPoint();
+                    if (fromPoint && fromPoint.value() != pointToSub)
+                        return factory.importExpr(expr);
+
+                    std::optional<ExprHandle> length;
+                    if (symbolAddr->getLength())
+                        length = factory.importExpr(*symbolAddr->getLength().value());
+
+                    auto fromAddr = symbolAddr->getFromAddr();
+                    if (fromAddr == std::nullopt)
+                        return factory
+                            .symbolAddress(symbolAddr->getPointeeType(), std::nullopt,
+                                           pointToSub, factory.importExpr(*symbolAddr->getOffset()),
+                                           length)
+                            .asExpr();
+
+                    auto realFromAddr = requireAddress(run(*fromAddr.value()));
+                    auto offset       = simplified(run(*symbolAddr->getOffset()));
+                    if (symbolAddr->getLength())
+                        length = simplified(run(*symbolAddr->getLength().value()));
+
+                    if (auto value = pathSubTo.getMemoryState().readHandle(*realFromAddr)) {
+                        auto realAddr = value.value()->tryEvalAsSymbolAddr();
+                        if (realAddr == std::nullopt)
+                            ERROR("This expr should be a `SymbolAddress");
+
+                        Addr concreteAddr{factory, factory.importAddress(*realAddr.value())};
+                        concreteAddr = concreteAddr.withAddedOffset(Expr{factory, offset});
+                        if (length)
+                            concreteAddr = concreteAddr.withLength(Expr{factory, length.value()});
+                        return concreteAddr.asExpr().handle();
+                    }
+
+                    return factory
+                        .symbolAddress(symbolAddr->getPointeeType(), realFromAddr,
+                                       pathSubTo.getStartPoint(), offset, length)
+                        .asExpr();
+                }
+                if (auto *binary = dyn_cast<const BinaryOpExpr>(&expr)) {
+                    return factory.binary(run(*binary->getLeft()), binary->getOperator(),
+                                          run(*binary->getRight()));
+                }
+                if (auto *unary = dyn_cast<const UnaryOpExpr>(&expr))
+                    return factory.unary(unary->getOperator(), run(*unary->getSub()));
+                if (auto *structure = dyn_cast<const Structure>(&expr)) {
+                    auto rebuilt = factory.importExpr(*structure);
+                    for (size_t i = 0; i < structure->getNumFields(); ++i)
+                        rebuilt = factory.withField(rebuilt, i,
+                                                    run(*structure->getFieldValue(i)));
+                    return rebuilt;
+                }
+                if (auto *sum = dyn_cast<const SumOverRange>(&expr)) {
+                    if (sum->getFromPoint().value() != pointToSub)
+                        return factory.importExpr(expr);
+                    return makeSumOverRangeHandle(factory, requireRange(run(sum->getRange())),
+                                                  sum->getIndexName(),
+                                                  pathSubTo.getStartPoint());
+                }
+                if (auto *quantifier = dyn_cast<const QuantifierOverRange>(&expr)) {
+                    return makeQuantifierOverRangeHandle(
+                        factory, requireRange(run(quantifier->getRange())),
+                        quantifier->getIndexName(), quantifier->getQuantifier(),
+                        *run(quantifier->getPredicate()));
+                }
+                if (auto *maxMin = dyn_cast<const MaxMinOverRange>(&expr)) {
+                    auto range = requireRange(run(maxMin->getRange()));
+                    auto body  = run(maxMin->getExpr());
+                    if (maxMin->getFromPoint().value() == pointToSub)
+                        TODO();
+                    return makeMaxMinOverRangeHandle(factory, range, maxMin->getIndexName(),
+                                                     maxMin->getExtremum(), body,
+                                                     maxMin->getFromPoint().value());
+                }
+
+                ERROR("Unsupported SymbolicExpr node in handle path substitution.");
+            }
+        };
+
+        return Substituter{factory, pathSubTo, pointToSub}.run(expr);
+    }
+
     ExprHandle getRangeIndexSubstitutedHandle(ExprFactory &factory,
                                               const SymbolicExpr &expr,
                                               const SymbolAddrBaseInfo &rangeBase,

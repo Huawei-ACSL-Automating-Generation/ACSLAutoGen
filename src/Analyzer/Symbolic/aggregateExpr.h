@@ -58,10 +58,6 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &,
             const SourcePoint &) const override;
-        /**
-         * @brief Replace the range index with a concrete expression when range is instantiated.
-         */
-
       private:
         utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &,
                                                              std::unordered_set<SourcePoint> &,
@@ -160,10 +156,6 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
-        /**
-         * @brief Replace the range index with a concrete expression.
-         */
-
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 1; }
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr(

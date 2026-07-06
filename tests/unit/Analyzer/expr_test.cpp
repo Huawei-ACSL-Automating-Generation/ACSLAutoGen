@@ -248,6 +248,21 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(factory.importExpr(*result), factory.literal(uint64_t{42}));
     }
 
+    TEST_F(SubstituteTest, PathSubstitutionHandleReplacesSymbolValueThroughFactory) {
+        auto var0Addr = makeVariableAddr(0);
+        mm.write(var0Addr, makeConstU64(42));
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto point = getSourcePoint(0);
+        auto varNode = makeSymbolValue(0, point);
+        auto result =
+            symbolic::getSubstitutedExprHandle(factory, *varNode, *path, point);
+
+        EXPECT_EQ(result.get().get(), factory.literal(uint64_t{42}).get().get());
+    }
+
     TEST_F(SubstituteTest, VarWithDifferentFromIsKeptUnchanged) {
         auto var0Addr = makeVariableAddr(0);
         mm.write(var0Addr, makeConstU64(7));
@@ -277,6 +292,26 @@ namespace acslg::test::unit::analyzer {
 
         auto expected = makeAdd(makeConstU64(1), makeConstU64(2));
         ASSERT_EQ(*expr->getSubstitutedExpr(*path, point), *expected);
+    }
+
+    TEST_F(SubstituteTest, PathSubstitutionHandleRebuildsCompositeExpression) {
+        mm.write(makeVariableAddr(1), makeConstU64(1));
+        mm.write(makeVariableAddr(2), makeConstU64(2));
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto point = getSourcePoint(0);
+        auto aVar = makeSymbolValue(1, point);
+        auto bVar = makeSymbolValue(2, point);
+        auto expr = makeAdd(std::move(aVar), std::move(bVar));
+
+        auto result = symbolic::getSubstitutedExprHandle(factory, *expr, *path, point);
+        auto expected = factory.binary(factory.literal(uint64_t{1}),
+                                       symbolic::BinaryOpExpr::Operator::Add,
+                                       factory.literal(uint64_t{2}));
+
+        EXPECT_EQ(result.get().get(), expected.get().get());
     }
 
     TEST_F(SubstituteTest, SymbolAddrResolvedBaseAndOffsetApplied) {

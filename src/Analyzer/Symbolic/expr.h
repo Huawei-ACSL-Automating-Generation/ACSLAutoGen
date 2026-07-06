@@ -596,6 +596,10 @@ namespace acslg::analyzer::symbolic {
     ExprHandle getSubstitutedValueHandle(ExprFactory &factory,
                                          const SymbolicExpr &expr,
                                          const HashExprHandleMap &hashToExprMap);
+    ExprHandle getSubstitutedExprHandle(ExprFactory &factory,
+                                        const SymbolicExpr &expr,
+                                        const Path &pathSubTo,
+                                        const SourcePoint &pointToSub);
     ExprHandle getRangeIndexSubstitutedHandle(ExprFactory &factory,
                                               const SymbolicExpr &expr,
                                               const SymbolAddrBaseInfo &rangeBase,
