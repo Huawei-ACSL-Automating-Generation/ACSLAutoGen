@@ -323,55 +323,37 @@ namespace acslg::spec_generator {
             // - i > n  ==> i >= n+1
             // - i != n can also be normalized into a one-sided inequality when step direction is
             //   known (as a coarse "out-of-range" condition)
-            std::unique_ptr<symb::SymbolicExpr> loopCond;
+            auto &factory = symb::ExprFactoryScope::current();
+            symb::Expr indexValue{factory, indexInfo.indexSymbolicValue};
+            symb::Expr indexBound{factory, indexInfo.indexBound};
+            std::optional<symb::Expr> loopCond;
             switch (indexInfo.op) {
                 using enum clang::BinaryOperatorKind;
-                using enum symb::BinaryOpExpr::Operator;
                 case BO_LT: {
                     // Normalize strict inequalities to non-strict to simplify invariant printing.
-                    auto newRHS =
-                        buildBinary(cloneExpr(*indexInfo.indexBound), Subtract, buildLiteral(1));
-                    loopCond = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), LessEqual,
-                                           std::move(newRHS))
-                                   .into_underlying();
+                    loopCond = indexValue.lessEqual(indexBound - symb::LiteralExpr{factory, 1});
                     break;
                 }
                 case BO_GT: {
-                    auto newRHS =
-                        buildBinary(cloneExpr(*indexInfo.indexBound), Add, buildLiteral(1));
-                    loopCond = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), GreaterEqual,
-                                           std::move(newRHS))
-                                   .into_underlying();
+                    loopCond = indexValue.greaterEqual(indexBound + symb::LiteralExpr{factory, 1});
                     break;
                 }
                 case BO_LE:
-                    loopCond =
-                        buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), LessEqual,
-                                    cloneExpr(*indexInfo.indexBound))
-                            .into_underlying();
+                    loopCond = indexValue.lessEqual(indexBound);
                     break;
                 case BO_GE:
-                    loopCond =
-                        buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), GreaterEqual,
-                                    cloneExpr(*indexInfo.indexBound))
-                            .into_underlying();
+                    loopCond = indexValue.greaterEqual(indexBound);
                     break;
                 case BO_NE: {
                     // Handling "i != bound" depends on the step direction:
                     // - step < 0 (decreasing): i != bound is normalized as i >= bound+1
                     // - step > 0 (increasing): i != bound is normalized as i <= bound-1
                     if (indexInfo.indexPattern.step < 0) {
-                        auto rhsPlus1 =
-                            buildBinary(cloneExpr(*indexInfo.indexBound), Add, buildLiteral(1));
-                        loopCond = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue),
-                                               GreaterEqual, std::move(rhsPlus1))
-                                       .into_underlying();
+                        loopCond =
+                            indexValue.greaterEqual(indexBound + symb::LiteralExpr{factory, 1});
                     } else if (indexInfo.indexPattern.step > 0) {
-                        auto rhsMinus1 = buildBinary(
-                            cloneExpr(*indexInfo.indexBound), Subtract, buildLiteral(1));
-                        loopCond = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), LessEqual,
-                                               std::move(rhsMinus1))
-                                       .into_underlying();
+                        loopCond =
+                            indexValue.lessEqual(indexBound - symb::LiteralExpr{factory, 1});
                     } else {
                         UNREACHABLE();
                     }
@@ -417,8 +399,9 @@ namespace acslg::spec_generator {
                 !loopHasArrayOrPointer(loopInfo); // collapse branches for array/pointer loops
 
             auto [spec, normalPostInfos, interruptPostInfos] =
-                analyzer::buildLoopInvariant(std::move(loopCond), *symbolEntry, *loopCurrent,
-                                             entryAndCurrentInfo.inactivePaths, generateBranches);
+                analyzer::buildLoopInvariant(
+                    factory.cloneExpr(loopCond.value().handle()).into_underlying(), *symbolEntry,
+                    *loopCurrent, entryAndCurrentInfo.inactivePaths, generateBranches);
 
             auto collectPathConds = [](analyzer::PathConditionList conds) {
                 analyzer::PathConditions collected;
