@@ -420,17 +420,17 @@ namespace acslg::spec_generator {
                 analyzer::buildLoopInvariant(std::move(loopCond), *symbolEntry, *loopCurrent,
                                              entryAndCurrentInfo.inactivePaths, generateBranches);
 
-            auto importPathConds = [](auto conds) {
-                analyzer::PathConditions imported;
-                imported.reserve(conds.size());
-                for (const auto &cond : conds)
-                    imported.emplace(detail::importPostExprThroughCurrentFactory(*cond));
-                return imported;
+            auto collectPathConds = [](analyzer::PathConditionList conds) {
+                analyzer::PathConditions collected;
+                collected.reserve(conds.size());
+                for (auto cond : conds)
+                    collected.emplace(cond);
+                return collected;
             };
             std::vector<PostPSInfo> normalPostPSInfos;
             for (auto &postInfo : normalPostInfos)
                 normalPostPSInfos.emplace_back(std::move(postInfo.first),
-                                               importPathConds(std::move(postInfo.second)),
+                                               collectPathConds(std::move(postInfo.second)),
                                                analyzer::Path::PathState::Step, std::nullopt);
 
             std::vector<std::vector<PostPSInfo>> interruptPathsPostPSInfos;
@@ -444,12 +444,12 @@ namespace acslg::spec_generator {
                     if (interruptPath->getPathState() == analyzer::Path::PathState::Return)
                         infos.emplace_back(
                             std::move(postInfo.first),
-                            importPathConds(std::move(postInfo.second)),
+                            collectPathConds(std::move(postInfo.second)),
                             analyzer::Path::PathState::Return,
                             detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                     else
                         infos.emplace_back(std::move(postInfo.first),
-                                           importPathConds(std::move(postInfo.second)),
+                                           collectPathConds(std::move(postInfo.second)),
                                            interruptPath->getPathState(), std::nullopt);
                 }
                 interruptPathsPostPSInfos.push_back(std::move(infos));
@@ -539,17 +539,17 @@ namespace acslg::spec_generator {
                 analyzer::buildLoopInvariant(std::move(loopCond).into_underlying(), *symbolEntry,
                                              *loopCurrent, entryAndCurrentInfo.inactivePaths);
 
-            auto importPathConds = [](auto conds) {
-                analyzer::PathConditions imported;
-                imported.reserve(conds.size());
-                for (const auto &cond : conds)
-                    imported.emplace(detail::importPostExprThroughCurrentFactory(*cond));
-                return imported;
+            auto collectPathConds = [](analyzer::PathConditionList conds) {
+                analyzer::PathConditions collected;
+                collected.reserve(conds.size());
+                for (auto cond : conds)
+                    collected.emplace(cond);
+                return collected;
             };
             std::vector<PostPSInfo> normalPostPSInfos;
             for (auto &postInfo : normalPostInfos)
                 normalPostPSInfos.emplace_back(std::move(postInfo.first),
-                                               importPathConds(std::move(postInfo.second)),
+                                               collectPathConds(std::move(postInfo.second)),
                                                analyzer::Path::PathState::Step, std::nullopt);
 
             std::vector<std::vector<PostPSInfo>> interruptPathsPostPSInfos;
@@ -563,12 +563,12 @@ namespace acslg::spec_generator {
                     if (interruptPath->getPathState() == analyzer::Path::PathState::Return)
                         infos.emplace_back(
                             std::move(postInfo.first),
-                            importPathConds(std::move(postInfo.second)),
+                            collectPathConds(std::move(postInfo.second)),
                             analyzer::Path::PathState::Return,
                             detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                     else
                         infos.emplace_back(std::move(postInfo.first),
-                                           importPathConds(std::move(postInfo.second)),
+                                           collectPathConds(std::move(postInfo.second)),
                                            interruptPath->getPathState(), std::nullopt);
                 }
                 interruptPathsPostPSInfos.push_back(std::move(infos));

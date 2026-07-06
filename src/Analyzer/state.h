@@ -74,6 +74,7 @@ namespace acslg::analyzer {
     };
     using PathConditions =
         std::unordered_set<symbolic::ExprHandle, PathConditionHash, PathConditionEqual>;
+    using PathConditionList = std::vector<symbolic::ExprHandle>;
     using TransRel = std::tuple<int, int, Parma_Polyhedra_Library::C_Polyhedron *>;
     using InitRel  = std::pair<int, Parma_Polyhedra_Library::C_Polyhedron *>;
 
@@ -1032,7 +1033,7 @@ namespace acslg::analyzer {
         std::optional<std::string> invs;
         using MemoryMapAndPathConds = std::pair<
             symbolic::AddressBoxMap<symbolic::ExprHandle>,
-            std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>;
+            PathConditionList>;
         std::vector<MemoryMapAndPathConds> normalPostStates;
         std::vector<std::vector<MemoryMapAndPathConds>> interruptPostStates;
     };

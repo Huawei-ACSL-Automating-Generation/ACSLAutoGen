@@ -1205,7 +1205,7 @@ namespace acslg::analyzer {
             }
 
             symbolic::AddressBoxMap<symbolic::ExprHandle> newVars;
-            std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> conds;
+            PathConditionList conds;
 
             for (size_t i = 0; i < half; ++i) {
                 auto varDecl = vm.varDecls.at(i);
@@ -1277,7 +1277,7 @@ namespace acslg::analyzer {
 
                 auto cond = buildBinary(std::move(lhs.value()), op, buildLiteral(0));
 
-                conds.push_back(std::move(cond));
+                conds.push_back(factory.importExpr(*cond));
             }
             return AddrValueAndCondsPair{std::move(newVars), std::move(conds)};
         }
