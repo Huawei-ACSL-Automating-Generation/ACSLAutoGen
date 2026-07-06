@@ -709,6 +709,7 @@ namespace acslg::analyzer {
          * @param cond [in] Constraint expression to insert.
          */
         void insertPathCondition(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> cond);
+        void insertPathCondition(symbolic::ExprHandle cond);
 
         void setReturnExpr(
             std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> expr) {

@@ -30,21 +30,22 @@ namespace acslg::test::unit::spec_generator {
                                         factory.literal(int64_t{4}));
 
         PostPIInfo piInfo;
-        piInfo.pathConds.push_back(factory.cloneExpr(condHandle));
+        piInfo.pathConds.emplace(condHandle);
 
         PostPIInfo copiedPI{piInfo};
         ASSERT_EQ(copiedPI.pathConds.size(), 1);
-        EXPECT_EQ(factory.importExpr(*copiedPI.pathConds.front()), condHandle);
-        EXPECT_NE(copiedPI.pathConds.front().get(), piInfo.pathConds.front().get());
+        EXPECT_EQ(*copiedPI.pathConds.begin(), condHandle);
+        EXPECT_EQ(copiedPI.pathConds.begin()->get(), condHandle.get());
 
-        std::vector<not_null<std::unique_ptr<SymbolicExpr>>> pathConds;
-        pathConds.push_back(factory.cloneExpr(condHandle));
+        PathConditions pathConds;
+        pathConds.emplace(condHandle);
         PostPSInfo psInfo({}, std::move(pathConds), Path::PathState::Return,
                           factory.cloneExpr(retHandle));
 
         PostPSInfo copiedPS{psInfo};
         ASSERT_EQ(copiedPS.pathConds.size(), 1);
-        EXPECT_EQ(factory.importExpr(*copiedPS.pathConds.front()), condHandle);
+        EXPECT_EQ(*copiedPS.pathConds.begin(), condHandle);
+        EXPECT_EQ(copiedPS.pathConds.begin()->get(), condHandle.get());
         ASSERT_TRUE(copiedPS.returnExpr);
         EXPECT_EQ(factory.importExpr(*copiedPS.returnExpr.value()), retHandle);
     }

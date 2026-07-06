@@ -310,19 +310,11 @@ namespace acslg::spec_generator {
                                                buildUnknown().into_underlying());
             }
 
-            std::vector<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> intersected;
+            analyzer::PathConditions intersected;
             intersected.reserve(std::min(lhs.pathConds.size(), rhs.pathConds.size()));
-            for (auto &cond : lhs.pathConds) {
-                bool found = false;
-                for (const auto &rcond : rhs.pathConds) {
-                    if (exprEqual(*cond, *rcond)) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (found)
-                    intersected.push_back(std::move(cond));
-            }
+            for (const auto &cond : lhs.pathConds)
+                if (rhs.pathConds.find(cond) != rhs.pathConds.end())
+                    intersected.emplace(cond);
             lhs.pathConds = std::move(intersected);
 
             if (lhs.pathState == analyzer::Path::PathState::Return) {
@@ -370,11 +362,12 @@ namespace acslg::spec_generator {
                 toUpdate.memoryMap.insert_or_assign(*subedAddr, std::move(subedValue));
             }
 
-            for (auto &cond : info.pathConds) {
+            for (const auto &cond : info.pathConds) {
                 // Substitute conditions so they refer to the current path's viewpoint of the loop
                 // entry.
                 auto subedConds = cond->getSubstitutedExpr(currentPath, loopEntryPoint);
-                toUpdate.pathConds.push_back(std::move(subedConds));
+                toUpdate.pathConds.emplace(
+                    detail::importPostExprThroughCurrentFactory(*subedConds));
                 // todo: may insert for each unmodified position:
                 // Symbol(with fromPoint_ = afterLoop) == the current value.
             }
@@ -611,8 +604,8 @@ namespace acslg::spec_generator {
                     postPath->setPathState(postBranchInfo.pathState);
                     postPath->setReturnExpr(std::move(postBranchInfo.returnExpr));
                     // Reapply substituted path conditions produced by plugins.
-                    for (auto &pathCond : postBranchInfo.pathConds)
-                        postPath->insertPathCondition(std::move(pathCond));
+                    for (auto pathCond : postBranchInfo.pathConds)
+                        postPath->insertPathCondition(pathCond);
                     postState->insertPath(std::move(postPath));
                 }
             };

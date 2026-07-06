@@ -27,6 +27,11 @@ namespace acslg::spec_generator {
             auto &factory = analyzer::symbolic::ExprFactoryScope::current();
             return factory.importAndCloneExpr(expr);
         }
+
+        inline analyzer::symbolic::ExprHandle importPostExprThroughCurrentFactory(
+            const analyzer::symbolic::SymbolicExpr &expr) {
+            return analyzer::symbolic::ExprFactoryScope::current().importExpr(expr);
+        }
     } // namespace detail
 
     /**
@@ -269,12 +274,12 @@ namespace acslg::spec_generator {
         analyzer::symbolic::AddressBoxMap<
             utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
             memoryMap;
-        std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pathConds;
+        analyzer::PathConditions pathConds;
 
         PostPIInfo(
             analyzer::symbolic::AddressBoxMap<
                 utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
-            std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pcs)
+            analyzer::PathConditions pcs)
             : memoryMap(std::move(mem)), pathConds(std::move(pcs)) {}
 
         PostPIInfo(const PostPIInfo &other) {
@@ -286,10 +291,8 @@ namespace acslg::spec_generator {
             }
 
             pathConds.reserve(other.pathConds.size());
-            for (const auto &exprp : other.pathConds) {
-                auto cloned = detail::copyPostExprThroughCurrentFactory(*exprp);
-                pathConds.push_back(utils::not_null{std::move(cloned)});
-            }
+            for (const auto &expr : other.pathConds)
+                pathConds.emplace(detail::importPostExprThroughCurrentFactory(*expr));
         }
 
         PostPIInfo()                       = default;
@@ -322,14 +325,14 @@ namespace acslg::spec_generator {
         analyzer::symbolic::AddressBoxMap<
             utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
             memoryMap;
-        std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pathConds;
+        analyzer::PathConditions pathConds;
         analyzer::Path::PathState pathState;
         std::optional<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> returnExpr;
 
         PostPSInfo(
             analyzer::symbolic::AddressBoxMap<
                 utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
-            std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pcs,
+            analyzer::PathConditions pcs,
             analyzer::Path::PathState ps,
             std::optional<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> re)
             : memoryMap(std::move(mem)), pathConds(std::move(pcs)), pathState(ps),
@@ -344,10 +347,8 @@ namespace acslg::spec_generator {
             }
 
             pathConds.reserve(other.pathConds.size());
-            for (const auto &expr : other.pathConds) {
-                auto cloned = detail::copyPostExprThroughCurrentFactory(*expr);
-                pathConds.push_back(utils::not_null{std::move(cloned)});
-            }
+            for (const auto &expr : other.pathConds)
+                pathConds.emplace(detail::importPostExprThroughCurrentFactory(*expr));
 
             if (other.returnExpr)
                 returnExpr = detail::copyPostExprThroughCurrentFactory(*other.returnExpr.value());

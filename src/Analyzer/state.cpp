@@ -501,6 +501,10 @@ namespace acslg::analyzer {
         pathConditions_.emplace(context_.getExprFactory().importExpr(*cond));
     }
 
+    void Path::insertPathCondition(symbolic::ExprHandle cond) {
+        pathConditions_.emplace(context_.getExprFactory().importExpr(*cond));
+    }
+
     /**
      * @brief Create a deep copy of the path, duplicating memory and constraints.
      * @return Newly allocated clone.
