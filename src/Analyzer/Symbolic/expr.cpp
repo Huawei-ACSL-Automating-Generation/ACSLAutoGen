@@ -212,7 +212,7 @@ namespace acslg::analyzer::symbolic {
             }
 
             ExprHandle simplified(ExprHandle handle) const {
-                return factory.importExpr(*handle->simplifiedExpr());
+                return simplifiedExprHandle(factory, *handle);
             }
 
             ExprHandle run(const SymbolicExpr &expr) const {
@@ -677,10 +677,9 @@ namespace acslg::analyzer::symbolic {
     ExprHandle ExprFactory::simplifiedBinary(ExprHandle left,
                                              BinaryOpExpr::Operator op,
                                              ExprHandle right) {
-        auto simplified = std::make_unique<detail::BinaryOpExprNode>(
-                              cloneExpr(left), op, cloneExpr(right))
-                              ->simplifiedExpr();
-        return importExpr(*simplified);
+        auto binary =
+            std::make_unique<detail::BinaryOpExprNode>(cloneExpr(left), op, cloneExpr(right));
+        return simplifiedExprHandle(*this, *binary);
     }
 
     AddrHandle ExprFactory::variableAddress(utils::not_null<const clang::VarDecl *> from) {
@@ -2109,7 +2108,9 @@ namespace acslg::analyzer::symbolic {
 
         // compare offset
         // todo: Need a `offsetEqual`, here is not correct now.
-        if (*offset_->simplifiedExpr() != *other->getOffset()->simplifiedExpr()) {
+        auto &factory = ExprFactoryScope::current();
+        if (*simplifiedExprHandle(factory, *offset_) !=
+            *simplifiedExprHandle(factory, *other->getOffset())) {
             return false;
         }
 
