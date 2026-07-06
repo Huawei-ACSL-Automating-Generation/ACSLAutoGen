@@ -499,7 +499,7 @@ namespace acslg::analyzer {
                 }
             }
         }
-        memoryState_.write(addr, context_.getExprFactory().cloneExpr(imported));
+        memoryState_.write(addr, imported);
     }
 
     /**
@@ -1993,11 +1993,18 @@ namespace acslg::analyzer {
 
     void MemoryModel::write(const symbolic::Address &addr,
                             utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> value) {
+        writeImported(addr, importValue(*value));
+    }
+
+    void MemoryModel::write(const symbolic::Address &addr, symbolic::ExprHandle value) {
+        writeImported(addr, factory().importExpr(*value));
+    }
+
+    void MemoryModel::writeImported(const symbolic::Address &addr, StoredValue valueHandle) {
         if (auto varAddr = symbolic::dyn_cast<const symbolic::VariableAddress>(&addr)) {
-            memoryMap_variableAddr_.insert_or_assign(*varAddr, importValue(*value));
+            memoryMap_variableAddr_.insert_or_assign(*varAddr, valueHandle);
             return;
         } else if (auto symbolAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
-            auto valueHandle = importValue(*value);
             auto baseInfo = symbolAddr->getBaseInfo();
 
             auto constOffset = symbolAddr->getOffset()->tryEvalAsConstant();
@@ -2064,7 +2071,7 @@ namespace acslg::analyzer {
             auto &index    = fieldAddr->getFieldIndex();
             if (fieldAddr->getDefinition() &&
                 fieldAddr->getDefinition()->getNameAsString() == "BigNum" && index == 4) {
-                DEBUG("write BigNum->data with: " << value->dump());
+                DEBUG("write BigNum->data with: " << valueHandle->dump());
             }
             auto baseValue = read(*baseAddr);
             if (baseValue == std::nullopt)
@@ -2072,7 +2079,7 @@ namespace acslg::analyzer {
             auto baseSt = symbolic::dyn_cast<symbolic::Structure>(baseValue.value().get().get());
             if (baseSt == nullptr)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
-            auto updated = baseSt->withFieldValue(index, std::move(value));
+            auto updated = baseSt->withFieldValue(index, factory().cloneExpr(valueHandle));
             std::unique_ptr<symbolic::SymbolicExpr> updatedExpr =
                 std::move(updated).into_underlying();
             write(*baseAddr, utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>{

@@ -128,6 +128,7 @@ namespace acslg::analyzer {
          */
         void write(const symbolic::Address &address,
                    utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> value);
+        void write(const symbolic::Address &address, symbolic::ExprHandle value);
 
         /**
          * @brief Checks whether a given address is contained in the memory model.
@@ -248,6 +249,7 @@ namespace acslg::analyzer {
         symbolic::ExprFactory &factory() const { return *factory_; }
         StoredValue importValue(const symbolic::SymbolicExpr &value);
         StoredValue copyStoredValueFrom(const MemoryModel &other, StoredValue value);
+        void writeImported(const symbolic::Address &address, StoredValue value);
 
         symbolic::ExprFactory *factory_;
     };

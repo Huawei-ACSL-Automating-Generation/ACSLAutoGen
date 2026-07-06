@@ -321,6 +321,8 @@ namespace acslg::test::unit::analyzer {
         auto expected = makeSymbolValue(42);
         mm.write(makeVariableAddr(1), cloneExpr(*expected));
         mm.write(makeVariableAddr(2), cloneExpr(*expected));
+        auto expectedHandle = symbolic::ExprFactoryScope::current().importExpr(*expected);
+        mm.write(makeVariableAddr(3), expectedHandle);
 
         std::vector<const symbolic::SymbolicExpr *> flatValues;
         for (auto &&[addr, value] : mm.flat()) {
@@ -328,8 +330,9 @@ namespace acslg::test::unit::analyzer {
                 flatValues.push_back(value.get());
         }
 
-        ASSERT_EQ(flatValues.size(), 2u);
+        ASSERT_EQ(flatValues.size(), 3u);
         EXPECT_EQ(flatValues[0], flatValues[1]);
+        EXPECT_EQ(flatValues[0], flatValues[2]);
 
         auto readBack = mm.read(makeVariableAddr(1));
         ASSERT_TRUE(readBack);
