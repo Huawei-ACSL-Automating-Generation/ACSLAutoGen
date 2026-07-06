@@ -468,17 +468,6 @@ namespace acslg::analyzer::symbolic {
             return ExprFactoryScope::current().importAndCloneExpr(*expr);
         }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildFieldAddress(
-            clang::QualType pointeeType,
-            const clang::RecordDecl *record,
-            const Address &base,
-            size_t fieldIndex) {
-            auto &factory = ExprFactoryScope::current();
-            auto fieldAddr = Addr{factory, factory.importAddress(base)}.field(
-                pointeeType, record, fieldIndex);
-            return factory.cloneExpr(fieldAddr.asExpr().handle());
-        }
-
         utils::not_null<std::unique_ptr<SymbolicExpr>> rebuildSymbolValue(
             SymbolicExpr::Type varType,
             const Address &from,
@@ -1927,7 +1916,11 @@ namespace acslg::analyzer::symbolic {
         auto realBaseAddr = dyn_cast<const Address>(subedExpr.get().get());
         if (realBaseAddr == nullptr)
             UNREACHABLE();
-        return rebuildFieldAddress(pointeeType_, definition_, *realBaseAddr, fieldIndex_);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+            factory.fieldAddress(pointeeType_, definition_,
+                                 factory.importAddress(*realBaseAddr), fieldIndex_)
+                .asExpr());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getSubstitutedExpr(
@@ -2031,7 +2024,11 @@ namespace acslg::analyzer::symbolic {
         auto realBaseAddr = dyn_cast<const Address>(subedExpr.get().get());
         if (realBaseAddr == nullptr)
             UNREACHABLE();
-        return rebuildFieldAddress(pointeeType_, definition_, *realBaseAddr, fieldIndex_);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+            factory.fieldAddress(pointeeType_, definition_,
+                                 factory.importAddress(*realBaseAddr), fieldIndex_)
+                .asExpr());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getRangeIndexSubstituted(
@@ -2136,7 +2133,11 @@ namespace acslg::analyzer::symbolic {
         auto realBaseAddr = dyn_cast<const Address>(subedExpr.get().get());
         if (realBaseAddr == nullptr)
             UNREACHABLE();
-        return rebuildFieldAddress(pointeeType_, definition_, *realBaseAddr, fieldIndex_);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(
+            factory.fieldAddress(pointeeType_, definition_,
+                                 factory.importAddress(*realBaseAddr), fieldIndex_)
+                .asExpr());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getSubstitutedValueExpr(

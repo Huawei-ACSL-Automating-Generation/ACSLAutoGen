@@ -2145,6 +2145,21 @@ namespace acslg::test::unit::analyzer {
         auto substitutedField =
             fieldClone->getRangeIndexSubstituted(rangeBase, *index.get());
         EXPECT_EQ(factory.importExpr(*substitutedField), fieldAddr.asExpr());
+
+        auto indexedStructAddr = factory.symbolAddress(
+            s->getType(), factory.variableAddress(s), point, rangeIndex, rangeIndex);
+        auto indexedFieldAddr =
+            factory.fieldAddress(firstField->getType(), record, indexedStructAddr, 0);
+        auto indexedFieldClone = symbolic::cloneFieldAddress(indexedFieldAddr);
+        auto indexedRangeBase =
+            indexedStructAddr.cast<symbolic::SymbolAddress>().getBaseInfo();
+        auto substitutedIndexedField =
+            indexedFieldClone->getRangeIndexSubstituted(indexedRangeBase, *index.get());
+        auto expectedStructAddr = factory.symbolAddress(
+            s->getType(), factory.variableAddress(s), point, index, index);
+        EXPECT_EQ(factory.importExpr(*substitutedIndexedField),
+                  factory.fieldAddress(firstField->getType(), record, expectedStructAddr, 0)
+                      .asExpr());
     }
 
     TEST(ExprFactoryTest, ScopedTryEvalSymbolAddressImportsThroughFactory) {
