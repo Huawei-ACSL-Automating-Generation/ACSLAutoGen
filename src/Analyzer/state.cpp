@@ -90,12 +90,11 @@ namespace acslg::analyzer {
                     return rhs;
                 if (!rhs)
                     return lhs;
-                return factory
-                    .binary(factory.importExpr(*lhs),
-                            symbolic::BinaryOpExpr::Operator::LogicalAnd,
-                            factory.importExpr(*rhs))
-                    ->clone()
-                    .into_underlying();
+                auto rebuilt =
+                    factory.binary(factory.importExpr(*lhs),
+                                   symbolic::BinaryOpExpr::Operator::LogicalAnd,
+                                   factory.importExpr(*rhs));
+                return factory.cloneExpr(rebuilt).into_underlying();
             }
 
             if (containsLocalVar(expr, locals))
@@ -2754,7 +2753,7 @@ namespace acslg::analyzer {
                                                factory.importExpr(*lhs.second[i])};
                         symbolic::Expr rhsExpr{factory,
                                                factory.importExpr(*rhs.second[j])};
-                        outExprs.emplace_back(lhsExpr.binary(op, rhsExpr)->clone());
+                        outExprs.emplace_back(cloneExpr(factory, *lhsExpr.binary(op, rhsExpr)));
 
                         if (i != 0 || j != 0)
                             outPaths.emplace_back(std::move(rhs.first[j - 1]));
@@ -3115,14 +3114,14 @@ namespace acslg::analyzer {
                 symbolic::Expr caseExpr{factory, factory.importExpr(*caseSymExpr)};
                 auto condExprEq = symExpr.equalTo(caseExpr);
                 for (auto &p : eqState->paths_)
-                    p->insertPathCondition(condExprEq->clone());
+                    p->insertPathCondition(cloneExpr(factory, *condExprEq));
 
                 for (auto *s : stmts)
                     eqState->step(s);
 
                 auto condExprNe = symExpr.notEqualTo(caseExpr);
                 for (auto &p : current->paths_)
-                    p->insertPathCondition(condExprNe->clone());
+                    p->insertPathCondition(cloneExpr(factory, *condExprNe));
 
                 if (eqState->isInactive()) {
                     finalStates.push_back(std::move(eqState));
