@@ -495,8 +495,7 @@ namespace acslg::analyzer::symbolic {
         UnaryOpExpr::Operator op,
         utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
         auto &factory = ExprFactoryScope::current();
-        Expr operand{factory, factory.importExpr(*expr)};
-        return factory.cloneExpr(operand.unary(op).handle());
+        return factory.cloneExpr(factory.unary(op, factory.importExpr(*expr)));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeBinaryExpr(
@@ -504,9 +503,8 @@ namespace acslg::analyzer::symbolic {
         BinaryOpExpr::Operator op,
         utils::not_null<std::unique_ptr<SymbolicExpr>> rhs) {
         auto &factory = ExprFactoryScope::current();
-        Expr lhsExpr{factory, factory.importExpr(*lhs)};
-        Expr rhsExpr{factory, factory.importExpr(*rhs)};
-        return factory.cloneExpr(lhsExpr.binary(op, rhsExpr).handle());
+        return factory.cloneExpr(
+            factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeRangeIndexExpr(std::string_view name) {
@@ -522,7 +520,8 @@ namespace acslg::analyzer::symbolic {
                                                  std::unique_ptr<Address> from,
                                                  SourcePoint fromPoint) {
         Addr fromAddr{factory, factory.importAddress(*from)};
-        return cloneSymbolValue(Expr::symbolValue(varType, fromAddr, std::move(fromPoint)).handle());
+        return cloneSymbolValue(
+            factory.symbolValue(varType, fromAddr.handle(), std::move(fromPoint)));
     }
 
     std::unique_ptr<SymbolAddress> cloneSymbolAddress(AddrHandle address) {
