@@ -100,16 +100,10 @@ namespace acslg::spec_generator {
             return symb::SymbolAddress(rebuilt.template cast<symb::SymbolAddress>());
         }
 
-        using OwnedSymbolicExpr = utils::not_null<std::unique_ptr<symb::SymbolicExpr>>;
         using symb::cloneSymbolAddress;
 
         symb::ExprHandle unknownHandle() {
             return symb::Expr::unknown().handle();
-        }
-
-        OwnedSymbolicExpr cloneExpr(const symb::SymbolicExpr &expr) {
-            auto &factory = symb::ExprFactoryScope::current();
-            return factory.importAndCloneExpr(expr);
         }
 
         bool stmtHasNonAffineOps(const clang::Stmt *stmt) {
@@ -1752,7 +1746,7 @@ namespace acslg::spec_generator {
                 if (indexStep > 0) {
                     auto leftBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
                     if (leftBound == std::nullopt)
-                        leftBound = cloneExpr(*indexInfo.indexPattern.initialValue);
+                        leftBound = factory.cloneExpr(indexInfo.indexPattern.initialValue);
                     auto leftExpected =
                         leftBound.value()->getACSL({}, entryAndCurrentInfo.loopEntryPoint);
                     assert(leftBound);
@@ -1771,7 +1765,7 @@ namespace acslg::spec_generator {
                     assert(leftExpected);
                     auto rightBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
                     if (rightBound == std::nullopt)
-                        rightBound = cloneExpr(*indexInfo.indexPattern.initialValue);
+                        rightBound = factory.cloneExpr(indexInfo.indexPattern.initialValue);
                     auto rightExpected =
                         rightBound.value()->getACSL({}, entryAndCurrentInfo.loopEntryPoint);
                     assert(rightBound);
