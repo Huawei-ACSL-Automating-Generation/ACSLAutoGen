@@ -103,11 +103,6 @@ namespace acslg::spec_generator {
         using OwnedSymbolicExpr = utils::not_null<std::unique_ptr<symb::SymbolicExpr>>;
         using symb::cloneSymbolAddress;
 
-        OwnedSymbolicExpr buildLiteral(int64_t value) {
-            auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.literal(value));
-        }
-
         symb::ExprHandle unknownHandle() {
             return symb::Expr::unknown().handle();
         }
@@ -115,24 +110,6 @@ namespace acslg::spec_generator {
         OwnedSymbolicExpr cloneExpr(const symb::SymbolicExpr &expr) {
             auto &factory = symb::ExprFactoryScope::current();
             return factory.importAndCloneExpr(expr);
-        }
-
-        OwnedSymbolicExpr buildUnary(symb::UnaryOpExpr::Operator op, OwnedSymbolicExpr expr) {
-            auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.unary(op, factory.importExpr(*expr)));
-        }
-
-        OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
-                                      symb::BinaryOpExpr::Operator op,
-                                      OwnedSymbolicExpr rhs) {
-            auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(
-                factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
-        }
-
-        OwnedSymbolicExpr buildRangeIndex(std::string_view name) {
-            auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.rangeIndex(name));
         }
 
         bool stmtHasNonAffineOps(const clang::Stmt *stmt) {
@@ -380,7 +357,7 @@ namespace acslg::spec_generator {
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
                         continue;
-                    symbolEntry->getMutMemoryState().write(addr, buildLiteral(constVal.value()));
+                    symbolEntry->getMutMemoryState().write(addr, factory.literal(constVal.value()));
                 }
             }
             auto loopCurrent = entryAndCurrentInfo.symbolicLoopCurrent->clone();
@@ -481,6 +458,7 @@ namespace acslg::spec_generator {
                 ERROR("Dependencies are not met.");
 
             auto &entryAndCurrentInfo = loopInfo.entryAndCurrentInfo.value();
+            auto &factory             = symb::ExprFactoryScope::current();
 
             if (loopHasNonAffineOps(loopInfo))
                 return std::nullopt;
@@ -498,7 +476,7 @@ namespace acslg::spec_generator {
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
                         continue;
-                    symbolEntry->getMutMemoryState().write(addr, buildLiteral(constVal.value()));
+                    symbolEntry->getMutMemoryState().write(addr, factory.literal(constVal.value()));
                 }
             }
 
