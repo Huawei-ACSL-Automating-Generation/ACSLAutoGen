@@ -89,16 +89,6 @@ namespace acslg::analyzer::symbolic {
             ExprFactory &factory;
             const HashExprHandleMap &substitutions;
 
-            ExprHandle legacyFallback(const SymbolicExpr &expr) const {
-                SymbolicExpr::HashExprMap legacyMap;
-                legacyMap.reserve(substitutions.size());
-                for (const auto &[hash, replacement] : substitutions)
-                    legacyMap.emplace(hash, factory.cloneExpr(replacement));
-
-                auto substituted = expr.getSubstitutedValueExpr(legacyMap);
-                return factory.importExpr(*substituted);
-            }
-
             AddrHandle requireAddress(ExprHandle handle) const {
                 if (auto *addr = handle.dyn_cast<const Address>())
                     return factory.importAddress(*addr);
@@ -137,7 +127,7 @@ namespace acslg::analyzer::symbolic {
                 if (auto *symbolValue = dyn_cast<const SymbolValue>(&expr)) {
                     auto fromAddr = symbolValue->getFromAddr();
                     if (fromAddr == std::nullopt)
-                        return legacyFallback(expr);
+                        UNREACHABLE();
                     auto from = requireAddress(run(*fromAddr.value()));
                     return factory.symbolValue(symbolValue->getValType(), from,
                                                symbolValue->getFromPoint().value());
@@ -188,7 +178,7 @@ namespace acslg::analyzer::symbolic {
                         run(maxMin->getExpr()), maxMin->getFromPoint().value());
                 }
 
-                return legacyFallback(expr);
+                ERROR("Unsupported SymbolicExpr node in handle value substitution.");
             }
         };
 
