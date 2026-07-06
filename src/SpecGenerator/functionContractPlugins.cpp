@@ -3,7 +3,6 @@
  * @brief Implements function-level ACSL contract plugins (assigns, behaviors, poststate).
  */
 #include <iterator>
-#include <memory>
 #include <optional>
 #include <unordered_set>
 
@@ -23,10 +22,8 @@ namespace acslg::spec_generator {
         const std::string IND1 = "  ";
         const std::string IND2 = "    ";
 
-        utils::not_null<std::unique_ptr<symb::SymbolicExpr>>
-        cloneExpr(const symb::SymbolicExpr &expr) {
-            auto &factory = symb::ExprFactoryScope::current();
-            return factory.importAndCloneExpr(expr);
+        symb::Expr simplifyExpr(const symb::SymbolicExpr &expr) {
+            return symb::Expr{expr}.simplified();
         }
 
         // Frama-C does not resolve ACSL logic labels derived from internal C labels
@@ -395,12 +392,12 @@ namespace acslg::spec_generator {
                             size_t idxField = 0;
                             for (auto field : info.definition_->fields()) {
                                 std::string fieldName = field->getNameAsString();
-                                auto fieldExpr = cloneExpr(*st->getFieldValue(idxField));
+                                auto simplifiedField =
+                                    simplifyExpr(*st->getFieldValue(idxField));
                                 ++idxField;
                                 if (fieldName.empty())
                                     continue;
 
-                                auto simplifiedField = fieldExpr->simplifiedExpr();
                                 if (referencesNonContractVisibleLocals(*simplifiedField, FD))
                                     continue;
                                 symb::SymbolicExpr::GetACSLConfig cfg{
@@ -469,8 +466,8 @@ namespace acslg::spec_generator {
                                 ++idxField;
                                 continue;
                             }
-                            auto fieldExpr = cloneExpr(*retSt->getFieldValue(idxField));
-                            auto simplifiedField = fieldExpr->simplifiedExpr();
+                            auto simplifiedField =
+                                simplifyExpr(*retSt->getFieldValue(idxField));
                             if (referencesNonContractVisibleLocals(*simplifiedField, FD)) {
                                 ++idxField;
                                 continue;
