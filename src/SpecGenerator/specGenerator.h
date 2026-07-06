@@ -327,14 +327,14 @@ namespace acslg::spec_generator {
             memoryMap;
         analyzer::PathConditions pathConds;
         analyzer::Path::PathState pathState;
-        std::optional<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> returnExpr;
+        std::optional<analyzer::symbolic::ExprHandle> returnExpr;
 
         PostPSInfo(
             analyzer::symbolic::AddressBoxMap<
                 utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
             analyzer::PathConditions pcs,
             analyzer::Path::PathState ps,
-            std::optional<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> re)
+            std::optional<analyzer::symbolic::ExprHandle> re)
             : memoryMap(std::move(mem)), pathConds(std::move(pcs)), pathState(ps),
               returnExpr(std::move(re)) {}
 
@@ -351,7 +351,7 @@ namespace acslg::spec_generator {
                 pathConds.emplace(detail::importPostExprThroughCurrentFactory(*expr));
 
             if (other.returnExpr)
-                returnExpr = detail::copyPostExprThroughCurrentFactory(*other.returnExpr.value());
+                returnExpr = detail::importPostExprThroughCurrentFactory(*other.returnExpr.value());
         }
 
         PostPSInfo()                       = default;

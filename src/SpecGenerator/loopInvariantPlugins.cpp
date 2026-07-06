@@ -446,7 +446,8 @@ namespace acslg::spec_generator {
                         infos.emplace_back(
                             std::move(postInfo.first),
                             importPathConds(std::move(postInfo.second)),
-                            analyzer::Path::PathState::Return, buildUnknown().into_underlying());
+                            analyzer::Path::PathState::Return,
+                            detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                     else
                         infos.emplace_back(std::move(postInfo.first),
                                            importPathConds(std::move(postInfo.second)),
@@ -565,7 +566,8 @@ namespace acslg::spec_generator {
                         infos.emplace_back(
                             std::move(postInfo.first),
                             importPathConds(std::move(postInfo.second)),
-                            analyzer::Path::PathState::Return, buildUnknown().into_underlying());
+                            analyzer::Path::PathState::Return,
+                            detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                     else
                         infos.emplace_back(std::move(postInfo.first),
                                            importPathConds(std::move(postInfo.second)),
@@ -1742,11 +1744,12 @@ namespace acslg::spec_generator {
                     ERROR("This path has path state 'return' but no return expr.");
                 if (!interruptedPath->getReturnExpr().value()->collectUsedSymbols().empty()) {
                     interruptedPathInfo.returnExpr =
-                        buildUnknown().into_underlying();
+                        detail::importPostExprThroughCurrentFactory(*buildUnknown());
                     // todo
                 } else {
                     interruptedPathInfo.returnExpr =
-                        cloneExpr(*interruptedPath->getReturnExpr().value());
+                        detail::importPostExprThroughCurrentFactory(
+                            *interruptedPath->getReturnExpr().value());
                 }
             }
             using enum symb::QuantifierOverRange::Quantifier;

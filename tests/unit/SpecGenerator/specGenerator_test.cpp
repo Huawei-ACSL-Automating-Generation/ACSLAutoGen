@@ -39,15 +39,15 @@ namespace acslg::test::unit::spec_generator {
 
         PathConditions pathConds;
         pathConds.emplace(condHandle);
-        PostPSInfo psInfo({}, std::move(pathConds), Path::PathState::Return,
-                          factory.cloneExpr(retHandle));
+        PostPSInfo psInfo({}, std::move(pathConds), Path::PathState::Return, retHandle);
 
         PostPSInfo copiedPS{psInfo};
         ASSERT_EQ(copiedPS.pathConds.size(), 1);
         EXPECT_EQ(*copiedPS.pathConds.begin(), condHandle);
         EXPECT_EQ(copiedPS.pathConds.begin()->get(), condHandle.get());
         ASSERT_TRUE(copiedPS.returnExpr);
-        EXPECT_EQ(factory.importExpr(*copiedPS.returnExpr.value()), retHandle);
+        EXPECT_EQ(copiedPS.returnExpr.value(), retHandle);
+        EXPECT_EQ(copiedPS.returnExpr.value().get(), retHandle.get());
     }
 
 } // namespace acslg::test::unit::spec_generator

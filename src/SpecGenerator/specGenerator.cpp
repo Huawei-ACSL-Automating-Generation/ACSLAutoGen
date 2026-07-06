@@ -321,7 +321,7 @@ namespace acslg::spec_generator {
                 if (!(lhs.returnExpr && rhs.returnExpr))
                     UNREACHABLE();
                 if (!exprEqual(*lhs.returnExpr.value(), *rhs.returnExpr.value())) {
-                    lhs.returnExpr = buildUnknown().into_underlying();
+                    lhs.returnExpr = detail::importPostExprThroughCurrentFactory(*buildUnknown());
                 }
             }
         };
@@ -378,8 +378,10 @@ namespace acslg::spec_generator {
                     assert(info.returnExpr);
                     if (info.returnExpr.value()->isUnknown())
                         return;
-                    toUpdate.returnExpr =
+                    auto subedReturnExpr =
                         info.returnExpr.value()->getSubstitutedExpr(currentPath, loopEntryPoint);
+                    toUpdate.returnExpr =
+                        detail::importPostExprThroughCurrentFactory(*subedReturnExpr);
                 }
             }
         };
@@ -602,7 +604,10 @@ namespace acslg::spec_generator {
                     }
                     // Carry over path termination state and optional return expression.
                     postPath->setPathState(postBranchInfo.pathState);
-                    postPath->setReturnExpr(std::move(postBranchInfo.returnExpr));
+                    if (postBranchInfo.returnExpr)
+                        postPath->setReturnExpr(postBranchInfo.returnExpr.value());
+                    else
+                        postPath->setReturnExpr(std::nullopt);
                     // Reapply substituted path conditions produced by plugins.
                     for (auto pathCond : postBranchInfo.pathConds)
                         postPath->insertPathCondition(pathCond);

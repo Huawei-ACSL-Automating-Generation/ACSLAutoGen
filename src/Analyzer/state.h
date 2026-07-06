@@ -719,6 +719,9 @@ namespace acslg::analyzer {
             }
             returnExpr_.emplace(context_.getExprFactory().importExpr(*expr.value()));
         };
+        void setReturnExpr(symbolic::ExprHandle expr) {
+            returnExpr_.emplace(context_.getExprFactory().importExpr(*expr));
+        }
         /// @brief Update the control-flow marker for this path.
         void setPathState(PathState state) { currentState_ = state; }
 
