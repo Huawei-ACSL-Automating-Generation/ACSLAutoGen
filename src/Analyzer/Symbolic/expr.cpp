@@ -84,13 +84,89 @@ namespace acslg::analyzer::symbolic {
                                          const SymbolicExpr &expr,
                                          const HashExprHandleMap &hashToExprMap) {
         ExprFactoryScope scope(factory);
-        SymbolicExpr::HashExprMap legacyMap;
-        legacyMap.reserve(hashToExprMap.size());
-        for (const auto &[hash, replacement] : hashToExprMap)
-            legacyMap.emplace(hash, factory.cloneExpr(replacement));
 
-        auto substituted = expr.getSubstitutedValueExpr(legacyMap);
-        return factory.importExpr(*substituted);
+        struct Substituter {
+            ExprFactory &factory;
+            const HashExprHandleMap &substitutions;
+
+            ExprHandle legacyFallback(const SymbolicExpr &expr) const {
+                SymbolicExpr::HashExprMap legacyMap;
+                legacyMap.reserve(substitutions.size());
+                for (const auto &[hash, replacement] : substitutions)
+                    legacyMap.emplace(hash, factory.cloneExpr(replacement));
+
+                auto substituted = expr.getSubstitutedValueExpr(legacyMap);
+                return factory.importExpr(*substituted);
+            }
+
+            AddrHandle requireAddress(ExprHandle handle) const {
+                if (auto *addr = handle.dyn_cast<const Address>())
+                    return factory.importAddress(*addr);
+                UNREACHABLE();
+            }
+
+            ExprHandle run(const SymbolicExpr &expr) const {
+                if (auto it = substitutions.find(expr.hash()); it != substitutions.end())
+                    return it->second;
+
+                if (auto *literal = dyn_cast<const detail::LiteralExprNode>(&expr))
+                    return literal->importInto(factory);
+                if (isa<UnknownExpr>(&expr))
+                    return factory.unknown();
+                if (auto *rangeIndex = dyn_cast<const SymbolAddress::RangeIndex>(&expr))
+                    return factory.rangeIndex(rangeIndex->getName());
+                if (auto *varAddr = dyn_cast<const VariableAddress>(&expr))
+                    return factory.variableAddress(varAddr->getFrom()).asExpr();
+                if (auto *fieldAddr = dyn_cast<const FieldAddress>(&expr)) {
+                    auto base = requireAddress(run(*fieldAddr->getBaseAddr()));
+                    return factory
+                        .fieldAddress(fieldAddr->getPointeeType(),
+                                      fieldAddr->getDefinition(), base,
+                                      fieldAddr->getFieldIndex())
+                        .asExpr();
+                }
+                if (auto *symbolValue = dyn_cast<const SymbolValue>(&expr)) {
+                    auto fromAddr = symbolValue->getFromAddr();
+                    if (fromAddr == std::nullopt)
+                        return legacyFallback(expr);
+                    auto from = requireAddress(run(*fromAddr.value()));
+                    return factory.symbolValue(symbolValue->getValType(), from,
+                                               symbolValue->getFromPoint().value());
+                }
+                if (auto *symbolAddr = dyn_cast<const SymbolAddress>(&expr)) {
+                    std::optional<AddrHandle> from;
+                    if (auto fromAddr = symbolAddr->getFromAddr())
+                        from = requireAddress(run(*fromAddr.value()));
+
+                    std::optional<ExprHandle> length;
+                    if (symbolAddr->getLength())
+                        length = run(*symbolAddr->getLength().value());
+
+                    return factory
+                        .symbolAddress(symbolAddr->getPointeeType(), from,
+                                       symbolAddr->getFromPoint().value(),
+                                       run(*symbolAddr->getOffset()), length)
+                        .asExpr();
+                }
+                if (auto *binary = dyn_cast<const BinaryOpExpr>(&expr)) {
+                    return factory.binary(run(*binary->getLeft()), binary->getOperator(),
+                                          run(*binary->getRight()));
+                }
+                if (auto *unary = dyn_cast<const UnaryOpExpr>(&expr))
+                    return factory.unary(unary->getOperator(), run(*unary->getSub()));
+                if (auto *structure = dyn_cast<const Structure>(&expr)) {
+                    auto rebuilt = factory.importExpr(*structure);
+                    for (size_t i = 0; i < structure->getNumFields(); ++i)
+                        rebuilt = factory.withField(rebuilt, i,
+                                                    run(*structure->getFieldValue(i)));
+                    return rebuilt;
+                }
+
+                return legacyFallback(expr);
+            }
+        };
+
+        return Substituter{factory, hashToExprMap}.run(expr);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> ExprChild::clone() const {

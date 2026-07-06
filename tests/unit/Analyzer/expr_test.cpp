@@ -897,6 +897,23 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(substituted.get().get(), replacement.get().get());
     }
 
+    TEST(ExprFactoryTest, ValueSubstitutionHandleMapRebuildsBinaryThroughFactory) {
+        symbolic::ExprFactory factory;
+
+        auto one = factory.literal(int64_t{1});
+        auto two = factory.literal(int64_t{2});
+        auto three = factory.literal(int64_t{3});
+        auto original = factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
+        auto expected = factory.binary(three, symbolic::BinaryOpExpr::Operator::Add, two);
+
+        symbolic::HashExprHandleMap substitutions;
+        substitutions.emplace(one.hash(), three);
+
+        auto substituted =
+            symbolic::getSubstitutedValueHandle(factory, *original, substitutions);
+        EXPECT_EQ(substituted.get().get(), expected.get().get());
+    }
+
     TEST(ExprFactoryTest, ScopedSimplifiedLinearExprRebuildsThroughFactory) {
         ASTExtractor e;
         e.init(R"c(
