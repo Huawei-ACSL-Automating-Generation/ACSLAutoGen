@@ -645,91 +645,87 @@ namespace acslg::analyzer {
             return result;
         }
 
-        Formulas preprocessConjConds(const PathConditions &conjConds) {
-            Formulas copied;
-            copied.reserve(conjConds.size());
-            for (const auto &cond : conjConds) {
-                copied.push_back(cloneExpr(*cond));
+        void appendPreprocessedConjCond(const symbolic::SymbolicExpr &cond, Formulas &result) {
+            if (auto bin = symbolic::dyn_cast<symbolic::BinaryOpExpr>(&cond)) {
+                using enum symbolic::detail::BinaryOpExprNode::Operator;
+                const auto &lhs = bin->getLeft();
+                const auto &rhs = bin->getRight();
+
+                switch (bin->getOperator()) {
+                    case NotEqual:
+                        // Create disjunctive conds, just skip this now.
+                        return;
+                    case GreaterThan: {
+                        auto newRHS = buildBinary(cloneExpr(*rhs), Add, buildLiteral(1));
+                        result.push_back(buildBinary(cloneExpr(*lhs), GreaterEqual,
+                                                        std::move(newRHS)));
+                        return;
+                    }
+                    case LessThan: {
+                        auto newRHS = buildBinary(cloneExpr(*rhs), Subtract,
+                                                     buildLiteral(1));
+                        result.push_back(buildBinary(cloneExpr(*lhs), LessEqual,
+                                                        std::move(newRHS)));
+                        return;
+                    }
+                    case LogicalAnd:
+                        appendPreprocessedConjCond(*lhs, result);
+                        appendPreprocessedConjCond(*rhs, result);
+                        return;
+                    case GreaterEqual:
+                    case LessEqual:
+                    case Equal:
+                        result.push_back(cloneExpr(cond));
+                        return;
+                    default: return;
+                }
             }
-            return preprocessConjConds(copied);
+
+            auto unary = symbolic::dyn_cast<symbolic::UnaryOpExpr>(&cond);
+            if (!unary ||
+                unary->getOperator() !=
+                    symbolic::detail::UnaryOpExprNode::Operator::LogicalNot)
+                return;
+
+            Formulas preprocessedSub;
+            appendPreprocessedConjCond(*unary->getSub(), preprocessedSub);
+            if (preprocessedSub.size() != 1)
+                return;
+
+            auto uneqExpr =
+                symbolic::dyn_cast<const symbolic::BinaryOpExpr>(preprocessedSub.front().get().get());
+            assert(uneqExpr);
+            switch (uneqExpr->getOperator()) {
+                using enum symbolic::detail::BinaryOpExprNode::Operator;
+                case LessEqual: {
+                    auto newRHS = buildBinary(cloneExpr(*uneqExpr->getRight()), Add,
+                                                 buildLiteral(1));
+                    result.push_back(buildBinary(cloneExpr(*uneqExpr->getLeft()),
+                                                    GreaterEqual, std::move(newRHS)));
+                    break;
+                }
+                case GreaterEqual: {
+                    auto newRHS = buildBinary(cloneExpr(*uneqExpr->getRight()),
+                                                 Subtract, buildLiteral(1));
+                    result.push_back(buildBinary(cloneExpr(*uneqExpr->getLeft()),
+                                                    LessEqual, std::move(newRHS)));
+                    break;
+                }
+                default: break;
+            }
+        }
+
+        Formulas preprocessConjConds(const PathConditions &conjConds) {
+            Formulas result;
+            for (const auto &cond : conjConds)
+                appendPreprocessedConjCond(*cond, result);
+            return result;
         }
 
         Formulas preprocessConjConds(const Formulas &conjConds) {
             Formulas result;
-            for (auto &cond : conjConds) {
-                if (auto bin = symbolic::dyn_cast<symbolic::BinaryOpExpr>(cond.get().get())) {
-                    using enum symbolic::detail::BinaryOpExprNode::Operator;
-                    const auto &lhs = bin->getLeft();
-                    const auto &rhs = bin->getRight();
-
-                    switch (bin->getOperator()) {
-                        case NotEqual: {
-                            // Create disjunctive conds, just skip this now.
-                            continue;
-                        }
-                        case GreaterThan: {
-                            auto newRHS = buildBinary(cloneExpr(*rhs), Add, buildLiteral(1));
-                            result.push_back(buildBinary(cloneExpr(*lhs), GreaterEqual,
-                                                            std::move(newRHS)));
-                            break;
-                        }
-                        case LessThan: {
-                            auto newRHS = buildBinary(cloneExpr(*rhs), Subtract,
-                                                         buildLiteral(1));
-                            result.push_back(buildBinary(cloneExpr(*lhs), LessEqual,
-                                                            std::move(newRHS)));
-                            break;
-                        }
-                        case LogicalAnd: {
-                            Formulas twoConds;
-                            twoConds.reserve(2);
-                            twoConds.push_back(cloneExpr(*lhs));
-                            twoConds.push_back(cloneExpr(*rhs));
-                            auto reTwoConds = preprocessConjConds(twoConds);
-                            result.insert(result.end(), std::make_move_iterator(reTwoConds.begin()),
-                                          std::make_move_iterator(reTwoConds.end()));
-                            break;
-                        }
-                        case GreaterEqual:
-                        case LessEqual:
-                        case Equal: {
-                            result.push_back(cloneExpr(*cond));
-                            break;
-                        }
-                        default: continue;
-                    }
-                } else if (auto unary = symbolic::dyn_cast<symbolic::UnaryOpExpr>(cond.get().get())) {
-                    if (unary->getOperator() != symbolic::detail::UnaryOpExprNode::Operator::LogicalNot)
-                        continue;
-                    Formulas oneExpr;
-                    oneExpr.push_back(cloneExpr(*unary->getSub()));
-                    auto reOneExpr = preprocessConjConds(oneExpr);
-                    if (reOneExpr.size() != 1)
-                        continue;
-                    auto uneqExpr =
-                        symbolic::dyn_cast<const symbolic::BinaryOpExpr>(reOneExpr.front().get().get());
-                    assert(uneqExpr);
-                    switch (uneqExpr->getOperator()) {
-                        using enum symbolic::detail::BinaryOpExprNode::Operator;
-                        case LessEqual: {
-                            auto newRHS = buildBinary(cloneExpr(*uneqExpr->getRight()), Add,
-                                                         buildLiteral(1));
-                            result.push_back(buildBinary(cloneExpr(*uneqExpr->getLeft()),
-                                                            GreaterEqual, std::move(newRHS)));
-                            break;
-                        }
-                        case GreaterEqual: {
-                            auto newRHS = buildBinary(cloneExpr(*uneqExpr->getRight()),
-                                                         Subtract, buildLiteral(1));
-                            result.push_back(buildBinary(cloneExpr(*uneqExpr->getLeft()),
-                                                            LessEqual, std::move(newRHS)));
-                            break;
-                        }
-                        default: continue;
-                    }
-                }
-            }
-
+            for (const auto &cond : conjConds)
+                appendPreprocessedConjCond(*cond, result);
             return result;
         }
 
