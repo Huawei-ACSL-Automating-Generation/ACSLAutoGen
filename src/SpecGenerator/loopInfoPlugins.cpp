@@ -23,6 +23,11 @@ namespace acslg::spec_generator {
             return factory.cloneExpr(factory.unknown());
         }
 
+        OwnedSymbolicExpr cloneExpr(const symb::SymbolicExpr &expr) {
+            auto &factory = symb::ExprFactoryScope::current();
+            return factory.cloneExpr(factory.importExpr(expr));
+        }
+
         OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
                                       symb::BinaryOpExpr::Operator op,
                                       OwnedSymbolicExpr rhs) {
@@ -45,11 +50,11 @@ namespace acslg::spec_generator {
 
             auto result =
                 pattern.step > 0
-                    ? buildBinary(buildBinary(boundValue.clone(), Add,
+                    ? buildBinary(buildBinary(cloneExpr(boundValue), Add,
                                               buildLiteral(pattern.step - 1)),
-                                  Subtract, pattern.initialValue->clone())
-                    : buildBinary(pattern.initialValue->clone(), Subtract,
-                                  buildBinary(boundValue.clone(), Add,
+                                  Subtract, cloneExpr(*pattern.initialValue))
+                    : buildBinary(cloneExpr(*pattern.initialValue), Subtract,
+                                  buildBinary(cloneExpr(boundValue), Add,
                                               buildLiteral(pattern.step + 1)));
             if (includeClosedBound)
                 result = buildBinary(std::move(result), Add, buildLiteral(1));
@@ -151,7 +156,7 @@ namespace acslg::spec_generator {
                     }
                     std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> entryExpr;
                     if (auto preValue = preMS.read(addr)) {
-                        entryExpr = preValue.value()->clone();
+                        entryExpr = cloneExpr(*preValue.value());
                     } else {
                         auto [hashAddrMap, _] =
                             symb::SymbolicExpr::collectUsedSymbols(*currentExpr);
@@ -164,7 +169,7 @@ namespace acslg::spec_generator {
                         if (isFrom(*hashAddrMap.begin()->second->toSymbolicExpr(),
                                    addr,
                                    symbolicLoopEntry->getStartPoint())) {
-                            entryExpr = hashAddrMap.begin()->second->toSymbolicExpr()->clone();
+                            entryExpr = cloneExpr(*hashAddrMap.begin()->second->toSymbolicExpr());
                         } else {
                             patterns.emplace(addr, std::nullopt);
                             continue;
@@ -304,7 +309,7 @@ namespace acslg::spec_generator {
             for (auto &&[addr, value] : merged->getMemoryState().flat()) {
                 if (analyzer::symbolic::isa<analyzer::symbolic::UnknownExpr>(value.get()))
                     continue;
-                sharedMemory.emplace(addr, value->clone());
+                sharedMemory.emplace(addr, cloneExpr(*value));
             }
 
             analyzer::PathConditions sharedConds;
@@ -580,7 +585,7 @@ namespace acslg::spec_generator {
 
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
-                    preciseLoopCount = maxLoopCount.value()->clone();
+                    preciseLoopCount = cloneExpr(*maxLoopCount.value());
                 } else {
                     preciseLoopCount = buildUnknown().into_underlying();
                 }
@@ -640,7 +645,7 @@ namespace acslg::spec_generator {
                     buildMaxLoopCountExpr(indexPattern.value(), *boundValue.value(), false);
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
-                    preciseLoopCount = maxLoopCount.value()->clone();
+                    preciseLoopCount = cloneExpr(*maxLoopCount.value());
                 } else {
                     preciseLoopCount = buildUnknown().into_underlying();
                 }
@@ -709,7 +714,7 @@ namespace acslg::spec_generator {
                     buildMaxLoopCountExpr(indexPattern.value(), *boundValue.value(), false);
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
-                    preciseLoopCount = maxLoopCount.value()->clone();
+                    preciseLoopCount = cloneExpr(*maxLoopCount.value());
                 } else {
                     preciseLoopCount = buildUnknown().into_underlying();
                 }
