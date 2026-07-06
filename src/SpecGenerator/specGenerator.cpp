@@ -69,29 +69,7 @@ namespace acslg::spec_generator {
             return factory.cloneExpr(factory.unknown());
         }
 
-        utils::not_null<std::unique_ptr<const symb::SymbolicExpr>> clonePatternExpr(
-            const symb::SymbolicExpr &expr) {
-            auto &factory = symb::ExprFactoryScope::current();
-            return utils::not_null<std::unique_ptr<const symb::SymbolicExpr>>{
-                factory.importAndCloneExpr(expr).into_underlying()};
-        }
     } // namespace
-
-    LoopInfo::Pattern::Pattern(const Pattern &other)
-        : initialValue(clonePatternExpr(*other.initialValue)), step(other.step) {}
-
-    /**
-     * @brief Deep-assign from another pattern by cloning its symbolic value.
-     * @param other Source pattern.
-     * @return Reference to this.
-     */
-    LoopInfo::Pattern &LoopInfo::Pattern::operator=(const Pattern &other) {
-        if (this == &other)
-            return *this;
-        initialValue = clonePatternExpr(*other.initialValue);
-        step         = other.step;
-        return *this;
-    }
 
     /**
      * @brief Render the pattern as a readable string for debugging.

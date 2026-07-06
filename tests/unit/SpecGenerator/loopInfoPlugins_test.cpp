@@ -32,7 +32,8 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
-        ExprFactoryScope scope(getLastExprFactory());
+        auto &factory = getLastExprFactory();
+        ExprFactoryScope scope(factory);
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.patternInfo, nullopt);
         auto &patternInfo = loopInfo.patternInfo.value();
@@ -42,6 +43,8 @@ namespace acslg::test::unit::spec_generator {
             if (pattern != nullopt) {
                 DEBUG(pattern.value().initialValue->dump() +
                       ", step: " + to_string(pattern.value().step));
+                EXPECT_EQ(pattern.value().initialValue,
+                          factory.importExpr(*pattern.value().initialValue));
                 EXPECT_EQ(pattern.value().step, 1);
             } else {
                 DEBUG("too complex");

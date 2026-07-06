@@ -52,19 +52,17 @@ namespace acslg::spec_generator {
      */
     struct LoopInfo {
         struct Pattern {
-            utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>> initialValue;
+            analyzer::symbolic::ExprHandle initialValue;
             int64_t step;
             /**
              * @brief Construct a pattern with initial symbolic value and fixed step.
              * @param init [in] Initial symbolic value for the pattern.
              * @param st [in] Step amount applied each iteration.
              */
-            Pattern(utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>> init,
-                    int64_t st)
-                : initialValue(std::move(init)), step(st) {}
-            /// @brief Copy-construct with deep-cloned symbolic value.
-            Pattern(const Pattern &other);
-            Pattern &operator=(const Pattern &other);
+            Pattern(analyzer::symbolic::ExprHandle init, int64_t st)
+                : initialValue(init), step(st) {}
+            Pattern(const Pattern &other)            = default;
+            Pattern &operator=(const Pattern &other) = default;
             Pattern(Pattern &&other)            = default;
             Pattern &operator=(Pattern &&other) = default;
             /**
