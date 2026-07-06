@@ -1266,8 +1266,9 @@ namespace acslg::test::unit::analyzer {
 
         auto literal = factory.literal(int64_t{7});
         auto index = factory.literal(int64_t{0});
-        auto substitutedLiteral = literal->getRangeIndexSubstituted(rangeBase, *index.get());
-        EXPECT_EQ(factory.importExpr(*substitutedLiteral), literal);
+        auto substitutedLiteral =
+            symbolic::getRangeIndexSubstitutedHandle(factory, *literal, rangeBase, index);
+        EXPECT_EQ(substitutedLiteral.get().get(), literal.get().get());
 
         symbolic::HashExprHandleMap emptySubstitutions;
         auto valueSubstitutedLiteral =
@@ -1275,9 +1276,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(valueSubstitutedLiteral.get().get(), literal.get().get());
 
         auto varAddr = factory.variableAddress(var);
-        auto substitutedAddr = varAddr->getRangeIndexSubstituted(rangeBase, *index.get());
-        const auto *addr = symbolic::cast<symbolic::Address>(substitutedAddr.get().get());
-        EXPECT_EQ(factory.importAddress(*addr), varAddr);
+        auto substitutedAddr =
+            symbolic::getRangeIndexSubstitutedHandle(factory, *varAddr, rangeBase, index);
+        EXPECT_EQ(substitutedAddr.get().get(), varAddr.asExpr().get().get());
     }
 
     TEST(ExprFactoryTest, ImportsLegacyAggregateChildrenAsHandles) {
@@ -1389,8 +1390,9 @@ namespace acslg::test::unit::analyzer {
         const auto &clonedSum = *symbolic::cast<symbolic::SumOverRange>(clone.get().get());
         EXPECT_EQ(&clonedSum.getRange(), rangeHandle.get().get());
 
-        auto index = symbolic::makeLiteralExpr(1);
-        auto substituted = sum.getRangeIndexSubstituted(rangeBase, *index);
+        auto index = factory.literal(int64_t{1});
+        auto substituted =
+            symbolic::getRangeIndexSubstitutedHandle(factory, sum, rangeBase, index);
         EXPECT_NE(*substituted, sum);
     }
 
@@ -1442,8 +1444,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(&clonedQuantifier.getPredicate(),
                   factory.importExpr(quantifier.getPredicate()).get().get());
 
-        auto index = symbolic::makeLiteralExpr(1);
-        auto substituted = quantifier.getRangeIndexSubstituted(rangeBase, *index);
+        auto index = factory.literal(int64_t{1});
+        auto substituted =
+            symbolic::getRangeIndexSubstitutedHandle(factory, quantifier, rangeBase, index);
         EXPECT_NE(*substituted, quantifier);
     }
 
@@ -1485,8 +1488,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(&clonedMax.getRange(), rangeHandle.get().get());
         EXPECT_EQ(&clonedMax.getExpr(), factory.importExpr(max.getExpr()).get().get());
 
-        auto index = symbolic::makeLiteralExpr(1);
-        auto substituted = max.getRangeIndexSubstituted(rangeBase, *index);
+        auto index = factory.literal(int64_t{1});
+        auto substituted =
+            symbolic::getRangeIndexSubstitutedHandle(factory, max, rangeBase, index);
         EXPECT_NE(*substituted, max);
     }
 
@@ -2277,33 +2281,35 @@ namespace acslg::test::unit::analyzer {
         auto index = factory.literal(int64_t{4});
         auto rangeBase = indexedAddr.cast<symbolic::SymbolAddress>().getBaseInfo();
 
-        auto indexedClone = symbolic::cloneSymbolAddress(indexedAddr);
         auto substitutedAddr =
-            indexedClone->getRangeIndexSubstituted(rangeBase, *index.get());
-        EXPECT_EQ(factory.importExpr(*substitutedAddr),
-                  factory.symbolAddress(x->getType(), varAddr, point, index, index).asExpr());
+            symbolic::getRangeIndexSubstitutedHandle(factory, *indexedAddr, rangeBase, index);
+        EXPECT_EQ(substitutedAddr.get().get(),
+                  factory.symbolAddress(x->getType(), varAddr, point, index, index)
+                      .asExpr()
+                      .get()
+                      .get());
 
         auto fieldAddr = factory.fieldAddress(
             firstField->getType(), record, factory.variableAddress(s), 0);
-        auto fieldClone = symbolic::cloneFieldAddress(fieldAddr);
         auto substitutedField =
-            fieldClone->getRangeIndexSubstituted(rangeBase, *index.get());
-        EXPECT_EQ(factory.importExpr(*substitutedField), fieldAddr.asExpr());
+            symbolic::getRangeIndexSubstitutedHandle(factory, *fieldAddr, rangeBase, index);
+        EXPECT_EQ(substitutedField.get().get(), fieldAddr.asExpr().get().get());
 
         auto indexedStructAddr = factory.symbolAddress(
             s->getType(), factory.variableAddress(s), point, rangeIndex, rangeIndex);
         auto indexedFieldAddr =
             factory.fieldAddress(firstField->getType(), record, indexedStructAddr, 0);
-        auto indexedFieldClone = symbolic::cloneFieldAddress(indexedFieldAddr);
         auto indexedRangeBase =
             indexedStructAddr.cast<symbolic::SymbolAddress>().getBaseInfo();
-        auto substitutedIndexedField =
-            indexedFieldClone->getRangeIndexSubstituted(indexedRangeBase, *index.get());
+        auto substitutedIndexedField = symbolic::getRangeIndexSubstitutedHandle(
+            factory, *indexedFieldAddr, indexedRangeBase, index);
         auto expectedStructAddr = factory.symbolAddress(
             s->getType(), factory.variableAddress(s), point, index, index);
-        EXPECT_EQ(factory.importExpr(*substitutedIndexedField),
+        EXPECT_EQ(substitutedIndexedField.get().get(),
                   factory.fieldAddress(firstField->getType(), record, expectedStructAddr, 0)
-                      .asExpr());
+                      .asExpr()
+                      .get()
+                      .get());
     }
 
     TEST(ExprFactoryTest, ScopedTryEvalSymbolAddressImportsThroughFactory) {
