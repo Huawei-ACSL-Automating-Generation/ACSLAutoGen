@@ -187,8 +187,8 @@ namespace acslg::analyzer {
             addresses.insert(addr);
 
         for (const auto &addrBox : addresses) {
-            auto lhsVal = memoryState_.read(addrBox);
-            auto rhsVal = other.memoryState_.read(addrBox);
+            auto lhsVal = memoryState_.readHandle(addrBox);
+            auto rhsVal = other.memoryState_.readHandle(addrBox);
 
             if (auto *fieldAddr = symbolic::dyn_cast<symbolic::FieldAddress>(&addrBox.get())) {
                 if (fieldAddr->getDefinition() &&
@@ -1605,7 +1605,7 @@ namespace acslg::analyzer {
                             baseAddr = utils::not_null<std::unique_ptr<symbolic::SymbolAddress>>{
                                 std::move(newAddr)};
                         }
-                        auto val = memoryState_.read(*baseAddr.value());
+                        auto val = memoryState_.readHandle(*baseAddr.value());
                         DEBUG("MemberExpr base in memory: " << (val ? "yes" : "no"));
                         if (val == std::nullopt) {
                             st = makeStructureForRecord(
@@ -1765,7 +1765,7 @@ namespace acslg::analyzer {
             oss << "    @" << (name.empty() ? hint("<unnamed>") : path(name)) << " " << op("->")
                 << " " << addr->dump();
 
-            if (auto value = memoryState_.read(*addr)) {
+            if (auto value = memoryState_.readHandle(*addr)) {
                 oss << " " << op("->") << " " << value.value()->dump();
             } else {
                 oss << " " << op("->") << " " << hint("null");
