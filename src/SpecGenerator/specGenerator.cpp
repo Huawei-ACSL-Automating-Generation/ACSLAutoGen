@@ -307,7 +307,8 @@ namespace acslg::spec_generator {
                 }
 
                 lhs.memoryMap.insert_or_assign(addr,
-                                               buildUnknown().into_underlying());
+                                               detail::importPostExprThroughCurrentFactory(
+                                                   *buildUnknown()));
             }
 
             analyzer::PathConditions intersected;
@@ -346,7 +347,7 @@ namespace acslg::spec_generator {
 
         auto updateResultInfoWithInfo = [&loopEntryPoint](const analyzer::Path &currentPath,
                                                           PostPSInfo &toUpdate, auto &&info) {
-            for (auto &[addr, value] : info.memoryMap) {
+            for (const auto &[addr, value] : info.memoryMap) {
                 auto subedAddrExpr = addr.get().getSubstitutedExpr(currentPath, loopEntryPoint);
                 auto subedAddr     = symb::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
                 if (subedAddr == nullptr)
@@ -359,7 +360,8 @@ namespace acslg::spec_generator {
                          subedValue->dump() + "} is discarded.");
                     continue;
                 }
-                toUpdate.memoryMap.insert_or_assign(*subedAddr, std::move(subedValue));
+                toUpdate.memoryMap.insert_or_assign(
+                    *subedAddr, detail::importPostExprThroughCurrentFactory(*subedValue));
             }
 
             for (const auto &cond : info.pathConds) {
@@ -592,7 +594,7 @@ namespace acslg::spec_generator {
             auto appendPostPaths = [&](std::vector<PostPSInfo> &branches) {
                 for (auto &postBranchInfo : branches) {
                     auto postPath = prePath->clone();
-                    for (auto &[addr, value] : postBranchInfo.memoryMap) {
+                    for (auto [addr, value] : postBranchInfo.memoryMap) {
                         auto root = addr.get().getFromRoot();
                         if (root == std::nullopt)
                             TODO();
@@ -600,7 +602,7 @@ namespace acslg::spec_generator {
                         // inventing new locals.
                         if (!postPath->getVarAddr().contains(root.value()))
                             continue;
-                        postPath->updateMemory(addr, std::move(value));
+                        postPath->updateMemory(addr, value);
                     }
                     // Carry over path termination state and optional return expression.
                     postPath->setPathState(postBranchInfo.pathState);

@@ -427,10 +427,17 @@ namespace acslg::spec_generator {
                     imported.emplace(detail::importPostExprThroughCurrentFactory(*cond));
                 return imported;
             };
+            auto importMemoryMap = [](auto memoryMap) {
+                PostMemoryMap imported;
+                imported.reserve(memoryMap.size());
+                for (const auto &[addr, value] : memoryMap)
+                    imported.emplace(addr, detail::importPostExprThroughCurrentFactory(*value));
+                return imported;
+            };
 
             std::vector<PostPSInfo> normalPostPSInfos;
             for (auto &postInfo : normalPostInfos)
-                normalPostPSInfos.emplace_back(std::move(postInfo.first),
+                normalPostPSInfos.emplace_back(importMemoryMap(std::move(postInfo.first)),
                                                importPathConds(std::move(postInfo.second)),
                                                analyzer::Path::PathState::Step, std::nullopt);
 
@@ -444,12 +451,12 @@ namespace acslg::spec_generator {
                 for (auto &postInfo : postInfos) {
                     if (interruptPath->getPathState() == analyzer::Path::PathState::Return)
                         infos.emplace_back(
-                            std::move(postInfo.first),
+                            importMemoryMap(std::move(postInfo.first)),
                             importPathConds(std::move(postInfo.second)),
                             analyzer::Path::PathState::Return,
                             detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                     else
-                        infos.emplace_back(std::move(postInfo.first),
+                        infos.emplace_back(importMemoryMap(std::move(postInfo.first)),
                                            importPathConds(std::move(postInfo.second)),
                                            interruptPath->getPathState(), std::nullopt);
                 }
@@ -547,10 +554,17 @@ namespace acslg::spec_generator {
                     imported.emplace(detail::importPostExprThroughCurrentFactory(*cond));
                 return imported;
             };
+            auto importMemoryMap = [](auto memoryMap) {
+                PostMemoryMap imported;
+                imported.reserve(memoryMap.size());
+                for (const auto &[addr, value] : memoryMap)
+                    imported.emplace(addr, detail::importPostExprThroughCurrentFactory(*value));
+                return imported;
+            };
 
             std::vector<PostPSInfo> normalPostPSInfos;
             for (auto &postInfo : normalPostInfos)
-                normalPostPSInfos.emplace_back(std::move(postInfo.first),
+                normalPostPSInfos.emplace_back(importMemoryMap(std::move(postInfo.first)),
                                                importPathConds(std::move(postInfo.second)),
                                                analyzer::Path::PathState::Step, std::nullopt);
 
@@ -564,12 +578,12 @@ namespace acslg::spec_generator {
                 for (auto &postInfo : postInfos) {
                     if (interruptPath->getPathState() == analyzer::Path::PathState::Return)
                         infos.emplace_back(
-                            std::move(postInfo.first),
+                            importMemoryMap(std::move(postInfo.first)),
                             importPathConds(std::move(postInfo.second)),
                             analyzer::Path::PathState::Return,
                             detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                     else
-                        infos.emplace_back(std::move(postInfo.first),
+                        infos.emplace_back(importMemoryMap(std::move(postInfo.first)),
                                            importPathConds(std::move(postInfo.second)),
                                            interruptPath->getPathState(), std::nullopt);
                 }
@@ -743,7 +757,8 @@ namespace acslg::spec_generator {
                 if (auto range = tryGetAsRange(addr)) {
                     if (pattern) {
                         auto [_, ok] = memoryMap.emplace(
-                            range.value(), buildUnknown().into_underlying());
+                            range.value(),
+                            detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                         // todo
                         // std::make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(),
                         // Add,
@@ -763,7 +778,8 @@ namespace acslg::spec_generator {
                             UNREACHABLE();
                     } else {
                         auto [_, ok] = memoryMap.emplace(
-                            range.value(), buildUnknown().into_underlying());
+                            range.value(),
+                            detail::importPostExprThroughCurrentFactory(*buildUnknown()));
 
                         // Deal with loops like
                         // {
@@ -790,14 +806,13 @@ namespace acslg::spec_generator {
                             // Loop count is precise (index's step is 1 or -1)
 
                             // init + step * loopCount
+                            auto postValue =
+                                buildBinary(cloneExpr(*pattern.value().initialValue), Add,
+                                            buildBinary(buildLiteral(pattern.value().step),
+                                                        Multiply,
+                                                        cloneExpr(*indexInfo.preciseLoopCount)));
                             auto [_, ok] = memoryMap.emplace(
-                                addr,
-                                buildBinary(
-                                    cloneExpr(*pattern.value().initialValue), Add,
-                                    buildBinary(buildLiteral(pattern.value().step),
-                                                   Multiply,
-                                                   cloneExpr(*indexInfo.preciseLoopCount)))
-                                    .into_underlying());
+                                addr, detail::importPostExprThroughCurrentFactory(*postValue));
                             if (!ok)
                                 UNREACHABLE();
                         } else {
@@ -876,13 +891,15 @@ namespace acslg::spec_generator {
                                                         cloneExpr(*pattern.value().initialValue),
                                                         Subtract, std::move(diff)));
 
-                            memoryMap.emplace(addr, std::move(postValue).into_underlying());
+                            memoryMap.emplace(
+                                addr, detail::importPostExprThroughCurrentFactory(*postValue));
                         }
                     }();
 
                     // Fallback: if the derivation did not end up installing a post value (or if a
                     // value already exists), default to Unknown.
-                    memoryMap.emplace(addr, buildUnknown().into_underlying());
+                    memoryMap.emplace(
+                        addr, detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                     assignedAddrs.push_back(addr);
                 }
             }
@@ -941,16 +958,17 @@ namespace acslg::spec_generator {
                 auto &postMemoryMap = interruptPostInfos.at(i).memoryMap;
 
                 for (auto &assignedAddr : assignedAddrs) {
-                    postMemoryMap.emplace(assignedAddr,
-                                          buildUnknown().into_underlying());
+                    postMemoryMap.emplace(
+                        assignedAddr, detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                 }
                 for (auto &[addr, _] : patternInfo.interruptedPathPatternsMaps.at(i)) {
                     if (auto range = tryGetAsRange(addr)) {
-                        postMemoryMap.emplace(std::move(range.value()),
-                                              buildUnknown().into_underlying());
+                        postMemoryMap.emplace(
+                            std::move(range.value()),
+                            detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                     } else {
-                        postMemoryMap.emplace(addr,
-                                              buildUnknown().into_underlying());
+                        postMemoryMap.emplace(
+                            addr, detail::importPostExprThroughCurrentFactory(*buildUnknown()));
                     }
                 }
             }
@@ -1044,7 +1062,7 @@ namespace acslg::spec_generator {
             PostPIInfo normalPostInfo;
             for (auto &addr : assignedAddrs) {
                 normalPostInfo.memoryMap.emplace(
-                    addr, buildUnknown().into_underlying());
+                    addr, detail::importPostExprThroughCurrentFactory(*buildUnknown()));
             }
 
             std::string specs;
@@ -1089,7 +1107,8 @@ namespace acslg::spec_generator {
 
                 for (auto &addr : interruptAssignedAddrs) {
                     postInfo.memoryMap.emplace(addr,
-                                               buildUnknown().into_underlying());
+                                               detail::importPostExprThroughCurrentFactory(
+                                                   *buildUnknown()));
                 }
             }
 
@@ -1497,8 +1516,8 @@ namespace acslg::spec_generator {
                 symb::AddressBox maxAddrBox{*maxAddrIt->second};
                 normalPostInfo.memoryMap.emplace(
                     maxAddrBox,
-                    makeMaxMinOverRangeExpr(std::move(arrayRange), "k", *extremum,
-                                            pointAfterLoop));
+                    detail::importPostExprThroughCurrentFactory(*makeMaxMinOverRangeExpr(
+                        std::move(arrayRange), "k", *extremum, pointAfterLoop)));
             }}; // ifVisitor end
             ifVisitor.runOn(loopInfo.bodyStmt);
 

@@ -22,17 +22,14 @@
 
 namespace acslg::spec_generator {
     namespace detail {
-        inline utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-        copyPostExprThroughCurrentFactory(const analyzer::symbolic::SymbolicExpr &expr) {
-            auto &factory = analyzer::symbolic::ExprFactoryScope::current();
-            return factory.importAndCloneExpr(expr);
-        }
-
         inline analyzer::symbolic::ExprHandle importPostExprThroughCurrentFactory(
             const analyzer::symbolic::SymbolicExpr &expr) {
             return analyzer::symbolic::ExprFactoryScope::current().importExpr(expr);
         }
     } // namespace detail
+
+    using PostMemoryMap =
+        analyzer::symbolic::AddressBoxMap<analyzer::symbolic::ExprHandle>;
 
     /**
      * @brief Emit an ACSL function contract using registered plugins.
@@ -271,23 +268,17 @@ namespace acslg::spec_generator {
     };
 
     struct PostPIInfo {
-        analyzer::symbolic::AddressBoxMap<
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
-            memoryMap;
+        PostMemoryMap memoryMap;
         analyzer::PathConditions pathConds;
 
-        PostPIInfo(
-            analyzer::symbolic::AddressBoxMap<
-                utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
-            analyzer::PathConditions pcs)
+        PostPIInfo(PostMemoryMap mem, analyzer::PathConditions pcs)
             : memoryMap(std::move(mem)), pathConds(std::move(pcs)) {}
 
         PostPIInfo(const PostPIInfo &other) {
             for (const auto &kv : other.memoryMap) {
                 const auto &addr  = kv.first;
                 const auto &exprp = kv.second;
-                auto cloned       = detail::copyPostExprThroughCurrentFactory(*exprp);
-                memoryMap.emplace(addr, utils::not_null{std::move(cloned)});
+                memoryMap.emplace(addr, detail::importPostExprThroughCurrentFactory(*exprp));
             }
 
             pathConds.reserve(other.pathConds.size());
@@ -322,16 +313,13 @@ namespace acslg::spec_generator {
     };
 
     struct PostPSInfo {
-        analyzer::symbolic::AddressBoxMap<
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
-            memoryMap;
+        PostMemoryMap memoryMap;
         analyzer::PathConditions pathConds;
         analyzer::Path::PathState pathState;
         std::optional<analyzer::symbolic::ExprHandle> returnExpr;
 
         PostPSInfo(
-            analyzer::symbolic::AddressBoxMap<
-                utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
+            PostMemoryMap mem,
             analyzer::PathConditions pcs,
             analyzer::Path::PathState ps,
             std::optional<analyzer::symbolic::ExprHandle> re)
@@ -342,8 +330,7 @@ namespace acslg::spec_generator {
             for (const auto &kv : other.memoryMap) {
                 const auto &addr = kv.first;
                 const auto &expr = kv.second;
-                auto cloned      = detail::copyPostExprThroughCurrentFactory(*expr);
-                memoryMap.emplace(addr, utils::not_null{std::move(cloned)});
+                memoryMap.emplace(addr, detail::importPostExprThroughCurrentFactory(*expr));
             }
 
             pathConds.reserve(other.pathConds.size());

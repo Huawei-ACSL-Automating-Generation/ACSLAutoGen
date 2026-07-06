@@ -477,6 +477,31 @@ namespace acslg::analyzer {
         memoryState_.write(addr, std::move(expr).into_underlying());
     }
 
+    void Path::updateMemory(const symbolic::Address &addr, symbolic::ExprHandle expr) {
+        auto imported = context_.getExprFactory().importExpr(*expr);
+        if (imported->isUnknown()) {
+            if (auto *fieldAddr = symbolic::dyn_cast<symbolic::FieldAddress>(&addr)) {
+                if (fieldAddr->getDefinition() &&
+                    fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
+                    fieldAddr->getFieldIndex() == 4) {
+                    if (stmtCtx_) {
+                        auto loc      = stmtCtx_->getBeginLoc();
+                        auto &SM      = context_.getSourceManager();
+                        auto presumed = SM.getPresumedLoc(loc);
+                        if (presumed.isValid()) {
+                            DEBUG("updateMemory Unknown BigNum->data at "
+                                  << presumed.getFilename() << ":" << presumed.getLine() << ":"
+                                  << presumed.getColumn());
+                        }
+                    } else {
+                        DEBUG("updateMemory Unknown BigNum->data (no stmtCtx)");
+                    }
+                }
+            }
+        }
+        memoryState_.write(addr, context_.getExprFactory().cloneExpr(imported));
+    }
+
     /**
      * @brief Update the symbolic value associated with a variable.
      * @param var Variable declaration being written.

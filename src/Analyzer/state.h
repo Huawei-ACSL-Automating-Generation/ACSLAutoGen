@@ -697,6 +697,7 @@ namespace acslg::analyzer {
          */
         void updateMemory(const symbolic::Address &addr,
                           utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr);
+        void updateMemory(const symbolic::Address &addr, symbolic::ExprHandle expr);
         /**
          * @brief Update the symbolic state of a variable.
          * @param var [in] Variable declaration being updated.
