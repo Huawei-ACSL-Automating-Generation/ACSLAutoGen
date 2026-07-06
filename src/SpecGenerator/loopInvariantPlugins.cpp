@@ -616,6 +616,7 @@ namespace acslg::spec_generator {
 
             auto &memoryMap = normalPostInfo.memoryMap;
             auto &pathConds = normalPostInfo.pathConds;
+            auto &factory   = symb::ExprFactoryScope::current();
 
             // Decide whether an address is "local":
             // - If its root decl is not in preState's varAddrMap, treat it as local (e.g. declared
@@ -710,10 +711,8 @@ namespace acslg::spec_generator {
             // the post-loop index value to fall within a certain window. We collect those
             // conditions and attach them to globalNormalPathPostInfo.pathConds for later use when
             // interpreting/printing the synthesized post-state.
-            std::unordered_map<size_t, utils::not_null<std::unique_ptr<symb::SymbolicExpr>>>
-                condsForInsert;
+            std::unordered_map<size_t, symb::ExprHandle> condsForInsert;
             for (auto &[addr, pattern] : patternInfo.normalExitPatternsMap) {
-                using enum symb::BinaryOpExpr::Operator;
                 if (isLocal(addr))
                     continue;
                 // 1) Try to lift the address to a range form (more compact assigns; use range addr
@@ -766,13 +765,12 @@ namespace acslg::spec_generator {
                             // Loop count is precise (index's step is 1 or -1)
 
                             // init + step * loopCount
+                            symb::Expr initialValue{factory, pattern.value().initialValue};
+                            symb::Expr loopCount{factory, indexInfo.preciseLoopCount};
                             auto postValue =
-                                buildBinary(cloneExpr(*pattern.value().initialValue), Add,
-                                            buildBinary(buildLiteral(pattern.value().step),
-                                                        Multiply,
-                                                        cloneExpr(*indexInfo.preciseLoopCount)));
-                            auto [_, ok] = memoryMap.emplace(
-                                addr, detail::importPostExprThroughCurrentFactory(*postValue));
+                                initialValue +
+                                symb::LiteralExpr{factory, pattern.value().step} * loopCount;
+                            auto [_, ok] = memoryMap.emplace(addr, postValue.handle());
                             if (!ok)
                                 UNREACHABLE();
                         } else {
@@ -801,58 +799,45 @@ namespace acslg::spec_generator {
                                           indexInfo.indexRealAddr->addressClone().into_underlying(),
                                           std::move(pointAfterLoop));
 
-                            using enum symb::BinaryOpExpr::Operator;
+                            symb::Expr indexAfter{factory,
+                                                  factory.importExpr(*indexValueAfterLoop)};
+                            symb::Expr indexBound{factory, indexInfo.indexBound};
+                            symb::Expr indexInitial{factory, indexInfo.indexSymbolicValue};
 
                             // i >= n (step > 0) or
                             // i <= 0 (step < 0)
                             auto firstIndexCond =
                                 (indexInfo.indexPattern.step > 0
-                                     ? buildBinary(
-                                           cloneExpr(*indexValueAfterLoop), GreaterEqual,
-                                           cloneExpr(*indexInfo.indexBound))
-                                     : buildBinary(
-                                           cloneExpr(*indexValueAfterLoop), LessEqual,
-                                           cloneExpr(*indexInfo.indexBound)));
+                                     ? indexAfter.greaterEqual(indexBound)
+                                     : indexAfter.lessEqual(indexBound));
 
                             // i < n + step (step > 0) or
                             // i > 0 + step (step < 0)
                             auto secondIndexCond =
                                 (indexInfo.indexPattern.step > 0
-                                     ? buildBinary(
-                                           cloneExpr(*indexValueAfterLoop), LessThan,
-                                           buildBinary(cloneExpr(*indexInfo.indexBound), Add,
-                                                          buildLiteral(
-                                                              indexInfo.indexPattern.step)))
-                                     : buildBinary(
-                                           cloneExpr(*indexValueAfterLoop), GreaterThan,
-                                           buildBinary(cloneExpr(*indexInfo.indexBound), Add,
-                                                          buildLiteral(
-                                                              indexInfo.indexPattern.step))));
+                                     ? indexAfter.lessThan(
+                                           indexBound +
+                                           symb::LiteralExpr{factory, indexInfo.indexPattern.step})
+                                     : indexAfter.greaterThan(
+                                           indexBound +
+                                           symb::LiteralExpr{factory,
+                                                             indexInfo.indexPattern.step}));
 
-                            condsForInsert.emplace(firstIndexCond->hash(),
-                                                   cloneExpr(*firstIndexCond));
-                            condsForInsert.emplace(secondIndexCond->hash(),
-                                                   cloneExpr(*secondIndexCond));
+                            condsForInsert.emplace(firstIndexCond.hash(), firstIndexCond.handle());
+                            condsForInsert.emplace(secondIndexCond.hash(),
+                                                   secondIndexCond.handle());
 
                             // abs(i_post - i_init)
-                            auto diff = (indexInfo.indexPattern.step > 0
-                                             ? buildBinary(
-                                                   cloneExpr(*indexValueAfterLoop), Subtract,
-                                                   cloneExpr(*indexInfo.indexSymbolicValue))
-                                             : buildBinary(
-                                                   cloneExpr(*indexInfo.indexSymbolicValue), Subtract,
-                                                   cloneExpr(*indexValueAfterLoop)));
+                            auto diff = (indexInfo.indexPattern.step > 0)
+                                            ? indexAfter - indexInitial
+                                            : indexInitial - indexAfter;
 
-                            auto postValue = (pattern.value().step > 0
-                                                  ? buildBinary(
-                                                        cloneExpr(*pattern.value().initialValue), Add,
-                                                        std::move(diff))
-                                                  : buildBinary(
-                                                        cloneExpr(*pattern.value().initialValue),
-                                                        Subtract, std::move(diff)));
+                            symb::Expr initialValue{factory, pattern.value().initialValue};
+                            auto postValue = (pattern.value().step > 0)
+                                                 ? initialValue + diff
+                                                 : initialValue - diff;
 
-                            memoryMap.emplace(
-                                addr, detail::importPostExprThroughCurrentFactory(*postValue));
+                            memoryMap.emplace(addr, postValue.handle());
                         }
                     }();
 
@@ -864,7 +849,7 @@ namespace acslg::spec_generator {
             }
 
             for (auto &[_, cond] : condsForInsert) {
-                pathConds.emplace(detail::importPostExprThroughCurrentFactory(*cond));
+                pathConds.emplace(cond);
             }
 
             // Build `loop assigns ...;`:
