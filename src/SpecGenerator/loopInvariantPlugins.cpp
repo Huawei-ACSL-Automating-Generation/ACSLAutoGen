@@ -1689,6 +1689,7 @@ namespace acslg::spec_generator {
             // Rewrite the interrupted predicate by replacing its symbols with k-parameterized
             // expressions, yielding pred(k).
             auto pred = interruptedCond->getSubstitutedValueExpr(hashExprMapForSub);
+            symb::Expr predExpr{factory, factory.importExpr(*pred)};
 
             std::vector<PostPSInfo> normalPostInfos{1};
             std::vector<std::vector<PostPSInfo>> interruptedPathsInfos{std::vector<PostPSInfo>{1}};
@@ -1752,23 +1753,17 @@ namespace acslg::spec_generator {
                         }));
             }
             normalPathInfo.pathState = analyzer::Path::PathState::Step;
-            auto normalCond = makeQuantifierOverRangeExpr(
-                cloneSymbolAddress(*arrayRange), "k", ForAll,
-                buildUnary(symb::UnaryOpExpr::Operator::LogicalNot, cloneExpr(*pred)));
-            normalPathInfo.pathConds.emplace(
-                detail::importPostExprThroughCurrentFactory(*normalCond));
+            auto normalPred = predExpr.logicalNot();
+            normalPathInfo.pathConds.emplace(makeQuantifierOverRangeHandle(
+                factory, *arrayRange, "k", ForAll, *normalPred));
 
-            auto interruptedQuantifierCond = makeQuantifierOverRangeExpr(
-                std::move(arrayRange), "k", Exist, cloneExpr(*pred));
-            interruptedPathInfo.pathConds.emplace(
-                detail::importPostExprThroughCurrentFactory(*interruptedQuantifierCond));
+            interruptedPathInfo.pathConds.emplace(makeQuantifierOverRangeHandle(
+                factory, *arrayRange, "k", Exist, *predExpr));
 
             // Try to print the forall form as a concrete ACSL text. If that fails, we still return
             // post-info but do not emit an invariant clause.
-            auto expected =
-                buildUnary(symb::UnaryOpExpr::Operator::LogicalNot, cloneExpr(*pred))
-                    ->getACSL({.predefinedLabels{
-                        {entryAndCurrentInfo.symbolicLoopEntry->getStartPoint(), "LoopEntry"}}});
+            auto expected = normalPred.getACSL({.predefinedLabels{
+                {entryAndCurrentInfo.symbolicLoopEntry->getStartPoint(), "LoopEntry"}}});
             if (expected) {
                 auto resACSL =
                     StringTemplate{"loop invariant \\forall integer k; ${leftBound} <= k "
