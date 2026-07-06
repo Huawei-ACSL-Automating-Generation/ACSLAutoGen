@@ -320,6 +320,11 @@ namespace acslg::test::utils {
         return exprFactory_.cloneExpr(exprFactory_.rangeIndex(name));
     }
 
+    not_null<unique_ptr<symbolic::SymbolicExpr>> FixtureWithCode::cloneExpr(
+        const symbolic::SymbolicExpr &expr) {
+        return exprFactory_.cloneExpr(exprFactory_.importExpr(expr));
+    }
+
     symbolic::SymbolAddress FixtureWithCode::makeRangeAddr(
         unsigned int id,
         unique_ptr<const symbolic::SymbolicExpr> offset,

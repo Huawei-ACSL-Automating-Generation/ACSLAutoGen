@@ -306,7 +306,7 @@ namespace acslg::test::unit::analyzer {
 
         auto addr     = makeVariableAddr(1);
         auto expr     = makeSymbolValue(42);
-        auto saveExpr = expr->clone();
+        auto saveExpr = cloneExpr(*expr);
         mm.write(addr, std::move(expr));
 
         ASSERT_EQ(expr.get(), nullptr);
@@ -319,8 +319,8 @@ namespace acslg::test::unit::analyzer {
         MemoryModel mm;
 
         auto expected = makeSymbolValue(42);
-        mm.write(makeVariableAddr(1), expected->clone());
-        mm.write(makeVariableAddr(2), expected->clone());
+        mm.write(makeVariableAddr(1), cloneExpr(*expected));
+        mm.write(makeVariableAddr(2), cloneExpr(*expected));
 
         std::vector<const symbolic::SymbolicExpr *> flatValues;
         for (auto &&[addr, value] : mm.flat()) {
@@ -343,14 +343,14 @@ namespace acslg::test::unit::analyzer {
         // noOffset
         auto baseA  = makeVariableAddr(1);
         auto eA     = makeSymbolValue(1);
-        auto saveEA = eA->clone();
+        auto saveEA = cloneExpr(*eA);
         mm.write(baseA, std::move(eA));
 
         // constantRange
         auto rangeB = makeRangeAddr(2, /*off=*/makeLiteralExpr(4).into_underlying(),
                                     /*len=*/makeLiteralExpr(2).into_underlying());
         auto eB     = makeSymbolValue(2);
-        auto saveEB = eB->clone();
+        auto saveEB = cloneExpr(*eB);
         mm.write(rangeB, std::move(eB));
 
         // symbolicRange
@@ -382,28 +382,28 @@ namespace acslg::test::unit::analyzer {
         auto aRange = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
                                     makeLiteralExpr(10U).into_underlying());
         auto eA     = makeSymbolValue(100);
-        auto saveA  = eA->clone();
+        auto saveA  = cloneExpr(*eA);
         mm.write(aRange, std::move(eA));
 
         // B: [3,8)
         auto bRange = makeRangeAddr(baseId, makeLiteralExpr(3U).into_underlying(),
                                     makeLiteralExpr(5U).into_underlying());
         auto eB     = makeSymbolValue(200);
-        auto saveB  = eB->clone();
+        auto saveB  = cloneExpr(*eB);
         mm.write(bRange, std::move(eB));
 
         // C: [1,3)
         auto cRange = makeRangeAddr(baseId, makeLiteralExpr(1U).into_underlying(),
                                     makeLiteralExpr(2U).into_underlying());
         auto eC     = makeSymbolValue(300);
-        auto saveC  = eC->clone();
+        auto saveC  = cloneExpr(*eC);
         mm.write(cRange, std::move(eC));
 
         // D: [7,10)
         auto dRange = makeRangeAddr(baseId, makeLiteralExpr(7U).into_underlying(),
                                     makeLiteralExpr(3U).into_underlying());
         auto eD     = makeSymbolValue(400);
-        auto saveD  = eD->clone();
+        auto saveD  = cloneExpr(*eD);
         mm.write(dRange, std::move(eD));
 
         //  [0] -> A
@@ -432,12 +432,12 @@ namespace acslg::test::unit::analyzer {
         auto r     = makeRangeAddr(baseId, makeLiteralExpr(5U).into_underlying(),
                                    makeLiteralExpr(4U).into_underlying());
         auto eX    = makeSymbolValue(500);
-        auto saveX = eX->clone();
+        auto saveX = cloneExpr(*eX);
         mm.write(r, std::move(eX));
 
         // Y: [5,9)
         auto eY    = makeSymbolValue(600);
-        auto saveY = eY->clone();
+        auto saveY = cloneExpr(*eY);
         mm.write(r, std::move(eY));
 
         for (uint64_t off = 5; off < 9; ++off) {
@@ -457,7 +457,6 @@ namespace acslg::test::unit::analyzer {
 
         auto val0     = makeSymbolValue(10);
         auto val1     = makeSymbolValue(20);
-        auto val1Copy = val1->clone();
 
         pathA->updateMemory(*addr0A, std::move(val0));
         pathB->updateMemory(*addr1B, std::move(val1));
@@ -496,12 +495,12 @@ namespace acslg::test::unit::analyzer {
         auto condShared = makeLiteral(1);
         auto condAOnly  = makeLiteral(2);
 
-        pathA->insertPathCondition(condShared->clone());
+        pathA->insertPathCondition(cloneExpr(*condShared));
         ASSERT_EQ(pathA->getPathConditions().size(), 1u);
         auto sharedHandle = *pathA->getPathConditions().begin();
 
         pathA->insertPathCondition(std::move(condAOnly));
-        pathB->insertPathCondition(condShared->clone());
+        pathB->insertPathCondition(cloneExpr(*condShared));
         ASSERT_EQ(pathB->getPathConditions().size(), 1u);
         EXPECT_EQ(sharedHandle, *pathB->getPathConditions().begin());
 
@@ -564,7 +563,7 @@ namespace acslg::test::unit::analyzer {
         auto r1 = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
                                 makeLiteralExpr(3U).into_underlying());
         auto v  = makeSymbolValue(1000);
-        auto sv = v->clone();
+        auto sv = cloneExpr(*v);
         mm.write(r1, std::move(v));
 
         // [3,5) value=V
@@ -593,14 +592,14 @@ namespace acslg::test::unit::analyzer {
         auto r1 = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
                                 makeLiteralExpr(3U).into_underlying());
         auto v1 = makeSymbolValue(1111);
-        auto s1 = v1->clone();
+        auto s1 = cloneExpr(*v1);
         mm.write(r1, std::move(v1));
 
         // [3,5) value=V2 (different value)
         auto r2 = makeRangeAddr(baseId, makeLiteralExpr(3U).into_underlying(),
                                 makeLiteralExpr(2U).into_underlying());
         auto v2 = makeSymbolValue(2222);
-        auto s2 = v2->clone();
+        auto s2 = cloneExpr(*v2);
         mm.write(r2, std::move(v2));
 
         mm.mergeConstantRanges();
@@ -629,7 +628,7 @@ namespace acslg::test::unit::analyzer {
                                 makeLiteralExpr(2U).into_underlying());
 
         auto v = makeSymbolValue(3333);
-        auto s = v->clone();
+        auto s = cloneExpr(*v);
         mm.write(r1, std::move(v));
         mm.write(r2, makeSymbolValue(3333));
         mm.write(r3, makeSymbolValue(3333));
@@ -657,7 +656,7 @@ namespace acslg::test::unit::analyzer {
                                 makeLiteralExpr(2U).into_underlying());
 
         auto v = makeSymbolValue(4444);
-        auto s = v->clone();
+        auto s = cloneExpr(*v);
         mm.write(r1, std::move(v));
         mm.write(r2, makeSymbolValue(5555)); // different
         mm.write(r3, makeSymbolValue(4444)); // same as r1
@@ -694,8 +693,8 @@ namespace acslg::test::unit::analyzer {
 
         // X, X+1, X+2 each represents a single address (non-range → [off, off+1))
         auto X  = makeSymbolValue(901); // symbolic SymbolValue expression (example)
-        auto X1 = makeAdd(X->clone(), makeLiteralExpr(1U));
-        auto X2 = makeAdd(X->clone(), makeLiteralExpr(2U));
+        auto X1 = makeAdd(cloneExpr(*X), makeLiteralExpr(1U));
+        auto X2 = makeAdd(cloneExpr(*X), makeLiteralExpr(2U));
 
         auto a0 = makeRangeAddr(baseId, /*off=*/std::move(X), /*len=*/nullptr);  // single @ X
         auto a1 = makeRangeAddr(baseId, /*off=*/std::move(X1), /*len=*/nullptr); // single @ X+1
@@ -703,7 +702,7 @@ namespace acslg::test::unit::analyzer {
 
         // Same value
         auto v  = makeSymbolValue(7777);
-        auto sv = v->clone();
+        auto sv = cloneExpr(*v);
         mm.write(a0, std::move(v));
         mm.write(a1, makeSymbolValue(7777));
         mm.write(a2, makeSymbolValue(7777));
@@ -719,13 +718,13 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 32;
 
         auto X  = makeSymbolValue(902);
-        auto X2 = makeAdd(X->clone(), makeLiteralExpr(2U));
+        auto X2 = makeAdd(cloneExpr(*X), makeLiteralExpr(2U));
 
         auto a0 = makeRangeAddr(baseId, std::move(X), nullptr);  // single @ X
         auto a2 = makeRangeAddr(baseId, std::move(X2), nullptr); // single @ X+2
 
         auto v  = makeSymbolValue(8888);
-        auto sv = v->clone();
+        auto sv = cloneExpr(*v);
         mm.write(a0, std::move(v));
         mm.write(a2, makeSymbolValue(8888)); // same value but with a gap of 1
 
@@ -740,14 +739,14 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 33;
 
         auto X  = makeSymbolValue(903);
-        auto X1 = makeAdd(X->clone(), makeLiteralExpr(1U));
+        auto X1 = makeAdd(cloneExpr(*X), makeLiteralExpr(1U));
 
         auto a0 = makeRangeAddr(baseId, std::move(X), nullptr);  // single @ X
         auto a1 = makeRangeAddr(baseId, std::move(X1), nullptr); // single @ X+1
 
         auto v1 = makeSymbolValue(10001);
         auto v2 = makeSymbolValue(10002);
-        auto s1 = v1->clone();
+        auto s1 = cloneExpr(*v1);
         mm.write(a0, std::move(v1));
         mm.write(a1, std::move(v2)); // different value
 
@@ -773,19 +772,19 @@ namespace acslg::test::unit::analyzer {
 
         // For two different bases, write X and X+1 with the same values
         auto XA  = makeSymbolValue(910);
-        auto X1A = makeAdd(XA->clone(), makeLiteralExpr(1U));
+        auto X1A = makeAdd(cloneExpr(*XA), makeLiteralExpr(1U));
         auto a0A = makeRangeAddr(baseA, std::move(XA), nullptr);
         auto a1A = makeRangeAddr(baseA, std::move(X1A), nullptr);
 
         auto XB  = makeSymbolValue(910); // same construction but different base
-        auto X1B = makeAdd(XB->clone(), makeLiteralExpr(1U));
+        auto X1B = makeAdd(cloneExpr(*XB), makeLiteralExpr(1U));
         auto a0B = makeRangeAddr(baseB, std::move(XB), nullptr);
         auto a1B = makeRangeAddr(baseB, std::move(X1B), nullptr);
 
         auto vA  = makeSymbolValue(1212);
-        auto svA = vA->clone();
+        auto svA = cloneExpr(*vA);
         auto vB  = makeSymbolValue(1212);
-        auto svB = vB->clone();
+        auto svB = cloneExpr(*vB);
 
         mm.write(a0A, std::move(vA));
         mm.write(a1A, makeSymbolValue(1212));
@@ -825,7 +824,7 @@ namespace acslg::test::unit::analyzer {
 
         // Same value
         auto v  = makeSymbolValue(1313);
-        auto sv = v->clone();
+        auto sv = cloneExpr(*v);
         mm.write(a0, std::move(v));
         mm.write(a1, makeSymbolValue(1313));
 
@@ -880,14 +879,14 @@ namespace acslg::test::unit::analyzer {
 
         auto X = makeSymbolValue(904);
         // A: [X,X+1) -> v
-        auto aRange = makeRangeAddr(baseId, X->clone().into_underlying(),
+        auto aRange = makeRangeAddr(baseId, cloneExpr(*X).into_underlying(),
                                     makeLiteralExpr(1U).into_underlying());
         auto v      = makeSymbolValue(1313);
 
-        mm.write(aRange, v->clone());
+        mm.write(aRange, cloneExpr(*v));
 
         // B: an addr with offset X
-        auto bAddr = makeRangeAddr(baseId, X->clone().into_underlying(), nullptr);
+        auto bAddr = makeRangeAddr(baseId, cloneExpr(*X).into_underlying(), nullptr);
 
         // read(A) == read(B) == v
         auto resA = mm.read(aRange);
