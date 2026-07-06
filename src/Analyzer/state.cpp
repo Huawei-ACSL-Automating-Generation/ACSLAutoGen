@@ -1925,9 +1925,17 @@ namespace acslg::analyzer {
 
     std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> MemoryModel::read(
         const symbolic::Address &addr) const {
+        auto value = readHandle(addr);
+        if (!value)
+            return std::nullopt;
+        return cloneExpr(factory(), *value.value());
+    }
+
+    std::optional<symbolic::ExprHandle> MemoryModel::readHandle(
+        const symbolic::Address &addr) const {
         if (auto varAddr = symbolic::dyn_cast<const symbolic::VariableAddress>(&addr)) {
             if (memoryMap_variableAddr_.contains(*varAddr))
-                return cloneExpr(factory(), *memoryMap_variableAddr_.at(*varAddr));
+                return memoryMap_variableAddr_.at(*varAddr);
             return std::nullopt;
         } else if (auto symbolAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
             auto baseInfo = symbolAddr->getBaseInfo();
@@ -1951,7 +1959,8 @@ namespace acslg::analyzer {
                     if (firstLEIt == rangeExprMap.end() ||
                         firstLEIt->first.second <= unsignedOffset)
                         return std::nullopt;
-                    return firstLEIt->second->getRangeIndexSubstituted(baseInfo, *offset);
+                    return factory().importExpr(
+                        *firstLEIt->second->getRangeIndexSubstituted(baseInfo, *offset));
                 } else if (auto &len = symbolAddr->getLength();
                            constOffset && len && len.value()->tryEvalAsConstant()) {
                     UNIMPLEMENT(
@@ -1971,22 +1980,22 @@ namespace acslg::analyzer {
                 auto it = addrValueMap.find(fakeRange);
                 if (it == addrValueMap.end())
                     return std::nullopt;
-                return cloneExpr(factory(), *it->second);
+                return it->second;
             }
             auto it = addrValueMap.find(*symbolAddr);
             if (it == addrValueMap.end())
                 return std::nullopt;
-            return cloneExpr(factory(), *it->second);
+            return it->second;
         } else if (auto fieldAddr = symbolic::dyn_cast<const symbolic::FieldAddress>(&addr)) {
             auto &baseAddr = fieldAddr->getBaseAddr();
             auto &index    = fieldAddr->getFieldIndex();
-            auto baseValue = read(*baseAddr);
+            auto baseValue = readHandle(*baseAddr);
             if (baseValue == std::nullopt)
                 return std::nullopt;
             auto baseSt = symbolic::dyn_cast<const symbolic::Structure>(baseValue.value().get().get());
             if (baseSt == nullptr)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
-            return cloneExpr(factory(), *baseSt->getFieldValue(index));
+            return factory().importExpr(*baseSt->getFieldValue(index));
         }
         UNREACHABLE();
     }
@@ -2073,10 +2082,10 @@ namespace acslg::analyzer {
                 fieldAddr->getDefinition()->getNameAsString() == "BigNum" && index == 4) {
                 DEBUG("write BigNum->data with: " << valueHandle->dump());
             }
-            auto baseValue = read(*baseAddr);
+            auto baseValue = readHandle(*baseAddr);
             if (baseValue == std::nullopt)
                 ERROR("Structure isn't existed in MemoryModel, insert it first.");
-            auto baseSt = symbolic::dyn_cast<symbolic::Structure>(baseValue.value().get().get());
+            auto baseSt = symbolic::dyn_cast<const symbolic::Structure>(baseValue.value().get().get());
             if (baseSt == nullptr)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
             auto updated = baseSt->withFieldValue(index, factory().cloneExpr(valueHandle));
@@ -2090,7 +2099,7 @@ namespace acslg::analyzer {
     }
 
     bool MemoryModel::contains(const symbolic::Address &addr) const {
-        return read(addr) ? true : false;
+        return readHandle(addr) ? true : false;
     }
 
     // MemoryModel::flat_view MemoryModel::flat() { return MemoryModel::flat_view{*this}; }

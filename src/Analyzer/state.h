@@ -121,6 +121,7 @@ namespace acslg::analyzer {
          */
         std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> read(
             const symbolic::Address &addr) const;
+        std::optional<symbolic::ExprHandle> readHandle(const symbolic::Address &addr) const;
 
         /**
          * @brief Writes a symbolic expression to the given address.

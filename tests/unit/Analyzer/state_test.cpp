@@ -338,6 +338,10 @@ namespace acslg::test::unit::analyzer {
         ASSERT_TRUE(readBack);
         EXPECT_EQ(*readBack.value(), *expected);
         EXPECT_NE(readBack.value().get().get(), flatValues[0]);
+
+        auto readBackHandle = mm.readHandle(makeVariableAddr(1));
+        ASSERT_TRUE(readBackHandle);
+        EXPECT_EQ(readBackHandle->get().get(), flatValues[0]);
     }
 
     TEST_F(MemoryModelTest, Flat_Yields_All_Three_Categories) {
