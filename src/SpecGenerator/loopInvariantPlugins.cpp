@@ -1614,33 +1614,27 @@ namespace acslg::spec_generator {
             //   init + step * (k - i_init) (or the reversed form depending on step direction)
             // - Otherwise treat the value as loop-invariant and just clone it
             auto getSubExpr = [&](const symb::Symbol &symbol)
-                -> std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> {
+                -> std::optional<symb::ExprHandle> {
                 auto fromAddr = symbol.getFromAddr();
                 if (fromAddr == std::nullopt)
                     return std::nullopt;
                 auto it = patternInfo.normalExitPatternsMap.find(*fromAddr.value());
                 // The value on this address doesn't change during loop, so just copy it.
                 if (it == patternInfo.normalExitPatternsMap.end())
-                    return cloneExpr(*symbol.toSymbolicExpr());
+                    return factory.importExpr(*symbol.toSymbolicExpr());
                 if (it->second == std::nullopt)
                     return std::nullopt;
                 auto &[initValue, step] = it->second.value();
-                using enum symb::BinaryOpExpr::Operator;
+                symb::Expr init{factory, initValue};
+                symb::Expr stepExpr{factory, factory.literal(step)};
+                symb::Expr rangeIndex{factory, factory.rangeIndex("k")};
+                symb::Expr indexInitial{factory, indexInfo.indexSymbolicValue};
                 // x_init + x_step * (index - index_init)
-                if (indexStep > 0)
-                    return buildBinary(
-                        cloneExpr(*initValue), Add,
-                        buildBinary(
-                            buildLiteral(step), Multiply,
-                            buildBinary(buildRangeIndex("k"), Subtract,
-                                        cloneExpr(*indexInfo.indexSymbolicValue))));
+                if (indexStep > 0) {
+                    return (init + stepExpr * (rangeIndex - indexInitial)).handle();
+                }
                 // x_init + x_step * (index_init - index)
-                return buildBinary(
-                    cloneExpr(*initValue), Add,
-                    buildBinary(
-                        buildLiteral(step), Multiply,
-                        buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), Subtract,
-                                       buildRangeIndex("k"))));
+                return (init + stepExpr * (indexInitial - rangeIndex)).handle();
             }; // getSubExpr ends
 
             // Try to extract a "common concrete value" across multiple real entry paths:
@@ -1679,14 +1673,15 @@ namespace acslg::spec_generator {
                         auto subedExpr = getSubExpr(*symbolInOff);
                         if (subedExpr == std::nullopt)
                             return std::nullopt;
-                        hashExprMapForSub.insert_or_assign(hashInOff, std::move(subedExpr.value()));
+                        hashExprMapForSub.insert_or_assign(hashInOff,
+                                                           factory.cloneExpr(subedExpr.value()));
                     }
                     continue;
                 }
                 auto subedExpr = getSubExpr(*symbol);
                 if (subedExpr == std::nullopt)
                     return std::nullopt;
-                hashExprMapForSub.insert_or_assign(hash, std::move(subedExpr.value()));
+                hashExprMapForSub.insert_or_assign(hash, factory.cloneExpr(subedExpr.value()));
             }
             if (arrayInCond == nullptr)
                 return {};
@@ -1713,7 +1708,6 @@ namespace acslg::spec_generator {
                 }
             }
             using enum symb::QuantifierOverRange::Quantifier;
-            using enum symb::BinaryOpExpr::Operator;
 
             assert(arrayInCond != nullptr);
             // arrayRange denotes the array/pointer access range to quantify over:
