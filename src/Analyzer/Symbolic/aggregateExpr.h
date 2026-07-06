@@ -432,6 +432,12 @@ namespace acslg::analyzer::symbolic {
                                          const SymbolAddress &range,
                                          std::string_view indexName,
                                          MaxMinOverRange::Extremum extremum,
+                                         SourcePoint fromPoint);
+
+    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
+                                         const SymbolAddress &range,
+                                         std::string_view indexName,
+                                         MaxMinOverRange::Extremum extremum,
                                          ExprHandle body,
                                          SourcePoint fromPoint);
 

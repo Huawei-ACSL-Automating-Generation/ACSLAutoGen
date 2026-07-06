@@ -56,7 +56,7 @@ namespace acslg::analyzer::symbolic {
                                          std::string_view indexName,
                                          const SourcePoint &fromPoint) {
             auto indexedRange = Addr{factory, factory.importAddress(range)}
-                                    .withOffset(Expr::rangeIndex(indexName));
+                                    .withOffset(Expr{factory, factory.rangeIndex(indexName)});
             indexedRange = indexedRange.withoutLength();
             std::unique_ptr<const Address> clonedRange =
                 indexedRange->addressClone().into_underlying();
@@ -82,6 +82,16 @@ namespace acslg::analyzer::symbolic {
                                              const SymbolicExpr &predicate) {
         return factory.intern(std::make_unique<QuantifierOverRange>(
             factory.importAddress(range), indexName, quantifier, factory.importExpr(predicate)));
+    }
+
+    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
+                                         const SymbolAddress &range,
+                                         std::string_view indexName,
+                                         MaxMinOverRange::Extremum extremum,
+                                         SourcePoint fromPoint) {
+        auto body = makeMaxMinDefaultBody(factory, range, indexName, fromPoint);
+        return makeMaxMinOverRangeHandle(factory, range, indexName, extremum, body,
+                                         std::move(fromPoint));
     }
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
@@ -550,9 +560,8 @@ namespace acslg::analyzer::symbolic {
         if (!range)
             ERROR("MaxMinOverRange requires a non-null range.");
         auto &factory = ExprFactoryScope::current();
-        auto body = makeMaxMinDefaultBody(factory, *range, indexName, fromPoint);
         return factory.cloneExpr(makeMaxMinOverRangeHandle(
-            factory, *range, indexName, extremum, body, std::move(fromPoint)));
+            factory, *range, indexName, extremum, std::move(fromPoint)));
     }
 
     utils::not_null<std::unique_ptr<const SymbolicExpr>> MaxMinOverRange::makeDefaultExpr(

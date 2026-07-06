@@ -1435,8 +1435,8 @@ namespace acslg::spec_generator {
                 symb::AddressBox maxAddrBox{*maxAddrIt->second};
                 normalPostInfo.memoryMap.emplace(
                     maxAddrBox,
-                    detail::importPostExprThroughCurrentFactory(*makeMaxMinOverRangeExpr(
-                        std::move(arrayRange), "k", *extremum, pointAfterLoop)));
+                    makeMaxMinOverRangeHandle(factory, *arrayRange, "k", *extremum,
+                                              pointAfterLoop));
             }}; // ifVisitor end
             ifVisitor.runOn(loopInfo.bodyStmt);
 
