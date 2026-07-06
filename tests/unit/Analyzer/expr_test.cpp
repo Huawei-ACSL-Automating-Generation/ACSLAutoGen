@@ -863,9 +863,8 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedSumNode->getRight().get(), two.get().get());
     }
 
-    TEST(ExprFactoryTest, ScopedValueSubstitutionHashHitImportsReplacement) {
+    TEST(ExprFactoryTest, ValueSubstitutionHandleMapImportsReplacement) {
         symbolic::ExprFactory factory;
-        symbolic::ExprFactoryScope scope(factory);
 
         auto one = factory.literal(int64_t{1});
         auto two = factory.literal(int64_t{2});
@@ -873,11 +872,12 @@ namespace acslg::test::unit::analyzer {
         auto replacement =
             factory.binary(two, symbolic::BinaryOpExpr::Operator::Subtract, one);
 
-        symbolic::SymbolicExpr::HashExprMap substitutions;
-        substitutions.emplace(original.hash(), factory.cloneExpr(replacement));
+        symbolic::HashExprHandleMap substitutions;
+        substitutions.emplace(original.hash(), replacement);
 
-        auto substituted = original->getSubstitutedValueExpr(substitutions);
-        EXPECT_EQ(factory.importExpr(*substituted), replacement);
+        auto substituted =
+            symbolic::getSubstitutedValueHandle(factory, *original, substitutions);
+        EXPECT_EQ(substituted.get().get(), replacement.get().get());
     }
 
     TEST(ExprFactoryTest, ValueSubstitutionHandleMapReturnsInternedReplacement) {
@@ -1278,9 +1278,10 @@ namespace acslg::test::unit::analyzer {
         auto substitutedLiteral = literal->getRangeIndexSubstituted(rangeBase, *index.get());
         EXPECT_EQ(factory.importExpr(*substitutedLiteral), literal);
 
-        symbolic::SymbolicExpr::HashExprMap emptySubstitutions;
-        auto valueSubstitutedLiteral = literal->getSubstitutedValueExpr(emptySubstitutions);
-        EXPECT_EQ(factory.importExpr(*valueSubstitutedLiteral), literal);
+        symbolic::HashExprHandleMap emptySubstitutions;
+        auto valueSubstitutedLiteral =
+            symbolic::getSubstitutedValueHandle(factory, *literal, emptySubstitutions);
+        EXPECT_EQ(valueSubstitutedLiteral.get().get(), literal.get().get());
 
         auto varAddr = factory.variableAddress(var);
         auto substitutedAddr = varAddr->getRangeIndexSubstituted(rangeBase, *index.get());
@@ -2787,13 +2788,14 @@ namespace acslg::test::unit::analyzer {
         auto *structure = symbolic::cast<symbolic::Structure>(structureExpr.get().get());
         auto replacement = factory.literal(42);
 
-        symbolic::SymbolicExpr::HashExprMap substitutions;
+        symbolic::HashExprHandleMap substitutions;
         substitutions.emplace(structure->getFieldValue(0)->hash(),
-                              factory.cloneExpr(replacement));
+                              replacement);
 
-        auto substituted = structure->getSubstitutedValueExpr(substitutions);
+        auto substituted =
+            symbolic::getSubstitutedValueHandle(factory, *structure, substitutions);
         const auto &substitutedStructure =
-            *symbolic::cast<symbolic::Structure>(substituted.get().get());
+            substituted.cast<symbolic::Structure>();
 
         EXPECT_EQ(substitutedStructure.getFieldValue(0).get(), replacement.get().get());
         EXPECT_EQ(substitutedStructure.getFieldValue(1).get(),
