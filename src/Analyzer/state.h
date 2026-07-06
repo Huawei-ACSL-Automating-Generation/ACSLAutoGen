@@ -1066,6 +1066,16 @@ namespace acslg::analyzer {
                                          const ProgramState &loopCurrent,
                                          std::ranges::range auto &inactivePaths,
                                          bool generateBranches = true);
+
+    InvsAndPostStates buildLoopInvariant(symbolic::ExprHandle loopCond,
+                                         const Path &entryPath,
+                                         const ProgramState &loopCurrent,
+                                         std::ranges::range auto &inactivePaths,
+                                         bool generateBranches = true) {
+        auto &factory = symbolic::ExprFactoryScope::current();
+        return buildLoopInvariant(factory.cloneExpr(loopCond).into_underlying(), entryPath,
+                                  loopCurrent, inactivePaths, generateBranches);
+    }
 } // namespace acslg::analyzer
 
 #include "Symbolic/invariant.tpp" // IWYU pragma: keep

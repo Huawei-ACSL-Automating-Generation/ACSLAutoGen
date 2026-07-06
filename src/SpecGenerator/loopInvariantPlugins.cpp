@@ -369,9 +369,9 @@ namespace acslg::spec_generator {
                 !loopHasArrayOrPointer(loopInfo); // collapse branches for array/pointer loops
 
             auto [spec, normalPostInfos, interruptPostInfos] =
-                analyzer::buildLoopInvariant(
-                    factory.cloneExpr(loopCond.value().handle()).into_underlying(), *symbolEntry,
-                    *loopCurrent, entryAndCurrentInfo.inactivePaths, generateBranches);
+                analyzer::buildLoopInvariant(loopCond.value().handle(), *symbolEntry,
+                                             *loopCurrent,
+                                             entryAndCurrentInfo.inactivePaths, generateBranches);
 
             auto collectPathConds = [](analyzer::PathConditionList conds) {
                 analyzer::PathConditions collected;
