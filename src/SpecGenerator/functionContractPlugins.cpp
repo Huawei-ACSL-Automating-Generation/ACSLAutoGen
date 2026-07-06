@@ -23,6 +23,12 @@ namespace acslg::spec_generator {
         const std::string IND1 = "  ";
         const std::string IND2 = "    ";
 
+        utils::not_null<std::unique_ptr<symb::SymbolicExpr>>
+        cloneExpr(const symb::SymbolicExpr &expr) {
+            auto &factory = symb::ExprFactoryScope::current();
+            return factory.cloneExpr(factory.importExpr(expr));
+        }
+
         // Frama-C does not resolve ACSL logic labels derived from internal C labels
         // (e.g. `After_CompoundStmt_xxxx`) inside function contracts. Such terms lead to
         // `annot-error: logic label ... not found` and abort WP. We conservatively drop them
@@ -389,7 +395,7 @@ namespace acslg::spec_generator {
                             size_t idxField = 0;
                             for (auto field : info.definition_->fields()) {
                                 std::string fieldName = field->getNameAsString();
-                                auto fieldExpr = st->getFieldValue(idxField)->clone();
+                                auto fieldExpr = cloneExpr(*st->getFieldValue(idxField));
                                 ++idxField;
                                 if (fieldName.empty())
                                     continue;
@@ -463,7 +469,7 @@ namespace acslg::spec_generator {
                                 ++idxField;
                                 continue;
                             }
-                            auto fieldExpr = retSt->getFieldValue(idxField)->clone();
+                            auto fieldExpr = cloneExpr(*retSt->getFieldValue(idxField));
                             auto simplifiedField = fieldExpr->simplifiedExpr();
                             if (referencesNonContractVisibleLocals(*simplifiedField, FD)) {
                                 ++idxField;
