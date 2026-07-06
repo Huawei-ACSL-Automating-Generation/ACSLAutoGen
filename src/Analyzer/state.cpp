@@ -108,6 +108,11 @@ namespace acslg::analyzer {
             return factory.cloneExpr(factory.unknown());
         }
 
+        utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+        cloneExpr(symbolic::ExprFactory &factory, const symbolic::SymbolicExpr &expr) {
+            return factory.cloneExpr(factory.importExpr(expr));
+        }
+
         using symbolic::cloneStructure;
         using symbolic::cloneSymbolAddress;
         using symbolic::cloneVariableAddress;
@@ -401,7 +406,7 @@ namespace acslg::analyzer {
             for (const auto &[vd, addrPtr] : varAddr_) {
                 if (vd && vd->getName() == canonicalVar->getName()) {
                     if (auto val = memoryState_.read(*addrPtr))
-                        return val.value()->clone();
+                        return cloneExpr(context_.getExprFactory(), *val.value());
                 }
             }
             ERROR("SymbolValue '" + canonicalVar->getNameAsString() + "' has no allocated address");
@@ -411,7 +416,7 @@ namespace acslg::analyzer {
         if (value == std::nullopt)
             ERROR("SymbolValue '" + canonicalVar->getNameAsString() +
                   "' has no memory state entry for allocated address");
-        return value.value()->clone();
+        return cloneExpr(context_.getExprFactory(), *value.value());
     }
 
     /// @brief Return a const reference to accumulated path conditions.
@@ -553,11 +558,15 @@ namespace acslg::analyzer {
                 }
                 calleePath->updateMemory(*slot, m.value()->addressClone().into_underlying());
             } else if (T->isStructureType()) {
-                calleePath->updateMemory(*slot, args[i]->clone());
+                calleePath->updateMemory(*slot,
+                                         cloneExpr(calleePath->getContext().getExprFactory(),
+                                                   *args[i]));
             } else if (T->isArrayType()) {
                 UNIMPLEMENT("array parameter");
             } else {
-                calleePath->updateMemory(*slot, args[i]->clone());
+                calleePath->updateMemory(*slot,
+                                         cloneExpr(calleePath->getContext().getExprFactory(),
+                                                   *args[i]));
             }
         }
     }
@@ -760,7 +769,7 @@ namespace acslg::analyzer {
                         symbolic::LiteralExpr litExpr{context_.getExprFactory(),
                                                       static_cast<int>(value.getSExtValue())};
                         Formulas exprs;
-                        exprs.push_back(litExpr->clone());
+                        exprs.push_back(cloneExpr(context_.getExprFactory(), *litExpr));
                         return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
                                 std::move(exprs)};
                     }
@@ -810,10 +819,12 @@ namespace acslg::analyzer {
                                 auto symbol =
                                     getSymbol(elemType, newAddr->addressClone().into_underlying(),
                                               startPoint_);
-                                memoryState_.write(*newAddr, symbol->clone());
+                                memoryState_.write(
+                                    *newAddr, cloneExpr(context_.getExprFactory(), *symbol));
                                 outExprs.emplace_back(std::move(symbol));
                             } else {
-                                outExprs.emplace_back(value.value()->clone());
+                                outExprs.emplace_back(
+                                    cloneExpr(context_.getExprFactory(), *value.value()));
                             }
                             if (i > 0)
                                 outPaths.emplace_back(std::move(idx.first[i - 1]));
