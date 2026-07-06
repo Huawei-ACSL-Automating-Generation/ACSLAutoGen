@@ -26,7 +26,7 @@ namespace acslg::spec_generator {
         utils::not_null<std::unique_ptr<symb::SymbolicExpr>>
         cloneExpr(const symb::SymbolicExpr &expr) {
             auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.importExpr(expr));
+            return factory.importAndCloneExpr(expr);
         }
 
         // Frama-C does not resolve ACSL logic labels derived from internal C labels

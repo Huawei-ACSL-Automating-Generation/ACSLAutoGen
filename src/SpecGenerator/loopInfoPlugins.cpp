@@ -25,7 +25,7 @@ namespace acslg::spec_generator {
 
         OwnedSymbolicExpr cloneExpr(const symb::SymbolicExpr &expr) {
             auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.importExpr(expr));
+            return factory.importAndCloneExpr(expr);
         }
 
         OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
@@ -40,7 +40,7 @@ namespace acslg::spec_generator {
             const symb::SymbolicExpr &expr) {
             auto &factory = symb::ExprFactoryScope::current();
             return utils::not_null<std::unique_ptr<const symb::SymbolicExpr>>{
-                factory.cloneExpr(factory.importExpr(expr)).into_underlying()};
+                factory.importAndCloneExpr(expr).into_underlying()};
         }
 
         OwnedSymbolicExpr buildMaxLoopCountExpr(const LoopInfo::Pattern &pattern,

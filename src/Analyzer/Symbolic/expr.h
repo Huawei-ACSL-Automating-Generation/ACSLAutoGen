@@ -2348,12 +2348,12 @@ namespace acslg::analyzer::symbolic {
 
                 if (auto *lLit = dyn_cast<LiteralExprNode>(L.get())) {
                     if (static_cast<std::uint64_t>(lLit->getLiteralValue()) == sizeofBytes) {
-                        return factory.cloneExpr(factory.importExpr(*R));
+                        return factory.importAndCloneExpr(*R);
                     }
                 }
                 if (auto *rLit = dyn_cast<LiteralExprNode>(R.get())) {
                     if (static_cast<std::uint64_t>(rLit->getLiteralValue()) == sizeofBytes) {
-                        return factory.cloneExpr(factory.importExpr(*L));
+                        return factory.importAndCloneExpr(*L);
                     }
                 }
             }

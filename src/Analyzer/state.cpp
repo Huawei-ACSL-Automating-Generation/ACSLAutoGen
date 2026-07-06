@@ -112,7 +112,7 @@ namespace acslg::analyzer {
 
         utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         cloneExpr(symbolic::ExprFactory &factory, const symbolic::SymbolicExpr &expr) {
-            return factory.cloneExpr(factory.importExpr(expr));
+            return factory.importAndCloneExpr(expr);
         }
 
         using symbolic::cloneStructure;

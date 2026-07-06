@@ -25,7 +25,7 @@ namespace acslg::spec_generator {
         inline utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
         copyPostExprThroughCurrentFactory(const analyzer::symbolic::SymbolicExpr &expr) {
             auto &factory = analyzer::symbolic::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.importExpr(expr));
+            return factory.importAndCloneExpr(expr);
         }
     } // namespace detail
 

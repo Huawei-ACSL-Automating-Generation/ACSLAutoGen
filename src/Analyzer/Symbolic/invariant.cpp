@@ -374,7 +374,7 @@ namespace acslg::analyzer {
 
         OwnedSymbolicExpr cloneExpr(const symbolic::SymbolicExpr &expr) {
             auto &factory = symbolic::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.importExpr(expr));
+            return factory.importAndCloneExpr(expr);
         }
 
         OwnedSymbolicExpr buildUnary(symbolic::UnaryOpExpr::Operator op, OwnedSymbolicExpr expr) {

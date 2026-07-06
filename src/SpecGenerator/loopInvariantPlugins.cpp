@@ -115,7 +115,7 @@ namespace acslg::spec_generator {
 
         OwnedSymbolicExpr cloneExpr(const symb::SymbolicExpr &expr) {
             auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.importExpr(expr));
+            return factory.importAndCloneExpr(expr);
         }
 
         OwnedSymbolicExpr buildUnary(symb::UnaryOpExpr::Operator op, OwnedSymbolicExpr expr) {

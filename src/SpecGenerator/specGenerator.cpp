@@ -73,7 +73,7 @@ namespace acslg::spec_generator {
             const symb::SymbolicExpr &expr) {
             auto &factory = symb::ExprFactoryScope::current();
             return utils::not_null<std::unique_ptr<const symb::SymbolicExpr>>{
-                factory.cloneExpr(factory.importExpr(expr)).into_underlying()};
+                factory.importAndCloneExpr(expr).into_underlying()};
         }
     } // namespace
 
