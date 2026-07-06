@@ -2328,13 +2328,13 @@ namespace acslg::analyzer::symbolic {
         using ::acslg::analyzer::symbolic::BinaryOpExpr;
         using ::acslg::analyzer::symbolic::detail::LiteralExprNode;
         using ::acslg::analyzer::symbolic::SymbolicExpr;
+        auto &factory = ExprFactoryScope::current();
 
         // Literal equals sizeofBytes -> return 1
         if (auto *lit = dyn_cast<LiteralExprNode>(in.get().get())) {
             const auto v = static_cast<std::uint64_t>(lit->getLiteralValue());
             if (v == sizeofBytes) {
-                return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{
-                    std::make_unique<LiteralExprNode>(std::uint64_t{1})};
+                return factory.cloneExpr(factory.literal(std::uint64_t{1}));
             }
             return in;
         }
@@ -2348,12 +2348,12 @@ namespace acslg::analyzer::symbolic {
 
                 if (auto *lLit = dyn_cast<LiteralExprNode>(L.get())) {
                     if (static_cast<std::uint64_t>(lLit->getLiteralValue()) == sizeofBytes) {
-                        return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{R->clone()};
+                        return factory.cloneExpr(factory.importExpr(*R));
                     }
                 }
                 if (auto *rLit = dyn_cast<LiteralExprNode>(R.get())) {
                     if (static_cast<std::uint64_t>(rLit->getLiteralValue()) == sizeofBytes) {
-                        return ::acslg::utils::not_null<std::unique_ptr<SymbolicExpr>>{L->clone()};
+                        return factory.cloneExpr(factory.importExpr(*L));
                     }
                 }
             }
