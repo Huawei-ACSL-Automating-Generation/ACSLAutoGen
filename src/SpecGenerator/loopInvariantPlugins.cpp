@@ -1442,9 +1442,10 @@ namespace acslg::spec_generator {
                                     address, factory.importExpr(*indexInfo.indexBound));
                             }));
                 } else {
-                    // arrayRange = arrayRange->withOffset(indexInfo.indexBound->clone());
-                    auto lengthExpr = buildBinary(indexInfo.indexSymbolicValue->clone(),
-                                                     Subtract, indexInfo.indexBound->clone());
+                    // Negative-step ranges keep the existing offset behavior; only length is
+                    // rebuilt here.
+                    auto lengthExpr = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue),
+                                                  Subtract, cloneExpr(*indexInfo.indexBound));
                     arrayRange = cloneSymbolAddress(
                         rebuildSymbolAddress(
                             *arrayRange,
@@ -1637,7 +1638,7 @@ namespace acslg::spec_generator {
                 auto it = patternInfo.normalExitPatternsMap.find(*fromAddr.value());
                 // The value on this address doesn't change during loop, so just copy it.
                 if (it == patternInfo.normalExitPatternsMap.end())
-                    return symbol.toSymbolicExpr()->clone();
+                    return cloneExpr(*symbol.toSymbolicExpr());
                 if (it->second == std::nullopt)
                     return std::nullopt;
                 auto &[initValue, step] = it->second.value();
@@ -1645,17 +1646,17 @@ namespace acslg::spec_generator {
                 // x_init + x_step * (index - index_init)
                 if (indexStep > 0)
                     return buildBinary(
-                        initValue->clone(), Add,
+                        cloneExpr(*initValue), Add,
                         buildBinary(
                             buildLiteral(step), Multiply,
                             buildBinary(buildRangeIndex("k"), Subtract,
-                                           indexInfo.indexSymbolicValue->clone())));
+                                        cloneExpr(*indexInfo.indexSymbolicValue))));
                 // x_init + x_step * (index_init - index)
                 return buildBinary(
-                    initValue->clone(), Add,
+                    cloneExpr(*initValue), Add,
                     buildBinary(
                         buildLiteral(step), Multiply,
-                        buildBinary(indexInfo.indexSymbolicValue->clone(), Subtract,
+                        buildBinary(cloneExpr(*indexInfo.indexSymbolicValue), Subtract,
                                        buildRangeIndex("k"))));
             }; // getSubExpr ends
 
@@ -1725,7 +1726,7 @@ namespace acslg::spec_generator {
                     // todo
                 } else {
                     interruptedPathInfo.returnExpr =
-                        interruptedPath->getReturnExpr().value()->clone();
+                        cloneExpr(*interruptedPath->getReturnExpr().value());
                 }
             }
             using enum symb::QuantifierOverRange::Quantifier;
@@ -1746,8 +1747,8 @@ namespace acslg::spec_generator {
                             return factory.withOffset(
                                 address, factory.importExpr(*indexInfo.indexSymbolicValue));
                         }));
-                auto lengthExpr = buildBinary(indexInfo.indexBound->clone(), Subtract,
-                                                 indexInfo.indexSymbolicValue->clone());
+                auto lengthExpr = buildBinary(cloneExpr(*indexInfo.indexBound), Subtract,
+                                              cloneExpr(*indexInfo.indexSymbolicValue));
                 arrayRange = cloneSymbolAddress(
                     rebuildSymbolAddress(
                         *arrayRange,
@@ -1762,8 +1763,8 @@ namespace acslg::spec_generator {
                             return factory.withOffset(
                                 address, factory.importExpr(*indexInfo.indexBound));
                         }));
-                auto lengthExpr = buildBinary(indexInfo.indexSymbolicValue->clone(),
-                                                 Subtract, indexInfo.indexBound->clone());
+                auto lengthExpr = buildBinary(cloneExpr(*indexInfo.indexSymbolicValue),
+                                              Subtract, cloneExpr(*indexInfo.indexBound));
                 arrayRange = cloneSymbolAddress(
                     rebuildSymbolAddress(
                         *arrayRange,
@@ -1774,15 +1775,15 @@ namespace acslg::spec_generator {
             normalPathInfo.pathState = analyzer::Path::PathState::Step;
             normalPathInfo.pathConds.push_back(makeQuantifierOverRangeExpr(
                 cloneSymbolAddress(*arrayRange), "k", ForAll,
-                buildUnary(symb::UnaryOpExpr::Operator::LogicalNot, pred->clone())));
+                buildUnary(symb::UnaryOpExpr::Operator::LogicalNot, cloneExpr(*pred))));
 
             interruptedPathInfo.pathConds.push_back(makeQuantifierOverRangeExpr(
-                std::move(arrayRange), "k", Exist, pred->clone()));
+                std::move(arrayRange), "k", Exist, cloneExpr(*pred)));
 
             // Try to print the forall form as a concrete ACSL text. If that fails, we still return
             // post-info but do not emit an invariant clause.
             auto expected =
-                buildUnary(symb::UnaryOpExpr::Operator::LogicalNot, pred->clone())
+                buildUnary(symb::UnaryOpExpr::Operator::LogicalNot, cloneExpr(*pred))
                     ->getACSL({.predefinedLabels{
                         {entryAndCurrentInfo.symbolicLoopEntry->getStartPoint(), "LoopEntry"}}});
             if (expected) {
@@ -1795,7 +1796,7 @@ namespace acslg::spec_generator {
                 if (indexStep > 0) {
                     auto leftBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
                     if (leftBound == std::nullopt)
-                        leftBound = indexInfo.indexPattern.initialValue->clone();
+                        leftBound = cloneExpr(*indexInfo.indexPattern.initialValue);
                     auto leftExpected =
                         leftBound.value()->getACSL({}, entryAndCurrentInfo.loopEntryPoint);
                     assert(leftBound);
@@ -1814,7 +1815,7 @@ namespace acslg::spec_generator {
                     assert(leftExpected);
                     auto rightBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
                     if (rightBound == std::nullopt)
-                        rightBound = indexInfo.indexPattern.initialValue->clone();
+                        rightBound = cloneExpr(*indexInfo.indexPattern.initialValue);
                     auto rightExpected =
                         rightBound.value()->getACSL({}, entryAndCurrentInfo.loopEntryPoint);
                     assert(rightBound);
