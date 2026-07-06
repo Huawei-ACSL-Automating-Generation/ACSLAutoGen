@@ -298,7 +298,7 @@ namespace acslg::analyzer {
 
         if (auto *arr = dyn_cast<clang::ArraySubscriptExpr>(lexpr)) {
             auto baseAddr = extractLValue(arr->getBase());
-            if (const auto symbol = memoryState_.read(*baseAddr)) {
+            if (const auto symbol = memoryState_.readHandle(*baseAddr)) {
                 auto symbolAddr =
                     symbolic::dyn_cast<const symbolic::SymbolAddress>(symbol.value().get().get());
                 if (symbolAddr == nullptr)
@@ -407,14 +407,14 @@ namespace acslg::analyzer {
             // different VarDecl instances). Do not allocate new memory here.
             for (const auto &[vd, addrPtr] : varAddr_) {
                 if (vd && vd->getName() == canonicalVar->getName()) {
-                    if (auto val = memoryState_.read(*addrPtr))
+                    if (auto val = memoryState_.readHandle(*addrPtr))
                         return cloneExpr(context_.getExprFactory(), *val.value());
                 }
             }
             ERROR("SymbolValue '" + canonicalVar->getNameAsString() + "' has no allocated address");
         }
         auto addr  = varIt->second.get().get();
-        auto value = memoryState_.read(*addr);
+        auto value = memoryState_.readHandle(*addr);
         if (value == std::nullopt)
             ERROR("SymbolValue '" + canonicalVar->getNameAsString() +
                   "' has no memory state entry for allocated address");
@@ -813,7 +813,7 @@ namespace acslg::analyzer {
                         DEBUG("evaluating ArraySubscriptExpr...");
                         auto variableAddr = extractLValue(arrSub->getBase());
                         std::unique_ptr<symbolic::SymbolAddress> addr;
-                        if (const auto symbol = memoryState_.read(*variableAddr)) {
+                        if (const auto symbol = memoryState_.readHandle(*variableAddr)) {
                             auto ptr = symbolic::dyn_cast<const symbolic::SymbolAddress>(
                                 symbol.value().get().get());
                             if (ptr == nullptr)
@@ -844,7 +844,8 @@ namespace acslg::analyzer {
                                                    factory.importExpr(*idx.second[i])};
                             auto newAddr =
                                 baseAddr.withOffset(idxExpr)->addressClone().into_underlying();
-                            if (auto value = memoryState_.read(*newAddr); value == std::nullopt) {
+                            if (auto value = memoryState_.readHandle(*newAddr);
+                                value == std::nullopt) {
                                 auto elemType = arrSub->getType();
                                 auto symbol =
                                     getSymbol(elemType, newAddr->addressClone().into_underlying(),
@@ -1384,11 +1385,9 @@ namespace acslg::analyzer {
                                                 p->context_.getExprFactory().importAddress(
                                                     *addrPtr)));
                                 }
-                                if (auto val = callerSnapshot->memoryState_.read(*addrPtr)) {
+                                if (auto val = callerSnapshot->memoryState_.readHandle(*addrPtr)) {
                                     auto &dstAddr = p->varAddr_.at(vd);
-                                    p->memoryState_.write(
-                                        *dstAddr, cloneExpr(p->context_.getExprFactory(),
-                                                            *val.value()));
+                                    p->memoryState_.write(*dstAddr, val.value());
                                 }
                             }
                             // Restore statement context back to the caller.
@@ -1499,7 +1498,7 @@ namespace acslg::analyzer {
                                 // ++x / x++ / --x / x--
                                 auto addr = path->extractLValue(uop->getSubExpr());
                                 // old value
-                                auto oldVal = path->memoryState_.read(*addr);
+                                auto oldVal = path->memoryState_.readHandle(*addr);
                                 if (oldVal == std::nullopt)
                                     ERROR("memoryState_ doesn't contain addr.");
                                 // compute new = old +/- 1
@@ -1508,8 +1507,7 @@ namespace acslg::analyzer {
                                 auto binOp  = (op == PreInc || op == PostInc)
                                                   ? symbolic::BinaryOpExpr::Operator::Add
                                                   : symbolic::BinaryOpExpr::Operator::Subtract;
-                                symbolic::Expr oldValExpr{
-                                    factory, factory.importExpr(*oldVal.value())};
+                                symbolic::Expr oldValExpr{factory, oldVal.value()};
                                 auto newValExpr = oldValExpr.binary(binOp, one);
                                 auto newVal     = cloneExpr(factory, *newValExpr);
                                 // return pre vs post
@@ -1526,7 +1524,7 @@ namespace acslg::analyzer {
                                 auto addr = unExpr->tryEvalAsSymbolAddr();
                                 if (addr == std::nullopt)
                                     ERROR("Expected symbolic::Address, got: " << unExpr->dump());
-                                if (auto value = path->memoryState_.read(*addr.value());
+                                if (auto value = path->memoryState_.readHandle(*addr.value());
                                     value == std::nullopt) {
                                     auto symbol =
                                         getSymbol(uop->getType(),
@@ -1838,11 +1836,11 @@ namespace acslg::analyzer {
             if (symbolAddr->getLength())
                 return false;
         }
-        auto value = memoryState_.read(addr);
+        auto value = memoryState_.readHandle(addr);
         if (value == std::nullopt)
             return true; // Assume it has not been accessed yet.
 
-        auto oldValue = since.getMemoryState().read(addr);
+        auto oldValue = since.getMemoryState().readHandle(addr);
         if (oldValue)
             return *value.value() == *oldValue.value();
         return isFrom(*value.value(), addr, since.getStartPoint());
@@ -1853,7 +1851,7 @@ namespace acslg::analyzer {
             if (symbolAddr->getLength())
                 return false;
         }
-        auto opt = memoryState_.read(addr);
+        auto opt = memoryState_.readHandle(addr);
         if (!opt)
             return false;
 
