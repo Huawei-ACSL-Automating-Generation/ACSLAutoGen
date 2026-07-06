@@ -1957,8 +1957,8 @@ namespace acslg::analyzer {
                     if (firstLEIt == rangeExprMap.end() ||
                         firstLEIt->first.second <= unsignedOffset)
                         return std::nullopt;
-                    return factory().importExpr(
-                        *firstLEIt->second->getRangeIndexSubstituted(baseInfo, *offset));
+                    return symbolic::getRangeIndexSubstitutedHandle(
+                        factory(), *firstLEIt->second, baseInfo, factory().importExpr(*offset));
                 } else if (auto &len = symbolAddr->getLength();
                            constOffset && len && len.value()->tryEvalAsConstant()) {
                     UNIMPLEMENT(
