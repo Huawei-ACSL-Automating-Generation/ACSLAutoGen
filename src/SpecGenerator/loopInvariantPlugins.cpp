@@ -1627,7 +1627,7 @@ namespace acslg::spec_generator {
                 return commonValue;
             }; // sameValueOnRealEntries ends
 
-            symb::SymbolicExpr::HashExprMap hashExprMapForSub{};
+            symb::HashExprHandleMap hashExprMapForSub{};
             std::unique_ptr<symb::SymbolAddress> arrayInCond;
             for (auto &[hash, symbol] : interruptedCond->collectUsedSymbols()) {
                 auto fromAddr = symbol->getFromAddr();
@@ -1645,23 +1645,23 @@ namespace acslg::spec_generator {
                         auto subedExpr = getSubExpr(*symbolInOff);
                         if (subedExpr == std::nullopt)
                             return std::nullopt;
-                        hashExprMapForSub.insert_or_assign(hashInOff,
-                                                           factory.cloneExpr(subedExpr.value()));
+                        hashExprMapForSub.insert_or_assign(hashInOff, subedExpr.value());
                     }
                     continue;
                 }
                 auto subedExpr = getSubExpr(*symbol);
                 if (subedExpr == std::nullopt)
                     return std::nullopt;
-                hashExprMapForSub.insert_or_assign(hash, factory.cloneExpr(subedExpr.value()));
+                hashExprMapForSub.insert_or_assign(hash, subedExpr.value());
             }
             if (arrayInCond == nullptr)
                 return {};
 
             // Rewrite the interrupted predicate by replacing its symbols with k-parameterized
             // expressions, yielding pred(k).
-            auto pred = interruptedCond->getSubstitutedValueExpr(hashExprMapForSub);
-            symb::Expr predExpr{factory, factory.importExpr(*pred)};
+            auto pred =
+                symb::getSubstitutedValueHandle(factory, *interruptedCond, hashExprMapForSub);
+            symb::Expr predExpr{factory, pred};
 
             std::vector<PostPSInfo> normalPostInfos{1};
             std::vector<std::vector<PostPSInfo>> interruptedPathsInfos{std::vector<PostPSInfo>{1}};

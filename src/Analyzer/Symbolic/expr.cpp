@@ -80,6 +80,19 @@ namespace acslg::analyzer::symbolic {
         return cloneWithValType(newType);
     }
 
+    ExprHandle getSubstitutedValueHandle(ExprFactory &factory,
+                                         const SymbolicExpr &expr,
+                                         const HashExprHandleMap &hashToExprMap) {
+        ExprFactoryScope scope(factory);
+        SymbolicExpr::HashExprMap legacyMap;
+        legacyMap.reserve(hashToExprMap.size());
+        for (const auto &[hash, replacement] : hashToExprMap)
+            legacyMap.emplace(hash, factory.cloneExpr(replacement));
+
+        auto substituted = expr.getSubstitutedValueExpr(legacyMap);
+        return factory.importExpr(*substituted);
+    }
+
     utils::not_null<std::unique_ptr<SymbolicExpr>> ExprChild::clone() const {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();

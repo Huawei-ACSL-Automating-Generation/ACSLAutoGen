@@ -601,6 +601,11 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<const SymbolicExpr *> expr_;
     };
 
+    using HashExprHandleMap = std::unordered_map<size_t, ExprHandle>;
+    ExprHandle getSubstitutedValueHandle(ExprFactory &factory,
+                                         const SymbolicExpr &expr,
+                                         const HashExprHandleMap &hashToExprMap);
+
     class ExprChild {
       public:
         explicit ExprChild(ExprHandle handle) : handle_(handle) {}
