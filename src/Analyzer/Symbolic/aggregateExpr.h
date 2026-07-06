@@ -64,12 +64,6 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
-        /**
-         * @brief Substitute value expressions using a map keyed by expression hashes.
-         */
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
-            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
-                &hashToExprMap) const override;
 
       private:
         utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &,
@@ -175,12 +169,7 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
-        /**
-         * @brief Substitute nested value expressions by hash mapping.
-         */
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
-            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
-                &hashToExprMap) const override;
+
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 1; }
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
@@ -270,9 +259,6 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
-            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
-                &hashToExprMap) const override;
         bool isLinear() const override { return false; }
         int getMaxDegree() const override { return -1; }
 
@@ -357,9 +343,6 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
             const SymbolAddrBaseInfo &rangeBase,
             const SymbolicExpr &indexExpr) const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExpr(
-            const std::unordered_map<size_t, utils::not_null<std::unique_ptr<SymbolicExpr>>>
-                &hashToExprMap) const override;
         bool isLinear() const override { return false; }
         int getMaxDegree() const override { return -1; }
 

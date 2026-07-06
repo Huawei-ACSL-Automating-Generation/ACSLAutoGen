@@ -225,11 +225,6 @@ namespace acslg::analyzer::symbolic {
         return importThroughCurrentFactory(indexExpr);
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
-    }
-
     std::string SumOverRange::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
@@ -270,11 +265,6 @@ namespace acslg::analyzer::symbolic {
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
         return rebuildSumOverRange(*subedRange, indexName_, fromPoint_);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
     }
 
     utils::expected<std::string, SymbolicExpr::GetACSLError> SumOverRange::doGetACSL(
@@ -347,11 +337,6 @@ namespace acslg::analyzer::symbolic {
         auto subedPred = pred_->getRangeIndexSubstituted(rangeBase, indexExpr);
 
         return rebuildQuantifierOverRange(*subedRange, indexName_, quant_, std::move(subedPred));
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
     }
 
     QuantifierOverRange &QuantifierOverRange::operator=(const QuantifierOverRange &other) {
@@ -462,11 +447,6 @@ namespace acslg::analyzer::symbolic {
 
         return rebuildMaxMinOverRange(*subedRange, indexName_, extremum_, std::move(subedBody),
                                       fromPoint_);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
     }
 
     MaxMinOverRange &MaxMinOverRange::operator=(const MaxMinOverRange &other) {

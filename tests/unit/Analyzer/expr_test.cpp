@@ -637,12 +637,6 @@ namespace acslg::test::unit::analyzer {
                 return clone();
             }
 
-            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
-            getSubstitutedValueExpr(
-                const symbolic::SymbolicExpr::HashExprMap &) const override {
-                return clone();
-            }
-
             bool isLinear() const override { return false; }
             int getMaxDegree() const override { return -1; }
 
@@ -699,12 +693,6 @@ namespace acslg::test::unit::analyzer {
             getRangeIndexSubstituted(
                 const symbolic::SymbolAddrBaseInfo &,
                 const symbolic::SymbolicExpr &) const override {
-                return clone();
-            }
-
-            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
-            getSubstitutedValueExpr(
-                const symbolic::SymbolicExpr::HashExprMap &) const override {
                 return clone();
             }
 

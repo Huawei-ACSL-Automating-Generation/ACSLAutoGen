@@ -185,17 +185,6 @@ namespace acslg::analyzer::symbolic {
         return Substituter{factory, hashToExprMap}.run(expr);
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedValueExprThroughHandles(
-        const SymbolicExpr &expr,
-        const SymbolicExpr::HashExprMap &hashToExprMap) {
-        auto &factory = ExprFactoryScope::current();
-        HashExprHandleMap handleMap;
-        handleMap.reserve(hashToExprMap.size());
-        for (const auto &[hash, replacement] : hashToExprMap)
-            handleMap.emplace(hash, factory.importExpr(*replacement));
-        return factory.cloneExpr(getSubstitutedValueHandle(factory, expr, handleMap));
-    }
-
     utils::not_null<std::unique_ptr<SymbolicExpr>> ExprChild::clone() const {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
@@ -2211,51 +2200,6 @@ namespace acslg::analyzer::symbolic {
             rebuilt = factory.withField(rebuilt, i, factory.importExpr(*field));
         }
         return factory.cloneExpr(rebuilt);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> VariableAddress::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> FieldAddress::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        return getSubstitutedValueExprThroughHandles(*this, hashExprMap);
     }
 
     std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> detail::BinaryOpExprNode::
