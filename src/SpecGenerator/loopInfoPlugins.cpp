@@ -303,13 +303,11 @@ namespace acslg::spec_generator {
             for (size_t i = 1; i < activePaths.size(); ++i)
                 merged->mergeWith(*activePaths[i]);
 
-            analyzer::symbolic::AddressBoxMap<
-                utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
-                sharedMemory;
+            PostMemoryMap sharedMemory;
             for (auto &&[addr, value] : merged->getMemoryState().flat()) {
                 if (analyzer::symbolic::isa<analyzer::symbolic::UnknownExpr>(value.get()))
                     continue;
-                sharedMemory.emplace(addr, cloneExpr(*value));
+                sharedMemory.emplace(addr, detail::importPostExprThroughCurrentFactory(*value));
             }
 
             analyzer::PathConditions sharedConds;

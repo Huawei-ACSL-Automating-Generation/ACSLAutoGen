@@ -199,6 +199,29 @@ namespace acslg::test::unit::spec_generator {
         }
     }
 
+    TEST(SetSharedStatePluginTest, SharedMemoryUsesFactoryHandles) {
+        auto pluginIds                = vector{"setSharedState"s};
+        auto code                     = R"(
+        int func(int x, int y){
+            for(int i = 0; i < 3; i++){
+                x = y + 1;
+            }
+            return x;
+        }
+    )";
+        auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
+        auto &factory                 = getLastExprFactory();
+        EXPECT_EQ(continueFlag, true);
+        ASSERT_NE(loopInfo.sharedMemoryMap, nullopt);
+        ASSERT_FALSE(loopInfo.sharedMemoryMap->empty());
+
+        for (const auto &[addr, value] : *loopInfo.sharedMemoryMap) {
+            (void)addr;
+            EXPECT_FALSE(value.isa<UnknownExpr>());
+            EXPECT_EQ(value, factory.importExpr(*value));
+        }
+    }
+
     TEST(SetIndexPluginTest, SimpleLoop_1) {
         auto pluginIds                = vector{"setPatterns"s, "setIndex"s};
         auto code                     = R"(
