@@ -31,6 +31,16 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_EQ(indexInfo.indexSymbolicAddr, factory.importAddress(*indexInfo.indexSymbolicAddr));
     }
 
+    void expectPatternInitialValuesCanonical(const LoopInfo::PatternInfo &patternInfo,
+                                             ExprFactory &factory) {
+        for (auto &[_, pattern] : patternInfo.allPatternsMap) {
+            if (pattern == nullopt)
+                continue;
+            EXPECT_EQ(pattern.value().initialValue,
+                      factory.importExpr(*pattern.value().initialValue));
+        }
+    }
+
     TEST(SetPatternsPluginTest, SimpleLoop_1) {
         auto pluginIds                = vector{"setPatterns"s};
         auto code                     = R"(
@@ -47,6 +57,7 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.patternInfo, nullopt);
         auto &patternInfo = loopInfo.patternInfo.value();
+        expectPatternInitialValuesCanonical(patternInfo, factory);
         EXPECT_EQ(patternInfo.allPatternsMap.size(), 2);
         for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
             DEBUG(addr.get().dump());
@@ -74,9 +85,12 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
+        auto &factory = getLastExprFactory();
+        ExprFactoryScope scope(factory);
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.patternInfo, nullopt);
         auto &patternInfo = loopInfo.patternInfo.value();
+        expectPatternInitialValuesCanonical(patternInfo, factory);
         EXPECT_EQ(patternInfo.allPatternsMap.size(), 2);
         for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
             DEBUG(addr.get().dump());
@@ -103,9 +117,12 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
+        auto &factory = getLastExprFactory();
+        ExprFactoryScope scope(factory);
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.patternInfo, nullopt);
         auto &patternInfo = loopInfo.patternInfo.value();
+        expectPatternInitialValuesCanonical(patternInfo, factory);
         EXPECT_EQ(patternInfo.allPatternsMap.size(), 3);
         for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
             DEBUG(addr.get().dump());
@@ -132,9 +149,12 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
+        auto &factory = getLastExprFactory();
+        ExprFactoryScope scope(factory);
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.patternInfo, nullopt);
         auto &patternInfo = loopInfo.patternInfo.value();
+        expectPatternInitialValuesCanonical(patternInfo, factory);
         EXPECT_EQ(patternInfo.allPatternsMap.size(), 2);
         for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
             DEBUG(addr.get().dump());
@@ -181,9 +201,12 @@ namespace acslg::test::unit::spec_generator {
 }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginId);
+        auto &factory = getLastExprFactory();
+        ExprFactoryScope scope(factory);
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.patternInfo, nullopt);
         auto &patternInfo = loopInfo.patternInfo.value();
+        expectPatternInitialValuesCanonical(patternInfo, factory);
         EXPECT_EQ(patternInfo.allPatternsMap.size(), 6);
         for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
             auto res = addr.get().getACSLOfValue({.noStateLabelFunctionAt = true});

@@ -11,13 +11,6 @@ namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
 
     namespace {
-        using OwnedSymbolicExpr = utils::not_null<std::unique_ptr<symb::SymbolicExpr>>;
-
-        OwnedSymbolicExpr cloneExpr(const symb::SymbolicExpr &expr) {
-            auto &factory = symb::ExprFactoryScope::current();
-            return factory.importAndCloneExpr(expr);
-        }
-
         symb::ExprHandle buildMaxLoopCountExpr(const LoopInfo::Pattern &pattern,
                                                symb::ExprHandle boundValue,
                                                bool includeClosedBound) {
@@ -116,6 +109,7 @@ namespace acslg::spec_generator {
                 symb::AddressBoxMap<std::optional<const Pattern>> patterns;
                 auto &preVA = symbolicLoopEntry->getPaths().at(0)->getVarAddr();
                 auto &preMS = symbolicLoopEntry->getPaths().at(0)->getMemoryState();
+                auto &factory = symb::ExprFactoryScope::current();
                 for (auto &&[addr, currentExpr] : currentEntry.getMemoryState().flat()) {
                     if (auto rootDecl = addr.get().getFromRoot();
                         rootDecl == std::nullopt || !preVA.contains(rootDecl.value()))
@@ -127,9 +121,9 @@ namespace acslg::spec_generator {
                         if (currentEntry.isUnchanged(addr, *symbolicLoopEntry->getPaths().front()))
                             continue; // unchanged relative to entry snapshot
                     }
-                    std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> entryExpr;
+                    std::optional<symb::ExprHandle> entryExpr;
                     if (auto preValue = preMS.readHandle(addr)) {
-                        entryExpr = cloneExpr(*preValue.value());
+                        entryExpr = preValue.value();
                     } else {
                         auto [hashAddrMap, _] =
                             symb::SymbolicExpr::collectUsedSymbols(*currentExpr);
@@ -139,10 +133,9 @@ namespace acslg::spec_generator {
                         }
                         // If the value is derived from the same address at loop entry, accept it as
                         // the baseline; otherwise mark as too complex.
-                        if (isFrom(*hashAddrMap.begin()->second->toSymbolicExpr(),
-                                   addr,
-                                   symbolicLoopEntry->getStartPoint())) {
-                            entryExpr = cloneExpr(*hashAddrMap.begin()->second->toSymbolicExpr());
+                        auto symbolExpr = hashAddrMap.begin()->second->toSymbolicExpr();
+                        if (isFrom(*symbolExpr, addr, symbolicLoopEntry->getStartPoint())) {
+                            entryExpr = factory.importExpr(*symbolExpr);
                         } else {
                             patterns.emplace(addr, std::nullopt);
                             continue;
@@ -153,8 +146,7 @@ namespace acslg::spec_generator {
                         UNREACHABLE();
                     auto [_, hashIdMap] =
                         symb::SymbolicExpr::collectUsedSymbols(*currentExpr, *entryExpr.value());
-                    if (currentExpr->getMaxDegree() < 0 ||
-                        entryExpr.value()->getMaxDegree() < 0) {
+                    if (currentExpr->getMaxDegree() < 0 || entryExpr.value()->getMaxDegree() < 0) {
                         patterns.emplace(addr, std::nullopt);
                         continue;
                     }
@@ -164,10 +156,7 @@ namespace acslg::spec_generator {
                                     entryExpr.value()->toLinearExpr(hashIdMap);
                         diff.all_homogeneous_terms_are_zero()) {
                         auto step = diff.inhomogeneous_term().get_si();
-                        patterns.emplace(
-                            addr,
-                            Pattern{symb::ExprFactoryScope::current().importExpr(*entryExpr.value()),
-                                    step});
+                        patterns.emplace(addr, Pattern{entryExpr.value(), step});
                     } else {
                         patterns.emplace(addr, std::nullopt);
                     }
