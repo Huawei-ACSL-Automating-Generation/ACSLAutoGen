@@ -76,6 +76,9 @@ namespace acslg::analyzer {
             return false;
         }
 
+        utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+        cloneExpr(symbolic::ExprFactory &factory, const symbolic::SymbolicExpr &expr);
+
         std::unique_ptr<symbolic::SymbolicExpr> dropLocalConjuncts(
             symbolic::ExprFactory &factory,
             const symbolic::SymbolicExpr &expr,
@@ -94,12 +97,12 @@ namespace acslg::analyzer {
                     factory.binary(factory.importExpr(*lhs),
                                    symbolic::BinaryOpExpr::Operator::LogicalAnd,
                                    factory.importExpr(*rhs));
-                return factory.cloneExpr(rebuilt).into_underlying();
+                return cloneExpr(factory, *rebuilt).into_underlying();
             }
 
             if (containsLocalVar(expr, locals))
                 return nullptr;
-            return factory.cloneExpr(factory.importExpr(expr)).into_underlying();
+            return cloneExpr(factory, expr).into_underlying();
         }
 
         utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> buildUnknown(
@@ -597,8 +600,7 @@ namespace acslg::analyzer {
                     nc.args.reserve(evalArg.args.size() + 1);
                     auto &factory = p->getContext().getExprFactory();
                     for (auto &a : evalArg.args)
-                        nc.args.emplace_back(
-                            factory.cloneExpr(factory.importExpr(*a)).into_underlying());
+                        nc.args.emplace_back(cloneExpr(factory, *a).into_underlying());
                     nc.args.emplace_back(std::move(values[j]).into_underlying());
                     next.emplace_back(std::move(nc));
                 }
@@ -674,7 +676,7 @@ namespace acslg::analyzer {
 
                     Formulas exprs;
                     exprs.reserve(1);
-                    exprs.push_back(factory.cloneExpr(result.handle()));
+                    exprs.push_back(cloneExpr(factory, *result));
 
                     return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
                             std::move(exprs)};
@@ -702,8 +704,8 @@ namespace acslg::analyzer {
 
                             symbolic::Expr lhsFacade{factory, factory.importExpr(*lhsExpr)};
                             symbolic::Expr rhsFacade{factory, factory.importExpr(*rhsExpr)};
-                            outExprs.emplace_back(
-                                factory.cloneExpr(lhsFacade.binary(op, rhsFacade).handle()));
+                            auto resultExpr = lhsFacade.binary(op, rhsFacade);
+                            outExprs.emplace_back(cloneExpr(factory, *resultExpr));
 
                             if (i == 0 && j == 0)
                                 continue;
@@ -998,10 +1000,8 @@ namespace acslg::analyzer {
                             auto &factory = context_.getExprFactory();
                             symbolic::Expr arg0Expr{factory, factory.importExpr(*a0)};
                             symbolic::Expr arg1Expr{factory, factory.importExpr(*a1)};
-                            auto totalSizeBytes =
-                                utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>{
-                                    factory.cloneExpr(arg0Expr.binary(Op::Multiply, arg1Expr).handle())
-                                        .into_underlying()};
+                            auto totalSizeExpr = arg0Expr.binary(Op::Multiply, arg1Expr);
+                            auto totalSizeBytes = cloneExpr(factory, *totalSizeExpr);
 
                             // Remove exactly one multiplicative factor equal to sizeof(T) to obtain
                             // the element count. This corresponds to interpreting the product as
@@ -1405,7 +1405,8 @@ namespace acslg::analyzer {
                             auto falsePath   = condPath->clone();
                             auto &factory    = context_.getExprFactory();
                             symbolic::Expr condFacade{factory, factory.importExpr(*condExpr)};
-                            auto negatedCond = factory.cloneExpr(condFacade.logicalNot().handle());
+                            auto negatedExpr = condFacade.logicalNot();
+                            auto negatedCond = cloneExpr(factory, *negatedExpr);
                             falsePath->insertPathCondition(std::move(negatedCond));
 
                             EvalResult falseVal = falsePath->evalExpr(condOp->getFalseExpr());
@@ -1518,8 +1519,8 @@ namespace acslg::analyzer {
                             } else {
                                 auto &factory = context_.getExprFactory();
                                 symbolic::Expr operandExpr{factory, factory.importExpr(*unExpr)};
-                                outExprs.emplace_back(
-                                    factory.cloneExpr(operandExpr.unary(op).handle()));
+                                auto resultExpr = operandExpr.unary(op);
+                                outExprs.emplace_back(cloneExpr(factory, *resultExpr));
                             }
                         }();
                         if (i > 0)
@@ -1537,9 +1538,11 @@ namespace acslg::analyzer {
                     auto targetType = symbolic::deriveType(castExpr->getType());
                     auto &factory   = context_.getExprFactory();
 
-                    for (auto &subExpr : sub.second)
-                        subExpr = factory.cloneExpr(
-                            factory.withValType(factory.importExpr(*subExpr), targetType));
+                    for (auto &subExpr : sub.second) {
+                        symbolic::Expr imported{factory, factory.importExpr(*subExpr)};
+                        auto typedExpr = imported.withType(targetType);
+                        subExpr = cloneExpr(factory, *typedExpr);
+                    }
 
                     return {std::move(sub.first), std::move(sub.second)};
                 })
@@ -1622,7 +1625,8 @@ namespace acslg::analyzer {
                         auto resultTy = symbolic::deriveType(ce->getType());
                         auto &factory = context_.getExprFactory();
                         symbolic::Expr subExpr{factory, factory.importExpr(*sub.second[0])};
-                        sub.second[0] = factory.cloneExpr(subExpr.withType(resultTy).handle());
+                        auto typedExpr = subExpr.withType(resultTy);
+                        sub.second[0] = cloneExpr(factory, *typedExpr);
                         return {std::move(sub.first), std::move(sub.second)};
                     }
                     auto resultTy = symbolic::deriveType(ce->getType());
@@ -1634,7 +1638,8 @@ namespace acslg::analyzer {
                             : symbolic::LiteralExpr{factory,
                                                     static_cast<uint64_t>(v.getZExtValue())};
                     EvalResult r;
-                    r.second.emplace_back(factory.cloneExpr(lit.withType(resultTy).handle()));
+                    auto typedLit = lit.withType(resultTy);
+                    r.second.emplace_back(cloneExpr(factory, *typedLit));
                     return r;
                 })
                 .Case<clang::UnaryExprOrTypeTraitExpr>(
@@ -1675,7 +1680,8 @@ namespace acslg::analyzer {
                         auto lit      = symbolic::LiteralExpr{factory, value};
 
                         EvalResult r;
-                        r.second.emplace_back(factory.cloneExpr(lit.withType(resultTy).handle()));
+                        auto typedLit = lit.withType(resultTy);
+                        r.second.emplace_back(cloneExpr(factory, *typedLit));
                         return r;
                     })
 
