@@ -18,6 +18,11 @@ namespace acslg::spec_generator {
             return factory.cloneExpr(factory.literal(value));
         }
 
+        OwnedSymbolicExpr buildUnknown() {
+            auto &factory = symb::ExprFactoryScope::current();
+            return factory.cloneExpr(factory.unknown());
+        }
+
         OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
                                       symb::BinaryOpExpr::Operator op,
                                       OwnedSymbolicExpr rhs) {
@@ -571,7 +576,7 @@ namespace acslg::spec_generator {
                     entryAndCurrentInfo.inactivePaths.empty()) {
                     preciseLoopCount = maxLoopCount.value()->clone();
                 } else {
-                    preciseLoopCount = symb::UnknownExpr::makeUnknown().into_underlying();
+                    preciseLoopCount = buildUnknown().into_underlying();
                 }
             } else if (auto unaryExpr =
                            dyn_cast<clang::UnaryOperator>(indexCond->IgnoreParenImpCasts())) {
@@ -631,7 +636,7 @@ namespace acslg::spec_generator {
                     entryAndCurrentInfo.inactivePaths.empty()) {
                     preciseLoopCount = maxLoopCount.value()->clone();
                 } else {
-                    preciseLoopCount = symb::UnknownExpr::makeUnknown().into_underlying();
+                    preciseLoopCount = buildUnknown().into_underlying();
                 }
             } else if (auto refExpr =
                            dyn_cast<clang::DeclRefExpr>(indexCond->IgnoreParenImpCasts())) {
@@ -700,7 +705,7 @@ namespace acslg::spec_generator {
                     entryAndCurrentInfo.inactivePaths.empty()) {
                     preciseLoopCount = maxLoopCount.value()->clone();
                 } else {
-                    preciseLoopCount = symb::UnknownExpr::makeUnknown().into_underlying();
+                    preciseLoopCount = buildUnknown().into_underlying();
                 }
             } else {
                 INFO("Loop's condition expr is too complex.");

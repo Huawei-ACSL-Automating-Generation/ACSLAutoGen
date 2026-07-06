@@ -63,6 +63,11 @@ namespace acslg::spec_generator {
             }
             return plugins;
         }
+
+        utils::not_null<std::unique_ptr<symb::SymbolicExpr>> buildUnknown() {
+            auto &factory = symb::ExprFactoryScope::current();
+            return factory.cloneExpr(factory.unknown());
+        }
     } // namespace
 
     /**
@@ -292,7 +297,7 @@ namespace acslg::spec_generator {
                 }
 
                 lhs.memoryMap.insert_or_assign(addr,
-                                               symb::UnknownExpr::makeUnknown().into_underlying());
+                                               buildUnknown().into_underlying());
             }
 
             std::vector<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> intersected;
@@ -314,7 +319,7 @@ namespace acslg::spec_generator {
                 if (!(lhs.returnExpr && rhs.returnExpr))
                     UNREACHABLE();
                 if (!exprEqual(*lhs.returnExpr.value(), *rhs.returnExpr.value())) {
-                    lhs.returnExpr = symb::UnknownExpr::makeUnknown().into_underlying();
+                    lhs.returnExpr = buildUnknown().into_underlying();
                 }
             }
         };

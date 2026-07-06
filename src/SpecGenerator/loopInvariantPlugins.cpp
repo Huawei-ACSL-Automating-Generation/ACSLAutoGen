@@ -108,6 +108,11 @@ namespace acslg::spec_generator {
             return factory.cloneExpr(factory.literal(value));
         }
 
+        OwnedSymbolicExpr buildUnknown() {
+            auto &factory = symb::ExprFactoryScope::current();
+            return factory.cloneExpr(factory.unknown());
+        }
+
         OwnedSymbolicExpr buildUnary(symb::UnaryOpExpr::Operator op, OwnedSymbolicExpr expr) {
             auto &factory = symb::ExprFactoryScope::current();
             return factory.cloneExpr(factory.unary(op, factory.importExpr(*expr)));
@@ -426,7 +431,7 @@ namespace acslg::spec_generator {
                     if (interruptPath->getPathState() == analyzer::Path::PathState::Return)
                         infos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
                                            analyzer::Path::PathState::Return,
-                                           symb::UnknownExpr::makeUnknown().into_underlying());
+                                           buildUnknown().into_underlying());
                     else
                         infos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
                                            interruptPath->getPathState(), std::nullopt);
@@ -535,7 +540,7 @@ namespace acslg::spec_generator {
                     if (interruptPath->getPathState() == analyzer::Path::PathState::Return)
                         infos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
                                            analyzer::Path::PathState::Return,
-                                           symb::UnknownExpr::makeUnknown().into_underlying());
+                                           buildUnknown().into_underlying());
                     else
                         infos.emplace_back(std::move(postInfo.first), std::move(postInfo.second),
                                            interruptPath->getPathState(), std::nullopt);
@@ -710,7 +715,7 @@ namespace acslg::spec_generator {
                 if (auto range = tryGetAsRange(addr)) {
                     if (pattern) {
                         auto [_, ok] = memoryMap.emplace(
-                            range.value(), symb::UnknownExpr::makeUnknown().into_underlying());
+                            range.value(), buildUnknown().into_underlying());
                         // todo
                         // std::make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(),
                         // Add,
@@ -730,7 +735,7 @@ namespace acslg::spec_generator {
                             UNREACHABLE();
                     } else {
                         auto [_, ok] = memoryMap.emplace(
-                            range.value(), symb::UnknownExpr::makeUnknown().into_underlying());
+                            range.value(), buildUnknown().into_underlying());
 
                         // Deal with loops like
                         // {
@@ -848,7 +853,7 @@ namespace acslg::spec_generator {
 
                     // Fallback: if the derivation did not end up installing a post value (or if a
                     // value already exists), default to Unknown.
-                    memoryMap.emplace(addr, symb::UnknownExpr::makeUnknown().into_underlying());
+                    memoryMap.emplace(addr, buildUnknown().into_underlying());
                     assignedAddrs.push_back(addr);
                 }
             }
@@ -908,15 +913,15 @@ namespace acslg::spec_generator {
 
                 for (auto &assignedAddr : assignedAddrs) {
                     postMemoryMap.emplace(assignedAddr,
-                                          symb::UnknownExpr::makeUnknown().into_underlying());
+                                          buildUnknown().into_underlying());
                 }
                 for (auto &[addr, _] : patternInfo.interruptedPathPatternsMaps.at(i)) {
                     if (auto range = tryGetAsRange(addr)) {
                         postMemoryMap.emplace(std::move(range.value()),
-                                              symb::UnknownExpr::makeUnknown().into_underlying());
+                                              buildUnknown().into_underlying());
                     } else {
                         postMemoryMap.emplace(addr,
-                                              symb::UnknownExpr::makeUnknown().into_underlying());
+                                              buildUnknown().into_underlying());
                     }
                 }
             }
@@ -1010,7 +1015,7 @@ namespace acslg::spec_generator {
             PostPIInfo normalPostInfo;
             for (auto &addr : assignedAddrs) {
                 normalPostInfo.memoryMap.emplace(
-                    addr, symb::UnknownExpr::makeUnknown().into_underlying());
+                    addr, buildUnknown().into_underlying());
             }
 
             std::string specs;
@@ -1055,7 +1060,7 @@ namespace acslg::spec_generator {
 
                 for (auto &addr : interruptAssignedAddrs) {
                     postInfo.memoryMap.emplace(addr,
-                                               symb::UnknownExpr::makeUnknown().into_underlying());
+                                               buildUnknown().into_underlying());
                 }
             }
 
@@ -1709,7 +1714,7 @@ namespace acslg::spec_generator {
                     ERROR("This path has path state 'return' but no return expr.");
                 if (!interruptedPath->getReturnExpr().value()->collectUsedSymbols().empty()) {
                     interruptedPathInfo.returnExpr =
-                        symb::UnknownExpr::makeUnknown().into_underlying();
+                        buildUnknown().into_underlying();
                     // todo
                 } else {
                     interruptedPathInfo.returnExpr =
