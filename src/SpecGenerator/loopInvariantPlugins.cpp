@@ -108,9 +108,8 @@ namespace acslg::spec_generator {
             return factory.cloneExpr(factory.literal(value));
         }
 
-        OwnedSymbolicExpr buildUnknown() {
-            auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.unknown());
+        symb::ExprHandle unknownHandle() {
+            return symb::Expr::unknown().handle();
         }
 
         OwnedSymbolicExpr cloneExpr(const symb::SymbolicExpr &expr) {
@@ -428,8 +427,7 @@ namespace acslg::spec_generator {
                         infos.emplace_back(
                             std::move(postInfo.first),
                             collectPathConds(std::move(postInfo.second)),
-                            analyzer::Path::PathState::Return,
-                            detail::importPostExprThroughCurrentFactory(*buildUnknown()));
+                            analyzer::Path::PathState::Return, unknownHandle());
                     else
                         infos.emplace_back(std::move(postInfo.first),
                                            collectPathConds(std::move(postInfo.second)),
@@ -547,8 +545,7 @@ namespace acslg::spec_generator {
                         infos.emplace_back(
                             std::move(postInfo.first),
                             collectPathConds(std::move(postInfo.second)),
-                            analyzer::Path::PathState::Return,
-                            detail::importPostExprThroughCurrentFactory(*buildUnknown()));
+                            analyzer::Path::PathState::Return, unknownHandle());
                     else
                         infos.emplace_back(std::move(postInfo.first),
                                            collectPathConds(std::move(postInfo.second)),
@@ -723,9 +720,7 @@ namespace acslg::spec_generator {
                 // in the post-state as well).
                 if (auto range = tryGetAsRange(addr)) {
                     if (pattern) {
-                        auto [_, ok] = memoryMap.emplace(
-                            range.value(),
-                            detail::importPostExprThroughCurrentFactory(*buildUnknown()));
+                        auto [_, ok] = memoryMap.emplace(range.value(), unknownHandle());
                         // todo
                         // std::make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(),
                         // Add,
@@ -744,9 +739,7 @@ namespace acslg::spec_generator {
                         if (!ok && !indexInfo.preciseLoopCount->isUnknown())
                             UNREACHABLE();
                     } else {
-                        auto [_, ok] = memoryMap.emplace(
-                            range.value(),
-                            detail::importPostExprThroughCurrentFactory(*buildUnknown()));
+                        auto [_, ok] = memoryMap.emplace(range.value(), unknownHandle());
 
                         // Deal with loops like
                         // {
@@ -865,8 +858,7 @@ namespace acslg::spec_generator {
 
                     // Fallback: if the derivation did not end up installing a post value (or if a
                     // value already exists), default to Unknown.
-                    memoryMap.emplace(
-                        addr, detail::importPostExprThroughCurrentFactory(*buildUnknown()));
+                    memoryMap.emplace(addr, unknownHandle());
                     assignedAddrs.push_back(addr);
                 }
             }
@@ -925,17 +917,13 @@ namespace acslg::spec_generator {
                 auto &postMemoryMap = interruptPostInfos.at(i).memoryMap;
 
                 for (auto &assignedAddr : assignedAddrs) {
-                    postMemoryMap.emplace(
-                        assignedAddr, detail::importPostExprThroughCurrentFactory(*buildUnknown()));
+                    postMemoryMap.emplace(assignedAddr, unknownHandle());
                 }
                 for (auto &[addr, _] : patternInfo.interruptedPathPatternsMaps.at(i)) {
                     if (auto range = tryGetAsRange(addr)) {
-                        postMemoryMap.emplace(
-                            std::move(range.value()),
-                            detail::importPostExprThroughCurrentFactory(*buildUnknown()));
+                        postMemoryMap.emplace(std::move(range.value()), unknownHandle());
                     } else {
-                        postMemoryMap.emplace(
-                            addr, detail::importPostExprThroughCurrentFactory(*buildUnknown()));
+                        postMemoryMap.emplace(addr, unknownHandle());
                     }
                 }
             }
@@ -1028,8 +1016,7 @@ namespace acslg::spec_generator {
 
             PostPIInfo normalPostInfo;
             for (auto &addr : assignedAddrs) {
-                normalPostInfo.memoryMap.emplace(
-                    addr, detail::importPostExprThroughCurrentFactory(*buildUnknown()));
+                normalPostInfo.memoryMap.emplace(addr, unknownHandle());
             }
 
             std::string specs;
@@ -1073,9 +1060,7 @@ namespace acslg::spec_generator {
                 collectAssignedFromPath(*path, interruptAssignedAddrs);
 
                 for (auto &addr : interruptAssignedAddrs) {
-                    postInfo.memoryMap.emplace(addr,
-                                               detail::importPostExprThroughCurrentFactory(
-                                                   *buildUnknown()));
+                    postInfo.memoryMap.emplace(addr, unknownHandle());
                 }
             }
 
@@ -1729,8 +1714,7 @@ namespace acslg::spec_generator {
                 if (interruptedPath->getReturnExpr() == std::nullopt)
                     ERROR("This path has path state 'return' but no return expr.");
                 if (!interruptedPath->getReturnExpr().value()->collectUsedSymbols().empty()) {
-                    interruptedPathInfo.returnExpr =
-                        detail::importPostExprThroughCurrentFactory(*buildUnknown());
+                    interruptedPathInfo.returnExpr = unknownHandle();
                     // todo
                 } else {
                     interruptedPathInfo.returnExpr =
