@@ -99,15 +99,13 @@ namespace acslg::spec_generator {
             utils::not_null<std::unique_ptr<analyzer::symbolic::Address>>
                 indexRealAddr; // index's sole address on pre-state
             utils::not_null<std::unique_ptr<analyzer::symbolic::Address>> indexSymbolicAddr;
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-                indexSymbolicValue; // Varibale or Address
+            analyzer::symbolic::ExprHandle indexSymbolicValue; // Varibale or Address
             clang::BinaryOperator::Opcode op;
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-                indexBound; // exclusive bound
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>> preciseLoopCount;
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-                maxLoopCount; // The absolute value of the difference between the starting index
-                              // and the maximum/minimum possible index.
+            analyzer::symbolic::ExprHandle indexBound; // exclusive bound
+            analyzer::symbolic::ExprHandle preciseLoopCount;
+            analyzer::symbolic::ExprHandle maxLoopCount; // The absolute value of the difference
+                                                         // between the starting index and the
+                                                         // maximum/minimum possible index.
             Pattern indexPattern;
             bool isLocal; // Useless, delete this.
         };

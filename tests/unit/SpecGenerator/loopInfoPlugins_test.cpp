@@ -236,10 +236,15 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
-        ExprFactoryScope scope(getLastExprFactory());
+        auto &factory = getLastExprFactory();
+        ExprFactoryScope scope(factory);
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.indexInfo, nullopt);
         auto &indexInfo = loopInfo.indexInfo.value();
+        EXPECT_EQ(indexInfo.indexSymbolicValue, factory.importExpr(*indexInfo.indexSymbolicValue));
+        EXPECT_EQ(indexInfo.indexBound, factory.importExpr(*indexInfo.indexBound));
+        EXPECT_EQ(indexInfo.preciseLoopCount, factory.importExpr(*indexInfo.preciseLoopCount));
+        EXPECT_EQ(indexInfo.maxLoopCount, factory.importExpr(*indexInfo.maxLoopCount));
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
         EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));

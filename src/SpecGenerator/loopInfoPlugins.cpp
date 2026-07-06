@@ -724,15 +724,17 @@ namespace acslg::spec_generator {
                 preciseLoopCount == std::nullopt || maxLoopCount == std::nullopt ||
                 indexPattern == std::nullopt || isLocal == std::nullopt)
                 UNREACHABLE();
+            auto &factory = symb::ExprFactoryScope::current();
             loopInfo.indexInfo =
                 LoopInfo::IndexInfo{.indexExpr          = std::move(indexExpr.value()),
                                     .indexRealAddr      = std::move(indexRealAddr.value()),
                                     .indexSymbolicAddr  = std::move(indexSymbolicAddr.value()),
-                                    .indexSymbolicValue = std::move(indexValue.value()),
+                                    .indexSymbolicValue = factory.importExpr(*indexValue.value()),
                                     .op                 = std::move(opCode.value()),
-                                    .indexBound         = std::move(boundValue.value()),
-                                    .preciseLoopCount   = std::move(preciseLoopCount.value()),
-                                    .maxLoopCount       = std::move(maxLoopCount.value()),
+                                    .indexBound         = factory.importExpr(*boundValue.value()),
+                                    .preciseLoopCount =
+                                        factory.importExpr(*preciseLoopCount.value()),
+                                    .maxLoopCount = factory.importExpr(*maxLoopCount.value()),
                                     .indexPattern       = std::move(indexPattern.value()),
                                     .isLocal            = std::move(isLocal.value())};
             loopInfo.extraCondConjuncts = std::move(extraConds);
