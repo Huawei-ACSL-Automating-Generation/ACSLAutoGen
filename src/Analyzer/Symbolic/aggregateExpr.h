@@ -52,12 +52,6 @@ namespace acslg::analyzer::symbolic {
         std::size_t hash() const override;
         bool isLinear() const override { return false; };
         int getMaxDegree() const override { return -1; };
-        /**
-         * @brief Substitute using path/point context; range indices are stable and just clone.
-         */
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &,
-            const SourcePoint &) const override;
       private:
         utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &,
                                                              std::unordered_set<SourcePoint> &,
@@ -150,12 +144,6 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override;
-        /**
-         * @brief Substitute symbols using a path/point context and rebuild the range.
-         */
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 1; }
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
@@ -239,9 +227,6 @@ namespace acslg::analyzer::symbolic {
         std::size_t hash() const override {
             return utils::hash_val(getKind(), OverRangeExpr::hash(), quant_, pred_->hash());
         };
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
         bool isLinear() const override { return false; }
         int getMaxDegree() const override { return -1; }
 
@@ -320,9 +305,6 @@ namespace acslg::analyzer::symbolic {
             return utils::hash_val(SymbolicExpr::getKind(), OverRangeExpr::hash(), extremum_,
                                    expr_->hash(), fromPoint_.hash());
         };
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
         bool isLinear() const override { return false; }
         int getMaxDegree() const override { return -1; }
 

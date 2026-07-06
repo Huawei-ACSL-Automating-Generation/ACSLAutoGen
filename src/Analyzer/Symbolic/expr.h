@@ -448,20 +448,6 @@ namespace acslg::analyzer::symbolic {
          */
         virtual bool isUnknown() const { return false; };
 
-        /**
-         * @brief Substitute symbols with fromPoint same as `pointToSub` in an expression to the
-         * given program point (pathSubTo). A substitution typically means locating the expression
-         * at the address at the program point through fromAddr_ (or a similar member).
-         *
-         * @param pathSubTo      The path that symbols should be substituted to.
-         *
-         * @param pointToSub     Symbols with fromPoint same as pointToSub should be subtituted.
-
-         */
-        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const = 0;
-
         //===----------------------------------------------------------------------===//
         // StInG Interface Utilities - Symbolic Expression Adapter
         //
@@ -710,10 +696,6 @@ namespace acslg::analyzer::symbolic {
         const detail::LiteralExprNode *evalToConstExpr() const override;
 
         virtual bool equal(const SymbolicExpr &expr) const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
-
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 0; }
@@ -814,9 +796,6 @@ namespace acslg::analyzer::symbolic {
         virtual bool isUnknown() const override {
             return left_->isUnknown() || right_->isUnknown();
         };
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
         // StInG: Support functions for affine invariant analysis
         UsedMap collectUsedSymbols() const override;
         bool isLinear() const override;
@@ -893,9 +872,6 @@ namespace acslg::analyzer::symbolic {
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         const detail::LiteralExprNode *evalToConstExpr() const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return expr_->isUnknown(); };
 
@@ -944,9 +920,6 @@ namespace acslg::analyzer::symbolic {
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual bool isUnknown() const override { return true; };
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override { return false; }
         int getMaxDegree() const override { return 0; }
@@ -1104,9 +1077,6 @@ namespace acslg::analyzer::symbolic {
         std::optional<SourcePoint> getFromPoint() const override;
         virtual std::size_t hash() const override;
         bool equal(const SymbolicExpr &expr) const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
         // StInG: Support functions for affine invariant analysis
         bool isLinear() const override {
             WARN("Met Structure in isLinear.");
@@ -1796,9 +1766,6 @@ namespace acslg::analyzer::symbolic {
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::size_t hash() const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
         // StInG: Support functions for affine invariant analysis
         UsedMap collectUsedSymbols() const override;
         bool isLinear() const override {
@@ -1938,9 +1905,6 @@ namespace acslg::analyzer::symbolic {
         };
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::size_t hash() const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
         auto getFrom() const -> const auto & { return from_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;
@@ -2028,9 +1992,6 @@ namespace acslg::analyzer::symbolic {
         };
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::size_t hash() const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
         auto getDefinition() const -> const auto & { return definition_; }
         auto getBaseAddr() const -> const auto & { return baseAddr_; }
         auto getFieldIndex() const -> const auto & { return fieldIndex_; }
@@ -2116,9 +2077,6 @@ namespace acslg::analyzer::symbolic {
 
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
-            const Path &pathSubTo,
-            const SourcePoint &pointToSub) const override;
         std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
             return fromAddr_->addressClone().into_underlying();
         }

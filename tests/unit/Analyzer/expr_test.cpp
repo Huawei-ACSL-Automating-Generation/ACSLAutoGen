@@ -682,12 +682,6 @@ namespace acslg::test::unit::analyzer {
 
             std::size_t hash() const override { return 42; }
 
-            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> getSubstitutedExpr(
-                const Path &,
-                const symbolic::SourcePoint &) const override {
-                return clone();
-            }
-
             bool isLinear() const override { return false; }
             int getMaxDegree() const override { return -1; }
 
@@ -733,12 +727,6 @@ namespace acslg::test::unit::analyzer {
             }
 
             std::size_t hash() const override { return 314159; }
-
-            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> getSubstitutedExpr(
-                const Path &,
-                const symbolic::SourcePoint &) const override {
-                return clone();
-            }
 
             bool isLinear() const override { return false; }
             int getMaxDegree() const override { return -1; }
