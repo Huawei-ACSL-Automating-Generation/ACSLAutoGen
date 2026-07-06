@@ -325,12 +325,15 @@ namespace acslg::spec_generator {
 
         auto updateResultInfoWithInfo = [&loopEntryPoint](const analyzer::Path &currentPath,
                                                           PostPSInfo &toUpdate, auto &&info) {
+            auto &factory = symb::ExprFactoryScope::current();
             for (const auto &[addr, value] : info.memoryMap) {
-                auto subedAddrExpr = addr.get().getSubstitutedExpr(currentPath, loopEntryPoint);
-                auto subedAddr     = symb::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
+                auto subedAddrExpr =
+                    symb::getSubstitutedExprHandle(factory, addr.get(), currentPath, loopEntryPoint);
+                auto subedAddr = symb::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
                 if (subedAddr == nullptr)
                     UNREACHABLE();
-                auto subedValue = value->getSubstitutedExpr(currentPath, loopEntryPoint);
+                auto subedValue =
+                    symb::getSubstitutedExprHandle(factory, *value, currentPath, loopEntryPoint);
                 if (auto it = toUpdate.memoryMap.find(*subedAddr);
                     it != toUpdate.memoryMap.end() && !it->second->isUnknown()) {
                     WARN("Another plugin has already updated this address. The new value: "
@@ -338,16 +341,15 @@ namespace acslg::spec_generator {
                          subedValue->dump() + "} is discarded.");
                     continue;
                 }
-                toUpdate.memoryMap.insert_or_assign(
-                    *subedAddr, detail::importPostExprThroughCurrentFactory(*subedValue));
+                toUpdate.memoryMap.insert_or_assign(*subedAddr, subedValue);
             }
 
             for (const auto &cond : info.pathConds) {
                 // Substitute conditions so they refer to the current path's viewpoint of the loop
                 // entry.
-                auto subedConds = cond->getSubstitutedExpr(currentPath, loopEntryPoint);
-                toUpdate.pathConds.emplace(
-                    detail::importPostExprThroughCurrentFactory(*subedConds));
+                auto subedConds =
+                    symb::getSubstitutedExprHandle(factory, *cond, currentPath, loopEntryPoint);
+                toUpdate.pathConds.emplace(subedConds);
                 // todo: may insert for each unmodified position:
                 // Symbol(with fromPoint_ = afterLoop) == the current value.
             }
@@ -359,9 +361,9 @@ namespace acslg::spec_generator {
                     if (info.returnExpr.value()->isUnknown())
                         return;
                     auto subedReturnExpr =
-                        info.returnExpr.value()->getSubstitutedExpr(currentPath, loopEntryPoint);
-                    toUpdate.returnExpr =
-                        detail::importPostExprThroughCurrentFactory(*subedReturnExpr);
+                        symb::getSubstitutedExprHandle(
+                            factory, *info.returnExpr.value(), currentPath, loopEntryPoint);
+                    toUpdate.returnExpr = subedReturnExpr;
                 }
             }
         };
