@@ -771,10 +771,10 @@ namespace acslg::spec_generator {
                             auto [_, ok] = memoryMap.emplace(
                                 addr,
                                 buildBinary(
-                                    pattern.value().initialValue->clone(), Add,
+                                    cloneExpr(*pattern.value().initialValue), Add,
                                     buildBinary(buildLiteral(pattern.value().step),
                                                    Multiply,
-                                                   indexInfo.preciseLoopCount->clone()))
+                                                   cloneExpr(*indexInfo.preciseLoopCount)))
                                     .into_underlying());
                             if (!ok)
                                 UNREACHABLE();
@@ -811,46 +811,47 @@ namespace acslg::spec_generator {
                             auto firstIndexCond =
                                 (indexInfo.indexPattern.step > 0
                                      ? buildBinary(
-                                           indexValueAfterLoop->clone(), GreaterEqual,
-                                           indexInfo.indexBound->clone())
+                                           cloneExpr(*indexValueAfterLoop), GreaterEqual,
+                                           cloneExpr(*indexInfo.indexBound))
                                      : buildBinary(
-                                           indexValueAfterLoop->clone(), LessEqual,
-                                           indexInfo.indexBound->clone()));
+                                           cloneExpr(*indexValueAfterLoop), LessEqual,
+                                           cloneExpr(*indexInfo.indexBound)));
 
                             // i < n + step (step > 0) or
                             // i > 0 + step (step < 0)
                             auto secondIndexCond =
                                 (indexInfo.indexPattern.step > 0
                                      ? buildBinary(
-                                           indexValueAfterLoop->clone(), LessThan,
-                                           buildBinary(indexInfo.indexBound->clone(), Add,
+                                           cloneExpr(*indexValueAfterLoop), LessThan,
+                                           buildBinary(cloneExpr(*indexInfo.indexBound), Add,
                                                           buildLiteral(
                                                               indexInfo.indexPattern.step)))
                                      : buildBinary(
-                                           indexValueAfterLoop->clone(), GreaterThan,
-                                           buildBinary(indexInfo.indexBound->clone(), Add,
+                                           cloneExpr(*indexValueAfterLoop), GreaterThan,
+                                           buildBinary(cloneExpr(*indexInfo.indexBound), Add,
                                                           buildLiteral(
                                                               indexInfo.indexPattern.step))));
 
-                            condsForInsert.emplace(firstIndexCond->hash(), firstIndexCond->clone());
+                            condsForInsert.emplace(firstIndexCond->hash(),
+                                                   cloneExpr(*firstIndexCond));
                             condsForInsert.emplace(secondIndexCond->hash(),
-                                                   secondIndexCond->clone());
+                                                   cloneExpr(*secondIndexCond));
 
                             // abs(i_post - i_init)
                             auto diff = (indexInfo.indexPattern.step > 0
                                              ? buildBinary(
-                                                   indexValueAfterLoop->clone(), Subtract,
-                                                   indexInfo.indexSymbolicValue->clone())
+                                                   cloneExpr(*indexValueAfterLoop), Subtract,
+                                                   cloneExpr(*indexInfo.indexSymbolicValue))
                                              : buildBinary(
-                                                   indexInfo.indexSymbolicValue->clone(), Subtract,
-                                                   indexValueAfterLoop->clone()));
+                                                   cloneExpr(*indexInfo.indexSymbolicValue), Subtract,
+                                                   cloneExpr(*indexValueAfterLoop)));
 
                             auto postValue = (pattern.value().step > 0
                                                   ? buildBinary(
-                                                        pattern.value().initialValue->clone(), Add,
+                                                        cloneExpr(*pattern.value().initialValue), Add,
                                                         std::move(diff))
                                                   : buildBinary(
-                                                        pattern.value().initialValue->clone(),
+                                                        cloneExpr(*pattern.value().initialValue),
                                                         Subtract, std::move(diff)));
 
                             memoryMap.emplace(addr, std::move(postValue).into_underlying());
