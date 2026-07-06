@@ -1358,7 +1358,9 @@ namespace acslg::analyzer {
                                 }
                                 if (auto val = callerSnapshot->memoryState_.read(*addrPtr)) {
                                     auto &dstAddr = p->varAddr_.at(vd);
-                                    p->memoryState_.write(*dstAddr, val.value()->clone());
+                                    p->memoryState_.write(
+                                        *dstAddr, cloneExpr(p->context_.getExprFactory(),
+                                                            *val.value()));
                                 }
                             }
                             // Restore statement context back to the caller.
@@ -1366,7 +1368,8 @@ namespace acslg::analyzer {
                             p->stmtCtx_ = callerSnapshot->stmtCtx_;
                             utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> ret =
                                 p->getReturnExpr()
-                                    ? p->getReturnExpr().value()->clone()
+                                    ? cloneExpr(p->context_.getExprFactory(),
+                                                *p->getReturnExpr().value())
                                     : buildUnknown(p->context_.getExprFactory());
 
                             if (!firstTaken) {
@@ -1479,12 +1482,12 @@ namespace acslg::analyzer {
                                 symbolic::Expr oldValExpr{
                                     factory, factory.importExpr(*oldVal.value())};
                                 auto newValExpr = oldValExpr.binary(binOp, one);
-                                auto newVal     = newValExpr->clone();
+                                auto newVal     = cloneExpr(factory, *newValExpr);
                                 // return pre vs post
                                 if (op == PreInc || op == PreDec)
-                                    outExprs.emplace_back(newValExpr->clone());
+                                    outExprs.emplace_back(cloneExpr(factory, *newValExpr));
                                 else {
-                                    outExprs.emplace_back(oldVal.value()->clone());
+                                    outExprs.emplace_back(cloneExpr(factory, *oldVal.value()));
                                 }
                                 // Writing back first will cause oldVal to become dangling.
                                 // write back
@@ -1500,10 +1503,14 @@ namespace acslg::analyzer {
                                         getSymbol(uop->getType(),
                                                   addr.value()->addressClone().into_underlying(),
                                                   startPoint_);
-                                    path->memoryState_.write(*addr.value(), symbol->clone());
+                                    path->memoryState_.write(
+                                        *addr.value(), cloneExpr(path->context_.getExprFactory(),
+                                                                 *symbol));
                                     outExprs.emplace_back(std::move(symbol));
                                 } else {
-                                    outExprs.emplace_back(value.value()->clone());
+                                    outExprs.emplace_back(
+                                        cloneExpr(path->context_.getExprFactory(),
+                                                  *value.value()));
                                 }
                             } else if (op == AddrOf) {
                                 // &x
@@ -1532,8 +1539,8 @@ namespace acslg::analyzer {
                     auto &factory   = context_.getExprFactory();
 
                     for (auto &subExpr : sub.second)
-                        subExpr = factory.withValType(factory.importExpr(*subExpr), targetType)
-                                      ->clone();
+                        subExpr = factory.cloneExpr(
+                            factory.withValType(factory.importExpr(*subExpr), targetType));
 
                     return {std::move(sub.first), std::move(sub.second)};
                 })
@@ -1575,7 +1582,8 @@ namespace acslg::analyzer {
                             st = makeStructureForRecord(
                                 context_.getExprFactory(), RD,
                                 baseAddr.value()->addressClone().into_underlying(), startPoint_);
-                            memoryState_.write(*baseAddr.value(), st->clone());
+                            memoryState_.write(*baseAddr.value(),
+                                               cloneExpr(context_.getExprFactory(), *st));
                         } else if (auto stVal = symbolic::dyn_cast<const symbolic::Structure>(
                                        val.value().get().get())) {
                             st = cloneStructure(context_.getExprFactory().importExpr(*stVal));
@@ -1592,7 +1600,7 @@ namespace acslg::analyzer {
                     size_t idx = FD->getFieldIndex();
                     if (idx >= st->getNumFields())
                         UNREACHABLE();
-                    auto fieldValue = st->getFieldValue(idx)->clone();
+                    auto fieldValue = cloneExpr(context_.getExprFactory(), *st->getFieldValue(idx));
                     DEBUG("MemberExpr field " << FD->getNameAsString() << " idx=" << idx
                                               << " value: " << fieldValue->dump());
                     EvalResult result{};
