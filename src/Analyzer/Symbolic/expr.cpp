@@ -1862,7 +1862,7 @@ namespace acslg::analyzer::symbolic {
             UNREACHABLE();
 
         // Origin is an address-like handle; try reading from loop-entry memory.
-        if (auto value = mem.read(*realFromAddr)) {
+        if (auto value = mem.readHandle(*realFromAddr)) {
             // Replace current SymbolValue with the cloned value read from memory.
             return importThroughCurrentFactory(*value.value());
         } else {
@@ -1910,7 +1910,7 @@ namespace acslg::analyzer::symbolic {
             length = length_.value()->getSubstitutedExpr(pathSubTo, pointToSub)->simplifiedExpr();
 
         // Origin is an address; attempt to read the value at that origin.
-        if (auto value = mem.read(*realFromAddr)) {
+        if (auto value = mem.readHandle(*realFromAddr)) {
             // The origin resolves to a value; it must be convertible to an `SymbolAddress`.
 
             auto realAddr = value.value()->tryEvalAsSymbolAddr();
