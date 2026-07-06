@@ -13,45 +13,25 @@ namespace acslg::spec_generator {
     namespace {
         using OwnedSymbolicExpr = utils::not_null<std::unique_ptr<symb::SymbolicExpr>>;
 
-        OwnedSymbolicExpr buildLiteral(int64_t value) {
-            auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.literal(value));
-        }
-
-        OwnedSymbolicExpr buildUnknown() {
-            auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.unknown());
-        }
-
         OwnedSymbolicExpr cloneExpr(const symb::SymbolicExpr &expr) {
             auto &factory = symb::ExprFactoryScope::current();
             return factory.importAndCloneExpr(expr);
         }
 
-        OwnedSymbolicExpr buildBinary(OwnedSymbolicExpr lhs,
-                                      symb::BinaryOpExpr::Operator op,
-                                      OwnedSymbolicExpr rhs) {
+        symb::ExprHandle buildMaxLoopCountExpr(const LoopInfo::Pattern &pattern,
+                                               symb::ExprHandle boundValue,
+                                               bool includeClosedBound) {
             auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(
-                factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
-        }
+            symb::Expr bound{factory, boundValue};
+            symb::Expr initial{factory, pattern.initialValue};
 
-        OwnedSymbolicExpr buildMaxLoopCountExpr(const LoopInfo::Pattern &pattern,
-                                                const symb::SymbolicExpr &boundValue,
-                                                bool includeClosedBound) {
-            using enum symb::BinaryOpExpr::Operator;
-
-            auto result =
-                pattern.step > 0
-                    ? buildBinary(buildBinary(cloneExpr(boundValue), Add,
-                                              buildLiteral(pattern.step - 1)),
-                                  Subtract, cloneExpr(*pattern.initialValue))
-                    : buildBinary(cloneExpr(*pattern.initialValue), Subtract,
-                                  buildBinary(cloneExpr(boundValue), Add,
-                                              buildLiteral(pattern.step + 1)));
+            auto result = pattern.step > 0
+                              ? (bound + symb::LiteralExpr{factory, pattern.step - 1}) - initial
+                              : initial -
+                                    (bound + symb::LiteralExpr{factory, pattern.step + 1});
             if (includeClosedBound)
-                result = buildBinary(std::move(result), Add, buildLiteral(1));
-            return result;
+                result = result + symb::LiteralExpr{factory, 1};
+            return result.handle();
         }
     } // namespace
 
@@ -494,9 +474,10 @@ namespace acslg::spec_generator {
             std::optional<utils::not_null<std::unique_ptr<symb::Address>>> indexSymbolicAddr;
             std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> indexValue;
             std::optional<clang::BinaryOperator::Opcode> opCode;
-            std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> boundValue;
-            std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> preciseLoopCount;
-            std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> maxLoopCount;
+            auto &factory = symb::ExprFactoryScope::current();
+            std::optional<symb::ExprHandle> boundValue;
+            std::optional<symb::ExprHandle> preciseLoopCount;
+            std::optional<symb::ExprHandle> maxLoopCount;
             std::optional<LoopInfo::Pattern> indexPattern;
             std::optional<bool> isLocal;
 
@@ -549,7 +530,7 @@ namespace acslg::spec_generator {
                     auto evalResult = entryPath->evalExpr(bound);
                     if (evalResult.second.size() != 1)
                         ERROR("This location does not support control flow branches.");
-                    boundValue = std::move(evalResult.second.front());
+                    boundValue = factory.importExpr(*evalResult.second.front());
                 } else {
                     INFO("Bound expr is changed after one round.");
                     return false;
@@ -573,15 +554,15 @@ namespace acslg::spec_generator {
                     opCode == std::nullopt)
                     UNREACHABLE();
 
-                maxLoopCount = buildMaxLoopCountExpr(
-                    indexPattern.value(), *boundValue.value(),
-                    opCode.value() == BO_LE || opCode.value() == BO_GE);
+                maxLoopCount =
+                    buildMaxLoopCountExpr(indexPattern.value(), boundValue.value(),
+                                          opCode.value() == BO_LE || opCode.value() == BO_GE);
 
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
-                    preciseLoopCount = cloneExpr(*maxLoopCount.value());
+                    preciseLoopCount = maxLoopCount.value();
                 } else {
-                    preciseLoopCount = buildUnknown().into_underlying();
+                    preciseLoopCount = symb::Expr::unknown().handle();
                 }
             } else if (auto unaryExpr =
                            dyn_cast<clang::UnaryOperator>(indexCond->IgnoreParenImpCasts())) {
@@ -630,18 +611,18 @@ namespace acslg::spec_generator {
                         unaryExpr);
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
-                boundValue = buildLiteral(0);
+                boundValue = symb::LiteralExpr{factory, 0}.handle();
 
                 if (indexPattern == std::nullopt || boundValue == std::nullopt)
                     UNREACHABLE();
 
                 maxLoopCount =
-                    buildMaxLoopCountExpr(indexPattern.value(), *boundValue.value(), false);
+                    buildMaxLoopCountExpr(indexPattern.value(), boundValue.value(), false);
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
-                    preciseLoopCount = cloneExpr(*maxLoopCount.value());
+                    preciseLoopCount = maxLoopCount.value();
                 } else {
-                    preciseLoopCount = buildUnknown().into_underlying();
+                    preciseLoopCount = symb::Expr::unknown().handle();
                 }
             } else if (auto refExpr =
                            dyn_cast<clang::DeclRefExpr>(indexCond->IgnoreParenImpCasts())) {
@@ -699,18 +680,18 @@ namespace acslg::spec_generator {
                     entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(refExpr);
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
-                boundValue = buildLiteral(0);
+                boundValue = symb::LiteralExpr{factory, 0}.handle();
 
                 if (indexPattern == std::nullopt || boundValue == std::nullopt)
                     UNREACHABLE();
 
                 maxLoopCount =
-                    buildMaxLoopCountExpr(indexPattern.value(), *boundValue.value(), false);
+                    buildMaxLoopCountExpr(indexPattern.value(), boundValue.value(), false);
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
-                    preciseLoopCount = cloneExpr(*maxLoopCount.value());
+                    preciseLoopCount = maxLoopCount.value();
                 } else {
-                    preciseLoopCount = buildUnknown().into_underlying();
+                    preciseLoopCount = symb::Expr::unknown().handle();
                 }
             } else {
                 INFO("Loop's condition expr is too complex.");
@@ -724,7 +705,6 @@ namespace acslg::spec_generator {
                 preciseLoopCount == std::nullopt || maxLoopCount == std::nullopt ||
                 indexPattern == std::nullopt || isLocal == std::nullopt)
                 UNREACHABLE();
-            auto &factory = symb::ExprFactoryScope::current();
             loopInfo.indexInfo =
                 LoopInfo::IndexInfo{.indexExpr          = std::move(indexExpr.value()),
                                     .indexRealAddr      = factory.importAddress(*indexRealAddr.value()),
@@ -732,10 +712,9 @@ namespace acslg::spec_generator {
                                         factory.importAddress(*indexSymbolicAddr.value()),
                                     .indexSymbolicValue = factory.importExpr(*indexValue.value()),
                                     .op                 = std::move(opCode.value()),
-                                    .indexBound         = factory.importExpr(*boundValue.value()),
-                                    .preciseLoopCount =
-                                        factory.importExpr(*preciseLoopCount.value()),
-                                    .maxLoopCount = factory.importExpr(*maxLoopCount.value()),
+                                    .indexBound         = boundValue.value(),
+                                    .preciseLoopCount   = preciseLoopCount.value(),
+                                    .maxLoopCount       = maxLoopCount.value(),
                                     .indexPattern       = std::move(indexPattern.value()),
                                     .isLocal            = std::move(isLocal.value())};
             loopInfo.extraCondConjuncts = std::move(extraConds);

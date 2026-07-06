@@ -21,6 +21,16 @@ namespace acslg::test::unit::spec_generator {
     using namespace acslg::analyzer::symbolic;
     using namespace utils;
 
+    void expectIndexInfoHandlesCanonical(const LoopInfo::IndexInfo &indexInfo,
+                                         ExprFactory &factory) {
+        EXPECT_EQ(indexInfo.indexSymbolicValue, factory.importExpr(*indexInfo.indexSymbolicValue));
+        EXPECT_EQ(indexInfo.indexBound, factory.importExpr(*indexInfo.indexBound));
+        EXPECT_EQ(indexInfo.preciseLoopCount, factory.importExpr(*indexInfo.preciseLoopCount));
+        EXPECT_EQ(indexInfo.maxLoopCount, factory.importExpr(*indexInfo.maxLoopCount));
+        EXPECT_EQ(indexInfo.indexRealAddr, factory.importAddress(*indexInfo.indexRealAddr));
+        EXPECT_EQ(indexInfo.indexSymbolicAddr, factory.importAddress(*indexInfo.indexSymbolicAddr));
+    }
+
     TEST(SetPatternsPluginTest, SimpleLoop_1) {
         auto pluginIds                = vector{"setPatterns"s};
         auto code                     = R"(
@@ -241,12 +251,7 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.indexInfo, nullopt);
         auto &indexInfo = loopInfo.indexInfo.value();
-        EXPECT_EQ(indexInfo.indexSymbolicValue, factory.importExpr(*indexInfo.indexSymbolicValue));
-        EXPECT_EQ(indexInfo.indexBound, factory.importExpr(*indexInfo.indexBound));
-        EXPECT_EQ(indexInfo.preciseLoopCount, factory.importExpr(*indexInfo.preciseLoopCount));
-        EXPECT_EQ(indexInfo.maxLoopCount, factory.importExpr(*indexInfo.maxLoopCount));
-        EXPECT_EQ(indexInfo.indexRealAddr, factory.importAddress(*indexInfo.indexRealAddr));
-        EXPECT_EQ(indexInfo.indexSymbolicAddr, factory.importAddress(*indexInfo.indexSymbolicAddr));
+        expectIndexInfoHandlesCanonical(indexInfo, factory);
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
         EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
@@ -271,10 +276,12 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
-        ExprFactoryScope scope(getLastExprFactory());
+        auto &factory = getLastExprFactory();
+        ExprFactoryScope scope(factory);
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.indexInfo, nullopt);
         auto &indexInfo = loopInfo.indexInfo.value();
+        expectIndexInfoHandlesCanonical(indexInfo, factory);
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
         EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
@@ -301,10 +308,12 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
-        ExprFactoryScope scope(getLastExprFactory());
+        auto &factory = getLastExprFactory();
+        ExprFactoryScope scope(factory);
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.indexInfo, nullopt);
         auto &indexInfo = loopInfo.indexInfo.value();
+        expectIndexInfoHandlesCanonical(indexInfo, factory);
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
         EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
@@ -328,9 +337,12 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
+        auto &factory = getLastExprFactory();
+        ExprFactoryScope scope(factory);
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.indexInfo, nullopt);
         auto &indexInfo = loopInfo.indexInfo.value();
+        expectIndexInfoHandlesCanonical(indexInfo, factory);
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "pt");
         EXPECT_TRUE(isa<Address>(*indexInfo.indexSymbolicValue));
@@ -394,10 +406,12 @@ namespace acslg::test::unit::spec_generator {
 }
     )";
         auto [loopInfo, continueFlag] = doPluginsOnFirstLoop(code, pluginIds);
-        ExprFactoryScope scope(getLastExprFactory());
+        auto &factory = getLastExprFactory();
+        ExprFactoryScope scope(factory);
         EXPECT_EQ(continueFlag, true);
         ASSERT_NE(loopInfo.indexInfo, nullopt);
         auto &indexInfo = loopInfo.indexInfo.value();
+        expectIndexInfoHandlesCanonical(indexInfo, factory);
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
         EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
