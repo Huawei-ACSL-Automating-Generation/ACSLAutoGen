@@ -91,12 +91,9 @@ namespace acslg::spec_generator {
                    stmtHasArrayOrPointer(loopInfo.initStmt);
         }
 
-        template <typename FactoryRebuild, typename LegacyRebuild>
+        template <typename FactoryRebuild>
         symb::SymbolAddress rebuildSymbolAddress(const symb::SymbolAddress &address,
-                                                 FactoryRebuild &&factoryRebuild,
-                                                 LegacyRebuild &&legacyRebuild) {
-            (void)legacyRebuild;
-
+                                                 FactoryRebuild &&factoryRebuild) {
             auto &factory = symb::ExprFactoryScope::current();
             auto rebuilt  = std::forward<FactoryRebuild>(factoryRebuild)(
                 factory, factory.importAddress(address));
@@ -646,16 +643,10 @@ namespace acslg::spec_generator {
                     auto result = rebuildSymbolAddress(
                         *symbolAddr,
                         [](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            symb::Addr addr{factory, address};
-                            symb::LiteralExpr zero{
-                                factory,
-                                static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)};
-                            return addr.withOffset(zero).handle();
-                        },
-                        [](const symb::SymbolAddress &address) {
-                            return address
-                                .withOffset(buildLiteral(symb::SymbolAddress::ZERO_OFFSET))
-                                .into_underlying();
+                            return factory.withOffset(
+                                address,
+                                factory.literal(
+                                    static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)));
                         });
                     auto lengthExpr = !indexInfo.preciseLoopCount->isUnknown()
                                           ? indexInfo.preciseLoopCount->simplifiedExpr()
@@ -663,12 +654,7 @@ namespace acslg::spec_generator {
                     auto resultWithLength = rebuildSymbolAddress(
                         result,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            symb::Addr addr{factory, address};
-                            symb::Expr length{factory, factory.importExpr(*lengthExpr)};
-                            return addr.withLength(length).handle();
-                        },
-                        [&lengthExpr](const symb::SymbolAddress &address) {
-                            return address.withLength(lengthExpr->clone()).into_underlying();
+                            return factory.withLength(address, factory.importExpr(*lengthExpr));
                         });
                     return resultWithLength;
                 }
@@ -689,14 +675,9 @@ namespace acslg::spec_generator {
                         auto result = rebuildSymbolAddress(
                             *symbolAddr,
                             [&pattern](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                symb::Addr addr{factory, address};
-                                symb::Expr offset{
-                                    factory, factory.importExpr(*pattern.value().initialValue)};
-                                return addr.withOffset(offset).handle();
-                            },
-                            [&pattern](const symb::SymbolAddress &address) {
-                                return address.withOffset(pattern.value().initialValue->clone())
-                                    .into_underlying();
+                                return factory.withOffset(
+                                    address,
+                                    factory.importExpr(*pattern.value().initialValue));
                             });
                         auto lengthExpr = !indexInfo.preciseLoopCount->isUnknown()
                                               ? indexInfo.preciseLoopCount->simplifiedExpr()
@@ -704,12 +685,7 @@ namespace acslg::spec_generator {
                         auto resultWithLength = rebuildSymbolAddress(
                             result,
                             [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                symb::Addr addr{factory, address};
-                                symb::Expr length{factory, factory.importExpr(*lengthExpr)};
-                                return addr.withLength(length).handle();
-                            },
-                            [&lengthExpr](const symb::SymbolAddress &address) {
-                                return address.withLength(lengthExpr->clone()).into_underlying();
+                                return factory.withLength(address, factory.importExpr(*lengthExpr));
                             });
                         return resultWithLength;
                     } else {
@@ -1438,14 +1414,10 @@ namespace acslg::spec_generator {
                     rebuildSymbolAddress(
                         *arrayAddr,
                         [](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            symb::Addr addr{factory, address};
-                            symb::LiteralExpr zero{
-                                factory,
-                                static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)};
-                            return addr.withOffset(zero).handle();
-                        },
-                        [](const symb::SymbolAddress &address) {
-                            return address.withResetOffset().into_underlying();
+                            return factory.withOffset(
+                                address,
+                                factory.literal(
+                                    static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)));
                         }));
                 if (indexStep > 0) {
                     // For now we take [0, bound) for max/min over range (reset offset to zero).
@@ -1454,14 +1426,8 @@ namespace acslg::spec_generator {
                         rebuildSymbolAddress(
                             *arrayRange,
                             [&](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                symb::Addr addr{factory, address};
-                                symb::Expr length{
-                                    factory, factory.importExpr(*indexInfo.indexBound)};
-                                return addr.withLength(length).handle();
-                            },
-                            [&](const symb::SymbolAddress &address) {
-                                return address.withLength(indexInfo.indexBound->clone())
-                                    .into_underlying();
+                                return factory.withLength(
+                                    address, factory.importExpr(*indexInfo.indexBound));
                             }));
                 } else {
                     // arrayRange = arrayRange->withOffset(indexInfo.indexBound->clone());
@@ -1471,12 +1437,7 @@ namespace acslg::spec_generator {
                         rebuildSymbolAddress(
                             *arrayRange,
                             [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                symb::Addr addr{factory, address};
-                                symb::Expr length{factory, factory.importExpr(*lengthExpr)};
-                                return addr.withLength(length).handle();
-                            },
-                            [&lengthExpr](const symb::SymbolAddress &address) {
-                                return address.withLength(lengthExpr->clone()).into_underlying();
+                                return factory.withLength(address, factory.importExpr(*lengthExpr));
                             }));
                 }
 
@@ -1770,14 +1731,8 @@ namespace acslg::spec_generator {
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            symb::Addr addr{factory, address};
-                            symb::Expr offset{
-                                factory, factory.importExpr(*indexInfo.indexSymbolicValue)};
-                            return addr.withOffset(offset).handle();
-                        },
-                        [&](const symb::SymbolAddress &address) {
-                            return address.withOffset(indexInfo.indexSymbolicValue->clone())
-                                .into_underlying();
+                            return factory.withOffset(
+                                address, factory.importExpr(*indexInfo.indexSymbolicValue));
                         }));
                 auto lengthExpr = buildBinary(indexInfo.indexBound->clone(), Subtract,
                                                  indexInfo.indexSymbolicValue->clone());
@@ -1785,26 +1740,15 @@ namespace acslg::spec_generator {
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            symb::Addr addr{factory, address};
-                            symb::Expr length{factory, factory.importExpr(*lengthExpr)};
-                            return addr.withLength(length).handle();
-                        },
-                        [&lengthExpr](const symb::SymbolAddress &address) {
-                            return address.withLength(lengthExpr->clone()).into_underlying();
+                            return factory.withLength(address, factory.importExpr(*lengthExpr));
                         }));
             } else {
                 arrayRange = cloneSymbolAddress(
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            symb::Addr addr{factory, address};
-                            symb::Expr offset{factory,
-                                              factory.importExpr(*indexInfo.indexBound)};
-                            return addr.withOffset(offset).handle();
-                        },
-                        [&](const symb::SymbolAddress &address) {
-                            return address.withOffset(indexInfo.indexBound->clone())
-                                .into_underlying();
+                            return factory.withOffset(
+                                address, factory.importExpr(*indexInfo.indexBound));
                         }));
                 auto lengthExpr = buildBinary(indexInfo.indexSymbolicValue->clone(),
                                                  Subtract, indexInfo.indexBound->clone());
@@ -1812,12 +1756,7 @@ namespace acslg::spec_generator {
                     rebuildSymbolAddress(
                         *arrayRange,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            symb::Addr addr{factory, address};
-                            symb::Expr length{factory, factory.importExpr(*lengthExpr)};
-                            return addr.withLength(length).handle();
-                        },
-                        [&lengthExpr](const symb::SymbolAddress &address) {
-                            return address.withLength(lengthExpr->clone()).into_underlying();
+                            return factory.withLength(address, factory.importExpr(*lengthExpr));
                         }));
             }
             normalPathInfo.pathState = analyzer::Path::PathState::Step;
