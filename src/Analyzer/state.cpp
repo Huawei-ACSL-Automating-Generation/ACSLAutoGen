@@ -103,6 +103,11 @@ namespace acslg::analyzer {
             return expr.clone().into_underlying();
         }
 
+        utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> buildUnknown(
+            symbolic::ExprFactory &factory) {
+            return factory.cloneExpr(factory.unknown());
+        }
+
         using symbolic::cloneStructure;
         using symbolic::cloneSymbolAddress;
         using symbolic::cloneVariableAddress;
@@ -220,7 +225,7 @@ namespace acslg::analyzer {
                     DEBUG("mergeWith BigNum->data: writing Unknown due to mismatch");
                 }
             }
-            memoryState_.write(addrBox, symbolic::UnknownExpr::makeUnknown().into_underlying());
+            memoryState_.write(addrBox, buildUnknown(context_.getExprFactory()).into_underlying());
         }
 
         // Intersect path conditions; a merged path must satisfy constraints from both sides.
@@ -430,7 +435,7 @@ namespace acslg::analyzer {
             memoryState_.write(*rawPtr, std::move(initSym));
         } else {
             // Prevent uninitialized variables.
-            memoryState_.write(*rawPtr, symbolic::UnknownExpr::makeUnknown().into_underlying());
+            memoryState_.write(*rawPtr, buildUnknown(context_.getExprFactory()).into_underlying());
         }
         return rawPtr;
     }
@@ -819,7 +824,8 @@ namespace acslg::analyzer {
                     const clang::FunctionDecl *callee = call->getDirectCallee();
                     if (!callee) {
                         Formulas exprs;
-                        exprs.emplace_back(symbolic::UnknownExpr::makeUnknown().into_underlying());
+                        exprs.emplace_back(
+                            buildUnknown(context_.getExprFactory()).into_underlying());
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
@@ -836,7 +842,8 @@ namespace acslg::analyzer {
                         lowerName.find("assert") != std::string::npos ||
                         lowerName.find("print") != std::string::npos) {
                         Formulas exprs;
-                        exprs.emplace_back(symbolic::UnknownExpr::makeUnknown().into_underlying());
+                        exprs.emplace_back(
+                            buildUnknown(context_.getExprFactory()).into_underlying());
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
@@ -904,7 +911,7 @@ namespace acslg::analyzer {
                         if (!retTy->isPointerType()) {
                             Formulas exprs;
                             exprs.emplace_back(
-                                symbolic::UnknownExpr::makeUnknown().into_underlying());
+                                buildUnknown(context_.getExprFactory()).into_underlying());
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
@@ -1007,8 +1014,7 @@ namespace acslg::analyzer {
                             // addr = addr->withLength(std::move(lengthInElems));
 
                             // Materialize the first element symbol at the allocated base address.
-                            auto elemSym = symbolic::UnknownExpr::makeUnknown();
-                            memoryState_.write(*addr, elemSym->clone());
+                            memoryState_.write(*addr, buildUnknown(context_.getExprFactory()));
 
                             Formulas exprs;
                             exprs.emplace_back(std::move(addr));
@@ -1092,8 +1098,7 @@ namespace acslg::analyzer {
 
                         // Overwrite freed memory with an UnknownExpr (symbolic tombstone).
                         // This prevents later reads from reusing stale symbolic values.
-                        auto tomb = symbolic::UnknownExpr::makeUnknown();
-                        memoryState_.write(*freedAddr, tomb->clone());
+                        memoryState_.write(*freedAddr, buildUnknown(context_.getExprFactory()));
 
                         // Record the freed address as a formula result (optional, for tracking).
                         Formulas exprs;
@@ -1284,7 +1289,8 @@ namespace acslg::analyzer {
                         auto destRange =
                             destBase.withLength(length)->addressClone().into_underlying();
                         memoryState_.write(
-                            *destRange, symbolic::UnknownExpr::makeUnknown().into_underlying());
+                            *destRange,
+                            buildUnknown(context_.getExprFactory()).into_underlying());
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
 
@@ -1306,7 +1312,7 @@ namespace acslg::analyzer {
                     if (!calleeWithBody->hasBody()) {
                         if (calleeWithBody->getNumParams() == 0) {
                             outExprs.push_back(
-                                symbolic::UnknownExpr::makeUnknown().into_underlying());
+                                buildUnknown(context_.getExprFactory()).into_underlying());
                             return {std::move(outPaths), std::move(outExprs)};
                         }
                         UNIMPLEMENT("Calling a function \"" + calleeWithBody->getNameAsString() +
@@ -1345,10 +1351,10 @@ namespace acslg::analyzer {
                             // Restore statement context back to the caller.
                             // Do not merge with callerSnapshot here; keep callee state as-is.
                             p->stmtCtx_ = callerSnapshot->stmtCtx_;
-                            auto ret =
-                                (p->getReturnExpr()
-                                     ? p->getReturnExpr().value()->clone()
-                                     : symbolic::UnknownExpr::makeUnknown().into_underlying());
+                            utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> ret =
+                                p->getReturnExpr()
+                                    ? p->getReturnExpr().value()->clone()
+                                    : buildUnknown(p->context_.getExprFactory());
 
                             if (!firstTaken) {
                                 this->swap(*p);
@@ -1363,7 +1369,7 @@ namespace acslg::analyzer {
 
                     if (!firstTaken) {
                         outExprs.emplace_back(
-                            symbolic::UnknownExpr::makeUnknown().into_underlying());
+                            buildUnknown(context_.getExprFactory()).into_underlying());
                     }
 
                     return {std::move(outPaths), std::move(outExprs)};
