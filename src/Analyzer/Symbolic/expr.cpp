@@ -589,6 +589,24 @@ namespace acslg::analyzer::symbolic {
             return ExprFactoryScope::current().importAndCloneExpr(expr);
         }
 
+        HashExprHandleMap importLegacySubstitutions(
+            ExprFactory &factory,
+            const SymbolicExpr::HashExprMap &legacyMap) {
+            HashExprHandleMap handleMap;
+            handleMap.reserve(legacyMap.size());
+            for (const auto &[hash, expr] : legacyMap)
+                handleMap.emplace(hash, factory.importExpr(*expr));
+            return handleMap;
+        }
+
+        utils::not_null<std::unique_ptr<SymbolicExpr>> substituteValueThroughHandles(
+            const SymbolicExpr &expr,
+            const SymbolicExpr::HashExprMap &legacyMap) {
+            auto &factory = ExprFactoryScope::current();
+            auto handleMap = importLegacySubstitutions(factory, legacyMap);
+            return factory.cloneExpr(getSubstitutedValueHandle(factory, expr, handleMap));
+        }
+
         ExprChild makeDefaultSymbolAddressOffsetChild() {
             auto &factory = ExprFactoryScope::current();
             return ExprChild{factory.literal(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET))};
@@ -2204,116 +2222,47 @@ namespace acslg::analyzer::symbolic {
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        return importThroughCurrentFactory(*this);
+        return substituteValueThroughHandles(*this, hashExprMap);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        return importThroughCurrentFactory(*this);
+        return substituteValueThroughHandles(*this, hashExprMap);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> VariableAddress::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        return importThroughCurrentFactory(*this);
+        return substituteValueThroughHandles(*this, hashExprMap);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        auto expr = fromAddr_->getSubstitutedValueExpr(hashExprMap);
-        auto addr = dyn_cast<Address>(expr.get().get());
-        if (addr == nullptr)
-            UNREACHABLE();
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(
-            factory.symbolValue(getValType(), factory.importAddress(*addr), fromPoint_));
+        return substituteValueThroughHandles(*this, hashExprMap);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        if (fromAddr_) {
-            auto subedExpr = fromAddr_.value()->getSubstitutedValueExpr(hashExprMap);
-            auto addr      = dyn_cast<Address>(subedExpr.get().get());
-            if (addr == nullptr)
-                UNREACHABLE();
-
-            auto &factory = ExprFactoryScope::current();
-            std::optional<ExprHandle> lengthArg;
-            if (length_)
-                lengthArg =
-                    factory.importExpr(*length_.value()->getSubstitutedValueExpr(hashExprMap));
-
-            return factory.cloneExpr(
-                factory.symbolAddress(
-                           pointeeType_, factory.importAddress(*addr), fromPoint_,
-                           factory.importExpr(*offset_->getSubstitutedValueExpr(hashExprMap)),
-                           lengthArg)
-                    .asExpr());
-        }
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(
-            factory.symbolAddress(
-                       pointeeType_, std::nullopt, fromPoint_,
-                       factory.importExpr(*offset_->getSubstitutedValueExpr(hashExprMap)),
-                       std::nullopt)
-                .asExpr());
+        return substituteValueThroughHandles(*this, hashExprMap);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> FieldAddress::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        auto subedExpr    = baseAddr_->getSubstitutedValueExpr(hashExprMap);
-        auto realBaseAddr = dyn_cast<const Address>(subedExpr.get().get());
-        if (realBaseAddr == nullptr)
-            UNREACHABLE();
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(
-            factory.fieldAddress(pointeeType_, definition_,
-                                 factory.importAddress(*realBaseAddr), fieldIndex_)
-                .asExpr());
+        return substituteValueThroughHandles(*this, hashExprMap);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        auto lhs = left_->getSubstitutedValueExpr(hashExprMap);
-        auto rhs = right_->getSubstitutedValueExpr(hashExprMap);
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(
-            factory.binary(factory.importExpr(*lhs), op_, factory.importExpr(*rhs)));
+        return substituteValueThroughHandles(*this, hashExprMap);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        auto subExpr = expr_->getSubstitutedValueExpr(hashExprMap);
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(factory.unary(op_, factory.importExpr(*subExpr)));
+        return substituteValueThroughHandles(*this, hashExprMap);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::getSubstitutedValueExpr(
         const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return importThroughCurrentFactory(*it->second);
-        auto &factory = ExprFactoryScope::current();
-        auto rebuilt = factory.importExpr(*this);
-        for (size_t i = 0; i < fields_.size(); ++i) {
-            auto field = fields_[i]->getSubstitutedValueExpr(hashExprMap);
-            rebuilt = factory.withField(rebuilt, i, factory.importExpr(*field));
-        }
-        return factory.cloneExpr(rebuilt);
+        return substituteValueThroughHandles(*this, hashExprMap);
     }
 
     std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> detail::BinaryOpExprNode::
