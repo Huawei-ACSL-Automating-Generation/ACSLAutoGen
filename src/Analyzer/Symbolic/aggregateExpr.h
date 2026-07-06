@@ -61,9 +61,6 @@ namespace acslg::analyzer::symbolic {
         /**
          * @brief Replace the range index with a concrete expression when range is instantiated.
          */
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
-            const SymbolAddrBaseInfo &rangeBase,
-            const SymbolicExpr &indexExpr) const override;
 
       private:
         utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &,
@@ -166,9 +163,6 @@ namespace acslg::analyzer::symbolic {
         /**
          * @brief Replace the range index with a concrete expression.
          */
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
-            const SymbolAddrBaseInfo &rangeBase,
-            const SymbolicExpr &indexExpr) const override;
 
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 1; }
@@ -256,9 +250,6 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
-            const SymbolAddrBaseInfo &rangeBase,
-            const SymbolicExpr &indexExpr) const override;
         bool isLinear() const override { return false; }
         int getMaxDegree() const override { return -1; }
 
@@ -340,9 +331,6 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> getSubstitutedExpr(
             const Path &pathSubTo,
             const SourcePoint &pointToSub) const override;
-        utils::not_null<std::unique_ptr<SymbolicExpr>> getRangeIndexSubstituted(
-            const SymbolAddrBaseInfo &rangeBase,
-            const SymbolicExpr &indexExpr) const override;
         bool isLinear() const override { return false; }
         int getMaxDegree() const override { return -1; }
 

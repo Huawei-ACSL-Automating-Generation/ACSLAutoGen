@@ -220,11 +220,6 @@ namespace acslg::analyzer::symbolic {
         return importThroughCurrentFactory(*this);
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::
-        getRangeIndexSubstituted(const SymbolAddrBaseInfo &, const SymbolicExpr &indexExpr) const {
-        return importThroughCurrentFactory(indexExpr);
-    }
-
     std::string SumOverRange::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
@@ -255,16 +250,6 @@ namespace acslg::analyzer::symbolic {
         if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
             ERROR("Substituted expression should be a *range*");
         return rebuildSumOverRange(*subedRange, indexName_, pathSubTo.getStartPoint());
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getRangeIndexSubstituted(
-        const SymbolAddrBaseInfo &rangeBase,
-        const SymbolicExpr &indexExpr) const {
-        auto subedExpr  = range().getRangeIndexSubstituted(rangeBase, indexExpr);
-        auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        return rebuildSumOverRange(*subedRange, indexName_, fromPoint_);
     }
 
     utils::expected<std::string, SymbolicExpr::GetACSLError> SumOverRange::doGetACSL(
@@ -323,18 +308,6 @@ namespace acslg::analyzer::symbolic {
 
         // Quantifier bodies need substitution as well so predicates refer to the new path labels.
         auto subedPred = pred_->getSubstitutedExpr(pathSubTo, pointToSub);
-
-        return rebuildQuantifierOverRange(*subedRange, indexName_, quant_, std::move(subedPred));
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getRangeIndexSubstituted(
-        const SymbolAddrBaseInfo &rangeBase,
-        const SymbolicExpr &indexExpr) const {
-        auto subedExpr  = range().getRangeIndexSubstituted(rangeBase, indexExpr);
-        auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        auto subedPred = pred_->getRangeIndexSubstituted(rangeBase, indexExpr);
 
         return rebuildQuantifierOverRange(*subedRange, indexName_, quant_, std::move(subedPred));
     }
@@ -432,19 +405,6 @@ namespace acslg::analyzer::symbolic {
 
         if (fromPoint_ == pointToSub)
             TODO();
-        return rebuildMaxMinOverRange(*subedRange, indexName_, extremum_, std::move(subedBody),
-                                      fromPoint_);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getRangeIndexSubstituted(
-        const SymbolAddrBaseInfo &rangeBase,
-        const SymbolicExpr &indexExpr) const {
-        auto subedExpr  = range().getRangeIndexSubstituted(rangeBase, indexExpr);
-        auto subedRange = dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        auto subedBody = expr_->getRangeIndexSubstituted(rangeBase, indexExpr);
-
         return rebuildMaxMinOverRange(*subedRange, indexName_, extremum_, std::move(subedBody),
                                       fromPoint_);
     }
