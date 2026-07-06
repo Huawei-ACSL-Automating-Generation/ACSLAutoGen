@@ -283,6 +283,7 @@ namespace acslg::analyzer::symbolic {
         auto st = spec_generator::StringTemplate{
             "\\${quant} integer ${i}; ${0} <= ${i} < ${n} ${entailOrAnd} ${pred}"};
 
+        auto &factory = ExprFactoryScope::current();
         std::string quantStr, entailOrAnd;
         switch (quant_) {
             using enum Quantifier;
@@ -297,21 +298,24 @@ namespace acslg::analyzer::symbolic {
             default: UNREACHABLE();
         }
 
-        auto zeroStr = callGetACSL(*range().getOffset()->simplifiedExpr(), config, usedPoints,
-                                   currentPoint, getPrecedence(Operator::LessThan), false);
+        auto zero = simplifiedExprHandle(factory, *range().getOffset());
+        auto zeroStr = callGetACSL(*zero, config, usedPoints, currentPoint,
+                                   getPrecedence(Operator::LessThan), false);
         if (!zeroStr)
             return zeroStr.error();
 
         auto rightBound = range().getRightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
-        auto nStr = callGetACSL(*rightBound.value()->simplifiedExpr(), config, usedPoints,
-                                currentPoint, getPrecedence(Operator::LessThan), true);
+        auto upper = simplifiedExprHandle(factory, *rightBound.value());
+        auto nStr = callGetACSL(*upper, config, usedPoints, currentPoint,
+                                getPrecedence(Operator::LessThan), true);
         if (!nStr)
             return nStr.error();
 
+        auto pred = simplifiedExprHandle(factory, *pred_);
         auto predStr = callGetACSL(
-            *pred_->simplifiedExpr(), config, usedPoints, currentPoint,
+            *pred, config, usedPoints, currentPoint,
             getPrecedence(entailOrAnd == "==>" ? Operator::Entailment : Operator::LogicalAnd),
             true);
         if (!predStr)
@@ -459,21 +463,25 @@ namespace acslg::analyzer::symbolic {
         if (rightBound == std::nullopt)
             UNREACHABLE();
 
+        auto &factory = ExprFactoryScope::current();
         auto [prefix, suffix] =
             details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
 
-        auto lowerStr = callGetACSL(*range().getOffset()->simplifiedExpr(), config, usedPoints,
-                                    fromPoint_, getPrecedence(Operator::LessEqual), false);
+        auto lower = simplifiedExprHandle(factory, *range().getOffset());
+        auto lowerStr = callGetACSL(*lower, config, usedPoints, fromPoint_,
+                                    getPrecedence(Operator::LessEqual), false);
         if (!lowerStr)
             return lowerStr.error();
 
-        auto upperStr = callGetACSL(*rightBound.value()->simplifiedExpr(), config, usedPoints,
-                                    fromPoint_, getPrecedence(Operator::LessThan), true);
+        auto upper = simplifiedExprHandle(factory, *rightBound.value());
+        auto upperStr = callGetACSL(*upper, config, usedPoints, fromPoint_,
+                                    getPrecedence(Operator::LessThan), true);
         if (!upperStr)
             return upperStr.error();
 
         auto cmpOp   = extremum_ == Extremum::Max ? Operator::GreaterEqual : Operator::LessEqual;
-        auto exprStr = callGetACSL(*expr_->simplifiedExpr(), config, usedPoints, fromPoint_,
+        auto expr    = simplifiedExprHandle(factory, *expr_);
+        auto exprStr = callGetACSL(*expr, config, usedPoints, fromPoint_,
                                    getPrecedence(cmpOp), true);
         if (!exprStr)
             return exprStr.error();
