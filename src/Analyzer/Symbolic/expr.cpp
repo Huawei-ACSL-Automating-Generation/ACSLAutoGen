@@ -1396,7 +1396,7 @@ namespace acslg::analyzer::symbolic {
 
                 const bool expectTrue = (op_ == Op::Equal) ? (v == 1) : (v == 0);
                 if (expectTrue)
-                    return factory.cloneExpr(factory.importExpr(boolExpr)).into_underlying();
+                    return importThroughCurrentFactory(boolExpr).into_underlying();
                 return factory.cloneExpr(
                                   factory.unary(
                                       detail::UnaryOpExprNode::Operator::LogicalNot,
@@ -1885,7 +1885,8 @@ namespace acslg::analyzer::symbolic {
                 concreteAddr =
                     concreteAddr.withLength(Expr{factory, factory.importExpr(*length.value())});
             }
-            return factory.cloneExpr(concreteAddr.asExpr().handle());
+            auto concreteExpr = concreteAddr.asExpr();
+            return importThroughCurrentFactory(*concreteExpr);
         } else {
             // The origin hasn't been accessed at loop entry -> construct a
             // SymbolAddress with corrext fromAddr and fromPoint.
@@ -2829,7 +2830,8 @@ namespace acslg::analyzer::symbolic {
                                                 std::move(fromPoint))
                                  : Addr::symbol(pointerType->getPointeeType(),
                                                 std::move(fromPoint));
-            return factory.cloneExpr(addr.asExpr().handle());
+            auto addrExpr = addr.asExpr();
+            return importThroughCurrentFactory(*addrExpr);
         }
 
         if (type->isArrayType()) {
@@ -2838,7 +2840,8 @@ namespace acslg::analyzer::symbolic {
                                                 std::move(fromPoint))
                                  : Addr::symbol(arrayType->getElementType(),
                                                 std::move(fromPoint));
-            return factory.cloneExpr(addr.asExpr().handle());
+            auto addrExpr = addr.asExpr();
+            return importThroughCurrentFactory(*addrExpr);
         }
 
         if (type->isStructureType()) {
