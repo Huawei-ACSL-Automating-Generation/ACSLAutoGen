@@ -21,6 +21,14 @@
 #include "Utils/utils.h"
 
 namespace acslg::spec_generator {
+    namespace detail {
+        inline utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
+        copyPostExprThroughCurrentFactory(const analyzer::symbolic::SymbolicExpr &expr) {
+            auto &factory = analyzer::symbolic::ExprFactoryScope::current();
+            return factory.cloneExpr(factory.importExpr(expr));
+        }
+    } // namespace detail
+
     /**
      * @brief Emit an ACSL function contract using registered plugins.
      * @param pre [in] Program state before function execution.
@@ -273,13 +281,13 @@ namespace acslg::spec_generator {
             for (const auto &kv : other.memoryMap) {
                 const auto &addr  = kv.first;
                 const auto &exprp = kv.second;
-                auto cloned       = exprp->clone();
+                auto cloned       = detail::copyPostExprThroughCurrentFactory(*exprp);
                 memoryMap.emplace(addr, utils::not_null{std::move(cloned)});
             }
 
             pathConds.reserve(other.pathConds.size());
             for (const auto &exprp : other.pathConds) {
-                auto cloned = exprp->clone();
+                auto cloned = detail::copyPostExprThroughCurrentFactory(*exprp);
                 pathConds.push_back(utils::not_null{std::move(cloned)});
             }
         }
@@ -331,18 +339,18 @@ namespace acslg::spec_generator {
             for (const auto &kv : other.memoryMap) {
                 const auto &addr = kv.first;
                 const auto &expr = kv.second;
-                auto cloned      = expr->clone();
+                auto cloned      = detail::copyPostExprThroughCurrentFactory(*expr);
                 memoryMap.emplace(addr, utils::not_null{std::move(cloned)});
             }
 
             pathConds.reserve(other.pathConds.size());
             for (const auto &expr : other.pathConds) {
-                auto cloned = expr->clone();
+                auto cloned = detail::copyPostExprThroughCurrentFactory(*expr);
                 pathConds.push_back(utils::not_null{std::move(cloned)});
             }
 
             if (other.returnExpr)
-                returnExpr = other.returnExpr.value()->clone();
+                returnExpr = detail::copyPostExprThroughCurrentFactory(*other.returnExpr.value());
         }
 
         PostPSInfo()                       = default;
