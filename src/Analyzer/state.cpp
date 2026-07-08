@@ -803,12 +803,11 @@ namespace acslg::analyzer {
                                 WARN("DeclRefExpr to pointer '"
                                      << varDecl->getNameAsString()
                                      << "' has non-address value; fabricating symbolic address.");
-                                auto addr = cloneSymbolAddress(
+                                auto addr =
                                     symbolic::Addr::symbol(factory,
                                                            varDecl->getType()->getPointeeType(),
-                                                           startPoint_)
-                                        .handle());
-                                varExpr = std::move(addr);
+                                                           startPoint_);
+                                varExpr = cloneExpr(factory, *addr.asExpr());
                             }
                         }
                         Formulas exprs;
@@ -987,7 +986,7 @@ namespace acslg::analyzer {
 	                        auto addr     = symbolic::Addr::symbol(factory, pointeeTy, pointAfterCall);
 
 	                        Formulas exprs;
-	                        exprs.emplace_back(cloneSymbolAddress(addr.handle()));
+	                        exprs.emplace_back(cloneExpr(factory, *addr.asExpr()));
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
@@ -1074,7 +1073,7 @@ namespace acslg::analyzer {
                             memoryState_.write(addr.handle(), factory.unknown());
 
                             Formulas exprs;
-                            exprs.emplace_back(cloneSymbolAddress(addr.handle()));
+                            exprs.emplace_back(cloneExpr(factory, *addr.asExpr()));
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             DEBUG("BSL_SAL_Calloc: return (builtin scalar)");
                             return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -1096,7 +1095,7 @@ namespace acslg::analyzer {
                             memoryState_.write(addr.handle(), factory.importExpr(*structVal));
 
                             Formulas exprs;
-                            exprs.emplace_back(cloneSymbolAddress(addr.handle()));
+                            exprs.emplace_back(cloneExpr(factory, *addr.asExpr()));
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             DEBUG("BSL_SAL_Calloc: return (structure)");
                             return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -1154,12 +1153,8 @@ namespace acslg::analyzer {
 
                         // Record the freed address as a formula result (optional, for tracking).
                         Formulas exprs;
-                        auto freedAddr = cloneSymbolAddress(normalizedFreedAddrHandle);
-                        std::unique_ptr<symbolic::SymbolicExpr> freedExpr =
-                            std::move(freedAddr);
-                        exprs.emplace_back(
-                            utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>{
-                                std::move(freedExpr)});
+                        symbolic::Addr freedAddr{factory, normalizedFreedAddrHandle};
+                        exprs.emplace_back(cloneExpr(factory, *freedAddr.asExpr()));
 
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -1325,7 +1320,7 @@ namespace acslg::analyzer {
                             symbolic::Addr destAddrFacade{factory, destAddr.value()};
                             auto destBase = destAddrFacade.withoutLength();
                             auto structVal = makeStructureForBase(
-                                factory, elemTy, cloneSymbolAddress(destBase.handle()),
+                                factory, elemTy, cloneAddress(destBase.handle()).into_underlying(),
                                 pointAfterCall);
                             memoryState_.write(destBase.handle(), factory.importExpr(*structVal));
                             return Path::EvalResult(std::move(empty), std::move(exprs));
