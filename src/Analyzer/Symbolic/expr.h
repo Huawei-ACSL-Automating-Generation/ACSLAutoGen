@@ -1264,6 +1264,9 @@ namespace acslg::analyzer::symbolic {
         const Address *ptr_;
     };
 
+    std::optional<AddrHandle> tryEvalAsSymbolAddrHandle(ExprFactory &factory,
+                                                        const SymbolicExpr &expr);
+
     class ExprFactory {
       public:
         ExprHandle literal(bool value) {

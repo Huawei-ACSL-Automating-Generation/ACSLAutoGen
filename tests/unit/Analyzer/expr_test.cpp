@@ -2416,11 +2416,17 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto evaluated = legacyAdd.tryEvalAsSymbolAddr();
-        ASSERT_TRUE(evaluated);
-
         auto expected =
             factory.symbolAddress(var->getType(), std::nullopt, point, factory.literal(int64_t{4}));
+
+        auto evaluatedHandle = symbolic::tryEvalAsSymbolAddrHandle(factory, legacyAdd);
+        ASSERT_TRUE(evaluatedHandle);
+        EXPECT_EQ(*evaluatedHandle, expected);
+        EXPECT_EQ(evaluatedHandle->cast<symbolic::SymbolAddress>().getOffset().get(),
+                  factory.literal(int64_t{4}).get().get());
+
+        auto evaluated = legacyAdd.tryEvalAsSymbolAddr();
+        ASSERT_TRUE(evaluated);
         auto imported = factory.importAddress(*evaluated.value());
         EXPECT_EQ(imported, expected);
         EXPECT_EQ(imported.cast<symbolic::SymbolAddress>().getOffset().get(),
