@@ -370,19 +370,22 @@ namespace acslg::analyzer {
                 if (addrEval.second.size() != 1)
                     ERROR("This location does not support control flow branches.");
                 auto baseExpr = std::move(addrEval.second[0]);
-                auto baseAddr = baseExpr->tryEvalAsSymbolAddr();
+                auto &factory = context_.getExprFactory();
+                auto baseAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, *baseExpr);
                 if (baseAddr == std::nullopt)
                     ERROR("Expected symbolic::Address for '->' base, got: " << baseExpr->dump());
 
-                if (!memoryState_.contains(*baseAddr.value())) {
+                if (!memoryState_.contains(baseAddr.value())) {
+                    std::unique_ptr<symbolic::Address> baseAddrClone =
+                        symbolic::cloneSymbolAddress(baseAddr.value());
                     auto st = makeStructureForRecord(
-                        context_.getExprFactory(), RD,
-                        baseAddr.value()->addressClone().into_underlying(), startPoint_);
-                    memoryState_.write(*baseAddr.value(), std::move(st));
+                        context_.getExprFactory(), RD, std::move(baseAddrClone), startPoint_);
+                    memoryState_.write(baseAddr.value(), factory.importExpr(*st));
                 }
+                std::unique_ptr<symbolic::Address> fieldBase =
+                    symbolic::cloneSymbolAddress(baseAddr.value());
                 return makeFieldAddress(context_.getExprFactory(), fieldType, RD,
-                                        baseAddr.value()->addressClone().into_underlying(),
-                                        FD->getFieldIndex());
+                                        std::move(fieldBase), FD->getFieldIndex());
             } else {
                 auto baseAddr = extractLValue(base);
 
