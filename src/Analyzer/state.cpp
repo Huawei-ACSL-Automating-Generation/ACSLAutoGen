@@ -591,7 +591,8 @@ namespace acslg::analyzer {
             auto slot = calleePath->allocMemory(param, /*initSymbolic*/ true);
 
             if (T->isPointerType()) {
-                auto m = args[i]->tryEvalAsSymbolAddr();
+                auto &factory = calleePath->getContext().getExprFactory();
+                auto m        = symbolic::tryEvalAsSymbolAddrHandle(factory, *args[i]);
                 if (!m) {
                     auto &SM     = FD->getASTContext().getSourceManager();
                     auto locStr  = FD->getLocation().isValid() ? FD->getLocation().printToString(SM)
@@ -602,7 +603,7 @@ namespace acslg::analyzer {
                           << funcStr << " param=" << paramStr << " index=" << i << " type="
                           << T.getAsString() << " loc=" << locStr << " arg=" << args[i]->dump());
                 }
-                calleePath->updateMemory(*slot, m.value()->addressClone().into_underlying());
+                calleePath->updateMemory(*slot, m.value().asExpr());
             } else if (T->isStructureType()) {
                 calleePath->updateMemory(*slot,
                                          cloneExpr(calleePath->getContext().getExprFactory(),
@@ -784,8 +785,9 @@ namespace acslg::analyzer {
                         }
                         // Ensure pointer-typed variables are represented as addresses, except for
                         // the null pointer constant 0.
+                        auto &factory = context_.getExprFactory();
                         if (varDecl->getType()->isPointerType() &&
-                            !varExpr->tryEvalAsSymbolAddr()) {
+                            !symbolic::tryEvalAsSymbolAddrHandle(factory, *varExpr)) {
                             if (auto *lit =
                                     symbolic::dyn_cast<symbolic::detail::LiteralExprNode>(varExpr.get().get());
                                 lit && lit->getLiteralValue() == 0) {
@@ -795,7 +797,7 @@ namespace acslg::analyzer {
                                      << varDecl->getNameAsString()
                                      << "' has non-address value; fabricating symbolic address.");
                                 auto addr = cloneSymbolAddress(
-                                    symbolic::Addr::symbol(context_.getExprFactory(),
+                                    symbolic::Addr::symbol(factory,
                                                            varDecl->getType()->getPointeeType(),
                                                            startPoint_)
                                         .handle());
