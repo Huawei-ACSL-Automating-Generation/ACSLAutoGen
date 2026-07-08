@@ -585,11 +585,6 @@ namespace acslg::analyzer::symbolic {
             return cast<const detail::LiteralExprNode>(handle.get().get());
         }
 
-        inline utils::not_null<std::unique_ptr<SymbolicExpr>> cloneConstLiteral(
-            const detail::LiteralExprNode &literal) {
-            return ExprFactoryScope::current().cloneExpr(ExprHandle{&literal});
-        }
-
         inline const detail::LiteralExprNode *makeLiteralFromUnifiedType(Type t,
                                                                          bool asBool,
                                                                          uint64_t raw) {
@@ -964,11 +959,96 @@ namespace acslg::analyzer::symbolic {
 
     ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr) {
         ExprFactoryScope scope(factory);
-        return factory.importExpr(*expr.simplifiedExpr());
+        if (expr.isUnknown())
+            return factory.unknown();
+
+        if (auto *symbolAddr = dyn_cast<const SymbolAddress>(&expr)) {
+            if (symbolAddr->getLength())
+                ERROR("Address range is solely for address representation and should not be "
+                      "used as an expression.");
+            return factory.importExpr(*symbolAddr);
+        }
+
+        if (auto *binary = dyn_cast<const detail::BinaryOpExprNode>(&expr)) {
+            if (binary->isLinear())
+                return factory.importExpr(*binary->simplifiedExprIfLinear());
+
+            if (auto c = binary->evalToConstExpr())
+                return factory.importExpr(*c);
+
+            auto lhs = simplifiedExprHandle(factory, *binary->getLeft());
+            auto rhs = simplifiedExprHandle(factory, *binary->getRight());
+
+            using Op = detail::BinaryOpExprNode::Operator;
+            if (binary->getOperator() == Op::Equal || binary->getOperator() == Op::NotEqual) {
+                auto simplifyBoolCmp = [&](ExprHandle boolExpr,
+                                           ExprHandle litExpr) -> std::optional<ExprHandle> {
+                    auto lit = litExpr.dyn_cast<const detail::LiteralExprNode>();
+                    if (!lit)
+                        return std::nullopt;
+                    auto value = lit->getLiteralValue();
+                    if (value != 0 && value != 1)
+                        return std::nullopt;
+                    if (!isBooleanExpr(*boolExpr))
+                        return std::nullopt;
+
+                    const bool expectTrue =
+                        binary->getOperator() == Op::Equal ? value == 1 : value == 0;
+                    if (expectTrue)
+                        return factory.importExpr(*boolExpr);
+                    return factory.unary(detail::UnaryOpExprNode::Operator::LogicalNot,
+                                         factory.importExpr(*boolExpr));
+                };
+
+                if (auto simplified = simplifyBoolCmp(lhs, rhs))
+                    return *simplified;
+                if (auto simplified = simplifyBoolCmp(rhs, lhs))
+                    return *simplified;
+            }
+
+            if (binary->getOperator() == Op::LogicalAnd) {
+                if (auto leftConst = lhs->evalToConstExpr()) {
+                    if (!literalAsBool(*leftConst))
+                        return factory.importExpr(*leftConst);
+                    return rhs;
+                }
+                if (auto rightConst = rhs->evalToConstExpr()) {
+                    if (!literalAsBool(*rightConst))
+                        return factory.importExpr(*rightConst);
+                    return lhs;
+                }
+            } else if (binary->getOperator() == Op::LogicalOr) {
+                if (auto leftConst = lhs->evalToConstExpr()) {
+                    if (literalAsBool(*leftConst))
+                        return factory.importExpr(*leftConst);
+                    return rhs;
+                }
+                if (auto rightConst = rhs->evalToConstExpr()) {
+                    if (literalAsBool(*rightConst))
+                        return factory.importExpr(*rightConst);
+                    return lhs;
+                }
+            }
+
+            return factory.binary(lhs, binary->getOperator(), rhs);
+        }
+
+        if (auto *unary = dyn_cast<const detail::UnaryOpExprNode>(&expr)) {
+            if (unary->isLinear())
+                return factory.importExpr(*unary->simplifiedExprIfLinear());
+            return factory.unary(unary->getOperator(),
+                                 simplifiedExprHandle(factory, *unary->getSub()));
+        }
+
+        if (auto *literal = dyn_cast<const detail::LiteralExprNode>(&expr))
+            return factory.importExpr(*literal->simplifiedExprIfLinear());
+
+        return factory.importExpr(expr);
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolicExpr::simplifiedExpr() const {
-        return importThroughCurrentFactory(*this);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(simplifiedExprHandle(factory, *this));
     }
 
     /**
@@ -1759,100 +1839,23 @@ namespace acslg::analyzer::symbolic {
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::simplifiedExpr() const {
-        return simplifiedExprIfLinear(); // Here, unlike a direct `clone`, after
-                                         // `simplifiedExprIfLinear`, all constants will have the
-                                         // same type.
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(simplifiedExprHandle(factory, *this));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::simplifiedExpr() const {
-        if (isUnknown())
-            return UnknownExpr::makeUnknown().into_underlying();
-        if (isLinear())
-            return simplifiedExprIfLinear();
-
-        // Try constant folding first.
-        if (auto c = evalToConstExpr())
-            return cloneConstLiteral(*c);
-
-        auto LHS = left_->simplifiedExpr();
-        auto RHS = right_->simplifiedExpr();
         auto &factory = ExprFactoryScope::current();
-
-        using Op = detail::BinaryOpExprNode::Operator;
-        // Normalize comparisons against boolean literals to avoid chained equality like `x == 0 == 1`.
-        if (op_ == Op::Equal || op_ == Op::NotEqual) {
-            auto simplifyBoolCmp = [&](const SymbolicExpr &boolExpr,
-                                       const SymbolicExpr &litExpr)
-                -> std::unique_ptr<SymbolicExpr> {
-                auto lit = dyn_cast<detail::LiteralExprNode>(&litExpr);
-                if (!lit)
-                    return nullptr;
-                auto v = lit->getLiteralValue();
-                if (v != 0 && v != 1)
-                    return nullptr;
-                if (!isBooleanExpr(boolExpr))
-                    return nullptr;
-
-                const bool expectTrue = (op_ == Op::Equal) ? (v == 1) : (v == 0);
-                if (expectTrue)
-                    return importThroughCurrentFactory(boolExpr).into_underlying();
-                return factory.cloneExpr(
-                                  factory.unary(
-                                      detail::UnaryOpExprNode::Operator::LogicalNot,
-                                      factory.importExpr(boolExpr)))
-                    .into_underlying();
-            };
-
-            if (auto simplified = simplifyBoolCmp(*LHS, *RHS))
-                return utils::not_null<std::unique_ptr<SymbolicExpr>>(std::move(simplified));
-            if (auto simplified = simplifyBoolCmp(*RHS, *LHS))
-                return utils::not_null<std::unique_ptr<SymbolicExpr>>(std::move(simplified));
-        }
-
-        // Simplify boolean short-circuit cases.
-        if (op_ == Op::LogicalAnd) {
-            if (auto lc = LHS->evalToConstExpr()) {
-                if (!literalAsBool(*lc))
-                    return cloneConstLiteral(*lc);
-                return RHS; // lhs is true
-            }
-            if (auto rc = RHS->evalToConstExpr()) {
-                if (!literalAsBool(*rc))
-                    return cloneConstLiteral(*rc);
-                return LHS; // rhs is true
-            }
-        } else if (op_ == Op::LogicalOr) {
-            if (auto lc = LHS->evalToConstExpr()) {
-                if (literalAsBool(*lc))
-                    return cloneConstLiteral(*lc);
-                return RHS; // lhs is false
-            }
-            if (auto rc = RHS->evalToConstExpr()) {
-                if (literalAsBool(*rc))
-                    return cloneConstLiteral(*rc);
-                return LHS; // rhs is false
-            }
-        }
-
-        return factory.cloneExpr(
-            factory.binary(factory.importExpr(*LHS), op_, factory.importExpr(*RHS)));
+        return factory.cloneExpr(simplifiedExprHandle(factory, *this));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::simplifiedExpr() const {
-        if (isUnknown())
-            return UnknownExpr::makeUnknown().into_underlying();
-        if (isLinear())
-            return simplifiedExprIfLinear();
-        auto subExpr = expr_->simplifiedExpr();
         auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(factory.unary(op_, factory.importExpr(*subExpr)));
+        return factory.cloneExpr(simplifiedExprHandle(factory, *this));
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::simplifiedExpr() const {
-        if (length_)
-            ERROR("Address range is solely for address representation and should not be "
-                  "used as an expression.");
-        return importThroughCurrentFactory(*this);
+        auto &factory = ExprFactoryScope::current();
+        return factory.cloneExpr(simplifiedExprHandle(factory, *this));
     }
 
     const detail::LiteralExprNode *detail::LiteralExprNode::evalToConstExpr() const {

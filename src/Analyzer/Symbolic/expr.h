@@ -39,6 +39,7 @@ namespace acslg::analyzer::symbolic {
     class Symbol;
     class ExprFactory;
     class ExprFactoryScope;
+    class ExprHandle;
     struct SymbolAddrBaseInfo;
 
     namespace detail {
@@ -523,6 +524,7 @@ namespace acslg::analyzer::symbolic {
 
         void setValType(Type newType) { valueType_ = newType; }
         friend class ExprFactory;
+        friend ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr);
 
         /// @brief Try to evaluate the expression to an symbol address.
         /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
