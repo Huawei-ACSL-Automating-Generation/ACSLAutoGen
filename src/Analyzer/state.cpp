@@ -1534,23 +1534,19 @@ namespace acslg::analyzer {
                                 path->memoryState_.write(*addr, std::move(newVal));
                             } else if (op == Dereference) {
                                 // *x
-                                auto addr = unExpr->tryEvalAsSymbolAddr();
+                                auto &factory = path->context_.getExprFactory();
+                                auto addr = symbolic::tryEvalAsSymbolAddrHandle(factory, *unExpr);
                                 if (addr == std::nullopt)
                                     ERROR("Expected symbolic::Address, got: " << unExpr->dump());
-                                if (auto value = path->memoryState_.readHandle(*addr.value());
+                                if (auto value = path->memoryState_.readHandle(addr.value());
                                     value == std::nullopt) {
                                     auto symbol =
-                                        getSymbol(uop->getType(),
-                                                  addr.value()->addressClone().into_underlying(),
+                                        getSymbol(uop->getType(), cloneConstAddress(addr.value()),
                                                   startPoint_);
-                                    path->memoryState_.write(
-                                        *addr.value(), cloneExpr(path->context_.getExprFactory(),
-                                                                 *symbol));
+                                    path->memoryState_.write(addr.value(), factory.importExpr(*symbol));
                                     outExprs.emplace_back(std::move(symbol));
                                 } else {
-                                    outExprs.emplace_back(
-                                        cloneExpr(path->context_.getExprFactory(),
-                                                  *value.value()));
+                                    outExprs.emplace_back(cloneExpr(factory, *value.value()));
                                 }
                             } else if (op == AddrOf) {
                                 // &x
@@ -1605,30 +1601,26 @@ namespace acslg::analyzer {
                     std::unique_ptr<symbolic::Structure> st;
                     auto baseExpr = std::move(base.second[0]).into_underlying();
                     if (memberExpr->isArrow()) {
-                        auto baseAddr = baseExpr->tryEvalAsSymbolAddr();
+                        auto &factory = context_.getExprFactory();
+                        auto baseAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, *baseExpr);
                         if (baseAddr == std::nullopt) {
                             WARN("LHS of '->' is not an address; fabricating symbolic pointer to "
                                  "continue.");
-                            auto newAddr = cloneSymbolAddress(
-                                symbolic::Addr::symbol(
-                                    context_.getExprFactory(),
-                                    memberExpr->getBase()->getType()->getPointeeType(),
-                                    startPoint_)
-                                    .handle());
-                            baseAddr = utils::not_null<std::unique_ptr<symbolic::SymbolAddress>>{
-                                std::move(newAddr)};
+                            baseAddr = symbolic::Addr::symbol(
+                                           factory,
+                                           memberExpr->getBase()->getType()->getPointeeType(),
+                                           startPoint_)
+                                           .handle();
                         }
-                        auto val = memoryState_.readHandle(*baseAddr.value());
+                        auto val = memoryState_.readHandle(baseAddr.value());
                         DEBUG("MemberExpr base in memory: " << (val ? "yes" : "no"));
                         if (val == std::nullopt) {
                             st = makeStructureForRecord(
-                                context_.getExprFactory(), RD,
-                                baseAddr.value()->addressClone().into_underlying(), startPoint_);
-                            memoryState_.write(*baseAddr.value(),
-                                               cloneExpr(context_.getExprFactory(), *st));
+                                factory, RD, cloneSymbolAddress(baseAddr.value()), startPoint_);
+                            memoryState_.write(baseAddr.value(), factory.importExpr(*st));
                         } else if (auto stVal = symbolic::dyn_cast<const symbolic::Structure>(
                                        val.value().get().get())) {
-                            st = cloneStructure(context_.getExprFactory().importExpr(*stVal));
+                            st = cloneStructure(factory.importExpr(*stVal));
                         } else {
                             ERROR("Dereferenced value is not a structure");
                         }
