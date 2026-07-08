@@ -989,16 +989,14 @@ namespace acslg::analyzer {
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
 
-                        auto pointAfterCall = symbolic::SourcePoint::fromStmtAfter(
-                            call, context_.getSourceManager(), context_.getLangOptions());
-                        auto pointeeTy = retTy->getPointeeType();
-                        auto addr = cloneSymbolAddress(
-                            symbolic::Addr::symbol(context_.getExprFactory(), pointeeTy,
-                                                   pointAfterCall)
-                                .handle());
+	                        auto pointAfterCall = symbolic::SourcePoint::fromStmtAfter(
+	                            call, context_.getSourceManager(), context_.getLangOptions());
+	                        auto pointeeTy = retTy->getPointeeType();
+	                        auto &factory = context_.getExprFactory();
+	                        auto addr     = symbolic::Addr::symbol(factory, pointeeTy, pointAfterCall);
 
-                        Formulas exprs;
-                        exprs.emplace_back(std::move(addr));
+	                        Formulas exprs;
+	                        exprs.emplace_back(cloneSymbolAddress(addr.handle()));
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
@@ -1548,10 +1546,11 @@ namespace acslg::analyzer {
                                 } else {
                                     outExprs.emplace_back(cloneExpr(factory, *value.value()));
                                 }
-                            } else if (op == AddrOf) {
-                                // &x
-                                auto addr = path->extractLValue(uop->getSubExpr());
-                                outExprs.emplace_back(addr->addressClone().into_underlying());
+	                            } else if (op == AddrOf) {
+	                                // &x
+	                                auto addr = path->extractLValue(uop->getSubExpr());
+	                                outExprs.emplace_back(
+	                                    cloneExpr(context_.getExprFactory(), *addr));
                             } else {
                                 auto &factory = context_.getExprFactory();
                                 symbolic::Expr operandExpr{factory, factory.importExpr(*unExpr)};
@@ -1614,10 +1613,11 @@ namespace acslg::analyzer {
                         }
                         auto val = memoryState_.readHandle(baseAddr.value());
                         DEBUG("MemberExpr base in memory: " << (val ? "yes" : "no"));
-                        if (val == std::nullopt) {
-                            st = makeStructureForRecord(
-                                factory, RD, cloneSymbolAddress(baseAddr.value()), startPoint_);
-                            memoryState_.write(baseAddr.value(), factory.importExpr(*st));
+	                        if (val == std::nullopt) {
+	                            st = makeStructureForRecord(
+	                                factory, RD,
+	                                cloneAddress(baseAddr.value()).into_underlying(), startPoint_);
+	                            memoryState_.write(baseAddr.value(), factory.importExpr(*st));
                         } else if (auto stVal = symbolic::dyn_cast<const symbolic::Structure>(
                                        val.value().get().get())) {
                             st = cloneStructure(factory.importExpr(*stVal));
