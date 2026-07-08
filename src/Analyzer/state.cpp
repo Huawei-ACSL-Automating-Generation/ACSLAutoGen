@@ -110,6 +110,13 @@ namespace acslg::analyzer {
             return factory.cloneExpr(factory.unknown());
         }
 
+        utils::not_null<std::unique_ptr<const symbolic::Address>> cloneConstAddress(
+            symbolic::AddrHandle address) {
+            std::unique_ptr<const symbolic::Address> cloned =
+                symbolic::cloneSymbolAddress(address);
+            return utils::not_null<std::unique_ptr<const symbolic::Address>>{std::move(cloned)};
+        }
+
         utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         cloneExpr(symbolic::ExprFactory &factory, const symbolic::SymbolicExpr &expr) {
             return factory.importAndCloneExpr(expr);
@@ -1138,30 +1145,32 @@ namespace acslg::analyzer {
                         }
 
                         // The argument must be a symbolic address.
-                        auto maybeAddr = p->tryEvalAsSymbolAddr();
+                        auto &factory   = context_.getExprFactory();
+                        auto maybeAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, *p);
                         if (!maybeAddr)
                             UNIMPLEMENT("BSL_SAL_Free argument must be a valid pointer value.");
 
                         // Normalize to base address (offset = 0) for consistent memory handling.
-                        auto freedAddr = std::move(*maybeAddr);
-                        auto &factory = context_.getExprFactory();
-                        symbolic::Addr normalizedFreedAddr{
-                            factory, factory.importAddress(*freedAddr)};
+                        symbolic::Addr normalizedFreedAddr{factory, maybeAddr.value()};
                         auto normalizedFreedAddrHandle =
                             normalizedFreedAddr
                                 .withOffset(symbolic::LiteralExpr{
                                     factory, static_cast<int64_t>(
                                                  symbolic::SymbolAddress::ZERO_OFFSET)})
                                 .handle();
-                        freedAddr = cloneSymbolAddress(normalizedFreedAddrHandle);
 
                         // Overwrite freed memory with an UnknownExpr (symbolic tombstone).
                         // This prevents later reads from reusing stale symbolic values.
-                        memoryState_.write(*freedAddr, buildUnknown(context_.getExprFactory()));
+                        memoryState_.write(normalizedFreedAddrHandle, factory.unknown());
 
                         // Record the freed address as a formula result (optional, for tracking).
                         Formulas exprs;
-                        exprs.emplace_back(std::move(freedAddr).into_underlying());
+                        auto freedAddr = cloneSymbolAddress(normalizedFreedAddrHandle);
+                        std::unique_ptr<symbolic::SymbolicExpr> freedExpr =
+                            std::move(freedAddr);
+                        exprs.emplace_back(
+                            utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>{
+                                std::move(freedExpr)});
 
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -1183,8 +1192,9 @@ namespace acslg::analyzer {
 
                         DEBUG("memcpy dest expr: " << destExpr->dump());
 
-                        auto destAddr = destExpr->tryEvalAsSymbolAddr();
-                        auto srcAddr  = srcExpr->tryEvalAsSymbolAddr();
+                        auto &factory = context_.getExprFactory();
+                        auto destAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, *destExpr);
+                        auto srcAddr  = symbolic::tryEvalAsSymbolAddrHandle(factory, *srcExpr);
                         if (!srcAddr)
                             UNIMPLEMENT("memcpy expects a pointer source argument.");
 
@@ -1226,26 +1236,19 @@ namespace acslg::analyzer {
                         if (noCopy)
                             return Path::EvalResult(std::move(empty), std::move(exprs));
 
-                        auto &factory = context_.getExprFactory();
-                        symbolic::Addr destBase{factory,
-                                                factory.importAddress(*destAddr.value())};
+                        symbolic::Addr destBase{factory, destAddr.value()};
                         symbolic::Expr length{factory, factory.importExpr(*lengthExpr)};
-                        auto destRange =
-                            destBase.withLength(length)->addressClone().into_underlying();
+                        auto destRange = destBase.withLength(length);
 
-                        symbolic::Addr srcBase{factory,
-                                               factory.importAddress(*srcAddr.value())};
+                        symbolic::Addr srcBase{factory, srcAddr.value()};
                         auto srcBaseWithoutLength = srcBase.withoutLength();
                         symbolic::SymbolAddress::RangeIndex rangeIndex{"i"};
                         symbolic::Expr rangeIndexExpr{factory, factory.importExpr(rangeIndex)};
-                        auto srcIndexed =
-                            srcBaseWithoutLength.withAddedOffset(rangeIndexExpr)
-                                ->addressClone()
-                                .into_underlying();
+                        auto srcIndexed = srcBaseWithoutLength.withAddedOffset(rangeIndexExpr);
 
                         auto valueExpr = symbolic::getSymbol(
-                            elemTy, srcIndexed->addressClone().into_underlying(), startPoint_);
-                        memoryState_.write(*destRange, std::move(valueExpr));
+                            elemTy, cloneConstAddress(srcIndexed.handle()), startPoint_);
+                        memoryState_.write(destRange.handle(), factory.importExpr(*valueExpr));
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     };
 
@@ -1285,7 +1288,8 @@ namespace acslg::analyzer {
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
 
-                        auto destAddr = destExpr->tryEvalAsSymbolAddr();
+                        auto &factory = context_.getExprFactory();
+                        auto destAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, *destExpr);
                         if (!destAddr)
                             UNIMPLEMENT("memset_s expects a pointer destination argument.");
 
@@ -1329,27 +1333,19 @@ namespace acslg::analyzer {
                             return Path::EvalResult(std::move(empty), std::move(exprs));
 
                         if (elemTy->isStructureType()) {
-                            auto &factory = context_.getExprFactory();
-                            symbolic::Addr destAddrFacade{
-                                factory, factory.importAddress(*destAddr.value())};
-                            auto destBase =
-                                destAddrFacade.withoutLength()->addressClone().into_underlying();
+                            symbolic::Addr destAddrFacade{factory, destAddr.value()};
+                            auto destBase = destAddrFacade.withoutLength();
                             auto structVal = makeStructureForBase(
-                                factory, elemTy, destBase->addressClone().into_underlying(),
+                                factory, elemTy, cloneSymbolAddress(destBase.handle()),
                                 pointAfterCall);
-                            memoryState_.write(*destBase, std::move(structVal));
+                            memoryState_.write(destBase.handle(), factory.importExpr(*structVal));
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
 
-                        auto &factory = context_.getExprFactory();
-                        symbolic::Addr destBase{factory,
-                                                factory.importAddress(*destAddr.value())};
+                        symbolic::Addr destBase{factory, destAddr.value()};
                         symbolic::Expr length{factory, factory.importExpr(*lengthExpr)};
-                        auto destRange =
-                            destBase.withLength(length)->addressClone().into_underlying();
-                        memoryState_.write(
-                            *destRange,
-                            buildUnknown(context_.getExprFactory()).into_underlying());
+                        auto destRange = destBase.withLength(length);
+                        memoryState_.write(destRange.handle(), factory.unknown());
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
 
