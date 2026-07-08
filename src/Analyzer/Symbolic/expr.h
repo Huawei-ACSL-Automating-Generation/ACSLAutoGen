@@ -419,9 +419,7 @@ namespace acslg::analyzer::symbolic {
 
         /// @brief Try to evaluate the expression to an symbol address.
         /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
-        std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> tryEvalAsSymbolAddr() const {
-            return callTryEvalAsAddr(*simplifiedExpr());
-        };
+        std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> tryEvalAsSymbolAddr() const;
 
         /**
          * @brief Attempt to evaluate the expression to a concrete integer constant.

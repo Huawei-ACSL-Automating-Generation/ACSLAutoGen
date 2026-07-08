@@ -2390,6 +2390,43 @@ namespace acslg::test::unit::analyzer {
                                         factory.literal(int64_t{4})));
     }
 
+    TEST(ExprFactoryTest, TryEvalSymbolAddressBinaryOffsetUsesHandleSimplification) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory setupFactory;
+        auto legacyAddr = symbolic::cloneSymbolAddress(
+            symbolic::Addr::symbol(setupFactory, var->getType(), point).handle());
+        auto legacyOffset = setupFactory.cloneExpr(setupFactory.literal(int64_t{4}));
+        symbolic::BinaryOpExpr legacyAdd(std::move(legacyAddr),
+                                         symbolic::BinaryOpExpr::Operator::Add,
+                                         std::move(legacyOffset));
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto evaluated = legacyAdd.tryEvalAsSymbolAddr();
+        ASSERT_TRUE(evaluated);
+
+        auto expected =
+            factory.symbolAddress(var->getType(), std::nullopt, point, factory.literal(int64_t{4}));
+        auto imported = factory.importAddress(*evaluated.value());
+        EXPECT_EQ(imported, expected);
+        EXPECT_EQ(imported.cast<symbolic::SymbolAddress>().getOffset().get(),
+                  factory.literal(int64_t{4}).get().get());
+    }
+
     TEST(ExprFactoryTest, AddressRebuildsReuseInternedRangeChildren) {
         ASTExtractor e;
         e.init(R"c(

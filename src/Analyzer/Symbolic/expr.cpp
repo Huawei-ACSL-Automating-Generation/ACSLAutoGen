@@ -1051,6 +1051,12 @@ namespace acslg::analyzer::symbolic {
         return factory.cloneExpr(simplifiedExprHandle(factory, *this));
     }
 
+    std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> SymbolicExpr::
+        tryEvalAsSymbolAddr() const {
+        auto &factory = ExprFactoryScope::current();
+        return callTryEvalAsAddr(*simplifiedExprHandle(factory, *this));
+    }
+
     /**
      * @brief Construct a symbolic structure value with all fields initialized to Unknown.
      * @param ty [in] Structure qualified type.
