@@ -122,6 +122,7 @@ namespace acslg::analyzer {
         std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> read(
             const symbolic::Address &addr) const;
         std::optional<symbolic::ExprHandle> readHandle(const symbolic::Address &addr) const;
+        std::optional<symbolic::ExprHandle> readHandle(symbolic::AddrHandle addr) const;
 
         /**
          * @brief Writes a symbolic expression to the given address.
@@ -131,6 +132,7 @@ namespace acslg::analyzer {
         void write(const symbolic::Address &address,
                    utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> value);
         void write(const symbolic::Address &address, symbolic::ExprHandle value);
+        void write(symbolic::AddrHandle address, symbolic::ExprHandle value);
 
         /**
          * @brief Checks whether a given address is contained in the memory model.
@@ -138,6 +140,7 @@ namespace acslg::analyzer {
          * @return true if address exists, false otherwise.
          */
         bool contains(const symbolic::Address &addr) const;
+        bool contains(symbolic::AddrHandle addr) const;
 
         /// Clears all memory maps.
         void clear() {
@@ -702,6 +705,7 @@ namespace acslg::analyzer {
         void updateMemory(const symbolic::Address &addr,
                           utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr);
         void updateMemory(const symbolic::Address &addr, symbolic::ExprHandle expr);
+        void updateMemory(symbolic::AddrHandle addr, symbolic::ExprHandle expr);
         /**
          * @brief Update the symbolic state of a variable.
          * @param var [in] Variable declaration being updated.

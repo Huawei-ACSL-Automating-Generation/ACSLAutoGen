@@ -344,6 +344,22 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(readBackHandle->get().get(), flatValues[0]);
     }
 
+    TEST_F(MemoryModelTest, AddrHandleReadWriteUsesInternedAddressAndValue) {
+        auto &factory = symbolic::ExprFactoryScope::current();
+        MemoryModel mm;
+
+        auto legacyAddr = makeRangeAddr(1, makeLiteralExpr(3).into_underlying(), nullptr);
+        auto addr       = factory.importAddress(legacyAddr);
+        auto value = factory.literal(int64_t{42});
+
+        mm.write(addr, value);
+        EXPECT_TRUE(mm.contains(addr));
+
+        auto readBack = mm.readHandle(addr);
+        ASSERT_TRUE(readBack);
+        EXPECT_EQ(readBack->get().get(), value.get().get());
+    }
+
     TEST_F(MemoryModelTest, Flat_Yields_All_Three_Categories) {
         MemoryModel mm;
 

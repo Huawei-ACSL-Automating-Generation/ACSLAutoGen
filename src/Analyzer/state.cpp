@@ -502,6 +502,10 @@ namespace acslg::analyzer {
         memoryState_.write(addr, imported);
     }
 
+    void Path::updateMemory(symbolic::AddrHandle addr, symbolic::ExprHandle expr) {
+        updateMemory(*addr, expr);
+    }
+
     /**
      * @brief Update the symbolic value associated with a variable.
      * @param var Variable declaration being written.
@@ -1998,6 +2002,10 @@ namespace acslg::analyzer {
         UNREACHABLE();
     }
 
+    std::optional<symbolic::ExprHandle> MemoryModel::readHandle(symbolic::AddrHandle addr) const {
+        return readHandle(*addr);
+    }
+
     void MemoryModel::write(const symbolic::Address &addr,
                             utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> value) {
         writeImported(addr, importValue(*value));
@@ -2005,6 +2013,10 @@ namespace acslg::analyzer {
 
     void MemoryModel::write(const symbolic::Address &addr, symbolic::ExprHandle value) {
         writeImported(addr, factory().importExpr(*value));
+    }
+
+    void MemoryModel::write(symbolic::AddrHandle addr, symbolic::ExprHandle value) {
+        write(*addr, value);
     }
 
     void MemoryModel::writeImported(const symbolic::Address &addr, StoredValue valueHandle) {
@@ -2098,6 +2110,10 @@ namespace acslg::analyzer {
 
     bool MemoryModel::contains(const symbolic::Address &addr) const {
         return readHandle(addr) ? true : false;
+    }
+
+    bool MemoryModel::contains(symbolic::AddrHandle addr) const {
+        return contains(*addr);
     }
 
     // MemoryModel::flat_view MemoryModel::flat() { return MemoryModel::flat_view{*this}; }
