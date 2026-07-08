@@ -117,6 +117,11 @@ namespace acslg::analyzer {
             return utils::not_null<std::unique_ptr<const symbolic::Address>>{std::move(cloned)};
         }
 
+        utils::not_null<std::unique_ptr<symbolic::Address>> cloneAddress(
+            symbolic::AddrHandle address) {
+            return address->addressClone();
+        }
+
         utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         cloneExpr(symbolic::ExprFactory &factory, const symbolic::SymbolicExpr &expr) {
             return factory.importAndCloneExpr(expr);
@@ -398,15 +403,16 @@ namespace acslg::analyzer {
                                         std::move(fieldBase), FD->getFieldIndex());
             } else {
                 auto baseAddr = extractLValue(base);
+                auto &factory = context_.getExprFactory();
+                auto baseHandle = factory.importAddress(*baseAddr);
 
-                if (!memoryState_.contains(*baseAddr)) {
+                if (!memoryState_.contains(baseHandle)) {
                     auto st = makeStructureForRecord(
-                        context_.getExprFactory(), RD, baseAddr->addressClone().into_underlying(),
-                        startPoint_);
-                    memoryState_.write(*baseAddr, std::move(st));
+                        factory, RD, cloneAddress(baseHandle).into_underlying(), startPoint_);
+                    memoryState_.write(baseHandle, factory.importExpr(*st));
                 }
-                return makeFieldAddress(context_.getExprFactory(), fieldType, RD,
-                                        baseAddr->addressClone().into_underlying(),
+                return makeFieldAddress(factory, fieldType, RD,
+                                        cloneAddress(baseHandle).into_underlying(),
                                         FD->getFieldIndex());
             }
         }
@@ -458,9 +464,9 @@ namespace acslg::analyzer {
 
         if (initSymbolic) {
             // Initialize with a symbolic value corresponding to the variable type.
-            auto initSym =
-                getSymbol(var->getType(), rawPtr->addressClone().into_underlying(), startPoint_);
-            memoryState_.write(*rawPtr, std::move(initSym));
+            auto addrHandle = context_.getExprFactory().importAddress(*rawPtr);
+            auto initSym    = getSymbol(var->getType(), cloneConstAddress(addrHandle), startPoint_);
+            memoryState_.write(addrHandle, context_.getExprFactory().importExpr(*initSym));
         } else {
             // Prevent uninitialized variables.
             memoryState_.write(*rawPtr, buildUnknown(context_.getExprFactory()).into_underlying());
@@ -2901,7 +2907,8 @@ namespace acslg::analyzer {
                     continue;
                 }
 
-                auto varAddr = path->allocMemory(varDecl);
+                auto varAddr       = path->allocMemory(varDecl);
+                auto varAddrHandle = context_.getExprFactory().importAddress(*varAddr);
 
                 if (initExpr == nullptr) {
                     // TODO: add default initialization for basic types.
@@ -2913,7 +2920,7 @@ namespace acslg::analyzer {
                     auto varType = varDecl->getType();
                     path->updateVarState(
                         varDecl,
-                        symbolic::getSymbol(varType, varAddr->addressClone().into_underlying(),
+                        symbolic::getSymbol(varType, cloneConstAddress(varAddrHandle),
                                             pointAfterDecl));
 
                     updatedPaths.push_back(std::move(path));
@@ -2933,7 +2940,7 @@ namespace acslg::analyzer {
 
                         auto st = makeStructureForRecord(
                             context_.getExprFactory(), RD,
-                            varAddr->addressClone().into_underlying(), startPoint_);
+                            cloneAddress(varAddrHandle).into_underlying(), startPoint_);
                         if (initListExpr->getNumInits() != st->getNumFields())
                             ERROR("Initializer std::list size mismatches the struct's field "
                                   "count.");
@@ -2971,7 +2978,7 @@ namespace acslg::analyzer {
 
                             auto varType = varDecl->getType();
                             newValue     = symbolic::getSymbol(
-                                varType, varAddr->addressClone().into_underlying(), pointAfterDecl);
+                                varType, cloneConstAddress(varAddrHandle), pointAfterDecl);
                         }
 
                         newPath->updateVarState(varDecl, std::move(newValue));
