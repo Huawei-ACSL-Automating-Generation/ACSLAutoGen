@@ -332,14 +332,22 @@ namespace acslg::analyzer {
                     TODO();
 
                 auto addrExpr = std::move(addrEval.second[0]);
-                if (auto addr = addrExpr->tryEvalAsSymbolAddr()) {
-                    if (!memoryState_.contains(*addr.value())) {
-                        auto symbol =
-                            getSymbol(uop->getType(),
-                                      addr.value()->addressClone().into_underlying(), startPoint_);
-                        memoryState_.write(*addr.value(), std::move(symbol));
+                auto &factory = context_.getExprFactory();
+                if (auto addr = symbolic::tryEvalAsSymbolAddrHandle(factory, *addrExpr)) {
+                    if (!memoryState_.contains(*addr)) {
+                        std::unique_ptr<const symbolic::Address> origin =
+                            symbolic::cloneSymbolAddress(*addr);
+                        auto symbol = getSymbol(
+                            uop->getType(),
+                            utils::not_null<std::unique_ptr<const symbolic::Address>>{
+                                std::move(origin)},
+                            startPoint_);
+                        memoryState_.write(*addr, factory.importExpr(*symbol));
                     }
-                    return std::move(addr).value().into_underlying();
+                    std::unique_ptr<symbolic::Address> clonedAddr =
+                        symbolic::cloneSymbolAddress(*addr);
+                    return utils::not_null<std::unique_ptr<symbolic::Address>>{
+                        std::move(clonedAddr)};
                 } else {
                     ERROR("Expected symbolic::Address in deref, got: " << addrExpr->dump());
                 }
