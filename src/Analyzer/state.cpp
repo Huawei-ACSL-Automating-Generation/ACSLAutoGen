@@ -845,7 +845,8 @@ namespace acslg::analyzer {
                     [this](const clang::ArraySubscriptExpr *arrSub) -> EvalResult {
                         DEBUG("evaluating ArraySubscriptExpr...");
                         auto variableAddr = extractLValue(arrSub->getBase());
-                        std::unique_ptr<symbolic::SymbolAddress> addr;
+                        auto &factory     = context_.getExprFactory();
+                        std::optional<symbolic::AddrHandle> addr;
                         if (const auto symbol = memoryState_.readHandle(*variableAddr)) {
                             auto ptr = symbolic::dyn_cast<const symbolic::SymbolAddress>(
                                 symbol.value().get().get());
@@ -856,8 +857,7 @@ namespace acslg::analyzer {
                                       "neither "
                                       "pointer nor "
                                       "array?");
-                            addr = cloneSymbolAddress(
-                                context_.getExprFactory().importAddress(*ptr));
+                            addr = factory.importAddress(*ptr);
                         } else {
                             ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither "
                                   "pointer "
@@ -869,26 +869,22 @@ namespace acslg::analyzer {
                         std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                         Formulas outExprs;
 
-                        auto &factory = context_.getExprFactory();
-                        auto baseAddrHandle = factory.importAddress(*addr);
                         for (size_t i = 0; i < idx.second.size(); ++i) {
-                            symbolic::Addr baseAddr{factory, baseAddrHandle};
+                            symbolic::Addr baseAddr{factory, addr.value()};
                             symbolic::Expr idxExpr{factory,
                                                    factory.importExpr(*idx.second[i])};
-                            auto newAddr =
-                                baseAddr.withOffset(idxExpr)->addressClone().into_underlying();
-                            if (auto value = memoryState_.readHandle(*newAddr);
+                            auto newAddr = baseAddr.withOffset(idxExpr);
+                            if (auto value = memoryState_.readHandle(newAddr.handle());
                                 value == std::nullopt) {
                                 auto elemType = arrSub->getType();
                                 auto symbol =
-                                    getSymbol(elemType, newAddr->addressClone().into_underlying(),
+                                    getSymbol(elemType, cloneConstAddress(newAddr.handle()),
                                               startPoint_);
                                 memoryState_.write(
-                                    *newAddr, cloneExpr(context_.getExprFactory(), *symbol));
+                                    newAddr.handle(), factory.importExpr(*symbol));
                                 outExprs.emplace_back(std::move(symbol));
                             } else {
-                                outExprs.emplace_back(
-                                    cloneExpr(context_.getExprFactory(), *value.value()));
+                                outExprs.emplace_back(cloneExpr(factory, *value.value()));
                             }
                             if (i > 0)
                                 outPaths.emplace_back(std::move(idx.first[i - 1]));
@@ -1075,10 +1071,7 @@ namespace acslg::analyzer {
 
                             // Allocate a fresh symbolic address anchored at the current allocation
                             // site.
-                            auto addr = cloneSymbolAddress(
-                                symbolic::Addr::symbol(context_.getExprFactory(), elemTy,
-                                                       pointAfterCall)
-                                    .handle());
+                            auto addr = symbolic::Addr::symbol(factory, elemTy, pointAfterCall);
 
                             // Note: The length is temporarily omitted since it conceptually
                             // represents the legal bound of accessible memory, rather than a
@@ -1089,10 +1082,10 @@ namespace acslg::analyzer {
                             // addr = addr->withLength(std::move(lengthInElems));
 
                             // Materialize the first element symbol at the allocated base address.
-                            memoryState_.write(*addr, buildUnknown(context_.getExprFactory()));
+                            memoryState_.write(addr.handle(), factory.unknown());
 
                             Formulas exprs;
-                            exprs.emplace_back(std::move(addr));
+                            exprs.emplace_back(cloneSymbolAddress(addr.handle()));
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             DEBUG("BSL_SAL_Calloc: return (builtin scalar)");
                             return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -1104,19 +1097,17 @@ namespace acslg::analyzer {
                             DEBUG("BSL_SAL_Calloc: structure type");
                             auto &factory = context_.getExprFactory();
                             auto zero     = symbolic::LiteralExpr{factory, 0};
-                            auto addr     = symbolic::Addr::symbol(elemTy, pointAfterCall, zero)
-                                            ->addressClone()
-                                            .into_underlying();
+                            auto addr     = symbolic::Addr::symbol(elemTy, pointAfterCall, zero);
 
                             // Build a Structure whose fields (and nested structs) are Unknown, then
                             // write it.
                             auto structVal = makeStructureForBase(
-                                factory, elemTy, addr->addressClone().into_underlying(),
+                                factory, elemTy, cloneAddress(addr.handle()).into_underlying(),
                                 pointAfterCall);
-                            memoryState_.write(*addr, std::move(structVal));
+                            memoryState_.write(addr.handle(), factory.importExpr(*structVal));
 
                             Formulas exprs;
-                            exprs.emplace_back(std::move(addr));
+                            exprs.emplace_back(cloneSymbolAddress(addr.handle()));
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             DEBUG("BSL_SAL_Calloc: return (structure)");
                             return Path::EvalResult(std::move(empty), std::move(exprs));
