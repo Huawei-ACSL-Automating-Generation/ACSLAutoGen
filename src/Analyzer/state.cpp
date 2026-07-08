@@ -113,7 +113,7 @@ namespace acslg::analyzer {
         utils::not_null<std::unique_ptr<const symbolic::Address>> cloneConstAddress(
             symbolic::AddrHandle address) {
             std::unique_ptr<const symbolic::Address> cloned =
-                symbolic::cloneSymbolAddress(address);
+                address->addressClone().into_underlying();
             return utils::not_null<std::unique_ptr<const symbolic::Address>>{std::move(cloned)};
         }
 
@@ -276,7 +276,9 @@ namespace acslg::analyzer {
         for (auto &[varDecl, addr] : varAddr_) {
             clang::QualType ty = varDecl->getType();
 
-            auto symbol = getSymbol(ty, addr->addressClone().into_underlying(), startPoint_);
+            auto symbol = getSymbol(
+                ty, cloneConstAddress(context_.getExprFactory().importAddress(*addr)),
+                startPoint_);
             updateMemory(*addr, std::move(symbol));
         }
     }
@@ -318,14 +320,15 @@ namespace acslg::analyzer {
                 auto &factory = context_.getExprFactory();
                 symbolic::Addr baseAddrFacade{factory, factory.importAddress(*symbolAddr)};
                 symbolic::Expr idxExpr{factory, factory.importExpr(*idxEval.second[0])};
-                auto resultAddr =
-                    baseAddrFacade.withAddedOffset(idxExpr)->addressClone().into_underlying();
-                if (!memoryState_.contains(*resultAddr)) {
-                    auto newSymbol = getSymbol(
-                        arr->getType(), resultAddr->addressClone().into_underlying(), startPoint_);
-                    memoryState_.write(*resultAddr, std::move(newSymbol));
+                auto resultAddr = baseAddrFacade.withAddedOffset(idxExpr);
+                if (!memoryState_.contains(resultAddr.handle())) {
+                    auto newSymbol =
+                        getSymbol(arr->getType(), cloneConstAddress(resultAddr.handle()),
+                                  startPoint_);
+                    memoryState_.write(resultAddr.handle(), factory.importExpr(*newSymbol));
                 }
-                return resultAddr;
+                return utils::not_null<std::unique_ptr<symbolic::Address>>{
+                    symbolic::cloneSymbolAddress(resultAddr.handle())};
             } else {
                 ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither pointer nor "
                       "array?");
