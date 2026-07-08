@@ -332,8 +332,7 @@ namespace acslg::analyzer {
                                   startPoint_);
                     memoryState_.write(resultAddr.handle(), factory.importExpr(*newSymbol));
                 }
-                return utils::not_null<std::unique_ptr<symbolic::Address>>{
-                    symbolic::cloneSymbolAddress(resultAddr.handle())};
+                return cloneAddress(resultAddr.handle());
             } else {
                 ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither pointer nor "
                       "array?");
@@ -350,19 +349,11 @@ namespace acslg::analyzer {
                 auto &factory = context_.getExprFactory();
                 if (auto addr = symbolic::tryEvalAsSymbolAddrHandle(factory, *addrExpr)) {
                     if (!memoryState_.contains(*addr)) {
-                        std::unique_ptr<const symbolic::Address> origin =
-                            symbolic::cloneSymbolAddress(*addr);
-                        auto symbol = getSymbol(
-                            uop->getType(),
-                            utils::not_null<std::unique_ptr<const symbolic::Address>>{
-                                std::move(origin)},
-                            startPoint_);
+                        auto symbol =
+                            getSymbol(uop->getType(), cloneConstAddress(*addr), startPoint_);
                         memoryState_.write(*addr, factory.importExpr(*symbol));
                     }
-                    std::unique_ptr<symbolic::Address> clonedAddr =
-                        symbolic::cloneSymbolAddress(*addr);
-                    return utils::not_null<std::unique_ptr<symbolic::Address>>{
-                        std::move(clonedAddr)};
+                    return cloneAddress(*addr);
                 } else {
                     ERROR("Expected symbolic::Address in deref, got: " << addrExpr->dump());
                 }
@@ -392,13 +383,13 @@ namespace acslg::analyzer {
 
                 if (!memoryState_.contains(baseAddr.value())) {
                     std::unique_ptr<symbolic::Address> baseAddrClone =
-                        symbolic::cloneSymbolAddress(baseAddr.value());
+                        cloneAddress(baseAddr.value()).into_underlying();
                     auto st = makeStructureForRecord(
                         context_.getExprFactory(), RD, std::move(baseAddrClone), startPoint_);
                     memoryState_.write(baseAddr.value(), factory.importExpr(*st));
                 }
                 std::unique_ptr<symbolic::Address> fieldBase =
-                    symbolic::cloneSymbolAddress(baseAddr.value());
+                    cloneAddress(baseAddr.value()).into_underlying();
                 return makeFieldAddress(context_.getExprFactory(), fieldType, RD,
                                         std::move(fieldBase), FD->getFieldIndex());
             } else {
