@@ -2382,10 +2382,10 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto sizeBefore = factory.size();
-        auto evaluated = legacy.tryEvalAsSymbolAddr();
+        auto evaluated = symbolic::tryEvalAsSymbolAddrHandle(factory, legacy);
         ASSERT_TRUE(evaluated);
         EXPECT_GT(factory.size(), sizeBefore);
-        EXPECT_EQ(factory.importAddress(*evaluated.value()),
+        EXPECT_EQ(evaluated.value(),
                   factory.symbolAddress(var->getType(), std::nullopt, point,
                                         factory.literal(int64_t{4})));
     }
@@ -2425,12 +2425,6 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(evaluatedHandle->cast<symbolic::SymbolAddress>().getOffset().get(),
                   factory.literal(int64_t{4}).get().get());
 
-        auto evaluated = legacyAdd.tryEvalAsSymbolAddr();
-        ASSERT_TRUE(evaluated);
-        auto imported = factory.importAddress(*evaluated.value());
-        EXPECT_EQ(imported, expected);
-        EXPECT_EQ(imported.cast<symbolic::SymbolAddress>().getOffset().get(),
-                  factory.literal(int64_t{4}).get().get());
     }
 
     TEST(ExprFactoryTest, AddressRebuildsReuseInternedRangeChildren) {
