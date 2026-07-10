@@ -23,11 +23,7 @@ namespace acslg::analyzer::symbolic {
             auto indexedRange = Addr{factory, factory.importAddress(range)}
                                     .withOffset(Expr{factory, factory.rangeIndex(indexName)});
             indexedRange = indexedRange.withoutLength();
-            std::unique_ptr<const Address> clonedRange =
-                indexedRange->addressClone().into_underlying();
-            std::optional<utils::not_null<std::unique_ptr<const Address>>> from{
-                utils::not_null<std::unique_ptr<const Address>>{std::move(clonedRange)}};
-            auto body = getSymbol(range.getPointeeType(), std::move(from), fromPoint);
+            auto body = getSymbol(range.getPointeeType(), indexedRange.handle(), fromPoint);
             return factory.importExpr(*body);
         }
     } // namespace
@@ -409,8 +405,7 @@ namespace acslg::analyzer::symbolic {
         auto indexedRangeHandle = factory.withOffset(factory.importAddress(range),
                                                      factory.importExpr(rangeIndex));
         indexedRangeHandle = factory.withoutLength(indexedRangeHandle);
-        auto indexedRange = indexedRangeHandle->addressClone().into_underlying();
-        return getSymbol(range.getPointeeType(), std::move(indexedRange), fromPoint)
+        return getSymbol(range.getPointeeType(), indexedRangeHandle, fromPoint)
             .into_underlying();
     }
 

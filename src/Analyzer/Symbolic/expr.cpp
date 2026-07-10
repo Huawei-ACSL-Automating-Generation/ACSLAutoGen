@@ -2894,6 +2894,52 @@ namespace acslg::analyzer::symbolic {
         return fromAddr == *from.value();
     }
 
+    namespace {
+        utils::not_null<std::unique_ptr<SymbolicExpr>> getSymbolFromAddr(
+            clang::QualType type,
+            std::optional<Addr> fromAddr,
+            SourcePoint fromPoint) {
+            auto &factory = ExprFactoryScope::current();
+
+            if (type->isPointerType()) {
+                auto pointerType = llvm::cast<clang::PointerType>(type);
+                auto addr = fromAddr ? Addr::symbol(pointerType->getPointeeType(), *fromAddr,
+                                                    std::move(fromPoint))
+                                     : Addr::symbol(pointerType->getPointeeType(),
+                                                    std::move(fromPoint));
+                auto addrExpr = addr.asExpr();
+                return importThroughCurrentFactory(*addrExpr);
+            }
+
+            if (type->isArrayType()) {
+                auto arrayType = llvm::cast<clang::ArrayType>(type);
+                auto addr = fromAddr ? Addr::symbol(arrayType->getElementType(), *fromAddr,
+                                                    std::move(fromPoint))
+                                     : Addr::symbol(arrayType->getElementType(),
+                                                    std::move(fromPoint));
+                auto addrExpr = addr.asExpr();
+                return importThroughCurrentFactory(*addrExpr);
+            }
+
+            if (type->isStructureType()) {
+                if (!fromAddr)
+                    ERROR("Structure should *from* an `Address`.");
+                auto *RD = type->getAsRecordDecl();
+                if (!RD || !RD->isCompleteDefinition())
+                    ERROR("Incomplete struct definition");
+                RD           = RD->getDefinition();
+                auto &layout = RD->getASTContext().getASTRecordLayout(RD);
+                return factory.cloneExpr(
+                    factory.structure(RD, layout, fromAddr->handle(), std::move(fromPoint)));
+            }
+
+            if (!fromAddr)
+                ERROR("SymbolValue should *from* an `Address`.");
+            return factory.cloneExpr(
+                Expr::symbolValue(deriveType(type), *fromAddr, std::move(fromPoint)).handle());
+        }
+    } // namespace
+
     utils::not_null<std::unique_ptr<SymbolicExpr>> getSymbol(
         clang::QualType type,
         std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
@@ -2902,43 +2948,16 @@ namespace acslg::analyzer::symbolic {
         std::optional<Addr> fromAddr;
         if (from)
             fromAddr.emplace(factory, factory.importAddress(*from.value()));
+        return getSymbolFromAddr(type, std::move(fromAddr), std::move(fromPoint));
+    }
 
-        if (type->isPointerType()) {
-            auto pointerType = llvm::cast<clang::PointerType>(type);
-            auto addr = fromAddr ? Addr::symbol(pointerType->getPointeeType(), *fromAddr,
-                                                std::move(fromPoint))
-                                 : Addr::symbol(pointerType->getPointeeType(),
-                                                std::move(fromPoint));
-            auto addrExpr = addr.asExpr();
-            return importThroughCurrentFactory(*addrExpr);
-        }
-
-        if (type->isArrayType()) {
-            auto arrayType = llvm::cast<clang::ArrayType>(type);
-            auto addr = fromAddr ? Addr::symbol(arrayType->getElementType(), *fromAddr,
-                                                std::move(fromPoint))
-                                 : Addr::symbol(arrayType->getElementType(),
-                                                std::move(fromPoint));
-            auto addrExpr = addr.asExpr();
-            return importThroughCurrentFactory(*addrExpr);
-        }
-
-        if (type->isStructureType()) {
-            if (!fromAddr)
-                ERROR("Structure should *from* an `Address`.");
-            auto *RD = type->getAsRecordDecl();
-            if (!RD || !RD->isCompleteDefinition())
-                ERROR("Incomplete struct definition");
-            RD           = RD->getDefinition();
-            auto &layout = RD->getASTContext().getASTRecordLayout(RD);
-            return factory.cloneExpr(
-                factory.structure(RD, layout, fromAddr->handle(), std::move(fromPoint)));
-        }
-
-        if (!fromAddr)
-            ERROR("SymbolValue should *from* an `Address`.");
-        return factory.cloneExpr(
-            Expr::symbolValue(deriveType(type), *fromAddr, std::move(fromPoint)).handle());
+    utils::not_null<std::unique_ptr<SymbolicExpr>> getSymbol(clang::QualType type,
+                                                            AddrHandle from,
+                                                            SourcePoint fromPoint) {
+        auto &factory = ExprFactoryScope::current();
+        return getSymbolFromAddr(type,
+                                 std::optional<Addr>{Addr{factory, from}},
+                                 std::move(fromPoint));
     }
 
     bool Symbol::classof(const SymbolicExpr *e) {

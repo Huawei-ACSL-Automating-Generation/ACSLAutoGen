@@ -2129,6 +2129,9 @@ namespace acslg::analyzer::symbolic {
         clang::QualType type,
         std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
         SourcePoint fromPoint);
+    utils::not_null<std::unique_ptr<SymbolicExpr>> getSymbol(clang::QualType type,
+                                                            AddrHandle from,
+                                                            SourcePoint fromPoint);
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeLiteralExpr(int64_t value);
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeUnaryExpr(
