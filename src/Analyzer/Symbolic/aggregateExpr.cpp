@@ -41,8 +41,18 @@ namespace acslg::analyzer::symbolic {
                                              std::string_view indexName,
                                              QuantifierOverRange::Quantifier quantifier,
                                              const SymbolicExpr &predicate) {
+        return makeQuantifierOverRangeHandle(factory, factory.importAddress(range),
+                                             indexName, quantifier,
+                                             factory.importExpr(predicate));
+    }
+
+    ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
+                                             AddrHandle range,
+                                             std::string_view indexName,
+                                             QuantifierOverRange::Quantifier quantifier,
+                                             ExprHandle predicate) {
         return factory.intern(std::make_unique<QuantifierOverRange>(
-            factory.importAddress(range), indexName, quantifier, factory.importExpr(predicate)));
+            range, indexName, quantifier, predicate));
     }
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
@@ -50,7 +60,17 @@ namespace acslg::analyzer::symbolic {
                                          std::string_view indexName,
                                          MaxMinOverRange::Extremum extremum,
                                          SourcePoint fromPoint) {
-        auto body = makeMaxMinDefaultBody(factory, range, indexName, fromPoint);
+        return makeMaxMinOverRangeHandle(factory, factory.importAddress(range), indexName,
+                                         extremum, std::move(fromPoint));
+    }
+
+    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
+                                         AddrHandle range,
+                                         std::string_view indexName,
+                                         MaxMinOverRange::Extremum extremum,
+                                         SourcePoint fromPoint) {
+        auto body = makeMaxMinDefaultBody(factory, range.cast<SymbolAddress>(), indexName,
+                                          fromPoint);
         return makeMaxMinOverRangeHandle(factory, range, indexName, extremum, body,
                                          std::move(fromPoint));
     }
@@ -61,8 +81,18 @@ namespace acslg::analyzer::symbolic {
                                          MaxMinOverRange::Extremum extremum,
                                          ExprHandle body,
                                          SourcePoint fromPoint) {
+        return makeMaxMinOverRangeHandle(factory, factory.importAddress(range), indexName,
+                                         extremum, body, std::move(fromPoint));
+    }
+
+    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
+                                         AddrHandle range,
+                                         std::string_view indexName,
+                                         MaxMinOverRange::Extremum extremum,
+                                         ExprHandle body,
+                                         SourcePoint fromPoint) {
         return factory.intern(std::make_unique<MaxMinOverRange>(
-            factory.importAddress(range), indexName, extremum, body, std::move(fromPoint)));
+            range, indexName, extremum, body, std::move(fromPoint)));
     }
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,

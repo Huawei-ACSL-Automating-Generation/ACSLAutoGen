@@ -366,6 +366,11 @@ namespace acslg::analyzer::symbolic {
                                              std::string_view indexName,
                                              QuantifierOverRange::Quantifier quantifier,
                                              const SymbolicExpr &predicate);
+    ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
+                                             AddrHandle range,
+                                             std::string_view indexName,
+                                             QuantifierOverRange::Quantifier quantifier,
+                                             ExprHandle predicate);
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeMaxMinOverRangeExpr(
         std::unique_ptr<SymbolAddress> range,
@@ -378,9 +383,20 @@ namespace acslg::analyzer::symbolic {
                                          std::string_view indexName,
                                          MaxMinOverRange::Extremum extremum,
                                          SourcePoint fromPoint);
+    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
+                                         AddrHandle range,
+                                         std::string_view indexName,
+                                         MaxMinOverRange::Extremum extremum,
+                                         SourcePoint fromPoint);
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          const SymbolAddress &range,
+                                         std::string_view indexName,
+                                         MaxMinOverRange::Extremum extremum,
+                                         ExprHandle body,
+                                         SourcePoint fromPoint);
+    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
+                                         AddrHandle range,
                                          std::string_view indexName,
                                          MaxMinOverRange::Extremum extremum,
                                          ExprHandle body,
