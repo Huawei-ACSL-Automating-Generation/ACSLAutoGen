@@ -1601,10 +1601,10 @@ namespace acslg::spec_generator {
             // - Otherwise treat the value as loop-invariant and just clone it
             auto getSubExpr = [&](const symb::Symbol &symbol)
                 -> std::optional<symb::ExprHandle> {
-                auto fromAddr = symbol.getFromAddr();
+                auto fromAddr = symb::getFromAddrHandle(factory, symbol);
                 if (fromAddr == std::nullopt)
                     return std::nullopt;
-                auto it = patternInfo.normalExitPatternsMap.find(*fromAddr.value());
+                auto it = patternInfo.normalExitPatternsMap.find(**fromAddr);
                 // The value on this address doesn't change during loop, so just copy it.
                 if (it == patternInfo.normalExitPatternsMap.end())
                     return factory.importExpr(*symbol.toSymbolicExpr());
@@ -1646,16 +1646,15 @@ namespace acslg::spec_generator {
             symb::HashExprHandleMap hashExprMapForSub{};
             std::optional<symb::AddrHandle> arrayInCond;
             for (auto &[hash, symbol] : interruptedCond->collectUsedSymbols()) {
-                auto fromAddr = symbol->getFromAddr();
+                auto fromAddr = symb::getFromAddrHandle(factory, *symbol);
                 if (fromAddr == std::nullopt)
                     return {};
                 // If the symbol's source address is a SymbolAddress (typical for array/pointer
                 // deref), we also need to substitute symbols used in its offset; meanwhile we keep
                 // the base SymbolAddress handle to build the quantified range later.
-                if (auto fromSymbolAddr =
-                        symb::dyn_cast<const symb::SymbolAddress>(fromAddr.value().get().get())) {
+                if (auto fromSymbolAddr = fromAddr->dyn_cast<symb::SymbolAddress>()) {
                     if (!arrayInCond)
-                        arrayInCond = factory.importAddress(*fromSymbolAddr);
+                        arrayInCond = *fromAddr;
                     auto offset = fromSymbolAddr->getOffset();
                     for (auto &[hashInOff, symbolInOff] : offset->collectUsedSymbols()) {
                         auto subedExpr = getSubExpr(*symbolInOff);

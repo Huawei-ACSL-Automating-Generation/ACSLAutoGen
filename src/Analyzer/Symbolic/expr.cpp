@@ -2887,10 +2887,30 @@ namespace acslg::analyzer::symbolic {
 
         if (symbol->getFromPoint() == std::nullopt || symbol->getFromPoint().value() != fromPoint)
             return false;
+
+        if (auto symbolValue = dyn_cast<const SymbolValue>(symbol))
+            return fromAddr == *symbolValue->getFromAddrHandle();
+        if (auto symbolAddr = dyn_cast<const SymbolAddress>(symbol)) {
+            auto from = symbolAddr->getFromAddrHandle();
+            return from && fromAddr == **from;
+        }
+
         auto from = symbol->getFromAddr();
         if (from == std::nullopt)
             return false;
         return fromAddr == *from.value();
+    }
+
+    std::optional<AddrHandle> getFromAddrHandle(ExprFactory &factory, const Symbol &symbol) {
+        if (auto symbolValue = dyn_cast<const SymbolValue>(&symbol))
+            return symbolValue->getFromAddrHandle();
+        if (auto symbolAddr = dyn_cast<const SymbolAddress>(&symbol))
+            return symbolAddr->getFromAddrHandle();
+
+        auto from = symbol.getFromAddr();
+        if (from == std::nullopt)
+            return std::nullopt;
+        return factory.importAddress(*from.value());
     }
 
     namespace {

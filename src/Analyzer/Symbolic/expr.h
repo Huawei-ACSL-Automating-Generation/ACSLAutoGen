@@ -2130,6 +2130,7 @@ namespace acslg::analyzer::symbolic {
     bool is_symbol_addr(const Address &a) noexcept;
 
     bool isFrom(const SymbolicExpr &expr, const Address &fromAddr, SourcePoint fromPoint);
+    std::optional<AddrHandle> getFromAddrHandle(ExprFactory &factory, const Symbol &symbol);
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> getSymbol(
         clang::QualType type,
