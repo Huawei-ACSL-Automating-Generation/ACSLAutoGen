@@ -2165,6 +2165,11 @@ namespace acslg::analyzer::symbolic {
                                                    const clang::RecordDecl *record,
                                                    std::unique_ptr<Address> base,
                                                    size_t fieldIndex);
+    std::unique_ptr<FieldAddress> makeFieldAddress(ExprFactory &factory,
+                                                   clang::QualType pointeeType,
+                                                   const clang::RecordDecl *record,
+                                                   AddrHandle base,
+                                                   size_t fieldIndex);
     std::unique_ptr<Structure> cloneStructure(ExprHandle structure);
     std::unique_ptr<Structure> makeStructure(ExprFactory &factory,
                                              const clang::RecordDecl *record,

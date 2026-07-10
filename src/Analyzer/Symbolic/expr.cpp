@@ -930,8 +930,16 @@ namespace acslg::analyzer::symbolic {
                                                    const clang::RecordDecl *record,
                                                    std::unique_ptr<Address> base,
                                                    size_t fieldIndex) {
-        auto fieldAddr =
-            Addr{factory, factory.importAddress(*base)}.field(pointeeType, record, fieldIndex);
+        return makeFieldAddress(factory, pointeeType, record, factory.importAddress(*base),
+                                fieldIndex);
+    }
+
+    std::unique_ptr<FieldAddress> makeFieldAddress(ExprFactory &factory,
+                                                   clang::QualType pointeeType,
+                                                   const clang::RecordDecl *record,
+                                                   AddrHandle base,
+                                                   size_t fieldIndex) {
+        auto fieldAddr = Addr{factory, base}.field(pointeeType, record, fieldIndex);
         return cloneFieldAddress(fieldAddr.handle());
     }
 

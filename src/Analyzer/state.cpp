@@ -41,12 +41,12 @@ namespace acslg::analyzer {
         std::unique_ptr<symbolic::Structure> makeStructureForRecord(
             symbolic::ExprFactory &factory,
             const clang::RecordDecl *record,
-            std::unique_ptr<symbolic::Address> base,
+            symbolic::AddrHandle base,
             symbolic::SourcePoint point) {
             if (!record || !record->isCompleteDefinition())
                 ERROR("Expected complete structure type.");
             record = record->getDefinition();
-            auto from = symbolic::Addr{factory, factory.importAddress(*base)};
+            auto from = symbolic::Addr{factory, base};
             return symbolic::cloneStructure(factory.structure(
                 record, record->getASTContext().getASTRecordLayout(record), from.handle(),
                 point));
@@ -55,10 +55,9 @@ namespace acslg::analyzer {
         std::unique_ptr<symbolic::Structure> makeStructureForBase(
             symbolic::ExprFactory &factory,
             clang::QualType type,
-            std::unique_ptr<symbolic::Address> base,
+            symbolic::AddrHandle base,
             symbolic::SourcePoint point) {
-            return makeStructureForRecord(
-                factory, type->getAsRecordDecl(), std::move(base), point);
+            return makeStructureForRecord(factory, type->getAsRecordDecl(), base, point);
         }
 
         bool containsLocalVar(const symbolic::SymbolicExpr &expr,
@@ -371,28 +370,22 @@ namespace acslg::analyzer {
                     ERROR("Expected symbolic::Address for '->' base, got: " << baseExpr->dump());
 
                 if (!memoryState_.contains(baseAddr.value())) {
-                    std::unique_ptr<symbolic::Address> baseAddrClone =
-                        cloneAddress(baseAddr.value()).into_underlying();
                     auto st = makeStructureForRecord(
-                        context_.getExprFactory(), RD, std::move(baseAddrClone), startPoint_);
+                        context_.getExprFactory(), RD, baseAddr.value(), startPoint_);
                     memoryState_.write(baseAddr.value(), factory.importExpr(*st));
                 }
-                std::unique_ptr<symbolic::Address> fieldBase =
-                    cloneAddress(baseAddr.value()).into_underlying();
                 return makeFieldAddress(context_.getExprFactory(), fieldType, RD,
-                                        std::move(fieldBase), FD->getFieldIndex());
+                                        baseAddr.value(), FD->getFieldIndex());
             } else {
                 auto baseAddr = extractLValue(base);
                 auto &factory = context_.getExprFactory();
                 auto baseHandle = factory.importAddress(*baseAddr);
 
                 if (!memoryState_.contains(baseHandle)) {
-                    auto st = makeStructureForRecord(
-                        factory, RD, cloneAddress(baseHandle).into_underlying(), startPoint_);
+                    auto st = makeStructureForRecord(factory, RD, baseHandle, startPoint_);
                     memoryState_.write(baseHandle, factory.importExpr(*st));
                 }
-                return makeFieldAddress(factory, fieldType, RD,
-                                        cloneAddress(baseHandle).into_underlying(),
+                return makeFieldAddress(factory, fieldType, RD, baseHandle,
                                         FD->getFieldIndex());
             }
         }
@@ -1076,9 +1069,8 @@ namespace acslg::analyzer {
 
                             // Build a Structure whose fields (and nested structs) are Unknown, then
                             // write it.
-                            auto structVal = makeStructureForBase(
-                                factory, elemTy, cloneAddress(addr.handle()).into_underlying(),
-                                pointAfterCall);
+                            auto structVal =
+                                makeStructureForBase(factory, elemTy, addr.handle(), pointAfterCall);
                             memoryState_.write(addr.handle(), factory.importExpr(*structVal));
 
                             Formulas exprs;
@@ -1307,8 +1299,7 @@ namespace acslg::analyzer {
                             symbolic::Addr destAddrFacade{factory, destAddr.value()};
                             auto destBase = destAddrFacade.withoutLength();
                             auto structVal = makeStructureForBase(
-                                factory, elemTy, cloneAddress(destBase.handle()).into_underlying(),
-                                pointAfterCall);
+                                factory, elemTy, destBase.handle(), pointAfterCall);
                             memoryState_.write(destBase.handle(), factory.importExpr(*structVal));
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
@@ -1585,11 +1576,9 @@ namespace acslg::analyzer {
                         }
                         auto val = memoryState_.readHandle(baseAddr.value());
                         DEBUG("MemberExpr base in memory: " << (val ? "yes" : "no"));
-	                        if (val == std::nullopt) {
-	                            st = makeStructureForRecord(
-	                                factory, RD,
-	                                cloneAddress(baseAddr.value()).into_underlying(), startPoint_);
-	                            memoryState_.write(baseAddr.value(), factory.importExpr(*st));
+                        if (val == std::nullopt) {
+                            st = makeStructureForRecord(factory, RD, baseAddr.value(), startPoint_);
+                            memoryState_.write(baseAddr.value(), factory.importExpr(*st));
                         } else if (auto stVal = symbolic::dyn_cast<const symbolic::Structure>(
                                        val.value().get().get())) {
                             st = cloneStructure(factory.importExpr(*stVal));
@@ -2901,8 +2890,7 @@ namespace acslg::analyzer {
                         RD = RD->getDefinition();
 
                         auto st = makeStructureForRecord(
-                            context_.getExprFactory(), RD,
-                            cloneAddress(varAddrHandle).into_underlying(), startPoint_);
+                            context_.getExprFactory(), RD, varAddrHandle, startPoint_);
                         if (initListExpr->getNumInits() != st->getNumFields())
                             ERROR("Initializer std::list size mismatches the struct's field "
                                   "count.");
