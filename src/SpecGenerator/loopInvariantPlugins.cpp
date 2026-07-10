@@ -92,11 +92,25 @@ namespace acslg::spec_generator {
         }
 
         template <typename FactoryRebuild>
+        symb::AddrHandle rebuildSymbolAddressHandle(symb::AddrHandle address,
+                                                    FactoryRebuild &&factoryRebuild) {
+            auto &factory = symb::ExprFactoryScope::current();
+            return std::forward<FactoryRebuild>(factoryRebuild)(factory, address);
+        }
+
+        template <typename FactoryRebuild>
+        symb::AddrHandle rebuildSymbolAddressHandle(const symb::SymbolAddress &address,
+                                                    FactoryRebuild &&factoryRebuild) {
+            auto &factory = symb::ExprFactoryScope::current();
+            return rebuildSymbolAddressHandle(factory.importAddress(address),
+                                              std::forward<FactoryRebuild>(factoryRebuild));
+        }
+
+        template <typename FactoryRebuild>
         symb::SymbolAddress rebuildSymbolAddress(const symb::SymbolAddress &address,
                                                  FactoryRebuild &&factoryRebuild) {
-            auto &factory = symb::ExprFactoryScope::current();
-            auto rebuilt  = std::forward<FactoryRebuild>(factoryRebuild)(
-                factory, factory.importAddress(address));
+            auto rebuilt = rebuildSymbolAddressHandle(
+                address, std::forward<FactoryRebuild>(factoryRebuild));
             return symb::SymbolAddress(rebuilt.template cast<symb::SymbolAddress>());
         }
 
@@ -1378,46 +1392,44 @@ namespace acslg::spec_generator {
                         "\n";
 
                 using enum symb::BinaryOpExpr::Operator;
-                auto arrayRange = cloneSymbolAddress(
-                    rebuildSymbolAddress(
-                        *arrayAddr,
-                        [](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withOffset(
-                                address,
-                                factory.literal(
-                                    static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)));
-                        }));
+                auto arrayRange = rebuildSymbolAddressHandle(
+                    *arrayAddr,
+                    [](symb::ExprFactory &factory, symb::AddrHandle address) {
+                        return factory.withOffset(
+                            address,
+                            factory.literal(
+                                static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)));
+                    });
                 if (indexStep > 0) {
                     // For now we take [0, bound) for max/min over range (reset offset to zero).
                     // More precise modeling (e.g. starting at index_init) is left for future work.
-                    arrayRange = cloneSymbolAddress(
-                        rebuildSymbolAddress(
-                            *arrayRange,
-                            [&](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                return factory.withLength(
-                                    address, factory.importExpr(*indexInfo.indexBound));
-                            }));
+                    arrayRange = rebuildSymbolAddressHandle(
+                        arrayRange,
+                        [&](symb::ExprFactory &factory, symb::AddrHandle address) {
+                            return factory.withLength(
+                                address, factory.importExpr(*indexInfo.indexBound));
+                        });
                 } else {
                     // Negative-step ranges keep the existing offset behavior; only length is
                     // rebuilt here.
                     symb::Expr indexSymbolic{factory, indexInfo.indexSymbolicValue};
                     symb::Expr indexBound{factory, indexInfo.indexBound};
                     auto lengthExpr = indexSymbolic - indexBound;
-                    arrayRange = cloneSymbolAddress(
-                        rebuildSymbolAddress(
-                            *arrayRange,
-                            [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                                return factory.withLength(address, lengthExpr.handle());
-                            }));
+                    arrayRange = rebuildSymbolAddressHandle(
+                        arrayRange,
+                        [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
+                            return factory.withLength(address, lengthExpr.handle());
+                        });
                 }
 
                 // Safety guard: avoid constructing MaxMinOverRange with an invalid range.
-                if (!arrayRange || !arrayRange->getLength()) {
+                auto *arrayRangeSymbol = arrayRange.dyn_cast<const symb::SymbolAddress>();
+                if (arrayRangeSymbol == nullptr || !arrayRangeSymbol->getLength()) {
                     WARN("ParadigmMaxMinPlugin: array range missing length, skip post-state.");
                     return;
                 }
                 DEBUG("ParadigmMaxMinPlugin: range length dump -> " +
-                      arrayRange->getLength().value()->dump());
+                      arrayRangeSymbol->getLength().value()->dump());
 
                 auto &entryPath = entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0);
                 auto maxAddrIt  = entryPath->getVarAddr().find(maxDecl);
@@ -1432,7 +1444,7 @@ namespace acslg::spec_generator {
                 symb::AddressBox maxAddrBox{*maxAddrIt->second};
                 normalPostInfo.memoryMap.emplace(
                     maxAddrBox,
-                    makeMaxMinOverRangeHandle(factory, *arrayRange, "k", *extremum,
+                    makeMaxMinOverRangeHandle(factory, arrayRange, "k", *extremum,
                                               pointAfterLoop));
             }}; // ifVisitor end
             ifVisitor.runOn(loopInfo.bodyStmt);
@@ -1695,49 +1707,45 @@ namespace acslg::spec_generator {
             // - step<0: from bound to current index (excluding current index)
             // Note: we represent the range via SymbolAddress offset/length; printing is handled by
             // the getACSL layer.
-            auto arrayRange = cloneSymbolAddress(*arrayInCond);
+            auto arrayRange = factory.importAddress(*arrayInCond);
             if (indexStep > 0) {
-                arrayRange = cloneSymbolAddress(
-                    rebuildSymbolAddress(
-                        *arrayRange,
-                        [&](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withOffset(
-                                address, factory.importExpr(*indexInfo.indexSymbolicValue));
-                        }));
+                arrayRange = rebuildSymbolAddressHandle(
+                    arrayRange,
+                    [&](symb::ExprFactory &factory, symb::AddrHandle address) {
+                        return factory.withOffset(
+                            address, factory.importExpr(*indexInfo.indexSymbolicValue));
+                    });
                 symb::Expr indexBound{factory, indexInfo.indexBound};
                 symb::Expr indexSymbolic{factory, indexInfo.indexSymbolicValue};
                 auto lengthExpr = indexBound - indexSymbolic;
-                arrayRange = cloneSymbolAddress(
-                    rebuildSymbolAddress(
-                        *arrayRange,
-                        [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withLength(address, lengthExpr.handle());
-                        }));
+                arrayRange = rebuildSymbolAddressHandle(
+                    arrayRange,
+                    [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
+                        return factory.withLength(address, lengthExpr.handle());
+                    });
             } else {
-                arrayRange = cloneSymbolAddress(
-                    rebuildSymbolAddress(
-                        *arrayRange,
-                        [&](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withOffset(
-                                address, factory.importExpr(*indexInfo.indexBound));
-                        }));
+                arrayRange = rebuildSymbolAddressHandle(
+                    arrayRange,
+                    [&](symb::ExprFactory &factory, symb::AddrHandle address) {
+                        return factory.withOffset(
+                            address, factory.importExpr(*indexInfo.indexBound));
+                    });
                 symb::Expr indexSymbolic{factory, indexInfo.indexSymbolicValue};
                 symb::Expr indexBound{factory, indexInfo.indexBound};
                 auto lengthExpr = indexSymbolic - indexBound;
-                arrayRange = cloneSymbolAddress(
-                    rebuildSymbolAddress(
-                        *arrayRange,
-                        [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
-                            return factory.withLength(address, lengthExpr.handle());
-                        }));
+                arrayRange = rebuildSymbolAddressHandle(
+                    arrayRange,
+                    [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
+                        return factory.withLength(address, lengthExpr.handle());
+                    });
             }
             normalPathInfo.pathState = analyzer::Path::PathState::Step;
             auto normalPred = predExpr.logicalNot();
             normalPathInfo.pathConds.emplace(makeQuantifierOverRangeHandle(
-                factory, *arrayRange, "k", ForAll, *normalPred));
+                factory, arrayRange, "k", ForAll, normalPred.handle()));
 
             interruptedPathInfo.pathConds.emplace(makeQuantifierOverRangeHandle(
-                factory, *arrayRange, "k", Exist, *predExpr));
+                factory, arrayRange, "k", Exist, predExpr.handle()));
 
             // Try to print the forall form as a concrete ACSL text. If that fails, we still return
             // post-info but do not emit an invariant clause.
