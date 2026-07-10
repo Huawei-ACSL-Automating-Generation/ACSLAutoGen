@@ -770,7 +770,7 @@ namespace acslg::spec_generator {
 
                             auto indexValueAfterLoop =
                                 getSymbol(indexInfo.indexExpr->getType(),
-                                          indexInfo.indexRealAddr->addressClone().into_underlying(),
+                                          indexInfo.indexRealAddr,
                                           std::move(pointAfterLoop));
 
                             symb::Expr indexAfter{factory,
@@ -1583,7 +1583,7 @@ namespace acslg::spec_generator {
 
             auto indexValueAfterLoop =
                 getSymbol(indexInfo.indexExpr->getType(),
-                          indexInfo.indexRealAddr->addressClone().into_underlying(),
+                          indexInfo.indexRealAddr,
                           std::move(pointAfterLoop));
 
             // Substitute a Symbol with an expression over the quantifier variable k:
