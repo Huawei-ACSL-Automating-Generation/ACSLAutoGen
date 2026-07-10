@@ -1646,18 +1646,18 @@ namespace acslg::spec_generator {
             }; // sameValueOnRealEntries ends
 
             symb::HashExprHandleMap hashExprMapForSub{};
-            std::unique_ptr<symb::SymbolAddress> arrayInCond;
+            std::optional<symb::AddrHandle> arrayInCond;
             for (auto &[hash, symbol] : interruptedCond->collectUsedSymbols()) {
                 auto fromAddr = symbol->getFromAddr();
                 if (fromAddr == std::nullopt)
                     return {};
                 // If the symbol's source address is a SymbolAddress (typical for array/pointer
                 // deref), we also need to substitute symbols used in its offset; meanwhile we keep
-                // a copy of the base SymbolAddress to build the quantified range later.
+                // the base SymbolAddress handle to build the quantified range later.
                 if (auto fromSymbolAddr =
                         symb::dyn_cast<const symb::SymbolAddress>(fromAddr.value().get().get())) {
-                    if (arrayInCond == nullptr)
-                        arrayInCond = cloneSymbolAddress(*fromSymbolAddr);
+                    if (!arrayInCond)
+                        arrayInCond = factory.importAddress(*fromSymbolAddr);
                     auto offset = fromSymbolAddr->getOffset();
                     for (auto &[hashInOff, symbolInOff] : offset->collectUsedSymbols()) {
                         auto subedExpr = getSubExpr(*symbolInOff);
@@ -1672,7 +1672,7 @@ namespace acslg::spec_generator {
                     return std::nullopt;
                 hashExprMapForSub.insert_or_assign(hash, subedExpr.value());
             }
-            if (arrayInCond == nullptr)
+            if (!arrayInCond)
                 return {};
 
             // Rewrite the interrupted predicate by replacing its symbols with k-parameterized
@@ -1700,13 +1700,13 @@ namespace acslg::spec_generator {
             }
             using enum symb::QuantifierOverRange::Quantifier;
 
-            assert(arrayInCond != nullptr);
+            assert(arrayInCond);
             // arrayRange denotes the array/pointer access range to quantify over:
             // - step>0: from current index to bound (excluding bound)
             // - step<0: from bound to current index (excluding current index)
             // Note: we represent the range via SymbolAddress offset/length; printing is handled by
             // the getACSL layer.
-            auto arrayRange = factory.importAddress(*arrayInCond);
+            auto arrayRange = *arrayInCond;
             if (indexStep > 0) {
                 arrayRange = rebuildSymbolAddressHandle(
                     arrayRange,
