@@ -1128,7 +1128,7 @@ namespace acslg::spec_generator {
                 // Parameters for template filling, see StringTemplate for more information.
                 std::optional<std::string> param_n{std::nullopt}, param_array{std::nullopt},
                     param_index{std::nullopt}, param_m{std::nullopt};
-                std::unique_ptr<symb::SymbolAddress> arrayAddr{nullptr};
+                std::optional<symb::AddrHandle> arrayAddr{std::nullopt};
                 // @SgtPepper114 2025/10/26: I'm in the middle of rewriting `regularForm` as
                 // `getACSL`. This plugin is a beast and barely anyone uses it, so I'm not gonna
                 // worry about the correct way to do it for now. If it breaks, just band-aid it by
@@ -1169,8 +1169,7 @@ namespace acslg::spec_generator {
                             entryAndCurrentInfo.symbolicLoopEntry->getStartPoint();
                         auto &factory = symb::ExprFactoryScope::current();
                         symb::Addr baseAddr{factory, factory.importAddress(base)};
-                        return cloneSymbolAddress(
-                            symb::Addr::symbol(type, baseAddr, fromPoint).handle());
+                        return symb::Addr::symbol(type, baseAddr, fromPoint).handle();
                     };
 
                     if (auto arraySub = dyn_cast_if_present<clang::ArraySubscriptExpr>(
