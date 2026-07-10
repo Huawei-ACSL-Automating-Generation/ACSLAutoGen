@@ -110,13 +110,6 @@ namespace acslg::analyzer {
             return factory.cloneExpr(factory.unknown());
         }
 
-        utils::not_null<std::unique_ptr<const symbolic::Address>> cloneConstAddress(
-            symbolic::AddrHandle address) {
-            std::unique_ptr<const symbolic::Address> cloned =
-                address->addressClone().into_underlying();
-            return utils::not_null<std::unique_ptr<const symbolic::Address>>{std::move(cloned)};
-        }
-
         utils::not_null<std::unique_ptr<symbolic::Address>> cloneAddress(
             symbolic::AddrHandle address) {
             return address->addressClone();
@@ -281,9 +274,8 @@ namespace acslg::analyzer {
         for (auto &[varDecl, addr] : varAddr_) {
             clang::QualType ty = varDecl->getType();
 
-            auto symbol = getSymbol(
-                ty, cloneConstAddress(context_.getExprFactory().importAddress(*addr)),
-                startPoint_);
+            auto symbol = getSymbol(ty, context_.getExprFactory().importAddress(*addr),
+                                    startPoint_);
             updateMemory(*addr, std::move(symbol));
         }
     }
@@ -327,9 +319,7 @@ namespace acslg::analyzer {
                 symbolic::Expr idxExpr{factory, factory.importExpr(*idxEval.second[0])};
                 auto resultAddr = baseAddrFacade.withAddedOffset(idxExpr);
                 if (!memoryState_.contains(resultAddr.handle())) {
-                    auto newSymbol =
-                        getSymbol(arr->getType(), cloneConstAddress(resultAddr.handle()),
-                                  startPoint_);
+                    auto newSymbol = getSymbol(arr->getType(), resultAddr.handle(), startPoint_);
                     memoryState_.write(resultAddr.handle(), factory.importExpr(*newSymbol));
                 }
                 return cloneAddress(resultAddr.handle());
@@ -349,8 +339,7 @@ namespace acslg::analyzer {
                 auto &factory = context_.getExprFactory();
                 if (auto addr = symbolic::tryEvalAsSymbolAddrHandle(factory, *addrExpr)) {
                     if (!memoryState_.contains(*addr)) {
-                        auto symbol =
-                            getSymbol(uop->getType(), cloneConstAddress(*addr), startPoint_);
+                        auto symbol = getSymbol(uop->getType(), *addr, startPoint_);
                         memoryState_.write(*addr, factory.importExpr(*symbol));
                     }
                     return cloneAddress(*addr);
@@ -456,7 +445,7 @@ namespace acslg::analyzer {
         if (initSymbolic) {
             // Initialize with a symbolic value corresponding to the variable type.
             auto addrHandle = context_.getExprFactory().importAddress(*rawPtr);
-            auto initSym    = getSymbol(var->getType(), cloneConstAddress(addrHandle), startPoint_);
+            auto initSym    = getSymbol(var->getType(), addrHandle, startPoint_);
             memoryState_.write(addrHandle, context_.getExprFactory().importExpr(*initSym));
         } else {
             // Prevent uninitialized variables.
@@ -867,9 +856,7 @@ namespace acslg::analyzer {
                             if (auto value = memoryState_.readHandle(newAddr.handle());
                                 value == std::nullopt) {
                                 auto elemType = arrSub->getType();
-                                auto symbol =
-                                    getSymbol(elemType, cloneConstAddress(newAddr.handle()),
-                                              startPoint_);
+                                auto symbol = getSymbol(elemType, newAddr.handle(), startPoint_);
                                 memoryState_.write(
                                     newAddr.handle(), factory.importExpr(*symbol));
                                 outExprs.emplace_back(std::move(symbol));
@@ -1230,8 +1217,8 @@ namespace acslg::analyzer {
                         symbolic::Expr rangeIndexExpr{factory, factory.importExpr(rangeIndex)};
                         auto srcIndexed = srcBaseWithoutLength.withAddedOffset(rangeIndexExpr);
 
-                        auto valueExpr = symbolic::getSymbol(
-                            elemTy, cloneConstAddress(srcIndexed.handle()), startPoint_);
+                        auto valueExpr =
+                            symbolic::getSymbol(elemTy, srcIndexed.handle(), startPoint_);
                         memoryState_.write(destRange.handle(), factory.importExpr(*valueExpr));
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     };
@@ -1524,9 +1511,8 @@ namespace acslg::analyzer {
                                     ERROR("Expected symbolic::Address, got: " << unExpr->dump());
                                 if (auto value = path->memoryState_.readHandle(addr.value());
                                     value == std::nullopt) {
-                                    auto symbol =
-                                        getSymbol(uop->getType(), cloneConstAddress(addr.value()),
-                                                  startPoint_);
+                                    auto symbol = getSymbol(uop->getType(), addr.value(),
+                                                            startPoint_);
                                     path->memoryState_.write(addr.value(), factory.importExpr(*symbol));
                                     outExprs.emplace_back(std::move(symbol));
                                 } else {
@@ -2897,8 +2883,7 @@ namespace acslg::analyzer {
                     auto varType = varDecl->getType();
                     path->updateVarState(
                         varDecl,
-                        symbolic::getSymbol(varType, cloneConstAddress(varAddrHandle),
-                                            pointAfterDecl));
+                        symbolic::getSymbol(varType, varAddrHandle, pointAfterDecl));
 
                     updatedPaths.push_back(std::move(path));
                     continue;
@@ -2954,8 +2939,7 @@ namespace acslg::analyzer {
                                 declStmt, context_.getSourceManager(), context_.getLangOptions());
 
                             auto varType = varDecl->getType();
-                            newValue     = symbolic::getSymbol(
-                                varType, cloneConstAddress(varAddrHandle), pointAfterDecl);
+                            newValue = symbolic::getSymbol(varType, varAddrHandle, pointAfterDecl);
                         }
 
                         newPath->updateVarState(varDecl, std::move(newValue));
