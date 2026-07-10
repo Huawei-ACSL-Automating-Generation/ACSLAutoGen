@@ -1818,6 +1818,11 @@ namespace acslg::analyzer::symbolic {
                 return std::nullopt;
             return fromAddr_.value()->addressClone().into_underlying();
         }
+        std::optional<AddrHandle> getFromAddrHandle() const {
+            if (fromAddr_ == std::nullopt)
+                return std::nullopt;
+            return AddrHandle{fromAddr_.value().get().get()};
+        }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
 
       private:
@@ -2082,6 +2087,7 @@ namespace acslg::analyzer::symbolic {
         std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
             return fromAddr_->addressClone().into_underlying();
         }
+        AddrHandle getFromAddrHandle() const { return AddrHandle{fromAddr_.get().get()}; }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const;
 

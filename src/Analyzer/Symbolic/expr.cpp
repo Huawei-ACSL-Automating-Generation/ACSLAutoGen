@@ -125,17 +125,14 @@ namespace acslg::analyzer::symbolic {
                         .asExpr();
                 }
                 if (auto *symbolValue = dyn_cast<const SymbolValue>(&expr)) {
-                    auto fromAddr = symbolValue->getFromAddr();
-                    if (fromAddr == std::nullopt)
-                        UNREACHABLE();
-                    auto from = requireAddress(run(*fromAddr.value()));
+                    auto from = requireAddress(run(*symbolValue->getFromAddrHandle()));
                     return factory.symbolValue(symbolValue->getValType(), from,
                                                symbolValue->getFromPoint().value());
                 }
                 if (auto *symbolAddr = dyn_cast<const SymbolAddress>(&expr)) {
                     std::optional<AddrHandle> from;
-                    if (auto fromAddr = symbolAddr->getFromAddr())
-                        from = requireAddress(run(*fromAddr.value()));
+                    if (auto fromAddr = symbolAddr->getFromAddrHandle())
+                        from = requireAddress(run(**fromAddr));
 
                     std::optional<ExprHandle> length;
                     if (symbolAddr->getLength())
@@ -237,10 +234,7 @@ namespace acslg::analyzer::symbolic {
                     if (fromPoint && fromPoint.value() != pointToSub)
                         return factory.importExpr(expr);
 
-                    auto fromAddr = symbolValue->getFromAddr();
-                    if (fromAddr == std::nullopt)
-                        UNREACHABLE();
-                    auto realFromAddr = requireAddress(run(*fromAddr.value()));
+                    auto realFromAddr = requireAddress(run(*symbolValue->getFromAddrHandle()));
                     if (auto value = pathSubTo.getMemoryState().readHandle(*realFromAddr))
                         return factory.importExpr(*value.value());
 
@@ -256,7 +250,7 @@ namespace acslg::analyzer::symbolic {
                     if (symbolAddr->getLength())
                         length = factory.importExpr(*symbolAddr->getLength().value());
 
-                    auto fromAddr = symbolAddr->getFromAddr();
+                    auto fromAddr = symbolAddr->getFromAddrHandle();
                     if (fromAddr == std::nullopt)
                         return factory
                             .symbolAddress(symbolAddr->getPointeeType(), std::nullopt,
@@ -264,7 +258,7 @@ namespace acslg::analyzer::symbolic {
                                            length)
                             .asExpr();
 
-                    auto realFromAddr = requireAddress(run(*fromAddr.value()));
+                    auto realFromAddr = requireAddress(run(**fromAddr));
                     auto offset       = simplified(run(*symbolAddr->getOffset()));
                     if (symbolAddr->getLength())
                         length = simplified(run(*symbolAddr->getLength().value()));
@@ -375,17 +369,14 @@ namespace acslg::analyzer::symbolic {
                         .asExpr();
                 }
                 if (auto *symbolValue = dyn_cast<const SymbolValue>(&expr)) {
-                    auto fromAddr = symbolValue->getFromAddr();
-                    if (fromAddr == std::nullopt)
-                        UNREACHABLE();
-                    auto from = requireAddress(run(*fromAddr.value()));
+                    auto from = requireAddress(run(*symbolValue->getFromAddrHandle()));
                     return factory.symbolValue(symbolValue->getValType(), from,
                                                symbolValue->getFromPoint().value());
                 }
                 if (auto *symbolAddr = dyn_cast<const SymbolAddress>(&expr)) {
                     std::optional<AddrHandle> from;
-                    if (auto fromAddr = symbolAddr->getFromAddr())
-                        from = requireAddress(run(*fromAddr.value()));
+                    if (auto fromAddr = symbolAddr->getFromAddrHandle())
+                        from = requireAddress(run(**fromAddr));
 
                     std::optional<ExprHandle> length;
                     if (symbolAddr->getLength())

@@ -626,12 +626,12 @@ namespace acslg::spec_generator {
                 if (symbolAddr == nullptr)
                     return std::nullopt;
 
-                auto from = symbolAddr->getFromAddr();
+                auto from = symbolAddr->getFromAddrHandle();
                 // If the base address itself is x-step, then there is no need to check the
                 // offset (or to check it for reliability).
                 if (from == std::nullopt)
                     ERROR("Invalid state");
-                if (auto it = patternInfo.normalExitPatternsMap.find(*from.value());
+                if (auto it = patternInfo.normalExitPatternsMap.find(**from);
                     it != patternInfo.normalExitPatternsMap.end()) {
                     auto &pattern = it->second;
                     if (pattern == std::nullopt)
@@ -661,10 +661,8 @@ namespace acslg::spec_generator {
                 auto offset = symbolAddr->getOffset();
                 // Is offset x-step?
                 if (auto symbolValue = symb::dyn_cast<const symb::SymbolValue>(offset.get())) {
-                    auto symbolValueFrom = symbolValue->getFromAddr();
-                    if (symbolValueFrom == std::nullopt)
-                        TODO();
-                    if (auto it = patternInfo.normalExitPatternsMap.find(*symbolValueFrom.value());
+                    auto symbolValueFrom = symbolValue->getFromAddrHandle();
+                    if (auto it = patternInfo.normalExitPatternsMap.find(*symbolValueFrom);
                         it != patternInfo.normalExitPatternsMap.end()) {
                         auto &pattern = it->second;
                         if (pattern == std::nullopt)
