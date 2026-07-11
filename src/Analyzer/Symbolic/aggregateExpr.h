@@ -159,9 +159,6 @@ namespace acslg::analyzer::symbolic {
 
         // Symbol
       public:
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
-            return std::nullopt;
-        }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; };
 
       private:
@@ -310,9 +307,6 @@ namespace acslg::analyzer::symbolic {
 
         // Symbol
       public:
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
-            return std::nullopt;
-        }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; };
 
       private:

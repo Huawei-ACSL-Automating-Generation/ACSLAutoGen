@@ -1862,13 +1862,63 @@ namespace acslg::analyzer::symbolic {
         return (needParens ? "(" : "") + concatenatedStr + (needParens ? ")" : "");
     }
 
+    namespace {
+        struct SymbolOrigin {
+            AddrHandle address;
+            SourcePoint point;
+        };
+
+        std::optional<SymbolOrigin> getBorrowedSymbolOrigin(const Symbol &symbol);
+
+        std::optional<SymbolOrigin> getStructureOrigin(const Structure &structure) {
+            std::optional<SymbolOrigin> common;
+            for (size_t index = 0; index < structure.getNumFields(); ++index) {
+                auto *symbol = dyn_cast<const Symbol>(structure.getFieldValue(index).get());
+                if (symbol == nullptr)
+                    return std::nullopt;
+
+                auto origin = getBorrowedSymbolOrigin(*symbol);
+                if (!origin)
+                    return std::nullopt;
+                auto *fieldAddr = origin->address.dyn_cast<FieldAddress>();
+                if (fieldAddr == nullptr || fieldAddr->getFieldIndex() != index)
+                    return std::nullopt;
+
+                SymbolOrigin fieldOrigin{
+                    AddrHandle{fieldAddr->getBaseAddr().get().get()}, origin->point};
+                if (!common) {
+                    common = fieldOrigin;
+                    continue;
+                }
+                if (*common->address != *fieldOrigin.address ||
+                    common->point != fieldOrigin.point)
+                    return std::nullopt;
+            }
+            return common;
+        }
+
+        std::optional<SymbolOrigin> getBorrowedSymbolOrigin(const Symbol &symbol) {
+            if (auto *value = dyn_cast<const SymbolValue>(&symbol))
+                return SymbolOrigin{value->getFromAddrHandle(), value->getFromPoint().value()};
+            if (auto *address = dyn_cast<const SymbolAddress>(&symbol)) {
+                auto from = address->getFromAddrHandle();
+                if (from)
+                    return SymbolOrigin{*from, address->getFromPoint().value()};
+                return std::nullopt;
+            }
+            if (auto *structure = dyn_cast<const Structure>(&symbol))
+                return getStructureOrigin(*structure);
+            return std::nullopt;
+        }
+    } // namespace
+
     utils::expected<std::string, SymbolicExpr::GetACSLError> Structure::doGetACSL(
         const SymbolicExpr::GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
         unsigned parentPrec,
         bool isRightChild) const {
-        auto from = getFrom();
+        auto from = getStructureOrigin(*this);
         if (from == std::nullopt)
             return SymbolicExpr::GetACSLError::PartiallyModifiedStruct;
 
@@ -2584,58 +2634,6 @@ namespace acslg::analyzer::symbolic {
         return os;
     }
 
-    Structure::From Structure::getFrom() const {
-        // This structure has a fixed 'from' only if every member is from the same `FieldAddress`
-        // **and** same `SourcePoint`.
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> commonBaseAddr{};
-        std::optional<SourcePoint> commonFromPoint{};
-        for (size_t index = 0; index < fields_.size(); ++index) {
-            auto &field = fields_.at(index);
-            auto symbol = dyn_cast<const Symbol>(field.get().get());
-            if (symbol == nullptr)
-                return std::nullopt;
-            auto fromAddr = symbol->getFromAddr();
-            if (fromAddr == std::nullopt)
-                return std::nullopt;
-            auto fieldAddr = dyn_cast<const FieldAddress>(fromAddr.value().get().get());
-            if (fieldAddr == nullptr)
-                return std::nullopt;
-
-            auto &base    = fieldAddr->getBaseAddr();
-            auto &fieldId = fieldAddr->getFieldIndex();
-            if (fieldId != index)
-                return std::nullopt;
-
-            if (commonBaseAddr == std::nullopt)
-                commonBaseAddr = base->addressClone().into_underlying();
-
-            auto fromPoint = symbol->getFromPoint();
-            if (fromPoint == std::nullopt)
-                return std::nullopt;
-            if (commonFromPoint == std::nullopt)
-                commonFromPoint.emplace(fromPoint.value());
-
-            if (*commonBaseAddr.value() != *base || commonFromPoint.value() != fromPoint.value())
-                return std::nullopt;
-        }
-        if (commonBaseAddr == std::nullopt || commonFromPoint == std::nullopt)
-            UNREACHABLE();
-
-        return std::pair{std::move(commonBaseAddr).value(), std::move(commonFromPoint).value()};
-    }
-
-    std::optional<utils::not_null<std::unique_ptr<const Address>>> Structure::getFromAddr() const {
-        if (auto from = getFrom())
-            return std::move(from.value().first);
-        return std::nullopt;
-    }
-
-    std::optional<SourcePoint> Structure::getFromPoint() const {
-        if (auto from = getFrom())
-            return std::move(from.value().second);
-        return std::nullopt;
-    }
-
     SourcePoint &SourcePoint::operator=(const SourcePoint &other) {
         if (this == &other)
             return *this;
@@ -2891,47 +2889,18 @@ namespace acslg::analyzer::symbolic {
 
     bool is_symbol_addr(const Address &a) noexcept { return isa<SymbolAddress>(a); }
 
-    namespace {
-        std::optional<AddrHandle> getStructureFromAddrHandle(ExprFactory &factory,
-                                                             const Structure &structure) {
-            std::optional<AddrHandle> commonBase;
-            std::optional<SourcePoint> commonPoint;
-            for (size_t index = 0; index < structure.getNumFields(); ++index) {
-                auto *symbol = dyn_cast<const Symbol>(structure.getFieldValue(index).get());
-                if (symbol == nullptr)
-                    return std::nullopt;
-
-                auto from = getFromAddrHandle(factory, *symbol);
-                if (!from)
-                    return std::nullopt;
-                auto *fieldAddr = from->dyn_cast<FieldAddress>();
-                if (fieldAddr == nullptr || fieldAddr->getFieldIndex() != index)
-                    return std::nullopt;
-
-                auto base = factory.importAddress(*fieldAddr->getBaseAddr());
-                auto point = symbol->getFromPoint();
-                if (!point)
-                    return std::nullopt;
-                if (!commonBase) {
-                    commonBase = base;
-                    commonPoint = *point;
-                    continue;
-                }
-                if (**commonBase != *base || *commonPoint != *point)
-                    return std::nullopt;
-            }
-            return commonBase;
-        }
-    } // namespace
+    std::optional<SourcePoint> Structure::getFromPoint() const {
+        auto origin = getStructureOrigin(*this);
+        if (!origin)
+            return std::nullopt;
+        return origin->point;
+    }
 
     std::optional<AddrHandle> getFromAddrHandle(ExprFactory &factory, const Symbol &symbol) {
-        if (auto symbolValue = dyn_cast<const SymbolValue>(&symbol))
-            return symbolValue->getFromAddrHandle();
-        if (auto symbolAddr = dyn_cast<const SymbolAddress>(&symbol))
-            return symbolAddr->getFromAddrHandle();
-        if (auto structure = dyn_cast<const Structure>(&symbol))
-            return getStructureFromAddrHandle(factory, *structure);
-        return std::nullopt;
+        auto origin = getBorrowedSymbolOrigin(symbol);
+        if (!origin)
+            return std::nullopt;
+        return factory.importAddress(*origin->address);
     }
 
     bool isFrom(const SymbolicExpr &expr, const Address &fromAddr, SourcePoint fromPoint) {
@@ -2943,13 +2912,8 @@ namespace acslg::analyzer::symbolic {
         if (!point || *point != fromPoint)
             return false;
 
-        if (ExprFactoryScope::hasCurrent()) {
-            auto from = getFromAddrHandle(ExprFactoryScope::current(), *symbol);
-            return from && fromAddr == **from;
-        }
-
-        auto from = symbol->getFromAddr();
-        return from && fromAddr == *from.value();
+        auto origin = getBorrowedSymbolOrigin(*symbol);
+        return origin && fromAddr == *origin->address;
     }
 
     namespace {

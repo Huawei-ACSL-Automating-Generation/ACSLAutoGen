@@ -970,9 +970,6 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<SymbolicExpr *> toSymbolicExpr();
         /// @brief Const downcast to the SymbolicExpr base.
         utils::not_null<const SymbolicExpr *> toSymbolicExpr() const;
-        /// @brief Original allocation address if any (e.g., variable or field).
-        virtual std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr()
-            const = 0;
         /// @brief Source point that created the symbol, if tracked.
         virtual std::optional<SourcePoint> getFromPoint() const = 0;
 
@@ -1003,11 +1000,9 @@ namespace acslg::analyzer::symbolic {
      *   Since id_ and name_ have been removed, a Structure can be constructed directly from the
      *   symbolic values of all its fields.
      *
-     * - **getFromAddr()**:
-     *   Invokes getFromAddr() on each field value. The function returns a common Address only if
-     *   every field yields a valid result and all results are FieldAddress instances with the same
-     *   base address and indices that correspond to the field values. Otherwise, it returns
-     *   monostate.
+     * - **Provenance**:
+     *   A structure has a common origin only when every field originates from the corresponding
+     *   FieldAddress with the same base address and source point.
      *
      * - **Equality and Hashing**:
      *   Both equality comparison and hash computation are defined as aggregation operations over
@@ -1074,7 +1069,6 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override;
         std::optional<SourcePoint> getFromPoint() const override;
         virtual std::size_t hash() const override;
         bool equal(const SymbolicExpr &expr) const override;
@@ -1087,11 +1081,6 @@ namespace acslg::analyzer::symbolic {
             WARN("Met Structure in getMaxDegree.");
             return -1;
         }
-
-      protected:
-        using From =
-            std::optional<std::pair<utils::not_null<std::unique_ptr<const Address>>, SourcePoint>>;
-        From getFrom() const;
 
       private:
         utils::expected<std::string, GetACSLError> doGetACSL(
@@ -1850,11 +1839,6 @@ namespace acslg::analyzer::symbolic {
 
         // Symbol
       public:
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
-            if (fromAddr_ == std::nullopt)
-                return std::nullopt;
-            return fromAddr_.value().clone().into_underlying();
-        }
         std::optional<AddrHandle> getFromAddrHandle() const {
             if (fromAddr_ == std::nullopt)
                 return std::nullopt;
@@ -2146,9 +2130,6 @@ namespace acslg::analyzer::symbolic {
 
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
-            return fromAddr_.clone().into_underlying();
-        }
         AddrHandle getFromAddrHandle() const { return AddrHandle{fromAddr_.get().get()}; }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const;
