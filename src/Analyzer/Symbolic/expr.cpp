@@ -646,9 +646,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle ExprFactory::simplifiedBinary(ExprHandle left,
                                              BinaryOpExpr::Operator op,
                                              ExprHandle right) {
-        auto binary =
-            std::make_unique<detail::BinaryOpExprNode>(cloneExpr(left), op, cloneExpr(right));
-        return simplifiedExprHandle(*this, *binary);
+        return simplifiedExprHandle(*this, *binary(left, op, right));
     }
 
     AddrHandle ExprFactory::variableAddress(utils::not_null<const clang::VarDecl *> from) {

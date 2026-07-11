@@ -1095,6 +1095,23 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(simplified, factory.literal(int64_t{3}));
     }
 
+    TEST(ExprFactoryTest, SimplifiedBinaryFallbackPreservesOperationAndChildHandles) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto i = factory.rangeIndex("i");
+        auto j = factory.rangeIndex("j");
+        auto product = factory.binary(
+            i, symbolic::BinaryOpExpr::Operator::Multiply, j);
+
+        auto simplified = factory.simplifiedBinary(
+            i, symbolic::BinaryOpExpr::Operator::Multiply, j);
+
+        EXPECT_EQ(simplified, product);
+        const auto &node = simplified.cast<symbolic::BinaryOpExpr>();
+        EXPECT_EQ(node.getLeft().get(), i.get().get());
+        EXPECT_EQ(node.getRight().get(), j.get().get());
+    }
+
     TEST(ExprFactoryTest, ScopedBooleanComparisonSimplificationImportsReturnedExpr) {
         ASTExtractor e;
         e.init(R"c(
