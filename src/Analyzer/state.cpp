@@ -497,11 +497,6 @@ namespace acslg::analyzer {
      * @param expr New symbolic value.
      */
     void Path::updateVarState(utils::not_null<const clang::VarDecl *> var,
-                              utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr) {
-        updateVarState(var, context_.getExprFactory().importExpr(*expr));
-    }
-
-    void Path::updateVarState(utils::not_null<const clang::VarDecl *> var,
                               symbolic::ExprHandle expr) {
         auto canonicalVar = var->getCanonicalDecl();
         auto addrIt       = varAddr_.find(canonicalVar);
@@ -2857,9 +2852,9 @@ namespace acslg::analyzer {
                         declStmt, context_.getSourceManager(), context_.getLangOptions());
 
                     auto varType = varDecl->getType();
+                    auto symbol = symbolic::getSymbol(varType, varAddrHandle, pointAfterDecl);
                     path->updateVarState(
-                        varDecl,
-                        symbolic::getSymbol(varType, varAddrHandle, pointAfterDecl));
+                        varDecl, context_.getExprFactory().importExpr(*symbol));
 
                     updatedPaths.push_back(std::move(path));
                     continue;
