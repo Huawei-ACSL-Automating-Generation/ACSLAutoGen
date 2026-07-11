@@ -743,10 +743,8 @@ namespace acslg::analyzer::symbolic {
                                          const clang::RecordDecl *record,
                                          AddrHandle baseAddr,
                                          size_t fieldIndex) {
-        std::unique_ptr<const Address> base = baseAddr->addressClone().into_underlying();
-        return internAddress(std::make_unique<FieldAddress>(
-            pointeeType, record, utils::not_null<std::unique_ptr<const Address>>{std::move(base)},
-            fieldIndex));
+        return internAddress(
+            std::make_unique<FieldAddress>(pointeeType, record, baseAddr, fieldIndex));
     }
 
     ExprHandle ExprFactory::structure(const clang::RecordDecl *record,
@@ -2482,7 +2480,7 @@ namespace acslg::analyzer::symbolic {
 
     FieldAddress::FieldAddress(const FieldAddress &other)
         : Address(other), definition_(other.definition_),
-          baseAddr_(other.baseAddr_->addressClone().into_underlying()),
+          baseAddr_(other.baseAddr_.copy()),
           fieldIndex_(other.fieldIndex_) {}
 
     FieldAddress &FieldAddress::operator=(const FieldAddress &other) {
@@ -2490,7 +2488,7 @@ namespace acslg::analyzer::symbolic {
             return *this;
         Address::operator=(other);
         definition_ = other.definition_;
-        baseAddr_   = other.baseAddr_->addressClone().into_underlying();
+        baseAddr_   = other.baseAddr_.copy();
         fieldIndex_ = other.fieldIndex_;
         return *this;
     }

@@ -2017,7 +2017,20 @@ namespace acslg::analyzer::symbolic {
             : Address(SymbolicExpr::ExprKind::K_FieldAddress,
                       SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                       pointeeType),
-              definition_(RD), baseAddr_(std::move(baseAddr)), fieldIndex_(fieldIndex) {
+              definition_(RD), baseAddr_(AddressChild::fromConstOwned(std::move(baseAddr))),
+              fieldIndex_(fieldIndex) {
+            if (!RD->isCompleteDefinition())
+                ERROR("Incomplete struct definition");
+            definition_ = RD->getDefinition();
+        };
+        FieldAddress(const clang::QualType pointeeType,
+                     const clang::RecordDecl *RD,
+                     AddrHandle baseAddr,
+                     size_t fieldIndex)
+            : Address(SymbolicExpr::ExprKind::K_FieldAddress,
+                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
+                      pointeeType),
+              definition_(RD), baseAddr_(baseAddr), fieldIndex_(fieldIndex) {
             if (!RD->isCompleteDefinition())
                 ERROR("Incomplete struct definition");
             definition_ = RD->getDefinition();
@@ -2089,7 +2102,7 @@ namespace acslg::analyzer::symbolic {
 
       private:
         utils::not_null<const clang::RecordDecl *> definition_;
-        utils::not_null<std::unique_ptr<const Address>> baseAddr_;
+        AddressChild baseAddr_;
         size_t fieldIndex_;
     };
 

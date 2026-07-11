@@ -2021,6 +2021,11 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(fieldAddrA, fieldAddrB);
         EXPECT_TRUE(fieldAddrA.isa<symbolic::FieldAddress>());
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
+        ASSERT_TRUE(fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle());
+        EXPECT_EQ(*fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle(), varAddrA);
+        auto clonedField = symbolic::cloneFieldAddress(fieldAddrA);
+        ASSERT_TRUE(clonedField->getBaseAddr().handle());
+        EXPECT_EQ(*clonedField->getBaseAddr().handle(), varAddrA);
     }
 
     TEST(ExprFactoryTest, LegacySymbolAddressDefaultOffsetUsesCurrentFactory) {
