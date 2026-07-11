@@ -127,8 +127,6 @@ namespace acslg::analyzer {
          * @param address The symbolic address to write to.
          * @param value The symbolic expression to store.
          */
-        void write(const symbolic::Address &address,
-                   utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> value);
         void write(const symbolic::Address &address, symbolic::ExprHandle value);
         void write(symbolic::AddrHandle address, symbolic::ExprHandle value);
 

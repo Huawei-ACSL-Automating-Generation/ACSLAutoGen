@@ -104,11 +104,6 @@ namespace acslg::analyzer {
             return cloneExpr(factory, expr).into_underlying();
         }
 
-        utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> buildUnknown(
-            symbolic::ExprFactory &factory) {
-            return factory.cloneExpr(factory.unknown());
-        }
-
         utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         cloneExpr(symbolic::ExprFactory &factory, const symbolic::SymbolicExpr &expr) {
             return factory.importAndCloneExpr(expr);
@@ -228,7 +223,7 @@ namespace acslg::analyzer {
                     DEBUG("mergeWith BigNum->data: writing Unknown due to mismatch");
                 }
             }
-            memoryState_.write(addrBox, buildUnknown(context_.getExprFactory()).into_underlying());
+            memoryState_.write(addrBox, context_.getExprFactory().unknown());
         }
 
         // Intersect path conditions; a merged path must satisfy constraints from both sides.
@@ -1884,11 +1879,6 @@ namespace acslg::analyzer {
 
     std::optional<symbolic::ExprHandle> MemoryModel::read(symbolic::AddrHandle addr) const {
         return read(*addr);
-    }
-
-    void MemoryModel::write(const symbolic::Address &addr,
-                            utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> value) {
-        writeImported(addr, importValue(*value));
     }
 
     void MemoryModel::write(const symbolic::Address &addr, symbolic::ExprHandle value) {

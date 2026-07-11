@@ -17,6 +17,10 @@ namespace acslg::test::unit::analyzer {
     using namespace acslg::analyzer;
     using namespace utils;
 
+    template <class ExprPtr> symbolic::ExprHandle internForTest(const ExprPtr &expr) {
+        return symbolic::ExprFactoryScope::current().importExpr(*expr);
+    }
+
     // TEST(PathTest, IsUnchangedState) {
     //     using enum SymbolicExpr::ScalarKind;
     //     TestPath dummyPath;
@@ -558,9 +562,9 @@ namespace acslg::test::unit::analyzer {
         auto addr     = makeVariableAddr(1);
         auto expr     = makeSymbolValue(42);
         auto saveExpr = cloneExpr(*expr);
-        mm.write(addr, std::move(expr));
+        mm.write(addr, internForTest(expr));
 
-        ASSERT_EQ(expr.get(), nullptr);
+        ASSERT_NE(expr.get(), nullptr);
         auto got = mm.read(addr);
         ASSERT_NE(got, nullopt);
         EXPECT_EQ(*got.value(), *saveExpr);
@@ -570,8 +574,10 @@ namespace acslg::test::unit::analyzer {
         MemoryModel mm;
 
         auto expected = makeSymbolValue(42);
-        mm.write(makeVariableAddr(1), cloneExpr(*expected));
-        mm.write(makeVariableAddr(2), cloneExpr(*expected));
+        auto expectedClone1 = cloneExpr(*expected);
+        auto expectedClone2 = cloneExpr(*expected);
+        mm.write(makeVariableAddr(1), internForTest(expectedClone1));
+        mm.write(makeVariableAddr(2), internForTest(expectedClone2));
         auto expectedHandle = symbolic::ExprFactoryScope::current().importExpr(*expected);
         mm.write(makeVariableAddr(3), expectedHandle);
 
@@ -616,7 +622,7 @@ namespace acslg::test::unit::analyzer {
         auto eA     = makeSymbolValue(1);
         auto saveEA = cloneExpr(*eA);
         auto addrAHandle = factory.importAddress(baseA);
-        mm.write(baseA, std::move(eA));
+        mm.write(baseA, internForTest(eA));
 
         // constantRange
         auto rangeB = makeRangeAddr(2, /*off=*/makeLiteralExpr(4).into_underlying(),
@@ -624,14 +630,14 @@ namespace acslg::test::unit::analyzer {
         auto eB     = makeSymbolValue(2);
         auto saveEB = cloneExpr(*eB);
         auto addrBHandle = factory.importAddress(rangeB);
-        mm.write(rangeB, std::move(eB));
+        mm.write(rangeB, internForTest(eB));
 
         // symbolicRange
         auto rangeC = makeRangeAddr(3, /*off=*/makeSymbolValue(3), nullptr);
         auto eC     = makeSymbolValue(3);
         auto saveEC = cloneExpr(*eC);
         auto addrCHandle = factory.importAddress(rangeC);
-        mm.write(rangeC, std::move(eC));
+        mm.write(rangeC, internForTest(eC));
 
         bool fA = false, fB = false, fC = false;
         for (auto &&[addr, value] : mm.flat()) {
@@ -661,28 +667,28 @@ namespace acslg::test::unit::analyzer {
                                     makeLiteralExpr(10U).into_underlying());
         auto eA     = makeSymbolValue(100);
         auto saveA  = cloneExpr(*eA);
-        mm.write(aRange, std::move(eA));
+        mm.write(aRange, internForTest(eA));
 
         // B: [3,8)
         auto bRange = makeRangeAddr(baseId, makeLiteralExpr(3U).into_underlying(),
                                     makeLiteralExpr(5U).into_underlying());
         auto eB     = makeSymbolValue(200);
         auto saveB  = cloneExpr(*eB);
-        mm.write(bRange, std::move(eB));
+        mm.write(bRange, internForTest(eB));
 
         // C: [1,3)
         auto cRange = makeRangeAddr(baseId, makeLiteralExpr(1U).into_underlying(),
                                     makeLiteralExpr(2U).into_underlying());
         auto eC     = makeSymbolValue(300);
         auto saveC  = cloneExpr(*eC);
-        mm.write(cRange, std::move(eC));
+        mm.write(cRange, internForTest(eC));
 
         // D: [7,10)
         auto dRange = makeRangeAddr(baseId, makeLiteralExpr(7U).into_underlying(),
                                     makeLiteralExpr(3U).into_underlying());
         auto eD     = makeSymbolValue(400);
         auto saveD  = cloneExpr(*eD);
-        mm.write(dRange, std::move(eD));
+        mm.write(dRange, internForTest(eD));
 
         //  [0] -> A
         //  [1,2] -> C
@@ -711,12 +717,12 @@ namespace acslg::test::unit::analyzer {
                                    makeLiteralExpr(4U).into_underlying());
         auto eX    = makeSymbolValue(500);
         auto saveX = cloneExpr(*eX);
-        mm.write(r, std::move(eX));
+        mm.write(r, internForTest(eX));
 
         // Y: [5,9)
         auto eY    = makeSymbolValue(600);
         auto saveY = cloneExpr(*eY);
-        mm.write(r, std::move(eY));
+        mm.write(r, internForTest(eY));
 
         for (uint64_t off = 5; off < 9; ++off) {
             EXPECT_TRUE(ExpectReadEqAt(mm, baseId, off, *saveY));
@@ -849,13 +855,13 @@ namespace acslg::test::unit::analyzer {
                                 makeLiteralExpr(3U).into_underlying());
         auto v  = makeSymbolValue(1000);
         auto sv = cloneExpr(*v);
-        mm.write(r1, std::move(v));
+        mm.write(r1, internForTest(v));
 
         // [3,5) value=V
         auto r2 = makeRangeAddr(baseId, makeLiteralExpr(3U).into_underlying(),
                                 makeLiteralExpr(2U).into_underlying());
         auto v2 = makeSymbolValue(1000); // same value
-        mm.write(r2, std::move(v2));
+        mm.write(r2, internForTest(v2));
 
         // Trigger constant-range merge
         mm.mergeConstantRanges();
@@ -878,14 +884,14 @@ namespace acslg::test::unit::analyzer {
                                 makeLiteralExpr(3U).into_underlying());
         auto v1 = makeSymbolValue(1111);
         auto s1 = cloneExpr(*v1);
-        mm.write(r1, std::move(v1));
+        mm.write(r1, internForTest(v1));
 
         // [3,5) value=V2 (different value)
         auto r2 = makeRangeAddr(baseId, makeLiteralExpr(3U).into_underlying(),
                                 makeLiteralExpr(2U).into_underlying());
         auto v2 = makeSymbolValue(2222);
         auto s2 = cloneExpr(*v2);
-        mm.write(r2, std::move(v2));
+        mm.write(r2, internForTest(v2));
 
         mm.mergeConstantRanges();
 
@@ -914,9 +920,9 @@ namespace acslg::test::unit::analyzer {
 
         auto v = makeSymbolValue(3333);
         auto s = cloneExpr(*v);
-        mm.write(r1, std::move(v));
-        mm.write(r2, makeSymbolValue(3333));
-        mm.write(r3, makeSymbolValue(3333));
+        mm.write(r1, internForTest(v));
+        mm.write(r2, internForTest(makeSymbolValue(3333)));
+        mm.write(r3, internForTest(makeSymbolValue(3333)));
 
         mm.mergeConstantRanges();
 
@@ -942,9 +948,9 @@ namespace acslg::test::unit::analyzer {
 
         auto v = makeSymbolValue(4444);
         auto s = cloneExpr(*v);
-        mm.write(r1, std::move(v));
-        mm.write(r2, makeSymbolValue(5555)); // different
-        mm.write(r3, makeSymbolValue(4444)); // same as r1
+        mm.write(r1, internForTest(v));
+        mm.write(r2, internForTest(makeSymbolValue(5555))); // different
+        mm.write(r3, internForTest(makeSymbolValue(4444))); // same as r1
 
         mm.mergeConstantRanges();
 
@@ -988,9 +994,9 @@ namespace acslg::test::unit::analyzer {
         // Same value
         auto v  = makeSymbolValue(7777);
         auto sv = cloneExpr(*v);
-        mm.write(a0, std::move(v));
-        mm.write(a1, makeSymbolValue(7777));
-        mm.write(a2, makeSymbolValue(7777));
+        mm.write(a0, internForTest(v));
+        mm.write(a1, internForTest(makeSymbolValue(7777)));
+        mm.write(a2, internForTest(makeSymbolValue(7777)));
 
         // Trigger symbolic-range merge (hash-based chaining)
         mm.mergeSymbolicRanges();
@@ -1010,8 +1016,8 @@ namespace acslg::test::unit::analyzer {
 
         auto v  = makeSymbolValue(8888);
         auto sv = cloneExpr(*v);
-        mm.write(a0, std::move(v));
-        mm.write(a2, makeSymbolValue(8888)); // same value but with a gap of 1
+        mm.write(a0, internForTest(v));
+        mm.write(a2, internForTest(makeSymbolValue(8888))); // same value but with a gap of 1
 
         mm.mergeSymbolicRanges();
 
@@ -1032,8 +1038,8 @@ namespace acslg::test::unit::analyzer {
         auto v1 = makeSymbolValue(10001);
         auto v2 = makeSymbolValue(10002);
         auto s1 = cloneExpr(*v1);
-        mm.write(a0, std::move(v1));
-        mm.write(a1, std::move(v2)); // different value
+        mm.write(a0, internForTest(v1));
+        mm.write(a1, internForTest(v2)); // different value
 
         mm.mergeSymbolicRanges();
 
@@ -1071,10 +1077,10 @@ namespace acslg::test::unit::analyzer {
         auto vB  = makeSymbolValue(1212);
         auto svB = cloneExpr(*vB);
 
-        mm.write(a0A, std::move(vA));
-        mm.write(a1A, makeSymbolValue(1212));
-        mm.write(a0B, std::move(vB));
-        mm.write(a1B, makeSymbolValue(1212));
+        mm.write(a0A, internForTest(vA));
+        mm.write(a1A, internForTest(makeSymbolValue(1212)));
+        mm.write(a0B, internForTest(vB));
+        mm.write(a1B, internForTest(makeSymbolValue(1212)));
 
         mm.mergeSymbolicRanges();
 
@@ -1110,8 +1116,8 @@ namespace acslg::test::unit::analyzer {
         // Same value
         auto v  = makeSymbolValue(1313);
         auto sv = cloneExpr(*v);
-        mm.write(a0, std::move(v));
-        mm.write(a1, makeSymbolValue(1313));
+        mm.write(a0, internForTest(v));
+        mm.write(a1, internForTest(makeSymbolValue(1313)));
 
         mm.mergeSymbolicRanges();
 
@@ -1142,7 +1148,8 @@ namespace acslg::test::unit::analyzer {
         // A: [0,10) -> i
         auto aRange = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
                                     makeLiteralExpr(10U).into_underlying());
-        mm.write(aRange, makeRangeIndexExpr("i").into_underlying());
+        auto rangeIndex = makeRangeIndexExpr("i");
+        mm.write(aRange, internForTest(rangeIndex));
 
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 0, symbolic::detail::LiteralExprNode{uint64_t{0}}));
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 1, symbolic::detail::LiteralExprNode{uint64_t{1}}));
@@ -1168,7 +1175,8 @@ namespace acslg::test::unit::analyzer {
                                     makeLiteralExpr(1U).into_underlying());
         auto v      = makeSymbolValue(1313);
 
-        mm.write(aRange, cloneExpr(*v));
+        auto valueClone = cloneExpr(*v);
+        mm.write(aRange, internForTest(valueClone));
 
         // B: an addr with offset X
         auto bAddr = makeRangeAddr(baseId, cloneExpr(*X).into_underlying(), nullptr);

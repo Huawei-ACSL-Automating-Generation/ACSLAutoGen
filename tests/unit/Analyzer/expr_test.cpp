@@ -190,6 +190,10 @@ namespace acslg::test::unit::analyzer {
         using namespace symbolic;
         unique_ptr<SymbolicExpr> makeConstU64(uint64_t v) { return make_unique<detail::LiteralExprNode>(v); }
 
+        template <class ExprPtr> ExprHandle internForTest(const ExprPtr &expr) {
+            return ExprFactoryScope::current().importExpr(*expr);
+        }
+
         unique_ptr<SymbolicExpr> makeAdd(unique_ptr<SymbolicExpr> a, unique_ptr<SymbolicExpr> b) {
             return make_unique<BinaryOpExpr>(std::move(a), BinaryOpExpr::Operator::Add,
                                              std::move(b));
@@ -225,7 +229,7 @@ namespace acslg::test::unit::analyzer {
 
     TEST_F(SubstituteTest, VarWithMatchingFromIsReplacedFromLoopEntry) {
         auto var0Addr = makeVariableAddr(0);
-        mm.write(var0Addr, makeConstU64(42));
+        mm.write(var0Addr, internForTest(makeConstU64(42)));
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
@@ -243,7 +247,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactoryScope scope(factory);
 
         auto var0Addr = makeVariableAddr(0);
-        mm.write(var0Addr, makeConstU64(42));
+        mm.write(var0Addr, internForTest(makeConstU64(42)));
 
         auto point   = getSourcePoint(0);
         auto varNode = makeSymbolValue(0, point);
@@ -255,7 +259,7 @@ namespace acslg::test::unit::analyzer {
 
     TEST_F(SubstituteTest, PathSubstitutionHandleReplacesSymbolValueThroughFactory) {
         auto var0Addr = makeVariableAddr(0);
-        mm.write(var0Addr, makeConstU64(42));
+        mm.write(var0Addr, internForTest(makeConstU64(42)));
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
@@ -270,7 +274,7 @@ namespace acslg::test::unit::analyzer {
 
     TEST_F(SubstituteTest, VarWithDifferentFromIsKeptUnchanged) {
         auto var0Addr = makeVariableAddr(0);
-        mm.write(var0Addr, makeConstU64(7));
+        mm.write(var0Addr, internForTest(makeConstU64(7)));
 
         auto point   = getSourcePoint(0);
         auto varNode = makeSymbolValue(0, point);
@@ -286,8 +290,8 @@ namespace acslg::test::unit::analyzer {
 
     TEST_F(SubstituteTest, CompositeExprIsSubstitutedRecursively) {
         // loop-entry：g1 -> 1, g2 -> 2
-        mm.write(makeVariableAddr(1), makeConstU64(1));
-        mm.write(makeVariableAddr(2), makeConstU64(2));
+        mm.write(makeVariableAddr(1), internForTest(makeConstU64(1)));
+        mm.write(makeVariableAddr(2), internForTest(makeConstU64(2)));
 
         auto point = getSourcePoint(0);
 
@@ -304,8 +308,8 @@ namespace acslg::test::unit::analyzer {
     }
 
     TEST_F(SubstituteTest, PathSubstitutionHandleRebuildsCompositeExpression) {
-        mm.write(makeVariableAddr(1), makeConstU64(1));
-        mm.write(makeVariableAddr(2), makeConstU64(2));
+        mm.write(makeVariableAddr(1), internForTest(makeConstU64(1)));
+        mm.write(makeVariableAddr(2), internForTest(makeConstU64(2)));
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
@@ -326,10 +330,10 @@ namespace acslg::test::unit::analyzer {
     TEST_F(SubstituteTest, SymbolAddrResolvedBaseAndOffsetApplied) {
         auto originAddr = makeVariableAddr(3);
         auto realAddr   = makeSimpleSymbolAddr(4);
-        mm.write(originAddr, realAddr.clone());
+        mm.write(originAddr, internForTest(realAddr.clone()));
 
         // Var(g5) = 3
-        mm.write(makeVariableAddr(5), makeConstU64(3));
+        mm.write(makeVariableAddr(5), internForTest(makeConstU64(3)));
 
         auto point = getSourcePoint(0);
 
@@ -368,7 +372,7 @@ namespace acslg::test::unit::analyzer {
     TEST_F(SubstituteTest, FromPointMismatchReturnsUnchangedSymbolAddr) {
         auto originAddr = makeVariableAddr(8);
         auto realAddr   = makeSimpleSymbolAddr(9);
-        mm.write(originAddr, realAddr.clone());
+        mm.write(originAddr, internForTest(realAddr.clone()));
 
         auto point = getSourcePoint(0);
         auto sym   = makeRangeAddr(/*origin id*/ 8, makeConstU64(1), nullptr, point);
@@ -387,7 +391,7 @@ namespace acslg::test::unit::analyzer {
 
         auto originAddr = makeVariableAddr(8);
         auto realAddr   = makeSimpleSymbolAddr(9);
-        mm.write(originAddr, realAddr.clone());
+        mm.write(originAddr, internForTest(realAddr.clone()));
 
         auto point = getSourcePoint(0);
         auto sym   = makeRangeAddr(/*origin id*/ 8, makeConstU64(1), nullptr, point);
@@ -416,7 +420,7 @@ namespace acslg::test::unit::analyzer {
 
     TEST_F(SubstituteTest, ResolvedValueNotAddressShouldError) {
         auto originAddr = makeVariableAddr(10);
-        mm.write(originAddr, makeConstU64(5));
+        mm.write(originAddr, internForTest(makeConstU64(5)));
 
         auto point = getSourcePoint(0);
         auto sym   = makeRangeAddr(/*origin id*/ 10, makeConstU64(0), nullptr, point);
