@@ -119,10 +119,8 @@ namespace acslg::analyzer {
          * @param addr The symbolic address to read from.
          * @return Optional containing the expression if found, otherwise empty.
          */
-        std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> read(
-            const symbolic::Address &addr) const;
-        std::optional<symbolic::ExprHandle> readHandle(const symbolic::Address &addr) const;
-        std::optional<symbolic::ExprHandle> readHandle(symbolic::AddrHandle addr) const;
+        std::optional<symbolic::ExprHandle> read(const symbolic::Address &addr) const;
+        std::optional<symbolic::ExprHandle> read(symbolic::AddrHandle addr) const;
 
         /**
          * @brief Writes a symbolic expression to the given address.

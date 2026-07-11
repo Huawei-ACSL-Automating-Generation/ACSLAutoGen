@@ -355,7 +355,7 @@ namespace acslg::test::unit::analyzer {
 
         const auto &path = *postState->getPaths().front();
         ASSERT_EQ(path.getVarAddr().size(), 1u);
-        auto value = path.getMemoryState().readHandle(path.getVarAddr().begin()->second);
+        auto value = path.getMemoryState().read(path.getVarAddr().begin()->second);
         ASSERT_TRUE(value.has_value());
         auto expected = postState->getExprFactory().literal(42);
         EXPECT_EQ(value->get().get(), expected.get().get());
@@ -474,7 +474,7 @@ namespace acslg::test::unit::analyzer {
         auto first  = path.allocMemory(var);
         auto second = path.allocMemory(var);
         auto cloned = path.clone();
-        auto stored = path.getMemoryState().readHandle(first);
+        auto stored = path.getMemoryState().read(first);
         ASSERT_TRUE(stored.has_value());
 
         EXPECT_EQ(first.get().get(), second.get().get());
@@ -588,11 +588,7 @@ namespace acslg::test::unit::analyzer {
         auto readBack = mm.read(makeVariableAddr(1));
         ASSERT_TRUE(readBack);
         EXPECT_EQ(*readBack.value(), *expected);
-        EXPECT_NE(readBack.value().get().get(), flatValues[0]);
-
-        auto readBackHandle = mm.readHandle(makeVariableAddr(1));
-        ASSERT_TRUE(readBackHandle);
-        EXPECT_EQ(readBackHandle->get().get(), flatValues[0]);
+        EXPECT_EQ(readBack.value().get().get(), flatValues[0]);
     }
 
     TEST_F(MemoryModelTest, AddrHandleReadWriteUsesInternedAddressAndValue) {
@@ -606,7 +602,7 @@ namespace acslg::test::unit::analyzer {
         mm.write(addr, value);
         EXPECT_TRUE(mm.contains(addr));
 
-        auto readBack = mm.readHandle(addr);
+        auto readBack = mm.read(addr);
         ASSERT_TRUE(readBack);
         EXPECT_EQ(readBack->get().get(), value.get().get());
     }
