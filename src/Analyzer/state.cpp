@@ -301,12 +301,12 @@ namespace acslg::analyzer {
                     ERROR("Value of ArraySubscriptExpr's base is not 'symbolic::SymbolAddress', "
                           "base is "
                           "neither pointer nor std::array?");
-                auto idxEval    = evalExpr(arr->getIdx());
+                auto idxEval    = evalExprHandles(arr->getIdx());
                 if (idxEval.second.size() != 1)
                     ERROR("This location does not support control flow branches.");
                 auto &factory = context_.getExprFactory();
                 symbolic::Addr baseAddrFacade{factory, factory.importAddress(*symbolAddr)};
-                symbolic::Expr idxExpr{factory, factory.importExpr(*idxEval.second[0])};
+                symbolic::Expr idxExpr{factory, idxEval.second[0]};
                 auto resultAddr = baseAddrFacade.withAddedOffset(idxExpr);
                 if (!memoryState_.contains(resultAddr.handle())) {
                     auto newSymbol = getSymbol(arr->getType(), resultAddr.handle(), startPoint_);
@@ -321,11 +321,11 @@ namespace acslg::analyzer {
 
         if (auto *uop = dyn_cast<clang::UnaryOperator>(lexpr)) {
             if (uop->getOpcode() == clang::UnaryOperatorKind::UO_Deref) {
-                auto addrEval = evalExpr(uop->getSubExpr());
+                auto addrEval = evalExprHandles(uop->getSubExpr());
                 if (addrEval.second.size() != 1)
                     TODO();
 
-                auto addrExpr = std::move(addrEval.second[0]);
+                auto addrExpr = addrEval.second[0];
                 auto &factory = context_.getExprFactory();
                 if (auto addr = symbolic::tryEvalAsSymbolAddrHandle(factory, *addrExpr)) {
                     if (!memoryState_.contains(*addr)) {
@@ -351,10 +351,10 @@ namespace acslg::analyzer {
             auto RD        = FD->getParent();
 
             if (mem->isArrow()) {
-                auto addrEval = evalExpr(base);
+                auto addrEval = evalExprHandles(base);
                 if (addrEval.second.size() != 1)
                     ERROR("This location does not support control flow branches.");
-                auto baseExpr = std::move(addrEval.second[0]);
+                auto baseExpr = addrEval.second[0];
                 auto &factory = context_.getExprFactory();
                 auto baseAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, *baseExpr);
                 if (baseAddr == std::nullopt)
