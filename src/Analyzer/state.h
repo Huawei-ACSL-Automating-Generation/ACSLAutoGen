@@ -702,8 +702,6 @@ namespace acslg::analyzer {
          * @param addr [in] Target address.
          * @param expr [in] Symbolic expression to store.
          */
-        void updateMemory(const symbolic::Address &addr,
-                          utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr);
         void updateMemory(const symbolic::Address &addr, symbolic::ExprHandle expr);
         void updateMemory(symbolic::AddrHandle addr, symbolic::ExprHandle expr);
         /**
@@ -717,17 +715,9 @@ namespace acslg::analyzer {
          * @brief Add a new constraint to the path condition set.
          * @param cond [in] Constraint expression to insert.
          */
-        void insertPathCondition(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> cond);
         void insertPathCondition(symbolic::ExprHandle cond);
 
-        void setReturnExpr(
-            std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> expr) {
-            if (expr == std::nullopt) {
-                returnExpr_ = std::nullopt;
-                return;
-            }
-            returnExpr_.emplace(context_.getExprFactory().importExpr(*expr.value()));
-        };
+        void setReturnExpr(std::nullopt_t) { returnExpr_.reset(); }
         void setReturnExpr(symbolic::ExprHandle expr) {
             returnExpr_.emplace(context_.getExprFactory().importExpr(*expr));
         }

@@ -267,7 +267,7 @@ namespace acslg::analyzer {
 
             auto symbol = getSymbol(ty, context_.getExprFactory().importAddress(*addr),
                                     startPoint_);
-            updateMemory(*addr, std::move(symbol));
+            updateMemory(*addr, context_.getExprFactory().importExpr(*symbol));
         }
     }
 
@@ -437,31 +437,6 @@ namespace acslg::analyzer {
      * @param addr Target address for the write.
      * @param expr Symbolic value to store.
      */
-    void Path::updateMemory(const symbolic::Address &addr,
-                            utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr) {
-        if (expr->isUnknown()) {
-            if (auto *fieldAddr = symbolic::dyn_cast<symbolic::FieldAddress>(&addr)) {
-                if (fieldAddr->getDefinition() &&
-                    fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
-                    fieldAddr->getFieldIndex() == 4) {
-                    if (stmtCtx_) {
-                        auto loc      = stmtCtx_->getBeginLoc();
-                        auto &SM      = context_.getSourceManager();
-                        auto presumed = SM.getPresumedLoc(loc);
-                        if (presumed.isValid()) {
-                            DEBUG("updateMemory Unknown BigNum->data at "
-                                  << presumed.getFilename() << ":" << presumed.getLine() << ":"
-                                  << presumed.getColumn());
-                        }
-                    } else {
-                        DEBUG("updateMemory Unknown BigNum->data (no stmtCtx)");
-                    }
-                }
-            }
-        }
-        memoryState_.write(addr, std::move(expr).into_underlying());
-    }
-
     void Path::updateMemory(const symbolic::Address &addr, symbolic::ExprHandle expr) {
         auto imported = context_.getExprFactory().importExpr(*expr);
         if (imported->isUnknown()) {
@@ -511,10 +486,6 @@ namespace acslg::analyzer {
      * @brief Insert a new predicate into the path condition set.
      * @param cond Condition to add.
      */
-    void Path::insertPathCondition(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> cond) {
-        pathConditions_.emplace(context_.getExprFactory().importExpr(*cond));
-    }
-
     void Path::insertPathCondition(symbolic::ExprHandle cond) {
         pathConditions_.emplace(context_.getExprFactory().importExpr(*cond));
     }
