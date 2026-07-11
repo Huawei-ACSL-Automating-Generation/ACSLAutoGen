@@ -100,7 +100,6 @@ namespace acslg::analyzer {
 
         using symbolic::cloneStructure;
         using symbolic::cloneVariableAddress;
-        using symbolic::makeStructure;
         using symbolic::makeVariableAddress;
     } // namespace
 

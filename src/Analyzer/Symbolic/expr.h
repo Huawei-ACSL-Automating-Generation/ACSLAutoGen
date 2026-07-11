@@ -2140,33 +2140,12 @@ namespace acslg::analyzer::symbolic {
                                                  SourcePoint fromPoint);
     std::unique_ptr<SymbolAddress> cloneSymbolAddress(AddrHandle address);
     std::unique_ptr<SymbolAddress> cloneSymbolAddress(const SymbolAddress &address);
-    std::unique_ptr<SymbolAddress> makeSymbolAddress(ExprFactory &factory,
-                                                     clang::QualType pointeeType,
-                                                     SourcePoint fromPoint);
-    std::unique_ptr<SymbolAddress> makeSymbolAddress(clang::QualType pointeeType,
-                                                     std::unique_ptr<Address> from,
-                                                     SourcePoint fromPoint);
     std::unique_ptr<VariableAddress> cloneVariableAddress(AddrHandle address);
     std::unique_ptr<VariableAddress> makeVariableAddress(
         ExprFactory &factory,
         utils::not_null<const clang::VarDecl *> from);
     std::unique_ptr<FieldAddress> cloneFieldAddress(AddrHandle address);
-    std::unique_ptr<FieldAddress> makeFieldAddress(ExprFactory &factory,
-                                                   clang::QualType pointeeType,
-                                                   const clang::RecordDecl *record,
-                                                   std::unique_ptr<Address> base,
-                                                   size_t fieldIndex);
-    std::unique_ptr<FieldAddress> makeFieldAddress(ExprFactory &factory,
-                                                   clang::QualType pointeeType,
-                                                   const clang::RecordDecl *record,
-                                                   AddrHandle base,
-                                                   size_t fieldIndex);
     std::unique_ptr<Structure> cloneStructure(ExprHandle structure);
-    std::unique_ptr<Structure> makeStructure(ExprFactory &factory,
-                                             const clang::RecordDecl *record,
-                                             const clang::ASTRecordLayout &layout,
-                                             std::unique_ptr<Address> from,
-                                             SourcePoint fromPoint);
 
     enum class Operator : unsigned {
 #define ALL_OP(name, tok, prec, isRightAssoc) name,
