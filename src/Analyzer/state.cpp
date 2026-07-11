@@ -1667,6 +1667,15 @@ namespace acslg::analyzer {
         return eval_result;
     }
 
+    Path::EvalHandleResult Path::evalExprHandles(const clang::Expr *expr) {
+        auto ownedResult = evalExpr(expr);
+        std::vector<symbolic::ExprHandle> handles;
+        handles.reserve(ownedResult.second.size());
+        for (const auto &value : ownedResult.second)
+            handles.emplace_back(context_.getExprFactory().importExpr(*value));
+        return {std::move(ownedResult.first), std::move(handles)};
+    }
+
     std::string Path::dump() const {
         using namespace utils::dump_fmt;
 

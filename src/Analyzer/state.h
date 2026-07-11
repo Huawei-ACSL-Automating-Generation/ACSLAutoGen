@@ -634,6 +634,9 @@ namespace acslg::analyzer {
     class Path {
       public:
         using EvalResult = std::pair<std::vector<utils::not_null<std::unique_ptr<Path>>>, Formulas>;
+        using EvalHandleResult =
+            std::pair<std::vector<utils::not_null<std::unique_ptr<Path>>>,
+                      std::vector<symbolic::ExprHandle>>;
 
         /**
          * @brief Construct a path with an initial source point.
@@ -769,6 +772,7 @@ namespace acslg::analyzer {
          * @return Pair of forked paths (if branching occurs) and resulting symbolic values.
          */
         EvalResult evalExpr(const clang::Expr *expr);
+        EvalHandleResult evalExprHandles(const clang::Expr *expr);
         friend class ProgramState;
 
         auto getVarAddr() const -> const auto & { return varAddr_; };

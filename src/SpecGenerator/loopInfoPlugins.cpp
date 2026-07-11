@@ -341,13 +341,13 @@ namespace acslg::spec_generator {
 
             auto unchangedAfterOneRound = [&](const clang::Expr *expr) -> bool {
                 auto state            = entryAndCurrentInfo.symbolicLoopCurrent->clone();
-                auto [_, valueVector] = entryPath->evalExpr(expr);
+                auto [_, valueVector] = entryPath->evalExprHandles(expr);
                 if (valueVector.size() != 1)
                     ERROR("Do not support branch at here");
                 auto preValue = std::move(valueVector[0]);
 
                 for (auto &path : state->getPaths()) {
-                    tie(std::ignore, valueVector) = path->evalExpr(expr);
+                    tie(std::ignore, valueVector) = path->evalExprHandles(expr);
                     if (valueVector.size() != 1)
                         ERROR("Do not support branch at here");
                     auto currentValue = std::move(valueVector[0]);
@@ -459,7 +459,7 @@ namespace acslg::spec_generator {
             std::optional<utils::not_null<const clang::Expr *>> indexExpr;
             std::optional<symb::AddrHandle> indexRealAddr;
             std::optional<symb::AddrHandle> indexSymbolicAddr;
-            std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> indexValue;
+            std::optional<symb::ExprHandle> indexValue;
             std::optional<clang::BinaryOperator::Opcode> opCode;
             auto &factory = symb::ExprFactoryScope::current();
             std::optional<symb::ExprHandle> boundValue;
@@ -505,7 +505,7 @@ namespace acslg::spec_generator {
                 }
 
                 auto [_, values] =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExpr(index);
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExprHandles(index);
                 if (values.size() != 1)
                     UNREACHABLE();
                 indexValue = std::move(values.at(0));
@@ -516,10 +516,10 @@ namespace acslg::spec_generator {
                         ->extractLValueHandle(index);
 
                 if (unchangedAfterOneRound(bound)) {
-                    auto evalResult = entryPath->evalExpr(bound);
+                    auto evalResult = entryPath->evalExprHandles(bound);
                     if (evalResult.second.size() != 1)
                         ERROR("This location does not support control flow branches.");
-                    boundValue = factory.importExpr(*evalResult.second.front());
+                    boundValue = evalResult.second.front();
                 } else {
                     INFO("Bound expr is changed after one round.");
                     return false;
@@ -590,7 +590,8 @@ namespace acslg::spec_generator {
                 }
 
                 auto [_, values] =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExpr(unaryExpr);
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExprHandles(
+                        unaryExpr);
                 if (values.size() != 1)
                     UNREACHABLE();
                 indexValue = std::move(values.at(0));
@@ -660,7 +661,8 @@ namespace acslg::spec_generator {
                 }
 
                 auto [_, values] =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExpr(refExpr);
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExprHandles(
+                        refExpr);
                 if (values.size() != 1)
                     UNREACHABLE();
                 indexValue = std::move(values.at(0));
@@ -700,7 +702,7 @@ namespace acslg::spec_generator {
                 LoopInfo::IndexInfo{.indexExpr          = std::move(indexExpr.value()),
                                     .indexRealAddr      = indexRealAddr.value(),
                                     .indexSymbolicAddr = indexSymbolicAddr.value(),
-                                    .indexSymbolicValue = factory.importExpr(*indexValue.value()),
+                                    .indexSymbolicValue = indexValue.value(),
                                     .op                 = std::move(opCode.value()),
                                     .indexBound         = boundValue.value(),
                                     .preciseLoopCount   = preciseLoopCount.value(),

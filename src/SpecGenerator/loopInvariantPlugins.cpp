@@ -489,7 +489,7 @@ namespace acslg::spec_generator {
             }
 
             // Evaluate condExpr directly on the entry path, and require it to be non-branching.
-            auto [_, evalExprs] = symbolEntry->evalExpr(loopInfo.condExpr);
+            auto [_, evalExprs] = symbolEntry->evalExprHandles(loopInfo.condExpr);
             if (evalExprs.size() != 1)
                 ERROR("Branching is not allowed here.");
             auto &loopCond = evalExprs.front();
@@ -503,7 +503,8 @@ namespace acslg::spec_generator {
             }
 
             auto [spec, normalPostInfos, interruptPostInfos] =
-                analyzer::buildLoopInvariant(std::move(loopCond).into_underlying(), *symbolEntry,
+                analyzer::buildLoopInvariant(factory.cloneExpr(loopCond).into_underlying(),
+                                             *symbolEntry,
                                              *loopCurrent, entryAndCurrentInfo.inactivePaths);
 
             auto collectPathConds = [](analyzer::PathConditionList conds) {
@@ -1332,7 +1333,7 @@ namespace acslg::spec_generator {
                         if (!maxValue.isa<symb::SymbolValue>())
                             return;
 
-                        auto evalResult = path->evalExpr(elementExpr);
+                        auto evalResult = path->evalExprHandles(elementExpr);
                         if (evalResult.second.size() != 1)
                             ERROR("Branch isn't permitted here.");
                         auto &elementValue = evalResult.second.front();

@@ -354,6 +354,39 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(cloned->getVarStateHandle(var).get().get(), stored->get().get());
     }
 
+    TEST(PathTest, EvalExprHandlesPreservesInternedConditionalResults) {
+        ASTExtractor extractor(R"c(
+            int func(int value) {
+                return value ? 1 : 2;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        auto *var  = extractor.findFirstDecl<ParmVarDecl>();
+        auto *cond = extractor.findFirstStmt<ConditionalOperator>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(var, nullptr);
+        ASSERT_NE(cond, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(
+            func, extractor.getSourceManager(), extractor.getLangOptions());
+        Path path(context, point);
+        path.allocMemory(var, true);
+
+        auto result = path.evalExprHandles(cond);
+        ASSERT_EQ(result.first.size(), 1u);
+        ASSERT_EQ(result.second.size(), 2u);
+
+        auto one = context.getExprFactory().literal(1);
+        auto two = context.getExprFactory().literal(2);
+        std::unordered_set<const symbolic::SymbolicExpr *> nodes;
+        for (auto value : result.second)
+            nodes.emplace(value.get().get());
+        EXPECT_TRUE(nodes.contains(one.get().get()));
+        EXPECT_TRUE(nodes.contains(two.get().get()));
+    }
+
     TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
         MemoryModel mm;
 
