@@ -64,9 +64,8 @@ namespace acslg::spec_generator {
             return plugins;
         }
 
-        utils::not_null<std::unique_ptr<symb::SymbolicExpr>> buildUnknown() {
-            auto &factory = symb::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.unknown());
+        symb::ExprHandle unknownHandle() {
+            return symb::ExprFactoryScope::current().unknown();
         }
 
     } // namespace
@@ -284,9 +283,7 @@ namespace acslg::spec_generator {
                     continue;
                 }
 
-                lhs.memoryMap.insert_or_assign(addr,
-                                               detail::importPostExprThroughCurrentFactory(
-                                                   *buildUnknown()));
+                lhs.memoryMap.insert_or_assign(addr, unknownHandle());
             }
 
             analyzer::PathConditions intersected;
@@ -300,7 +297,7 @@ namespace acslg::spec_generator {
                 if (!(lhs.returnExpr && rhs.returnExpr))
                     UNREACHABLE();
                 if (!exprEqual(*lhs.returnExpr.value(), *rhs.returnExpr.value())) {
-                    lhs.returnExpr = detail::importPostExprThroughCurrentFactory(*buildUnknown());
+                    lhs.returnExpr = unknownHandle();
                 }
             }
         };
