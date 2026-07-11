@@ -546,7 +546,7 @@ namespace acslg::analyzer {
 
     struct CallArgs {
         std::unique_ptr<Path> path;
-        std::vector<std::unique_ptr<symbolic::SymbolicExpr>> args;
+        std::vector<symbolic::ExprHandle> args;
     };
 
     /**
@@ -557,7 +557,7 @@ namespace acslg::analyzer {
      */
     void bindParams(Path *calleePath,
                     const clang::FunctionDecl *FD,
-                    const std::vector<std::unique_ptr<symbolic::SymbolicExpr>> &args) {
+                    const std::vector<symbolic::ExprHandle> &args) {
         const unsigned n = FD->getNumParams();
         assert(args.size() == n);
 
@@ -582,15 +582,11 @@ namespace acslg::analyzer {
                 }
                 calleePath->updateMemory(*slot, m.value().asExpr());
             } else if (T->isStructureType()) {
-                calleePath->updateMemory(*slot,
-                                         cloneExpr(calleePath->getContext().getExprFactory(),
-                                                   *args[i]));
+                calleePath->updateMemory(slot, args[i]);
             } else if (T->isArrayType()) {
                 UNIMPLEMENT("array parameter");
             } else {
-                calleePath->updateMemory(*slot,
-                                         cloneExpr(calleePath->getContext().getExprFactory(),
-                                                   *args[i]));
+                calleePath->updateMemory(slot, args[i]);
             }
         }
     }
@@ -612,7 +608,7 @@ namespace acslg::analyzer {
             for (auto &evalArg : args) {
                 Path *p = evalArg.path ? evalArg.path.get() : basePath;
 
-                auto [newPaths, values] = p->evalExpr(arg);
+                auto [newPaths, values] = p->evalExprHandles(arg);
                 for (size_t j = 0; j < values.size(); ++j) {
                     CallArgs nc;
                     if (j == 0)
@@ -620,10 +616,9 @@ namespace acslg::analyzer {
                     else
                         nc.path = std::move(newPaths[j - 1]).into_underlying();
                     nc.args.reserve(evalArg.args.size() + 1);
-                    auto &factory = p->getContext().getExprFactory();
-                    for (auto &a : evalArg.args)
-                        nc.args.emplace_back(cloneExpr(factory, *a).into_underlying());
-                    nc.args.emplace_back(std::move(values[j]).into_underlying());
+                    for (auto a : evalArg.args)
+                        nc.args.emplace_back(a);
+                    nc.args.emplace_back(values[j]);
                     next.emplace_back(std::move(nc));
                 }
             }
@@ -2554,7 +2549,7 @@ namespace acslg::analyzer {
                 continue;
             }
 
-            auto [newPathGroup, exprGroup] = path->evalExpr(expr);
+            auto [newPathGroup, exprGroup] = path->evalExprHandles(expr);
             updatedPaths.push_back(std::move(path));
 
             for (size_t i = 0; i < newPathGroup.size(); ++i) {

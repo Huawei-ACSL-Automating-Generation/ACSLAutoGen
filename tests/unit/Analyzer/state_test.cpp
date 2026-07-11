@@ -363,6 +363,36 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(path.getReturnExpr()->get().get(), expected.get().get());
     }
 
+    TEST(ProgramStateTest, InlineCallPreservesArgumentHandle) {
+        ASTExtractor extractor(R"c(
+            int identity(int value) {
+                return value;
+            }
+
+            int func(int input) {
+                return identity(input);
+            }
+        )c");
+        auto *func = extractor.findFunc("func");
+        ASSERT_NE(func, nullptr);
+        ASSERT_EQ(func->getNameAsString(), "func");
+        ASSERT_EQ(func->getNumParams(), 1u);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        auto input = state.getPaths().front()->getVarStateHandle(func->getParamDecl(0));
+
+        state.step(func->getBody());
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        const auto &result = state.getPaths().front()->getReturnExpr();
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result->get().get(), input.get().get());
+    }
+
     TEST(PathTest, ExtractLValueHandleReusesFactoryAddress) {
         ASTExtractor extractor(R"c(
             void func(void) {
