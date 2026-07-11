@@ -676,12 +676,11 @@ namespace acslg::analyzer {
         symbolic::AddrHandle extractLValueHandle(const clang::Expr *lhs);
 
         /**
-         * @brief Retrieve the symbolic value of a variable within the path.
+         * @brief Retrieve the factory-owned symbolic value of a variable.
          * @param var [in] Variable declaration to query.
-         * @return A clone of the stored symbolic expression.
+         * @return Interned handle to the stored symbolic expression.
          */
-        utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> getVarState(
-            const clang::VarDecl *var) const;
+        symbolic::ExprHandle getVarStateHandle(const clang::VarDecl *var) const;
         /**
          * @brief Access accumulated path conditions.
          * @return Const reference to path condition set.

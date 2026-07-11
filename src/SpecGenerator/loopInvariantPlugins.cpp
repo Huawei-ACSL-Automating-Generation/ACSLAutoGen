@@ -1328,15 +1328,9 @@ namespace acslg::spec_generator {
                     auto symbolState = entryAndCurrentInfo.symbolicLoopEntry->clone();
                     symbolState->step(thenStmt);
                     for (auto &path : symbolState->getPaths()) {
-                        std::unique_ptr<symb::SymbolValue> maxVar{nullptr};
-                        if (auto maxValue = path->getVarState(maxDecl);
-                            symb::isa<symb::SymbolValue>(*maxValue)) {
-                            maxVar = std::unique_ptr<symb::SymbolValue>(
-                                symb::dyn_cast<symb::SymbolValue>(
-                                    std::move(maxValue).into_underlying().release()));
-                        } else {
+                        auto maxValue = path->getVarStateHandle(maxDecl);
+                        if (!maxValue.isa<symb::SymbolValue>())
                             return;
-                        }
 
                         auto evalResult = path->evalExpr(elementExpr);
                         if (evalResult.second.size() != 1)
@@ -1344,7 +1338,7 @@ namespace acslg::spec_generator {
                         auto &elementValue = evalResult.second.front();
                         // After executing the then branch, m must equal the current element value
                         // (i.e. m = a[i]).
-                        if (*maxVar != *elementValue)
+                        if (*maxValue != *elementValue)
                             return;
                     }
                 } else {

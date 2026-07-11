@@ -756,7 +756,7 @@ namespace acslg::analyzer {
                 if (varIt == vm.varIndexMap.end())
                     continue;
 
-                auto expr = path.getVarState(varDecl);
+                auto expr = path.getVarStateHandle(varDecl);
 
                 size_t idx;
                 if (init) {
@@ -1127,7 +1127,7 @@ namespace acslg::analyzer {
                 resolvedExprs;
             for (size_t i = half; i < n; ++i) {
                 auto trueDecl = vm.varDecls.at(i - half);
-                resolvedExprs.emplace(i, initPath.getVarState(trueDecl));
+                resolvedExprs.emplace(i, factory.cloneExpr(initPath.getVarStateHandle(trueDecl)));
             }
 
             auto &cs = poly.constraints();

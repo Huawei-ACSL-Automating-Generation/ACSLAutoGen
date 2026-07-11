@@ -387,8 +387,7 @@ namespace acslg::analyzer {
      * @param var Variable declaration to query.
      * @return Newly cloned symbolic expression representing the variable's value.
      */
-    utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> Path::getVarState(
-        const clang::VarDecl *var) const {
+    symbolic::ExprHandle Path::getVarStateHandle(const clang::VarDecl *var) const {
         auto canonicalVar = var->getCanonicalDecl();
         auto varIt        = varAddr_.find(canonicalVar);
         if (varIt == varAddr_.end()) {
@@ -397,7 +396,7 @@ namespace acslg::analyzer {
             for (const auto &[vd, addrPtr] : varAddr_) {
                 if (vd && vd->getName() == canonicalVar->getName()) {
                     if (auto val = memoryState_.readHandle(*addrPtr))
-                        return cloneExpr(context_.getExprFactory(), *val.value());
+                        return val.value();
                 }
             }
             ERROR("SymbolValue '" + canonicalVar->getNameAsString() + "' has no allocated address");
@@ -407,7 +406,7 @@ namespace acslg::analyzer {
         if (value == std::nullopt)
             ERROR("SymbolValue '" + canonicalVar->getNameAsString() +
                   "' has no memory state entry for allocated address");
-        return cloneExpr(context_.getExprFactory(), *value.value());
+        return value.value();
     }
 
     /// @brief Return a const reference to accumulated path conditions.
@@ -752,7 +751,8 @@ namespace acslg::analyzer {
                         }
                     }
                     if (const auto *varDecl = dyn_cast<clang::VarDecl>(declRef->getDecl())) {
-                        auto varExpr = getVarState(varDecl);
+                        auto varExpr = context_.getExprFactory().cloneExpr(
+                            getVarStateHandle(varDecl));
                         if (varDecl->getType()->isPointerType()) {
                             DEBUG("DeclRefExpr pointer value: " << varExpr->dump());
                         }

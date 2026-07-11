@@ -344,10 +344,14 @@ namespace acslg::test::unit::analyzer {
         auto first  = path.allocMemory(var);
         auto second = path.allocMemory(var);
         auto cloned = path.clone();
+        auto stored = path.getMemoryState().readHandle(first);
+        ASSERT_TRUE(stored.has_value());
 
         EXPECT_EQ(first.get().get(), second.get().get());
         EXPECT_EQ(cloned->getVarAddr().at(var).get().get(), first.get().get());
         EXPECT_EQ(first.get().get(), context.getExprFactory().variableAddress(var).get().get());
+        EXPECT_EQ(path.getVarStateHandle(var).get().get(), stored->get().get());
+        EXPECT_EQ(cloned->getVarStateHandle(var).get().get(), stored->get().get());
     }
 
     TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
