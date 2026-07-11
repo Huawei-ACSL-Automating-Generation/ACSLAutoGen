@@ -785,8 +785,7 @@ namespace acslg::spec_generator {
                                           indexInfo.indexRealAddr,
                                           std::move(pointAfterLoop));
 
-                            symb::Expr indexAfter{factory,
-                                                  factory.importExpr(*indexValueAfterLoop)};
+                            symb::Expr indexAfter{factory, indexValueAfterLoop};
                             symb::Expr indexBound{factory, indexInfo.indexBound};
                             symb::Expr indexInitial{factory, indexInfo.indexSymbolicValue};
 
@@ -1572,16 +1571,6 @@ namespace acslg::spec_generator {
                 return {};
 
             const auto &interruptedCond = *interruptedConds.begin();
-
-            auto pointAfterLoop = symb::SourcePoint::fromStmtAfter(
-                loopInfo.bodyStmt,
-                entryAndCurrentInfo.symbolicLoopEntry->getContext().getSourceManager(),
-                entryAndCurrentInfo.symbolicLoopEntry->getContext().getLangOptions());
-
-            auto indexValueAfterLoop =
-                getSymbol(indexInfo.indexExpr->getType(),
-                          indexInfo.indexRealAddr,
-                          std::move(pointAfterLoop));
 
             // Substitute a Symbol with an expression over the quantifier variable k:
             // - If the symbol's address has a (init, step) pattern in patternInfo, build

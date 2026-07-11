@@ -2202,30 +2202,27 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto makeFrom = [&](const VarDecl *var) {
-            std::unique_ptr<const symbolic::Address> addr =
-                factory.variableAddress(var)->addressClone().into_underlying();
-            return std::optional<
-                ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>>{
-                ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>{
-                    std::move(addr)}};
-        };
+        auto scalarSym =
+            symbolic::getSymbol(scalar->getType(), factory.variableAddress(scalar), point);
+        auto ptrSym = symbolic::getSymbol(ptr->getType(), factory.variableAddress(ptr), point);
+        auto unbasedPtrSym = symbolic::getSymbol(ptr->getType(), std::nullopt, point);
+        auto arrSym = symbolic::getSymbol(arr->getType(), factory.variableAddress(arr), point);
+        auto stSym = symbolic::getSymbol(st->getType(), factory.variableAddress(st), point);
 
-        auto scalarSym = symbolic::getSymbol(scalar->getType(), makeFrom(scalar), point);
-        auto ptrSym = symbolic::getSymbol(ptr->getType(), makeFrom(ptr), point);
-        auto arrSym = symbolic::getSymbol(arr->getType(), makeFrom(arr), point);
-        auto stSym = symbolic::getSymbol(st->getType(), makeFrom(st), point);
-
-        EXPECT_EQ(factory.importExpr(*scalarSym),
+        EXPECT_EQ(scalarSym,
                   factory.symbolValue(symbolic::deriveType(scalar->getType()),
                                       factory.variableAddress(scalar), point));
         auto pointerType = llvm::cast<PointerType>(ptr->getType());
-        EXPECT_EQ(factory.importExpr(*ptrSym),
+        EXPECT_EQ(ptrSym,
                   factory.symbolAddress(pointerType->getPointeeType(),
                                         factory.variableAddress(ptr), point)
                       .asExpr());
+        EXPECT_EQ(unbasedPtrSym,
+                  symbolic::Addr::symbol(factory, pointerType->getPointeeType(), point)
+                      .asExpr()
+                      .handle());
         auto arrayType = llvm::cast<ArrayType>(arr->getType());
-        EXPECT_EQ(factory.importExpr(*arrSym),
+        EXPECT_EQ(arrSym,
                   factory.symbolAddress(arrayType->getElementType(),
                                         factory.variableAddress(arr), point)
                       .asExpr());
@@ -2235,7 +2232,7 @@ namespace acslg::test::unit::analyzer {
         ASSERT_TRUE(record->isCompleteDefinition());
         record = record->getDefinition();
         auto &layout = record->getASTContext().getASTRecordLayout(record);
-        EXPECT_EQ(factory.importExpr(*stSym),
+        EXPECT_EQ(stSym,
                   factory.structure(record, layout, factory.variableAddress(st), point));
     }
 

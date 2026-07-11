@@ -251,7 +251,7 @@ namespace acslg::analyzer {
 
             auto symbol = getSymbol(ty, context_.getExprFactory().importAddress(*addr),
                                     startPoint_);
-            updateMemory(*addr, context_.getExprFactory().importExpr(*symbol));
+            updateMemory(*addr, symbol);
         }
     }
 
@@ -294,7 +294,7 @@ namespace acslg::analyzer {
                 auto resultAddr = baseAddrFacade.withAddedOffset(idxExpr);
                 if (!memoryState_.contains(resultAddr.handle())) {
                     auto newSymbol = getSymbol(arr->getType(), resultAddr.handle(), startPoint_);
-                    memoryState_.write(resultAddr.handle(), factory.importExpr(*newSymbol));
+                    memoryState_.write(resultAddr.handle(), newSymbol);
                 }
                 return resultAddr.handle();
             } else {
@@ -314,7 +314,7 @@ namespace acslg::analyzer {
                 if (auto addr = symbolic::tryEvalAsSymbolAddrHandle(factory, *addrExpr)) {
                     if (!memoryState_.contains(*addr)) {
                         auto symbol = getSymbol(uop->getType(), *addr, startPoint_);
-                        memoryState_.write(*addr, factory.importExpr(*symbol));
+                        memoryState_.write(*addr, symbol);
                     }
                     return *addr;
                 } else {
@@ -408,7 +408,7 @@ namespace acslg::analyzer {
         if (initSymbolic) {
             // Initialize with a symbolic value corresponding to the variable type.
             auto initSym = getSymbol(var->getType(), newAddr, startPoint_);
-            memoryState_.write(newAddr, context_.getExprFactory().importExpr(*initSym));
+            memoryState_.write(newAddr, initSym);
         } else {
             // Prevent uninitialized variables.
             memoryState_.write(newAddr, context_.getExprFactory().unknown());
@@ -782,9 +782,8 @@ namespace acslg::analyzer {
                                 value == std::nullopt) {
                                 auto elemType = arrSub->getType();
                                 auto symbol = getSymbol(elemType, newAddr.handle(), startPoint_);
-                                memoryState_.write(
-                                    newAddr.handle(), factory.importExpr(*symbol));
-                                outExprs.emplace_back(factory.importExpr(*symbol));
+                                memoryState_.write(newAddr.handle(), symbol);
+                                outExprs.emplace_back(symbol);
                             } else {
                                 outExprs.emplace_back(value.value());
                             }
@@ -1133,7 +1132,7 @@ namespace acslg::analyzer {
 
                         auto valueExpr =
                             symbolic::getSymbol(elemTy, srcIndexed.handle(), startPoint_);
-                        memoryState_.write(destRange.handle(), factory.importExpr(*valueExpr));
+                        memoryState_.write(destRange.handle(), valueExpr);
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     };
 
@@ -1413,9 +1412,8 @@ namespace acslg::analyzer {
                                     value == std::nullopt) {
                                     auto symbol = getSymbol(uop->getType(), addr.value(),
                                                             startPoint_);
-                                    auto symbolHandle = factory.importExpr(*symbol);
-                                    path->memoryState_.write(addr.value(), symbolHandle);
-                                    outExprs.emplace_back(symbolHandle);
+                                    path->memoryState_.write(addr.value(), symbol);
+                                    outExprs.emplace_back(symbol);
                                 } else {
                                     outExprs.emplace_back(value.value());
                                 }
@@ -2762,8 +2760,7 @@ namespace acslg::analyzer {
 
                     auto varType = varDecl->getType();
                     auto symbol = symbolic::getSymbol(varType, varAddrHandle, pointAfterDecl);
-                    path->updateVarState(
-                        varDecl, context_.getExprFactory().importExpr(*symbol));
+                    path->updateVarState(varDecl, symbol);
 
                     updatedPaths.push_back(std::move(path));
                     continue;
@@ -2820,8 +2817,7 @@ namespace acslg::analyzer {
                                 declStmt, context_.getSourceManager(), context_.getLangOptions());
 
                             auto varType = varDecl->getType();
-                            newValue = context_.getExprFactory().importExpr(
-                                *symbolic::getSymbol(varType, varAddrHandle, pointAfterDecl));
+                            newValue = symbolic::getSymbol(varType, varAddrHandle, pointAfterDecl);
                         }
 
                         newPath->updateVarState(varDecl, newValue);

@@ -23,8 +23,7 @@ namespace acslg::analyzer::symbolic {
             auto indexedRange = Addr{factory, factory.importAddress(range)}
                                     .withOffset(Expr{factory, factory.rangeIndex(indexName)});
             indexedRange = indexedRange.withoutLength();
-            auto body = getSymbol(range.getPointeeType(), indexedRange.handle(), fromPoint);
-            return factory.importExpr(*body);
+            return getSymbol(range.getPointeeType(), indexedRange.handle(), fromPoint);
         }
     } // namespace
 
@@ -399,8 +398,11 @@ namespace acslg::analyzer::symbolic {
         auto indexedRangeHandle = factory.withOffset(factory.importAddress(range),
                                                      factory.importExpr(rangeIndex));
         indexedRangeHandle = factory.withoutLength(indexedRangeHandle);
-        return getSymbol(range.getPointeeType(), indexedRangeHandle, fromPoint)
-            .into_underlying();
+        std::unique_ptr<const SymbolicExpr> body =
+            factory
+                .cloneExpr(getSymbol(range.getPointeeType(), indexedRangeHandle, fromPoint))
+                .into_underlying();
+        return utils::not_null<std::unique_ptr<const SymbolicExpr>>{std::move(body)};
     }
 
     std::string MaxMinOverRange::dump() const {
