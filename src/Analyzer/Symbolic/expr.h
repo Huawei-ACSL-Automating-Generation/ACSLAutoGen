@@ -748,13 +748,6 @@ namespace acslg::analyzer::symbolic {
             : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()), left_(std::move(left)),
               op_(op), right_(std::move(right)) {}
 
-        BinaryOpExprNode(utils::not_null<SymbolicExpr *> left,
-                         Operator op,
-                         utils::not_null<SymbolicExpr *> right)
-            : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()),
-              left_(std::unique_ptr<SymbolicExpr>{left}), op_(op),
-              right_(std::unique_ptr<SymbolicExpr>{right}) {}
-
         BinaryOpExprNode(ExprHandle left, Operator op, ExprHandle right)
             : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()), left_(left), op_(op),
               right_(right) {}
