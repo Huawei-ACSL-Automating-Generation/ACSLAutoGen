@@ -441,6 +441,20 @@ namespace acslg::analyzer::symbolic {
         return ExprChild{owned_->get()->clone()};
     }
 
+    utils::not_null<std::unique_ptr<Address>> AddressChild::clone() const {
+        return get()->addressClone();
+    }
+
+    AddressChild AddressChild::copy() const {
+        if (ExprFactoryScope::hasCurrent())
+            return AddressChild{ExprFactoryScope::current().importAddress(*get())};
+        if (handle_)
+            return AddressChild{*handle_};
+        std::unique_ptr<const Address> cloned = get()->addressClone().into_underlying();
+        return AddressChild::fromConstOwned(
+            utils::not_null<std::unique_ptr<const Address>>{std::move(cloned)});
+    }
+
     AddrHandle ExprFactory::importAddress(const Address &address) {
         return AddrHandle{cast<const Address>(importExpr(address).get().get())};
     }
@@ -472,16 +486,16 @@ namespace acslg::analyzer::symbolic {
         }
 
         if (auto *symbolAddr = dyn_cast<SymbolAddress>(&expr)) {
-            auto base = symbolAddr->getBaseInfo();
-            std::optional<AddrHandle> from;
-            if (base.fromAddr_)
-                from = internAddress(base.fromAddr_.value()->addressClone());
+            auto from = symbolAddr->getFromAddrHandle();
+            if (from)
+                from = importAddress(**from);
 
             std::optional<ExprHandle> length;
             if (const auto &legacyLength = symbolAddr->getLength(); legacyLength)
                 length = importExpr(*legacyLength.value());
 
-            return symbolAddress(base.pointeeType_, from, base.fromPoint_,
+            return symbolAddress(symbolAddr->getPointeeType(), from,
+                                 symbolAddr->getFromPoint().value(),
                                  importExpr(*symbolAddr->getOffset()), length)
                 .asExpr();
         }
@@ -521,15 +535,6 @@ namespace acslg::analyzer::symbolic {
     }
 
     namespace {
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> cloneAddress(
-            std::optional<AddrHandle> handle) {
-            if (!handle)
-                return std::nullopt;
-            std::unique_ptr<const Address> cloned =
-                handle.value()->addressClone().into_underlying();
-            return utils::not_null<std::unique_ptr<const Address>>{std::move(cloned)};
-        }
-
         template <class... Ts> struct overloaded : Ts... {
             using Ts::operator()...;
         };
@@ -653,11 +658,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle ExprFactory::symbolValue(SymbolicExpr::Type varType,
                                         AddrHandle from,
                                         SourcePoint fromPoint) {
-        auto clonedFrom = cloneAddress(from);
-        if (!clonedFrom)
-            ERROR("SymbolValue requires a source address.");
-        return intern(std::make_unique<SymbolValue>(
-            varType, std::move(clonedFrom.value()), std::move(fromPoint)));
+        return intern(std::make_unique<SymbolValue>(varType, from, std::move(fromPoint)));
     }
 
     ExprHandle ExprFactory::simplifiedBinary(ExprHandle left,
@@ -681,22 +682,20 @@ namespace acslg::analyzer::symbolic {
         auto resolvedOffset =
             offset.value_or(literal(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)));
         return internAddress(std::make_unique<SymbolAddress>(
-            pointeeType, cloneAddress(from), std::move(fromPoint), resolvedOffset, length));
+            SymbolAddress::FactoryNodeTag{}, pointeeType, from, std::move(fromPoint),
+            resolvedOffset, length));
     }
 
     AddrHandle ExprFactory::withOffset(AddrHandle address, ExprHandle offset) {
         const auto &symbolAddr = address.cast<SymbolAddress>();
-        auto base              = symbolAddr.getBaseInfo();
-
-        std::optional<AddrHandle> from;
-        if (base.fromAddr_)
-            from = internAddress(base.fromAddr_.value()->addressClone());
+        auto from              = symbolAddr.getFromAddrHandle();
 
         std::optional<ExprHandle> length;
         if (const auto &existingLength = symbolAddr.getLength(); existingLength)
             length = importExpr(*existingLength.value());
 
-        return symbolAddress(base.pointeeType_, from, base.fromPoint_, offset, length);
+        return symbolAddress(symbolAddr.getPointeeType(), from,
+                             symbolAddr.getFromPoint().value(), offset, length);
     }
 
     AddrHandle ExprFactory::withAddedOffset(AddrHandle address, ExprHandle extra) {
@@ -715,13 +714,10 @@ namespace acslg::analyzer::symbolic {
 
     AddrHandle ExprFactory::withLength(AddrHandle address, ExprHandle length) {
         const auto &symbolAddr = address.cast<SymbolAddress>();
-        auto base              = symbolAddr.getBaseInfo();
+        auto from              = symbolAddr.getFromAddrHandle();
 
-        std::optional<AddrHandle> from;
-        if (base.fromAddr_)
-            from = internAddress(base.fromAddr_.value()->addressClone());
-
-        return symbolAddress(base.pointeeType_, from, base.fromPoint_,
+        return symbolAddress(symbolAddr.getPointeeType(), from,
+                             symbolAddr.getFromPoint().value(),
                              importExpr(*symbolAddr.getOffset()), length);
     }
 
@@ -736,13 +732,10 @@ namespace acslg::analyzer::symbolic {
 
     AddrHandle ExprFactory::withoutLength(AddrHandle address) {
         const auto &symbolAddr = address.cast<SymbolAddress>();
-        auto base              = symbolAddr.getBaseInfo();
+        auto from              = symbolAddr.getFromAddrHandle();
 
-        std::optional<AddrHandle> from;
-        if (base.fromAddr_)
-            from = internAddress(base.fromAddr_.value()->addressClone());
-
-        return symbolAddress(base.pointeeType_, from, base.fromPoint_,
+        return symbolAddress(symbolAddr.getPointeeType(), from,
+                             symbolAddr.getFromPoint().value(),
                              importExpr(*symbolAddr.getOffset()), std::nullopt);
     }
 
@@ -2316,7 +2309,7 @@ namespace acslg::analyzer::symbolic {
         if (other.fromAddr_ == std::nullopt)
             fromAddr_ = std::nullopt;
         else
-            fromAddr_ = other.fromAddr_.value()->addressClone().into_underlying();
+            fromAddr_.emplace(other.fromAddr_.value().copy());
     }
 
     SymbolAddrBaseInfo::SymbolAddrBaseInfo(const SymbolAddrBaseInfo &other)
@@ -2337,7 +2330,9 @@ namespace acslg::analyzer::symbolic {
                   SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                   pointeeType),
           Symbol(Kind::K_SymbolAddress), offset_(makeSymbolAddressOffsetChild(std::move(offset))),
-          fromAddr_(std::move(from)), fromPoint_(fromPoint), length_(std::nullopt) {
+          fromAddr_(std::nullopt), fromPoint_(fromPoint), length_(std::nullopt) {
+        if (from)
+            fromAddr_.emplace(AddressChild::fromConstOwned(std::move(from.value())));
         if (length != std::nullopt)
             length_.emplace(ExprChild::fromConstOwned(std::move(length.value())));
     }
@@ -2352,9 +2347,28 @@ namespace acslg::analyzer::symbolic {
                   SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                   pointeeType),
           Symbol(Kind::K_SymbolAddress), offset_(makeSymbolAddressOffsetChild(offset)),
-          fromAddr_(std::move(from)), fromPoint_(fromPoint), length_(std::nullopt) {
+          fromAddr_(std::nullopt), fromPoint_(fromPoint), length_(std::nullopt) {
+        if (from)
+            fromAddr_.emplace(AddressChild::fromConstOwned(std::move(from.value())));
         if (length != std::nullopt)
             length_.emplace(length.value());
+    }
+
+    SymbolAddress::SymbolAddress(FactoryNodeTag,
+                                 const clang::QualType pointeeType,
+                                 std::optional<AddrHandle> from,
+                                 SourcePoint fromPoint,
+                                 ExprHandle offset,
+                                 std::optional<ExprHandle> length)
+        : Address(SymbolicExpr::ExprKind::K_SymbolAddress,
+                  SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
+                  pointeeType),
+          Symbol(Kind::K_SymbolAddress), offset_(offset), fromAddr_(std::nullopt),
+          fromPoint_(std::move(fromPoint)), length_(std::nullopt) {
+        if (from)
+            fromAddr_.emplace(*from);
+        if (length)
+            length_.emplace(*length);
     }
 
     utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withOffset(
@@ -2439,7 +2453,7 @@ namespace acslg::analyzer::symbolic {
     SymbolAddrBaseInfo SymbolAddress::getBaseInfo() const {
         if (fromAddr_ == std::nullopt)
             return SymbolAddrBaseInfo{std::nullopt, fromPoint_, pointeeType_};
-        return SymbolAddrBaseInfo{fromAddr_.value()->addressClone().into_underlying(), fromPoint_,
+        return SymbolAddrBaseInfo{fromAddr_.value().clone().into_underlying(), fromPoint_,
                                   pointeeType_};
     }
 
@@ -2553,7 +2567,7 @@ namespace acslg::analyzer::symbolic {
 
     SymbolValue::SymbolValue(const SymbolValue &other)
         : SymbolicExpr(other), Symbol(Kind::K_SymbolValue),
-          fromAddr_(other.fromAddr_->addressClone().into_underlying()),
+          fromAddr_(other.fromAddr_.copy()),
           fromPoint_(other.fromPoint_) {}
 
     std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprKind t) {

@@ -1264,6 +1264,36 @@ namespace acslg::analyzer::symbolic {
         const Address *ptr_;
     };
 
+    class AddressChild {
+      public:
+        explicit AddressChild(AddrHandle handle) : handle_(handle) {}
+
+        static AddressChild fromConstOwned(
+            utils::not_null<std::unique_ptr<const Address>> owned) {
+            return AddressChild{ConstOwnedTag{}, std::move(owned)};
+        }
+
+        utils::not_null<const Address *> get() const {
+            if (handle_)
+                return handle_->get();
+            return owned_->get().get();
+        }
+
+        const Address &operator*() const { return *get(); }
+        const Address *operator->() const { return get().get(); }
+        utils::not_null<std::unique_ptr<Address>> clone() const;
+        AddressChild copy() const;
+        std::optional<AddrHandle> handle() const { return handle_; }
+
+      private:
+        struct ConstOwnedTag {};
+        AddressChild(ConstOwnedTag, utils::not_null<std::unique_ptr<const Address>> owned)
+            : owned_(std::move(owned)) {}
+
+        std::optional<AddrHandle> handle_;
+        std::optional<utils::not_null<std::unique_ptr<const Address>>> owned_;
+    };
+
     std::optional<AddrHandle> tryEvalAsSymbolAddrHandle(ExprFactory &factory,
                                                         const SymbolicExpr &expr);
 
@@ -1707,6 +1737,7 @@ namespace acslg::analyzer::symbolic {
     /// of pointer variable or an address of heap.
     class SymbolAddress : public Address, public Symbol {
       public:
+        struct FactoryNodeTag {};
         inline static constexpr signed long ZERO_OFFSET =
             0; ///< Unify the type of zero under zero offset. This type should be the same as the
                ///< type of the zero value in SymbolicExpr::simplifiedExprIfLinear, or relax the
@@ -1729,6 +1760,12 @@ namespace acslg::analyzer::symbolic {
                       std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
                       SourcePoint fromPoint,
                       std::optional<ExprHandle> offset,
+                      std::optional<ExprHandle> length);
+        SymbolAddress(FactoryNodeTag,
+                      clang::QualType pointeeType,
+                      std::optional<AddrHandle> from,
+                      SourcePoint fromPoint,
+                      ExprHandle offset,
                       std::optional<ExprHandle> length);
 
         static bool classof(const SymbolicExpr *expr) {
@@ -1816,7 +1853,7 @@ namespace acslg::analyzer::symbolic {
         std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
             if (fromAddr_ == std::nullopt)
                 return std::nullopt;
-            return fromAddr_.value()->addressClone().into_underlying();
+            return fromAddr_.value().clone().into_underlying();
         }
         std::optional<AddrHandle> getFromAddrHandle() const {
             if (fromAddr_ == std::nullopt)
@@ -1827,7 +1864,7 @@ namespace acslg::analyzer::symbolic {
 
       private:
         ExprChild offset_; ///< Offset relative to an address.
-        std::optional<utils::not_null<std::unique_ptr<const Address>>>
+        std::optional<AddressChild>
             fromAddr_; ///< From another Address p means this is a value(may with offset) of a
                        ///< pointer variable whose address is p; std::nullopt means this a
                        ///< address of heap, in which case `fromPoint_` is the source point after
@@ -2069,7 +2106,11 @@ namespace acslg::analyzer::symbolic {
                     utils::not_null<std::unique_ptr<const Address>> from,
                     SourcePoint fromPoint)
             : SymbolicExpr(ExprKind::K_SymbolValue, varType), Symbol(Kind::K_SymbolValue),
-              fromAddr_(std::move(from)), fromPoint_(std::move(fromPoint)) {}
+              fromAddr_(AddressChild::fromConstOwned(std::move(from))),
+              fromPoint_(std::move(fromPoint)) {}
+        SymbolValue(Type varType, AddrHandle from, SourcePoint fromPoint)
+            : SymbolicExpr(ExprKind::K_SymbolValue, varType), Symbol(Kind::K_SymbolValue),
+              fromAddr_(from), fromPoint_(std::move(fromPoint)) {}
 
         SymbolValue(const SymbolValue &other);
         SymbolValue(SymbolValue &&) = default;
@@ -2085,7 +2126,7 @@ namespace acslg::analyzer::symbolic {
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         std::optional<utils::not_null<std::unique_ptr<const Address>>> getFromAddr() const override {
-            return fromAddr_->addressClone().into_underlying();
+            return fromAddr_.clone().into_underlying();
         }
         AddrHandle getFromAddrHandle() const { return AddrHandle{fromAddr_.get().get()}; }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
@@ -2109,7 +2150,7 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
-        utils::not_null<std::unique_ptr<const Address>>
+        AddressChild
             fromAddr_; ///< The original Address of the value or the Structure it belongs.
 
         SourcePoint fromPoint_;

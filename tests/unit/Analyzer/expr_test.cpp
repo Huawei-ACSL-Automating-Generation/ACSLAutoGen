@@ -1983,9 +1983,21 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(varAddrA, varAddrB);
         EXPECT_TRUE(varAddrA.isa<symbolic::VariableAddress>());
 
+        auto symbolValue = factory.symbolValue(
+            symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::Int, 32},
+            varAddrA, point);
+        EXPECT_EQ(symbolValue.cast<symbolic::SymbolValue>().getFromAddrHandle(), varAddrA);
+        auto clonedValue = symbolic::cloneSymbolValue(symbolValue);
+        EXPECT_EQ(clonedValue->getFromAddrHandle(), varAddrA);
+
         auto defaultSymAddr = factory.symbolAddress(
             firstField->getType(), std::optional<symbolic::AddrHandle>{varAddrA}, point);
         const auto &defaultSymAddrNode = defaultSymAddr.cast<symbolic::SymbolAddress>();
+        ASSERT_TRUE(defaultSymAddrNode.getFromAddrHandle());
+        EXPECT_EQ(*defaultSymAddrNode.getFromAddrHandle(), varAddrA);
+        auto clonedAddr = symbolic::cloneSymbolAddress(defaultSymAddr);
+        ASSERT_TRUE(clonedAddr->getFromAddrHandle());
+        EXPECT_EQ(*clonedAddr->getFromAddrHandle(), varAddrA);
         EXPECT_EQ(defaultSymAddrNode.getOffset().get(),
                   factory.literal(static_cast<int64_t>(symbolic::SymbolAddress::ZERO_OFFSET))
                       .get()
