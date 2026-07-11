@@ -835,10 +835,6 @@ namespace acslg::analyzer::symbolic {
         return std::make_unique<SymbolAddress>(address.cast<SymbolAddress>());
     }
 
-    std::unique_ptr<SymbolAddress> cloneSymbolAddress(const SymbolAddress &address) {
-        return cloneSymbolAddress(ExprFactoryScope::current().importAddress(address));
-    }
-
     std::unique_ptr<VariableAddress> cloneVariableAddress(AddrHandle address) {
         return std::make_unique<VariableAddress>(address.cast<VariableAddress>());
     }
@@ -847,10 +843,6 @@ namespace acslg::analyzer::symbolic {
         ExprFactory &factory,
         utils::not_null<const clang::VarDecl *> from) {
         return cloneVariableAddress(factory.variableAddress(from));
-    }
-
-    std::unique_ptr<FieldAddress> cloneFieldAddress(AddrHandle address) {
-        return std::make_unique<FieldAddress>(address.cast<FieldAddress>());
     }
 
     ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr) {

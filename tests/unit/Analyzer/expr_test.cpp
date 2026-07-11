@@ -2044,7 +2044,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
         ASSERT_TRUE(fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle());
         EXPECT_EQ(*fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle(), varAddrA);
-        auto clonedField = symbolic::cloneFieldAddress(fieldAddrA);
+        auto clonedAddress = fieldAddrA->addressClone();
+        auto *clonedField =
+            symbolic::cast<symbolic::FieldAddress>(clonedAddress.get().get());
         ASSERT_TRUE(clonedField->getBaseAddr().handle());
         EXPECT_EQ(*clonedField->getBaseAddr().handle(), varAddrA);
     }
