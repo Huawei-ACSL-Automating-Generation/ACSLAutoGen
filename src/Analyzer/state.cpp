@@ -109,20 +109,13 @@ namespace acslg::analyzer {
             return factory.cloneExpr(factory.unknown());
         }
 
-        utils::not_null<std::unique_ptr<symbolic::Address>> cloneAddress(
-            symbolic::AddrHandle address) {
-            return address->addressClone();
-        }
-
         utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         cloneExpr(symbolic::ExprFactory &factory, const symbolic::SymbolicExpr &expr) {
             return factory.importAndCloneExpr(expr);
         }
 
         using symbolic::cloneStructure;
-        using symbolic::cloneSymbolAddress;
         using symbolic::cloneVariableAddress;
-        using symbolic::makeFieldAddress;
         using symbolic::makeStructure;
         using symbolic::makeVariableAddress;
     } // namespace
@@ -388,11 +381,6 @@ namespace acslg::analyzer {
         }
 
         UNIMPLEMENT("Unsupported LHS expression: " << lexpr->getStmtClassName());
-    }
-
-    utils::not_null<std::unique_ptr<symbolic::Address>> Path::extractLValue(
-        const clang::Expr *lhs) {
-        return cloneAddress(extractLValueHandle(lhs));
     }
 
     /**

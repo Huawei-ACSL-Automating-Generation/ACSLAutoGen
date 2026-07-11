@@ -676,13 +676,6 @@ namespace acslg::analyzer {
         symbolic::AddrHandle extractLValueHandle(const clang::Expr *lhs);
 
         /**
-         * @brief Derive a cloned symbolic l-value address for legacy callers.
-         * @param lhs [in] Expression used as an assignment target.
-         * @return Owning address clone pointing to the referenced storage.
-         */
-        utils::not_null<std::unique_ptr<symbolic::Address>> extractLValue(const clang::Expr *lhs);
-
-        /**
          * @brief Retrieve the symbolic value of a variable within the path.
          * @param var [in] Variable declaration to query.
          * @return A clone of the stored symbolic expression.

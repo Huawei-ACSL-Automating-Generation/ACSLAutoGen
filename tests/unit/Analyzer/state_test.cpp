@@ -4,7 +4,6 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include <llvm/Support/Casting.h>
-#include "xmock.h"
 #include "state.h"
 #include "clang/AST/Decl.h"
 #include "Symbolic/expr.h"
@@ -17,17 +16,6 @@ using namespace clang;
 namespace acslg::test::unit::analyzer {
     using namespace acslg::analyzer;
     using namespace utils;
-
-    class TestPath : public Path {
-      public:
-        // MOCK_NONVIRTUAL_METHOD(
-        //     unique_ptr<SymbolicExpr>, evalExpr, (const Expr *), (), TestPath);
-        MOCK_NONVIRTUAL_METHOD(acslg::utils::not_null<unique_ptr<symbolic::Address>>,
-                               extractLValue,
-                               (const Expr *),
-                               (),
-                               TestPath);
-    };
 
     // TEST(PathTest, IsUnchangedState) {
     //     using enum SymbolicExpr::ScalarKind;
@@ -327,10 +315,6 @@ namespace acslg::test::unit::analyzer {
         auto second = path.extractLValueHandle(varExpr);
         EXPECT_EQ(first.get().get(), expected.get().get());
         EXPECT_EQ(second.get().get(), first.get().get());
-
-        auto legacyClone = path.extractLValue(varExpr);
-        EXPECT_EQ(*legacyClone, *first);
-        EXPECT_NE(legacyClone.get().get(), first.get().get());
     }
 
     TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
