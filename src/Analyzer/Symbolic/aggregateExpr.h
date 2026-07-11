@@ -128,9 +128,6 @@ namespace acslg::analyzer::symbolic {
         SumOverRange &operator=(const SumOverRange &) = default;
         SumOverRange &operator=(SumOverRange &&)      = default;
 
-        SumOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
-                     std::string_view indexName,
-                     SourcePoint fromPoint);
         SumOverRange(AddrHandle range, std::string_view indexName, SourcePoint fromPoint);
 
         // SymbolicExpr
@@ -164,13 +161,6 @@ namespace acslg::analyzer::symbolic {
       private:
         SourcePoint fromPoint_;
 
-      private:
-        struct Init {
-            Type type;
-            utils::not_null<std::unique_ptr<const SymbolAddress>> range;
-        };
-        static Init makeInit(utils::not_null<std::unique_ptr<const SymbolAddress>> range);
-        SumOverRange(Init init, std::string_view indexName, SourcePoint fromPoint);
     };
 
     class QuantifierOverRange : public OverRangeExpr {

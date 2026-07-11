@@ -1395,7 +1395,8 @@ namespace acslg::test::unit::analyzer {
                 std::move(constPred)};
         };
 
-        symbolic::SumOverRange sum{makeRange(), "i", point};
+        auto ownedSumRange = makeRange();
+        symbolic::SumOverRange sum{factory.importAddress(*ownedSumRange), "i", point};
         symbolic::QuantifierOverRange quantifier{
             makeRange(), "i", symbolic::QuantifierOverRange::Quantifier::ForAll, makePred()};
         symbolic::MaxMinOverRange max{
@@ -1447,15 +1448,8 @@ namespace acslg::test::unit::analyzer {
             var->getType(), factory.variableAddress(var), point);
         rangeHandle = factory.withOffset(rangeHandle, factory.rangeIndex("i"));
         rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
-        auto range = cloneSymbolAddressForLegacyTest(rangeHandle);
-        auto rangeBase = range->getBaseInfo();
-
-        std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
-        symbolic::SumOverRange sum{
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
-                std::move(constRange)},
-            "i",
-            point};
+        auto rangeBase = rangeHandle.cast<symbolic::SymbolAddress>().getBaseInfo();
+        symbolic::SumOverRange sum{rangeHandle, "i", point};
 
         auto clone = sum.clone();
         EXPECT_EQ(*clone, sum);
@@ -1608,7 +1602,7 @@ namespace acslg::test::unit::analyzer {
 
         auto sumRange = makeRange();
         auto rangeBase = sumRange->getBaseInfo();
-        symbolic::SumOverRange sum{makeConstRange(std::move(sumRange)), "i", point};
+        symbolic::SumOverRange sum{factory.importAddress(*sumRange), "i", point};
         auto substitutedSum =
             symbolic::getRangeIndexSubstitutedHandle(factory, sum, rangeBase, one);
         const auto &sumNode = substitutedSum.cast<symbolic::SumOverRange>();
