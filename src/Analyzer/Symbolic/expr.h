@@ -2312,14 +2312,6 @@ namespace acslg::analyzer::symbolic {
         return in;
     }
 
-    inline ::acslg::utils::not_null<std::unique_ptr<::acslg::analyzer::symbolic::SymbolicExpr>> strip_sizeof_factor(
-        ::acslg::utils::not_null<std::unique_ptr<::acslg::analyzer::symbolic::SymbolicExpr>> in,
-        std::uint64_t sizeofBytes) {
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(
-            strip_sizeof_factor(factory, factory.importExpr(*in), sizeofBytes));
-    }
-
 } // namespace acslg::analyzer::symbolic
 
 // The project's file structure makes it difficult to distinguish between internal and external
