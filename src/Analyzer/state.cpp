@@ -38,7 +38,7 @@ namespace acslg::analyzer {
             return std::nullopt;
         }
 
-        std::unique_ptr<symbolic::Structure> makeStructureForRecord(
+        symbolic::ExprHandle makeStructureForRecord(
             symbolic::ExprFactory &factory,
             const clang::RecordDecl *record,
             symbolic::AddrHandle base,
@@ -46,13 +46,13 @@ namespace acslg::analyzer {
             if (!record || !record->isCompleteDefinition())
                 ERROR("Expected complete structure type.");
             record = record->getDefinition();
-            auto from = symbolic::Addr{factory, base};
-            return symbolic::cloneStructure(factory.structure(
-                record, record->getASTContext().getASTRecordLayout(record), from.handle(),
-                point));
+            return factory.structure(record,
+                                     record->getASTContext().getASTRecordLayout(record),
+                                     base,
+                                     point);
         }
 
-        std::unique_ptr<symbolic::Structure> makeStructureForBase(
+        symbolic::ExprHandle makeStructureForBase(
             symbolic::ExprFactory &factory,
             clang::QualType type,
             symbolic::AddrHandle base,
@@ -98,7 +98,6 @@ namespace acslg::analyzer {
             return factory.importExpr(expr);
         }
 
-        using symbolic::cloneStructure;
         using symbolic::cloneVariableAddress;
         using symbolic::makeVariableAddress;
     } // namespace
@@ -346,7 +345,7 @@ namespace acslg::analyzer {
                 if (!memoryState_.contains(baseAddr.value())) {
                     auto st = makeStructureForRecord(
                         context_.getExprFactory(), RD, baseAddr.value(), startPoint_);
-                    memoryState_.write(baseAddr.value(), factory.importExpr(*st));
+                    memoryState_.write(baseAddr.value(), st);
                 }
                 return factory.fieldAddress(fieldType, RD, baseAddr.value(),
                                             FD->getFieldIndex());
@@ -356,7 +355,7 @@ namespace acslg::analyzer {
 
                 if (!memoryState_.contains(baseAddr)) {
                     auto st = makeStructureForRecord(factory, RD, baseAddr, startPoint_);
-                    memoryState_.write(baseAddr, factory.importExpr(*st));
+                    memoryState_.write(baseAddr, st);
                 }
                 return factory.fieldAddress(fieldType, RD, baseAddr, FD->getFieldIndex());
             }
@@ -993,7 +992,7 @@ namespace acslg::analyzer {
                             // write it.
                             auto structVal =
                                 makeStructureForBase(factory, elemTy, addr.handle(), pointAfterCall);
-                            memoryState_.write(addr.handle(), factory.importExpr(*structVal));
+                            memoryState_.write(addr.handle(), structVal);
 
                             std::vector<symbolic::ExprHandle> exprs;
                             exprs.emplace_back(addr.asExpr().handle());
@@ -1219,7 +1218,7 @@ namespace acslg::analyzer {
                             auto destBase = destAddrFacade.withoutLength();
                             auto structVal = makeStructureForBase(
                                 factory, elemTy, destBase.handle(), pointAfterCall);
-                            memoryState_.write(destBase.handle(), factory.importExpr(*structVal));
+                            memoryState_.write(destBase.handle(), structVal);
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
 
@@ -1483,8 +1482,7 @@ namespace acslg::analyzer {
                         auto val = memoryState_.read(baseAddr.value());
                         DEBUG("MemberExpr base in memory: " << (val ? "yes" : "no"));
                         if (val == std::nullopt) {
-                            st = factory.importExpr(
-                                *makeStructureForRecord(factory, RD, baseAddr.value(), startPoint_));
+                            st = makeStructureForRecord(factory, RD, baseAddr.value(), startPoint_);
                             memoryState_.write(baseAddr.value(), st.value());
                         } else if (auto stVal = symbolic::dyn_cast<const symbolic::Structure>(
                                        val.value().get().get())) {
@@ -2777,8 +2775,7 @@ namespace acslg::analyzer {
                         RD = RD->getDefinition();
 
                         auto &factory = context_.getExprFactory();
-                        auto st = factory.importExpr(
-                            *makeStructureForRecord(factory, RD, varAddrHandle, startPoint_));
+                        auto st = makeStructureForRecord(factory, RD, varAddrHandle, startPoint_);
                         const auto fieldCount = st.cast<symbolic::Structure>().getNumFields();
                         if (initListExpr->getNumInits() != fieldCount)
                             ERROR("Initializer std::list size mismatches the struct's field "

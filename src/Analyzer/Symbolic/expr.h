@@ -2141,7 +2141,6 @@ namespace acslg::analyzer::symbolic {
         ExprFactory &factory,
         utils::not_null<const clang::VarDecl *> from);
     std::unique_ptr<FieldAddress> cloneFieldAddress(AddrHandle address);
-    std::unique_ptr<Structure> cloneStructure(ExprHandle structure);
 
     enum class Operator : unsigned {
 #define ALL_OP(name, tok, prec, isRightAssoc) name,

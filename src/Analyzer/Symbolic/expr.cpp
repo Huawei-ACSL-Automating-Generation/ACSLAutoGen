@@ -853,10 +853,6 @@ namespace acslg::analyzer::symbolic {
         return std::make_unique<FieldAddress>(address.cast<FieldAddress>());
     }
 
-    std::unique_ptr<Structure> cloneStructure(ExprHandle structure) {
-        return std::make_unique<Structure>(structure.cast<Structure>());
-    }
-
     ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr) {
         ExprFactoryScope scope(factory);
         if (expr.isUnknown())
