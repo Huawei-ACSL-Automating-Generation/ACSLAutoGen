@@ -377,8 +377,6 @@ namespace acslg::analyzer::symbolic {
         /// @return Simplified expression.
         virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const;
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> withValType(Type newType) const;
-
         using UsedMap   = std::unordered_map<size_t, utils::not_null<const Symbol *>>;
         using HashIdMap = std::unordered_map<size_t, size_t>;
         /// @brief Collect `Symbols` used in the expression.

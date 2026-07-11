@@ -863,7 +863,7 @@ namespace acslg::test::unit::analyzer {
 
         auto targetType = symbolic::SymbolicExpr::Type{
             symbolic::SymbolicExpr::ScalarKind::UInt, 64};
-        auto typedSum = sum->withValType(targetType);
+        auto typedSum = factory.withValType(sum, targetType);
 
         EXPECT_EQ(sum->getValType().kind, symbolic::SymbolicExpr::ScalarKind::Int);
         EXPECT_EQ(sum->getValType().bitWidth, 32);
@@ -875,17 +875,8 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedSumNode->getLeft().get(), one.get().get());
         EXPECT_EQ(typedSumNode->getRight().get(), two.get().get());
 
-        auto importedTypedSum = factory.importExpr(*typedSum);
-        EXPECT_NE(importedTypedSum, sum);
-        EXPECT_EQ(importedTypedSum, factory.importExpr(*typedSum));
-        EXPECT_EQ(importedTypedSum->getValType().kind,
-                  symbolic::SymbolicExpr::ScalarKind::UInt);
-        EXPECT_EQ(importedTypedSum->getValType().bitWidth, 64);
-
-        const auto &importedTypedSumNode =
-            importedTypedSum.cast<symbolic::BinaryOpExpr>();
-        EXPECT_EQ(importedTypedSumNode.getLeft().get(), one.get().get());
-        EXPECT_EQ(importedTypedSumNode.getRight().get(), two.get().get());
+        EXPECT_NE(typedSum, sum);
+        EXPECT_EQ(typedSum, factory.withValType(sum, targetType));
     }
 
     TEST(ExprFactoryTest, WithValTypeInternsTypedRebuilds) {
@@ -906,27 +897,6 @@ namespace acslg::test::unit::analyzer {
         auto typedFacade = facade.withType(targetType);
         EXPECT_EQ(typedFacade.handle(), typedOne);
         EXPECT_EQ(typedFacade.getValType(), targetType);
-    }
-
-    TEST(ExprFactoryTest, ScopedLegacyWithValTypeUsesFactory) {
-        symbolic::ExprFactory factory;
-
-        auto one = factory.literal(1);
-        auto two = factory.literal(2);
-        auto sum = factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
-        auto targetType = symbolic::SymbolicExpr::Type{
-            symbolic::SymbolicExpr::ScalarKind::UInt, 64};
-
-        symbolic::ExprFactoryScope scope(factory);
-        auto typedSum = sum->withValType(targetType);
-        auto expected = factory.withValType(sum, targetType);
-
-        EXPECT_EQ(factory.importExpr(*typedSum), expected);
-        EXPECT_EQ(typedSum->getValType(), targetType);
-        const auto *typedSumNode =
-            symbolic::cast<symbolic::BinaryOpExpr>(typedSum.get().get());
-        EXPECT_EQ(typedSumNode->getLeft().get(), one.get().get());
-        EXPECT_EQ(typedSumNode->getRight().get(), two.get().get());
     }
 
     TEST(ExprFactoryTest, ValueSubstitutionHandleMapImportsReplacement) {

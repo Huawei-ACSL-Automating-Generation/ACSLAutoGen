@@ -70,16 +70,6 @@ namespace acslg::analyzer::symbolic {
         return intern(expr->cloneWithValType(newType));
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolicExpr::withValType(
-        Type newType) const {
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            return factory.cloneExpr(
-                factory.withValType(factory.importExpr(*this), newType));
-        }
-        return cloneWithValType(newType);
-    }
-
     ExprHandle getSubstitutedValueHandle(ExprFactory &factory,
                                          const SymbolicExpr &expr,
                                          const HashExprHandleMap &hashToExprMap) {
