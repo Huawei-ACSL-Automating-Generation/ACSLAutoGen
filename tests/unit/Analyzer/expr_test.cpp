@@ -64,6 +64,12 @@ namespace acslg::test::unit::analyzer {
                 factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
         }
 
+        std::unique_ptr<symbolic::SymbolAddress> cloneSymbolAddressForLegacyTest(
+            symbolic::AddrHandle address) {
+            return std::make_unique<symbolic::SymbolAddress>(
+                address.cast<symbolic::SymbolAddress>());
+        }
+
         ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         makeStructureCloneWithFacade(symbolic::ExprFactory &factory,
                                      clang::QualType type,
@@ -1355,7 +1361,7 @@ namespace acslg::test::unit::analyzer {
             auto range = symbolic::Addr::symbol(var->getType(), from, point)
                              .withLength(symbolic::LiteralExpr{factory, int64_t{3}});
             std::unique_ptr<const symbolic::SymbolAddress> constRange =
-                symbolic::cloneSymbolAddress(range.handle());
+                cloneSymbolAddressForLegacyTest(range.handle());
             return ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
                 std::move(constRange)};
         };
@@ -1424,7 +1430,7 @@ namespace acslg::test::unit::analyzer {
             var->getType(), factory.variableAddress(var), point);
         rangeHandle = factory.withOffset(rangeHandle, factory.rangeIndex("i"));
         rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
-        auto range = symbolic::cloneSymbolAddress(rangeHandle);
+        auto range = cloneSymbolAddressForLegacyTest(rangeHandle);
         auto rangeBase = range->getBaseInfo();
 
         std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
@@ -1466,7 +1472,7 @@ namespace acslg::test::unit::analyzer {
         auto rangeHandle = factory.symbolAddress(
             var->getType(), factory.variableAddress(var), point);
         rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
-        auto range = symbolic::cloneSymbolAddress(rangeHandle);
+        auto range = cloneSymbolAddressForLegacyTest(rangeHandle);
         auto rangeBase = range->getBaseInfo();
 
         auto pred = cloneBinaryForLegacyTest(
@@ -1520,7 +1526,7 @@ namespace acslg::test::unit::analyzer {
         auto rangeHandle = factory.symbolAddress(
             var->getType(), factory.variableAddress(var), point);
         rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
-        auto range = symbolic::cloneSymbolAddress(rangeHandle);
+        auto range = cloneSymbolAddressForLegacyTest(rangeHandle);
         auto rangeBase = range->getBaseInfo();
 
         std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
@@ -1566,7 +1572,7 @@ namespace acslg::test::unit::analyzer {
                 var->getType(), factory.variableAddress(var), point);
             rangeHandle = factory.withOffset(rangeHandle, factory.rangeIndex("i"));
             rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
-            return symbolic::cloneSymbolAddress(rangeHandle);
+            return cloneSymbolAddressForLegacyTest(rangeHandle);
         };
         auto makeConstRange = [](std::unique_ptr<symbolic::SymbolAddress> range) {
             std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
@@ -2017,7 +2023,7 @@ namespace acslg::test::unit::analyzer {
         auto copiedBase = defaultBase;
         ASSERT_TRUE(copiedBase.fromAddr_->handle());
         EXPECT_EQ(*copiedBase.fromAddr_->handle(), varAddrA);
-        auto clonedAddr = symbolic::cloneSymbolAddress(defaultSymAddr);
+        auto clonedAddr = cloneSymbolAddressForLegacyTest(defaultSymAddr);
         ASSERT_TRUE(clonedAddr->getFromAddrHandle());
         EXPECT_EQ(*clonedAddr->getFromAddrHandle(), varAddrA);
         EXPECT_EQ(defaultSymAddrNode.getOffset().get(),
@@ -2412,7 +2418,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
         symbolic::ExprFactory setupFactory;
-        auto legacyPtr = symbolic::cloneSymbolAddress(
+        auto legacyPtr = cloneSymbolAddressForLegacyTest(
             symbolic::Addr::symbol(setupFactory, var->getType(), point)
                 .withOffset(symbolic::LiteralExpr{setupFactory, int64_t{4}})
                 .handle());
@@ -2446,7 +2452,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
         symbolic::ExprFactory setupFactory;
-        auto legacyAddr = symbolic::cloneSymbolAddress(
+        auto legacyAddr = cloneSymbolAddressForLegacyTest(
             symbolic::Addr::symbol(setupFactory, var->getType(), point).handle());
         auto legacyOffset = setupFactory.cloneExpr(setupFactory.literal(int64_t{4}));
         symbolic::BinaryOpExpr legacyAdd(std::move(legacyAddr),
@@ -2567,7 +2573,7 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto legacyPtr = symbolic::cloneSymbolAddress(
+        auto legacyPtr = cloneSymbolAddressForLegacyTest(
             symbolic::Addr::symbol(
                 var->getType(),
                 symbolic::Addr::variable(var),

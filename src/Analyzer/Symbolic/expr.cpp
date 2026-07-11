@@ -818,10 +818,6 @@ namespace acslg::analyzer::symbolic {
         }
     } // namespace
 
-    std::unique_ptr<SymbolAddress> cloneSymbolAddress(AddrHandle address) {
-        return std::make_unique<SymbolAddress>(address.cast<SymbolAddress>());
-    }
-
     ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr) {
         ExprFactoryScope scope(factory);
         if (expr.isUnknown())

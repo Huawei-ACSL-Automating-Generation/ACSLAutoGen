@@ -339,8 +339,10 @@ namespace acslg::test::utils {
         if (len != nullptr)
             lenHandle = exprFactory_.importExpr(*len);
 
-        return *symbolic::cloneSymbolAddress(exprFactory_.symbolAddress(
-            QualType{}, baseHandle, fromPoint.value_or(defaultPoint), offsetHandle, lenHandle));
+        return exprFactory_
+            .symbolAddress(QualType{}, baseHandle, fromPoint.value_or(defaultPoint), offsetHandle,
+                           lenHandle)
+            .cast<symbolic::SymbolAddress>();
     }
 
     unique_ptr<symbolic::SymbolValue> FixtureWithCode::makeSymbolValue(
@@ -355,9 +357,10 @@ namespace acslg::test::utils {
     symbolic::SymbolAddress FixtureWithCode::makeSimpleSymbolAddr(
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
-        return *symbolic::cloneSymbolAddress(exprFactory_.symbolAddress(
-            QualType{}, exprFactory_.variableAddress(getVarDecl(id)),
-            fromPoint.value_or(defaultPoint)));
+        return exprFactory_
+            .symbolAddress(QualType{}, exprFactory_.variableAddress(getVarDecl(id)),
+                           fromPoint.value_or(defaultPoint))
+            .cast<symbolic::SymbolAddress>();
     }
 
     symbolic::SymbolAddress FixtureWithCode::makePointAddr(unsigned int id, uint64_t off) {

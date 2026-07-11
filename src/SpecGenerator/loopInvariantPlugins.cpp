@@ -114,8 +114,6 @@ namespace acslg::spec_generator {
             return symb::SymbolAddress(rebuilt.template cast<symb::SymbolAddress>());
         }
 
-        using symb::cloneSymbolAddress;
-
         symb::ExprHandle unknownHandle() {
             return symb::Expr::unknown().handle();
         }

@@ -2129,8 +2129,6 @@ namespace acslg::analyzer::symbolic {
                          std::optional<AddrHandle> from,
                          SourcePoint fromPoint);
 
-    std::unique_ptr<SymbolAddress> cloneSymbolAddress(AddrHandle address);
-
     enum class Operator : unsigned {
 #define ALL_OP(name, tok, prec, isRightAssoc) name,
 #include "operators.def"
