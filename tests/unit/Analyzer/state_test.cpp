@@ -311,6 +311,39 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(returnExpr->get().get(), expected.get().get());
     }
 
+    TEST(ProgramStateTest, CompoundAssignmentStoresInternedOperation) {
+        ASTExtractor extractor(R"c(
+            int func(int x, int y) {
+                x += y;
+                return x;
+            }
+        )c");
+        auto *func   = extractor.findFirstDecl<FunctionDecl>();
+        auto *assign = extractor.findFirstStmt<CompoundAssignOperator>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(assign, nullptr);
+        ASSERT_EQ(func->getNumParams(), 2u);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        ASSERT_EQ(state.getPaths().size(), 1u);
+
+        auto x = state.getPaths().front()->getVarStateHandle(func->getParamDecl(0));
+        auto y = state.getPaths().front()->getVarStateHandle(func->getParamDecl(1));
+        auto expected = symbolic::Expr{context.getExprFactory(), x}
+                            .binary(symbolic::BinaryOpExpr::Operator::Add,
+                                    symbolic::Expr{context.getExprFactory(), y})
+                            .handle();
+
+        state.step(assign);
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        auto actual = state.getPaths().front()->getVarStateHandle(func->getParamDecl(0));
+        EXPECT_EQ(actual.get().get(), expected.get().get());
+    }
+
     TEST(PathTest, ExtractLValueHandleReusesFactoryAddress) {
         ASTExtractor extractor(R"c(
             void func(void) {

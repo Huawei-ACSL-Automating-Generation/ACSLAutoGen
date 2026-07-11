@@ -2750,29 +2750,27 @@ namespace acslg::analyzer {
                 continue;
             }
 
-            Path::EvalResult eval;
+            Path::EvalHandleResult eval;
 
             if (binOp->isCompoundAssignmentOp()) {
                 symbolic::BinaryOpExpr::Operator op =
                     symbolic::getCompoundAssignOp(binOp->getOpcode());
                 auto &factory = context_.getExprFactory();
 
-                Path::EvalResult lhs = path->evalExpr(binOp->getLHS());
+                Path::EvalHandleResult lhs = path->evalExprHandles(binOp->getLHS());
 
                 std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
-                Formulas outExprs;
+                std::vector<symbolic::ExprHandle> outExprs;
 
                 for (size_t i = 0; i < lhs.second.size(); ++i) {
                     auto &lhsPath = (i == 0) ? *path : *lhs.first[i - 1];
 
-                    Path::EvalResult rhs = lhsPath.evalExpr(binOp->getRHS());
+                    Path::EvalHandleResult rhs = lhsPath.evalExprHandles(binOp->getRHS());
 
                     for (size_t j = 0; j < rhs.second.size(); ++j) {
-                        symbolic::Expr lhsExpr{factory,
-                                               factory.importExpr(*lhs.second[i])};
-                        symbolic::Expr rhsExpr{factory,
-                                               factory.importExpr(*rhs.second[j])};
-                        outExprs.emplace_back(cloneExpr(factory, *lhsExpr.binary(op, rhsExpr)));
+                        symbolic::Expr lhsExpr{factory, lhs.second[i]};
+                        symbolic::Expr rhsExpr{factory, rhs.second[j]};
+                        outExprs.emplace_back(lhsExpr.binary(op, rhsExpr).handle());
 
                         if (i != 0 || j != 0)
                             outPaths.emplace_back(std::move(rhs.first[j - 1]));
@@ -2780,13 +2778,13 @@ namespace acslg::analyzer {
                 }
                 eval = {std::move(outPaths), std::move(outExprs)};
             } else {
-                eval = path->evalExpr(binOp->getRHS());
+                eval = path->evalExprHandles(binOp->getRHS());
             }
 
             size_t n = eval.second.size();
             for (size_t i = 0; i < n; ++i) {
                 auto newPath  = (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
-                auto newValue = std::move(eval.second.at(i));
+                auto newValue = eval.second.at(i);
                 auto dstAddr  = newPath->extractLValueHandle(binOp->getLHS());
                 if (auto *mem =
                         llvm::dyn_cast<clang::MemberExpr>(binOp->getLHS()->IgnoreParenImpCasts())) {
@@ -2819,8 +2817,7 @@ namespace acslg::analyzer {
                         }
                     }
                 }
-                newPath->updateMemory(
-                    dstAddr, newPath->context_.getExprFactory().importExpr(*newValue));
+                newPath->updateMemory(dstAddr, newValue);
                 updatedPaths.push_back(std::move(newPath));
             }
         }
