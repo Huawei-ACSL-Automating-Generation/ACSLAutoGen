@@ -1028,19 +1028,6 @@ namespace acslg::analyzer {
     };
 
     /**
-     * @brief Build loop invariants from the condition and explored paths.
-     * @param loopCond [in] Symbolic loop condition.
-     * @param paths [in] Active execution paths to analyze.
-     * @param initState [in] Initial program state before the loop.
-     * @param generateBranches [in] Whether to enumerate branch-specific invariants.
-     * @return Invariants and post-states captured for the loop.
-     */
-    InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
-                                         const std::vector<std::unique_ptr<Path>> &paths,
-                                         const ProgramState &initState,
-                                         bool generateBranches = true);
-
-    /**
      * @brief Build loop invariants from a single entry path and potential inactive paths.
      * @param loopCond [in] Symbolic loop condition.
      * @param entryPath [in] Path at loop entry.
@@ -1049,21 +1036,11 @@ namespace acslg::analyzer {
      * @param generateBranches [in] Whether to enumerate branch-specific invariants.
      * @return Invariants and post-states captured for the loop.
      */
-    InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
-                                         const Path &entryPath,
-                                         const ProgramState &loopCurrent,
-                                         std::ranges::range auto &inactivePaths,
-                                         bool generateBranches = true);
-
     InvsAndPostStates buildLoopInvariant(symbolic::ExprHandle loopCond,
                                          const Path &entryPath,
                                          const ProgramState &loopCurrent,
                                          std::ranges::range auto &inactivePaths,
-                                         bool generateBranches = true) {
-        auto &factory = symbolic::ExprFactoryScope::current();
-        return buildLoopInvariant(factory.cloneExpr(loopCond).into_underlying(), entryPath,
-                                  loopCurrent, inactivePaths, generateBranches);
-    }
+                                         bool generateBranches = true);
 } // namespace acslg::analyzer
 
 #include "Symbolic/invariant.tpp" // IWYU pragma: keep

@@ -503,9 +503,8 @@ namespace acslg::spec_generator {
             }
 
             auto [spec, normalPostInfos, interruptPostInfos] =
-                analyzer::buildLoopInvariant(factory.cloneExpr(loopCond).into_underlying(),
-                                             *symbolEntry,
-                                             *loopCurrent, entryAndCurrentInfo.inactivePaths);
+                analyzer::buildLoopInvariant(loopCond, *symbolEntry, *loopCurrent,
+                                             entryAndCurrentInfo.inactivePaths);
 
             auto collectPathConds = [](analyzer::PathConditionList conds) {
                 analyzer::PathConditions collected;

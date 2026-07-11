@@ -58,7 +58,7 @@ namespace acslg::analyzer {
      * @param generateBranches [in] Whether to enumerate branch-specific post-states.
      * @return Invariants and synthesized post-states for normal and interrupt exits.
      */
-    InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
+    InvsAndPostStates buildLoopInvariant(symbolic::ExprHandle loopCond,
                                          const Path &entryPath,
                                          const ProgramState &loopCurrent,
                                          std::ranges::range auto &inactivePaths,
@@ -109,7 +109,7 @@ namespace acslg::analyzer {
         auto identityPoly = details::buildIdentityPoly(vm); // shared across all paths
 
         Formulas assertions;
-        assertions.push_back(std::move(loopCond)); // Yes, there is only one.
+        assertions.push_back(loopCond->clone());
         assertions               = details::preprocessConjConds(std::move(assertions));
         auto baseConditionPoly   = details::convertFormulaToPoly(assertions, vm);
         auto primedConditionPoly = details::primedPolyhedron(baseConditionPoly, vm);
