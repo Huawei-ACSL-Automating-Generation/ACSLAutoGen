@@ -623,7 +623,8 @@ namespace acslg::test::unit::analyzer {
         auto expected = factory.binary(factory.importExpr(*addrRange.getOffset()),
                                        BinaryOpExpr::Operator::Add,
                                        factory.importExpr(*addrRange.getLength().value()));
-        EXPECT_EQ(factory.importExpr(*rightBound.value()), expected);
+        EXPECT_EQ(rightBound.value(), expected);
+        EXPECT_EQ(addrRange.getRightBound(), rightBound);
 
         auto *rightBoundNode =
             symbolic::cast<symbolic::BinaryOpExpr>(rightBound.value().get().get());

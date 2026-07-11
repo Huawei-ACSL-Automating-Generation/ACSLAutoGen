@@ -2419,16 +2419,14 @@ namespace acslg::analyzer::symbolic {
         return utils::hash_val(fromPoint_.hash(), fromAddr_ ? fromAddr_.value()->hash() : 0);
     }
 
-    std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> SymbolAddress::getRightBound()
-        const {
+    std::optional<ExprHandle> SymbolAddress::getRightBound() const {
         // Not sure return which one is better, offset_+1 or nullopt.
         if (length_ == std::nullopt)
             return std::nullopt;
         auto &factory = ExprFactoryScope::current();
-        auto rightBound = factory.binary(factory.importExpr(*offset_),
-                                         detail::BinaryOpExprNode::Operator::Add,
-                                         factory.importExpr(*length_.value()));
-        return factory.cloneExpr(rightBound);
+        return factory.binary(factory.importExpr(*offset_),
+                              detail::BinaryOpExprNode::Operator::Add,
+                              factory.importExpr(*length_.value()));
     }
 
     SymbolAddrBaseInfo SymbolAddress::getBaseInfo() const {

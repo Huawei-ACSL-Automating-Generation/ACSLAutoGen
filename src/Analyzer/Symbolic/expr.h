@@ -1797,7 +1797,7 @@ namespace acslg::analyzer::symbolic {
             utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const;
         utils::not_null<std::unique_ptr<SymbolAddress>> withoutLength() const;
 
-        std::optional<utils::not_null<std::unique_ptr<SymbolicExpr>>> getRightBound() const;
+        std::optional<ExprHandle> getRightBound() const;
         SymbolAddrBaseInfo getBaseInfo() const;
 
         // SymbolExpr
