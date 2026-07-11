@@ -714,6 +714,8 @@ namespace acslg::analyzer {
          */
         void updateVarState(utils::not_null<const clang::VarDecl *> var,
                             utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr);
+        void updateVarState(utils::not_null<const clang::VarDecl *> var,
+                            symbolic::ExprHandle expr);
         /**
          * @brief Add a new constraint to the path condition set.
          * @param cond [in] Constraint expression to insert.

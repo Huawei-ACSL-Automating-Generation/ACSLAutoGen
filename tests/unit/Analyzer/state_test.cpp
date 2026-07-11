@@ -344,6 +344,25 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(actual.get().get(), expected.get().get());
     }
 
+    TEST(ProgramStateTest, DeclarationInitializerStoresFactoryHandle) {
+        auto postState = execOnFirstFunc(R"c(
+            int func(void) {
+                int value = 42;
+                return value;
+            }
+        )c");
+        ASSERT_EQ(postState->getPaths().size(), 1u);
+
+        const auto &path = *postState->getPaths().front();
+        ASSERT_EQ(path.getVarAddr().size(), 1u);
+        auto value = path.getMemoryState().readHandle(path.getVarAddr().begin()->second);
+        ASSERT_TRUE(value.has_value());
+        auto expected = postState->getExprFactory().literal(42);
+        EXPECT_EQ(value->get().get(), expected.get().get());
+        ASSERT_TRUE(path.getReturnExpr().has_value());
+        EXPECT_EQ(path.getReturnExpr()->get().get(), expected.get().get());
+    }
+
     TEST(PathTest, ExtractLValueHandleReusesFactoryAddress) {
         ASTExtractor extractor(R"c(
             void func(void) {

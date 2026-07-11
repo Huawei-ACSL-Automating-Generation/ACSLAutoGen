@@ -498,13 +498,18 @@ namespace acslg::analyzer {
      */
     void Path::updateVarState(utils::not_null<const clang::VarDecl *> var,
                               utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr) {
+        updateVarState(var, context_.getExprFactory().importExpr(*expr));
+    }
+
+    void Path::updateVarState(utils::not_null<const clang::VarDecl *> var,
+                              symbolic::ExprHandle expr) {
         auto canonicalVar = var->getCanonicalDecl();
         auto addrIt       = varAddr_.find(canonicalVar);
         if (addrIt == varAddr_.end())
             ERROR("SymbolValue has no allocated address");
 
         auto &addr = addrIt->second;
-        memoryState_.write(*addr, std::move(expr).into_underlying());
+        memoryState_.write(addr, expr);
     }
 
     /**
@@ -2877,23 +2882,25 @@ namespace acslg::analyzer {
 
                         RD = RD->getDefinition();
 
-                        auto st = makeStructureForRecord(
-                            context_.getExprFactory(), RD, varAddrHandle, startPoint_);
-                        if (initListExpr->getNumInits() != st->getNumFields())
+                        auto &factory = context_.getExprFactory();
+                        auto st = factory.importExpr(
+                            *makeStructureForRecord(factory, RD, varAddrHandle, startPoint_));
+                        const auto fieldCount = st.cast<symbolic::Structure>().getNumFields();
+                        if (initListExpr->getNumInits() != fieldCount)
                             ERROR("Initializer std::list size mismatches the struct's field "
                                   "count.");
-                        for (size_t i = 0; i < st->getNumFields(); ++i) {
+                        for (size_t i = 0; i < fieldCount; ++i) {
                             const clang::Expr *init = initListExpr->getInit(i);
 
-                            Path::EvalResult eval = path->evalExpr(init);
+                            Path::EvalHandleResult eval = path->evalExprHandles(init);
                             if (eval.second.size() != 1)
                                 UNIMPLEMENT(
                                     "No control flow branching permitted within an initializer "
                                     "list now.");
-                            st = st->withFieldValue(i, std::move(eval.second[0])).into_underlying();
+                            st = factory.withField(st, i, eval.second[0]);
                         }
 
-                        path->updateVarState(varDecl, std::move(st));
+                        path->updateVarState(varDecl, st);
                         updatedPaths.push_back(std::move(path));
                         continue;
                     } else {
@@ -2903,22 +2910,23 @@ namespace acslg::analyzer {
                                     varType->getTypeClassName() + ".");
                     }
                 } else {
-                    Path::EvalResult eval = path->evalExpr(initExpr);
+                    Path::EvalHandleResult eval = path->evalExprHandles(initExpr);
 
                     size_t n = eval.second.size();
                     for (size_t i = 0; i < n; ++i) {
                         auto newPath  = (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
-                        auto newValue = std::move(eval.second[i]);
+                        auto newValue = eval.second[i];
 
                         if (newValue->isUnknown()) {
                             auto pointAfterDecl = symbolic::SourcePoint::fromStmtAfter(
                                 declStmt, context_.getSourceManager(), context_.getLangOptions());
 
                             auto varType = varDecl->getType();
-                            newValue = symbolic::getSymbol(varType, varAddrHandle, pointAfterDecl);
+                            newValue = context_.getExprFactory().importExpr(
+                                *symbolic::getSymbol(varType, varAddrHandle, pointAfterDecl));
                         }
 
-                        newPath->updateVarState(varDecl, std::move(newValue));
+                        newPath->updateVarState(varDecl, newValue);
                         updatedPaths.push_back(std::move(newPath));
                     }
                     continue;
