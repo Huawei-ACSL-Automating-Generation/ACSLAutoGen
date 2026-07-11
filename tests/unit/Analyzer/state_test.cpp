@@ -301,6 +301,38 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(lit->getLiteralValue(), 12);
     }
 
+    TEST(PathTest, ExtractLValueHandleReusesFactoryAddress) {
+        ASTExtractor extractor(R"c(
+            void func(void) {
+                int value;
+                value;
+            }
+        )c");
+        auto *func    = extractor.findFirstDecl<FunctionDecl>();
+        auto *var     = extractor.findFirstDecl<VarDecl>();
+        auto *varExpr = extractor.findFirstStmt<DeclRefExpr>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(var, nullptr);
+        ASSERT_NE(varExpr, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(
+            func, extractor.getSourceManager(), extractor.getLangOptions());
+        Path path(context, point);
+        auto legacyAddress = path.allocMemory(var);
+        auto expected = context.getExprFactory().importAddress(*legacyAddress);
+
+        auto first  = path.extractLValueHandle(varExpr);
+        auto second = path.extractLValueHandle(varExpr);
+        EXPECT_EQ(first.get().get(), expected.get().get());
+        EXPECT_EQ(second.get().get(), first.get().get());
+
+        auto legacyClone = path.extractLValue(varExpr);
+        EXPECT_EQ(*legacyClone, *first);
+        EXPECT_NE(legacyClone.get().get(), first.get().get());
+    }
+
     TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
         MemoryModel mm;
 

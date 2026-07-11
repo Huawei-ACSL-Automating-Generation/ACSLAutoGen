@@ -671,7 +671,14 @@ namespace acslg::analyzer {
         /**
          * @brief Derive the symbolic l-value address from a left-hand side expression.
          * @param lhs [in] Expression used as an assignment target.
-         * @return Address pointing to the storage referenced by the expression.
+         * @return Interned address handle pointing to the referenced storage.
+         */
+        symbolic::AddrHandle extractLValueHandle(const clang::Expr *lhs);
+
+        /**
+         * @brief Derive a cloned symbolic l-value address for legacy callers.
+         * @param lhs [in] Expression used as an assignment target.
+         * @return Owning address clone pointing to the referenced storage.
          */
         utils::not_null<std::unique_ptr<symbolic::Address>> extractLValue(const clang::Expr *lhs);
 

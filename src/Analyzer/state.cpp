@@ -287,13 +287,12 @@ namespace acslg::analyzer {
      * The routine walks through decl references, array subscripts, pointer dereferences, and member
      * accesses, allocating unknown symbols on demand when the memory model lacks entries.
      */
-    utils::not_null<std::unique_ptr<symbolic::Address>> Path::extractLValue(const clang::Expr *lhs) {
+    symbolic::AddrHandle Path::extractLValueHandle(const clang::Expr *lhs) {
         auto lexpr = lhs->IgnoreParenImpCasts();
         if (auto declRef = dyn_cast<clang::DeclRefExpr>(lexpr)) {
             if (auto varDecl = llvm::dyn_cast<clang::VarDecl>(declRef->getDecl())) {
                 if (auto it = varAddr_.find(varDecl->getCanonicalDecl()); it != varAddr_.end()) {
-                    return cloneVariableAddress(
-                        context_.getExprFactory().importAddress(*it->second));
+                    return context_.getExprFactory().importAddress(*it->second);
                 } else {
                     ERROR("varState has no `VarDecl*` of `DeclRefExpr`, undefined variable?");
                 }
@@ -302,8 +301,8 @@ namespace acslg::analyzer {
         }
 
         if (auto *arr = dyn_cast<clang::ArraySubscriptExpr>(lexpr)) {
-            auto baseAddr = extractLValue(arr->getBase());
-            if (const auto symbol = memoryState_.readHandle(*baseAddr)) {
+            auto baseAddr = extractLValueHandle(arr->getBase());
+            if (const auto symbol = memoryState_.readHandle(baseAddr)) {
                 auto symbolAddr =
                     symbolic::dyn_cast<const symbolic::SymbolAddress>(symbol.value().get().get());
                 if (symbolAddr == nullptr)
@@ -321,7 +320,7 @@ namespace acslg::analyzer {
                     auto newSymbol = getSymbol(arr->getType(), resultAddr.handle(), startPoint_);
                     memoryState_.write(resultAddr.handle(), factory.importExpr(*newSymbol));
                 }
-                return cloneAddress(resultAddr.handle());
+                return resultAddr.handle();
             } else {
                 ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither pointer nor "
                       "array?");
@@ -341,7 +340,7 @@ namespace acslg::analyzer {
                         auto symbol = getSymbol(uop->getType(), *addr, startPoint_);
                         memoryState_.write(*addr, factory.importExpr(*symbol));
                     }
-                    return cloneAddress(*addr);
+                    return *addr;
                 } else {
                     ERROR("Expected symbolic::Address in deref, got: " << addrExpr->dump());
                 }
@@ -374,23 +373,26 @@ namespace acslg::analyzer {
                         context_.getExprFactory(), RD, baseAddr.value(), startPoint_);
                     memoryState_.write(baseAddr.value(), factory.importExpr(*st));
                 }
-                return makeFieldAddress(context_.getExprFactory(), fieldType, RD,
-                                        baseAddr.value(), FD->getFieldIndex());
+                return factory.fieldAddress(fieldType, RD, baseAddr.value(),
+                                            FD->getFieldIndex());
             } else {
-                auto baseAddr = extractLValue(base);
+                auto baseAddr = extractLValueHandle(base);
                 auto &factory = context_.getExprFactory();
-                auto baseHandle = factory.importAddress(*baseAddr);
 
-                if (!memoryState_.contains(baseHandle)) {
-                    auto st = makeStructureForRecord(factory, RD, baseHandle, startPoint_);
-                    memoryState_.write(baseHandle, factory.importExpr(*st));
+                if (!memoryState_.contains(baseAddr)) {
+                    auto st = makeStructureForRecord(factory, RD, baseAddr, startPoint_);
+                    memoryState_.write(baseAddr, factory.importExpr(*st));
                 }
-                return makeFieldAddress(factory, fieldType, RD, baseHandle,
-                                        FD->getFieldIndex());
+                return factory.fieldAddress(fieldType, RD, baseAddr, FD->getFieldIndex());
             }
         }
 
         UNIMPLEMENT("Unsupported LHS expression: " << lexpr->getStmtClassName());
+    }
+
+    utils::not_null<std::unique_ptr<symbolic::Address>> Path::extractLValue(
+        const clang::Expr *lhs) {
+        return cloneAddress(extractLValueHandle(lhs));
     }
 
     /**
@@ -816,10 +818,10 @@ namespace acslg::analyzer {
                 .Case<clang::ArraySubscriptExpr>(
                     [this](const clang::ArraySubscriptExpr *arrSub) -> EvalResult {
                         DEBUG("evaluating ArraySubscriptExpr...");
-                        auto variableAddr = extractLValue(arrSub->getBase());
+                        auto variableAddr = extractLValueHandle(arrSub->getBase());
                         auto &factory     = context_.getExprFactory();
                         std::optional<symbolic::AddrHandle> addr;
-                        if (const auto symbol = memoryState_.readHandle(*variableAddr)) {
+                        if (const auto symbol = memoryState_.readHandle(variableAddr)) {
                             auto ptr = symbolic::dyn_cast<const symbolic::SymbolAddress>(
                                 symbol.value().get().get());
                             if (ptr == nullptr)
@@ -1471,9 +1473,9 @@ namespace acslg::analyzer {
                             using enum symbolic::UnaryOpExpr::Operator;
                             if (op == PreInc || op == PostInc || op == PreDec || op == PostDec) {
                                 // ++x / x++ / --x / x--
-                                auto addr = path->extractLValue(uop->getSubExpr());
+                                auto addr = path->extractLValueHandle(uop->getSubExpr());
                                 // old value
-                                auto oldVal = path->memoryState_.readHandle(*addr);
+                                auto oldVal = path->memoryState_.readHandle(addr);
                                 if (oldVal == std::nullopt)
                                     ERROR("memoryState_ doesn't contain addr.");
                                 // compute new = old +/- 1
@@ -1493,7 +1495,7 @@ namespace acslg::analyzer {
                                 }
                                 // Writing back first will cause oldVal to become dangling.
                                 // write back
-                                path->memoryState_.write(*addr, std::move(newVal));
+                                path->memoryState_.write(addr, factory.importExpr(*newVal));
                             } else if (op == Dereference) {
                                 // *x
                                 auto &factory = path->context_.getExprFactory();
@@ -1511,9 +1513,9 @@ namespace acslg::analyzer {
                                 }
 	                            } else if (op == AddrOf) {
 	                                // &x
-	                                auto addr = path->extractLValue(uop->getSubExpr());
+	                                auto addr = path->extractLValueHandle(uop->getSubExpr());
 	                                outExprs.emplace_back(
-	                                    cloneExpr(context_.getExprFactory(), *addr));
+	                                    context_.getExprFactory().cloneExpr(addr.asExpr()));
                             } else {
                                 auto &factory = context_.getExprFactory();
                                 symbolic::Expr operandExpr{factory, factory.importExpr(*unExpr)};
@@ -2795,7 +2797,7 @@ namespace acslg::analyzer {
             for (size_t i = 0; i < n; ++i) {
                 auto newPath  = (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
                 auto newValue = std::move(eval.second.at(i));
-                auto dstAddr  = newPath->extractLValue(binOp->getLHS());
+                auto dstAddr  = newPath->extractLValueHandle(binOp->getLHS());
                 if (auto *mem =
                         llvm::dyn_cast<clang::MemberExpr>(binOp->getLHS()->IgnoreParenImpCasts())) {
                     if (auto *FD = llvm::dyn_cast<clang::FieldDecl>(mem->getMemberDecl())) {
@@ -2812,8 +2814,7 @@ namespace acslg::analyzer {
                     }
                 }
                 if (newValue->isUnknown()) {
-                    if (auto *fieldAddr =
-                            symbolic::dyn_cast<symbolic::FieldAddress>(dstAddr.get().get())) {
+                    if (auto *fieldAddr = dstAddr.dyn_cast<symbolic::FieldAddress>()) {
                         if (fieldAddr->getDefinition() &&
                             fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
                             fieldAddr->getFieldIndex() == 4) {
@@ -2828,7 +2829,8 @@ namespace acslg::analyzer {
                         }
                     }
                 }
-                newPath->updateMemory(*dstAddr, std::move(newValue));
+                newPath->updateMemory(
+                    dstAddr, newPath->context_.getExprFactory().importExpr(*newValue));
                 updatedPaths.push_back(std::move(newPath));
             }
         }
