@@ -339,21 +339,10 @@ namespace acslg::analyzer::symbolic {
                         SourcePoint fromPoint);
     };
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeSumOverRangeExpr(
-        std::unique_ptr<SymbolAddress> range,
-        std::string_view indexName,
-        SourcePoint fromPoint);
-
     ExprHandle makeSumOverRangeHandle(ExprFactory &factory,
                                       const SymbolAddress &range,
                                       std::string_view indexName,
                                       SourcePoint fromPoint);
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeQuantifierOverRangeExpr(
-        std::unique_ptr<SymbolAddress> range,
-        std::string_view indexName,
-        QuantifierOverRange::Quantifier quantifier,
-        utils::not_null<std::unique_ptr<SymbolicExpr>> predicate);
 
     ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
                                              const SymbolAddress &range,
@@ -365,12 +354,6 @@ namespace acslg::analyzer::symbolic {
                                              std::string_view indexName,
                                              QuantifierOverRange::Quantifier quantifier,
                                              ExprHandle predicate);
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeMaxMinOverRangeExpr(
-        std::unique_ptr<SymbolAddress> range,
-        std::string_view indexName,
-        MaxMinOverRange::Extremum extremum,
-        SourcePoint fromPoint);
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          const SymbolAddress &range,

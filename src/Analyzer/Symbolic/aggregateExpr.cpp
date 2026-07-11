@@ -389,41 +389,6 @@ namespace acslg::analyzer::symbolic {
                                      SourcePoint fromPoint)
         : MaxMinOverRange(makeInit(std::move(range)), indexName, extremum, std::move(fromPoint)) {}
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeSumOverRangeExpr(
-        std::unique_ptr<SymbolAddress> range,
-        std::string_view indexName,
-        SourcePoint fromPoint) {
-        if (!range)
-            ERROR("SumOverRange requires a non-null range.");
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(makeSumOverRangeHandle(
-            factory, *range, indexName, std::move(fromPoint)));
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeQuantifierOverRangeExpr(
-        std::unique_ptr<SymbolAddress> range,
-        std::string_view indexName,
-        QuantifierOverRange::Quantifier quantifier,
-        utils::not_null<std::unique_ptr<SymbolicExpr>> predicate) {
-        if (!range)
-            ERROR("QuantifierOverRange requires a non-null range.");
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(makeQuantifierOverRangeHandle(
-            factory, *range, indexName, quantifier, *predicate));
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeMaxMinOverRangeExpr(
-        std::unique_ptr<SymbolAddress> range,
-        std::string_view indexName,
-        MaxMinOverRange::Extremum extremum,
-        SourcePoint fromPoint) {
-        if (!range)
-            ERROR("MaxMinOverRange requires a non-null range.");
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(makeMaxMinOverRangeHandle(
-            factory, *range, indexName, extremum, std::move(fromPoint)));
-    }
-
     utils::not_null<std::unique_ptr<const SymbolicExpr>> MaxMinOverRange::makeDefaultExpr(
         const SymbolAddress &range,
         std::string_view indexName,
