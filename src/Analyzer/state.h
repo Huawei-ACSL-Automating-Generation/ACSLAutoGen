@@ -18,52 +18,7 @@
 #include "Context/context.h"
 
 namespace acslg::analyzer {
-    using Formulas = std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>;
-    struct SymbolicExprPtrHash {
-        using is_transparent = void;
-
-        std::size_t operator()(
-            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &ptr) const noexcept {
-            return ptr->hash();
-        }
-        std::size_t operator()(const symbolic::SymbolicExpr &expr) const noexcept {
-            return expr.hash();
-        }
-        std::size_t operator()(const symbolic::SymbolicExpr *expr) const noexcept {
-            return expr ? expr->hash() : 0;
-        }
-    };
-    struct SymbolicExprPtrEqual {
-        using is_transparent = void;
-
-        bool operator()(
-            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
-            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const noexcept {
-            return lhs->equal(*rhs);
-        }
-        bool operator()(const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
-                        const symbolic::SymbolicExpr &rhs) const noexcept {
-            return lhs->equal(rhs);
-        }
-        bool operator()(
-            const symbolic::SymbolicExpr &lhs,
-            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const noexcept {
-            return lhs.equal(*rhs);
-        }
-        bool operator()(const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
-                        const symbolic::SymbolicExpr *rhs) const noexcept {
-            return rhs && lhs->equal(*rhs);
-        }
-        bool operator()(
-            const symbolic::SymbolicExpr *lhs,
-            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const noexcept {
-            return lhs && lhs->equal(*rhs);
-        }
-        bool operator()(const symbolic::SymbolicExpr *lhs,
-                        const symbolic::SymbolicExpr *rhs) const noexcept {
-            return lhs && rhs && lhs->equal(*rhs);
-        }
-    };
+    using Formulas = std::vector<symbolic::ExprHandle>;
     struct PathConditionHash {
         std::size_t operator()(symbolic::ExprHandle expr) const noexcept { return expr.hash(); }
     };

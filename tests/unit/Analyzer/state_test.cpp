@@ -351,6 +351,31 @@ namespace acslg::test::unit::analyzer {
         EXPECT_FALSE(path.getVarAddr().contains(local));
     }
 
+    TEST(InvariantFormulaTest, EqualityNegationBuildsInternedHandleBranches) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto lhs = factory.literal(int64_t{10});
+        auto rhs = factory.literal(int64_t{20});
+        auto equality = factory.binary(lhs, symbolic::BinaryOpExpr::Operator::Equal, rhs);
+
+        Formulas formulas{equality};
+        auto branches = ::acslg::analyzer::details::negateFormulas(formulas);
+
+        ASSERT_EQ(branches.size(), 2u);
+        ASSERT_EQ(branches[0].size(), 1u);
+        ASSERT_EQ(branches[1].size(), 1u);
+        auto expectedGreater = factory.binary(
+            lhs, symbolic::BinaryOpExpr::Operator::GreaterEqual,
+            factory.binary(rhs, symbolic::BinaryOpExpr::Operator::Add,
+                           factory.literal(int64_t{1})));
+        auto expectedLess = factory.binary(
+            lhs, symbolic::BinaryOpExpr::Operator::LessEqual,
+            factory.binary(rhs, symbolic::BinaryOpExpr::Operator::Subtract,
+                           factory.literal(int64_t{1})));
+        EXPECT_EQ(branches[0][0].get().get(), expectedGreater.get().get());
+        EXPECT_EQ(branches[1][0].get().get(), expectedLess.get().get());
+    }
+
     TEST(ProgramStateTest, CompoundAssignmentStoresInternedOperation) {
         ASTExtractor extractor(R"c(
             int func(int x, int y) {
