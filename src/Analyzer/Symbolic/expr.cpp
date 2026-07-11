@@ -1099,30 +1099,6 @@ namespace acslg::analyzer::symbolic {
 
 
     /**
-     * @brief Construct a symbolic structure value with all fields initialized to Unknown.
-     * @param ty [in] Structure qualified type.
-     * @param baseAddr [in] Base address for the structure.
-     * @param fromPoint [in] Source point used to tag created symbols.
-     * @return Symbolic expression representing an unknown structure layout.
-     */
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeUnknownStructure(
-        const clang::QualType &ty,
-        utils::not_null<std::unique_ptr<const Address>> baseAddr,
-        SourcePoint fromPoint) {
-        const auto *RT = ty->getAs<clang::RecordType>();
-        if (!RT || !RT->getDecl())
-            UNIMPLEMENT("Invalid structure type in makeUnknownStructure.");
-        const auto *RD = RT->getDecl()->getDefinition();
-        if (!RD || !RD->isCompleteDefinition())
-            UNIMPLEMENT("Incomplete struct definition in makeUnknownStructure.");
-        const auto &layout = RD->getASTContext().getASTRecordLayout(RD);
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(
-            factory.structure(RD, layout, factory.importAddress(*baseAddr),
-                              std::move(fromPoint)));
-    }
-
-    /**
      * @brief Simplify a linear expression by rebuilding it as a minimal sum of terms.
      * @return Simplified clone when expression is linear; otherwise a plain clone.
      */
@@ -2763,15 +2739,6 @@ namespace acslg::analyzer::symbolic {
             UNREACHABLE();
         return !SM_.isBeforeInTranslationUnit(loc_, other.loc_) &&
                !SM_.isBeforeInTranslationUnit(other.loc_, loc_);
-    }
-
-    std::unique_ptr<SymbolicExpr> createLNotExpr(
-        utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(
-                          factory.unary(detail::UnaryOpExprNode::Operator::LogicalNot,
-                                        factory.importExpr(*expr)))
-            .into_underlying();
     }
 
     detail::BinaryOpExprNode::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp) {

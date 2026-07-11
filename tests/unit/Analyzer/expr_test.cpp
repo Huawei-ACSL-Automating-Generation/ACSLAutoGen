@@ -2296,7 +2296,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(legacy.getFieldValue(2).get(), expectedField2.get().get());
     }
 
-    TEST(ExprFactoryTest, ScopedMakeUnknownStructureUsesFactoryStructure) {
+    TEST(ExprFactoryTest, StructureBuilderInitializesUnknownFieldHandles) {
         ASTExtractor e;
         e.init(R"c(
             struct Inner {
@@ -2330,19 +2330,15 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto sizeBefore = factory.size();
-        auto structureExpr = symbolic::makeUnknownStructure(
-            var->getType(),
-            symbolic::cloneVariableAddress(symbolic::Addr::variable(var).handle()),
-            point);
+        auto structureExpr = factory.structure(record, layout, factory.variableAddress(var), point);
         EXPECT_GT(factory.size(), sizeBefore);
 
         auto expected = factory.structure(record, layout, factory.variableAddress(var), point);
-        EXPECT_EQ(factory.importExpr(*structureExpr), expected);
-        const auto *structure =
-            symbolic::cast<symbolic::Structure>(structureExpr.get().get());
+        EXPECT_EQ(structureExpr, expected);
+        const auto &structure = structureExpr.cast<symbolic::Structure>();
         const auto &expectedStructure = expected.cast<symbolic::Structure>();
         for (size_t i = 0; i < expectedStructure.getNumFields(); ++i)
-            EXPECT_EQ(structure->getFieldValue(i).get(),
+            EXPECT_EQ(structure.getFieldValue(i).get(),
                       expectedStructure.getFieldValue(i).get());
     }
 
