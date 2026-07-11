@@ -948,8 +948,8 @@ namespace acslg::analyzer {
         void setStmtCtx(const clang::Stmt *stmtCtx);
         // TODO: remove from private member. [a local helper function.]
         // Only be used in step when processing SwitchStmt, just for a cleaner code.
-        std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<symbolic::SymbolicExpr>>> splitStateBySwitchCond(
-            const clang::Expr *switchCond);
+        std::vector<std::pair<std::unique_ptr<ProgramState>, symbolic::ExprHandle>>
+        splitStateBySwitchCond(const clang::Expr *switchCond);
         void stepSimpleSwitch(const clang::SwitchStmt *switchstmt);
 
         void stepBranch(const std::vector<const clang::Expr *> &branchConds,

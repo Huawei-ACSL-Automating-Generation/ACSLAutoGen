@@ -3069,16 +3069,15 @@ namespace acslg::analyzer {
         }
     }
 
-    std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<symbolic::SymbolicExpr>>> ProgramState::
-        splitStateBySwitchCond(const clang::Expr *switchCond) {
+    std::vector<std::pair<std::unique_ptr<ProgramState>, symbolic::ExprHandle>>
+    ProgramState::splitStateBySwitchCond(const clang::Expr *switchCond) {
         if (!switchCond) {
             TODO();
         }
-        std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<symbolic::SymbolicExpr>>>
-            result;
+        std::vector<std::pair<std::unique_ptr<ProgramState>, symbolic::ExprHandle>> result;
 
         for (auto &path : paths_) {
-            auto evalResult = path->evalExpr(switchCond);
+            auto evalResult = path->evalExprHandles(switchCond);
 
             if (evalResult.first.size() != 0) {
                 ERROR("evalExpr produced unexpected side paths");
@@ -3088,8 +3087,7 @@ namespace acslg::analyzer {
             onePath.push_back(std::move(path).into_underlying());
             auto stateClone = cloneWithPaths(onePath);
 
-            result.emplace_back(std::move(stateClone),
-                                std::move(evalResult.second[0]).into_underlying());
+            result.emplace_back(std::move(stateClone), evalResult.second[0]);
         }
 
         return result;
@@ -3105,7 +3103,7 @@ namespace acslg::analyzer {
         std::vector<std::unique_ptr<ProgramState>> finalStates;
         for (auto &pr : partitions) {
             auto current  = std::move(pr.first);
-            auto symValue = std::move(pr.second);
+            auto symValue = pr.second;
             for (size_t i = 0; i < blocks.size(); ++i) {
                 auto &stmts    = blocks[i];
                 auto *caseCond = conds[i];
@@ -3119,25 +3117,25 @@ namespace acslg::analyzer {
 
                 // TODO: pack a static function in Path.
                 Path tmpPath(context_, startPoint_);
-                auto caseCondEval = tmpPath.evalExpr(caseCond);
+                auto caseCondEval = tmpPath.evalExprHandles(caseCond);
                 assert(caseCondEval.second.size() == 1);
 
-                auto caseSymExpr = std::move(caseCondEval.second[0]);
+                auto caseSymExpr = caseCondEval.second[0];
                 auto eqState     = current->clone();
                 auto &factory    = context_.getExprFactory();
 
-                symbolic::Expr symExpr{factory, factory.importExpr(*symValue)};
-                symbolic::Expr caseExpr{factory, factory.importExpr(*caseSymExpr)};
+                symbolic::Expr symExpr{factory, symValue};
+                symbolic::Expr caseExpr{factory, caseSymExpr};
                 auto condExprEq = symExpr.equalTo(caseExpr);
                 for (auto &p : eqState->paths_)
-                    p->insertPathCondition(cloneExpr(factory, *condExprEq));
+                    p->insertPathCondition(condExprEq.handle());
 
                 for (auto *s : stmts)
                     eqState->step(s);
 
                 auto condExprNe = symExpr.notEqualTo(caseExpr);
                 for (auto &p : current->paths_)
-                    p->insertPathCondition(cloneExpr(factory, *condExprNe));
+                    p->insertPathCondition(condExprNe.handle());
 
                 if (eqState->isInactive()) {
                     finalStates.push_back(std::move(eqState));

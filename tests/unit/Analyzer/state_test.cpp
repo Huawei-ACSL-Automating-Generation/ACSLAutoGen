@@ -393,6 +393,40 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(result->get().get(), input.get().get());
     }
 
+    TEST(ProgramStateTest, SwitchCasesStoreFactoryHandles) {
+        ASTExtractor extractor(R"c(
+            int func(int value) {
+                switch (value) {
+                    case 1: return 10;
+                    case 2: return 20;
+                    default: return 30;
+                }
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        ASSERT_NE(func, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(func->getBody());
+
+        std::unordered_set<const symbolic::SymbolicExpr *> returns;
+        for (const auto &path : state.getPaths()) {
+            ASSERT_TRUE(path->getReturnExpr().has_value());
+            returns.emplace(path->getReturnExpr()->get().get());
+            for (auto cond : path->getPathConditions()) {
+                auto interned = context.getExprFactory().importExpr(*cond);
+                EXPECT_EQ(cond.get().get(), interned.get().get());
+            }
+        }
+
+        EXPECT_TRUE(returns.contains(context.getExprFactory().literal(10).get().get()));
+        EXPECT_TRUE(returns.contains(context.getExprFactory().literal(20).get().get()));
+        EXPECT_TRUE(returns.contains(context.getExprFactory().literal(30).get().get()));
+    }
+
     TEST(PathTest, ExtractLValueHandleReusesFactoryAddress) {
         ASTExtractor extractor(R"c(
             void func(void) {
