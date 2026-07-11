@@ -1537,6 +1537,12 @@ namespace acslg::test::unit::analyzer {
             symbolic::MaxMinOverRange::Extremum::Max,
             point};
 
+        auto indexedRange = factory.withOffset(rangeHandle, factory.rangeIndex("i"));
+        indexedRange      = factory.withoutLength(indexedRange);
+        auto expectedBody =
+            symbolic::getSymbol(rangeHandle->getPointeeType(), indexedRange, point);
+        EXPECT_EQ(&max.getExpr(), expectedBody.get().get());
+
         auto clone = max.clone();
         EXPECT_EQ(*clone, max);
         const auto &clonedMax = *symbolic::cast<symbolic::MaxMinOverRange>(clone.get().get());

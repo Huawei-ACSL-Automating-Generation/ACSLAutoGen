@@ -322,7 +322,7 @@ namespace acslg::analyzer::symbolic {
         ExprChild expr_;
         SourcePoint fromPoint_;
 
-        static utils::not_null<std::unique_ptr<const SymbolicExpr>> makeDefaultExpr(
+        static ExprHandle makeDefaultExpr(
             const SymbolAddress &range,
             std::string_view indexName,
             const SourcePoint &fromPoint);

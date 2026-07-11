@@ -378,8 +378,7 @@ namespace acslg::analyzer::symbolic {
                         std::move(init.range),
                         indexName),
           Symbol(Kind::K_MaxMinOverRange),
-          extremum_(extremum),
-          expr_(ExprChild::fromConstOwned(makeDefaultExpr(range(), indexName, fromPoint))),
+          extremum_(extremum), expr_(makeDefaultExpr(range(), indexName, fromPoint)),
           fromPoint_(std::move(fromPoint)) {}
 
     MaxMinOverRange::MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
@@ -388,21 +387,11 @@ namespace acslg::analyzer::symbolic {
                                      SourcePoint fromPoint)
         : MaxMinOverRange(makeInit(std::move(range)), indexName, extremum, std::move(fromPoint)) {}
 
-    utils::not_null<std::unique_ptr<const SymbolicExpr>> MaxMinOverRange::makeDefaultExpr(
+    ExprHandle MaxMinOverRange::makeDefaultExpr(
         const SymbolAddress &range,
         std::string_view indexName,
         const SourcePoint &fromPoint) {
-        auto &factory = ExprFactoryScope::current();
-
-        SymbolAddress::RangeIndex rangeIndex{indexName};
-        auto indexedRangeHandle = factory.withOffset(factory.importAddress(range),
-                                                     factory.importExpr(rangeIndex));
-        indexedRangeHandle = factory.withoutLength(indexedRangeHandle);
-        std::unique_ptr<const SymbolicExpr> body =
-            factory
-                .cloneExpr(getSymbol(range.getPointeeType(), indexedRangeHandle, fromPoint))
-                .into_underlying();
-        return utils::not_null<std::unique_ptr<const SymbolicExpr>>{std::move(body)};
+        return makeMaxMinDefaultBody(ExprFactoryScope::current(), range, indexName, fromPoint);
     }
 
     std::string MaxMinOverRange::dump() const {
