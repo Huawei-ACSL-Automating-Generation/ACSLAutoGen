@@ -799,11 +799,6 @@ namespace acslg::analyzer::symbolic {
     }
 
     namespace {
-        utils::not_null<std::unique_ptr<SymbolicExpr>> importThroughCurrentFactory(
-            const SymbolicExpr &expr) {
-            return ExprFactoryScope::current().importAndCloneExpr(expr);
-        }
-
         ExprChild makeDefaultSymbolAddressOffsetChild() {
             auto &factory = ExprFactoryScope::current();
             return ExprChild{factory.literal(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET))};
@@ -876,7 +871,7 @@ namespace acslg::analyzer::symbolic {
 
         if (auto *binary = dyn_cast<const detail::BinaryOpExprNode>(&expr)) {
             if (binary->isLinear())
-                return factory.importExpr(*binary->simplifiedExprIfLinear());
+                return binary->simplifiedExprIfLinear();
 
             if (auto c = binary->evalToConstExpr())
                 return factory.importExpr(*c);
@@ -940,13 +935,13 @@ namespace acslg::analyzer::symbolic {
 
         if (auto *unary = dyn_cast<const detail::UnaryOpExprNode>(&expr)) {
             if (unary->isLinear())
-                return factory.importExpr(*unary->simplifiedExprIfLinear());
+                return unary->simplifiedExprIfLinear();
             return factory.unary(unary->getOperator(),
                                  simplifiedExprHandle(factory, *unary->getSub()));
         }
 
         if (auto *literal = dyn_cast<const detail::LiteralExprNode>(&expr))
-            return factory.importExpr(*literal->simplifiedExprIfLinear());
+            return literal->simplifiedExprIfLinear();
 
         return factory.importExpr(expr);
     }
@@ -1005,11 +1000,11 @@ namespace acslg::analyzer::symbolic {
 
     /**
      * @brief Simplify a linear expression by rebuilding it as a minimal sum of terms.
-     * @return Simplified clone when expression is linear; otherwise a plain clone.
+     * @return Interned simplified expression when linear; otherwise the imported node.
      */
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolicExpr::simplifiedExprIfLinear() const {
+    ExprHandle SymbolicExpr::simplifiedExprIfLinear() const {
         if (!isLinear())
-            return importThroughCurrentFactory(*this);
+            return ExprFactoryScope::current().importExpr(*this);
         auto [hashPtrMap, hashIdMap] = collectUsedSymbols(*this);
 
         auto &factory   = ExprFactoryScope::current();
@@ -1055,7 +1050,7 @@ namespace acslg::analyzer::symbolic {
         if (result == std::nullopt) {
             ERROR("Simplified expr is null! Something goes wrong.");
         }
-        return factory.cloneExpr(result.value());
+        return result.value();
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::clone() const {

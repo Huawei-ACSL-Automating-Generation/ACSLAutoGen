@@ -732,8 +732,7 @@ namespace acslg::test::unit::analyzer {
           public:
             using symbolic::detail::BinaryOpExprNode::BinaryOpExprNode;
 
-            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
-            callSimplifiedExprIfLinear() const {
+            symbolic::ExprHandle callSimplifiedExprIfLinear() const {
                 return simplifiedExprIfLinear();
             }
         };
@@ -1056,13 +1055,13 @@ namespace acslg::test::unit::analyzer {
             cloneWithFactory(factory, *x)};
 
         auto simplified = legacyProduct.callSimplifiedExprIfLinear();
-        auto *product = symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
+        const auto &product = simplified.cast<symbolic::BinaryOpExpr>();
 
-        EXPECT_EQ(product->getLeft().get(),
-                  factory.importExpr(*product->getLeft().get()).get().get());
-        EXPECT_EQ(product->getRight().get(),
-                  factory.importExpr(*product->getRight().get()).get().get());
-        EXPECT_EQ(factory.importExpr(*simplified), factory.importExpr(legacyProduct));
+        EXPECT_EQ(product.getLeft().get(),
+                  factory.importExpr(*product.getLeft().get()).get().get());
+        EXPECT_EQ(product.getRight().get(),
+                  factory.importExpr(*product.getRight().get()).get().get());
+        EXPECT_EQ(simplified, factory.importExpr(legacyProduct));
     }
 
     TEST(ExprFactoryTest, ScopedDefaultSimplifiedExprImportsCloneThroughFactory) {

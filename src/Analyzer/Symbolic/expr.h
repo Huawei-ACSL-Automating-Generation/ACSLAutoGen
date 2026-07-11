@@ -489,8 +489,8 @@ namespace acslg::analyzer::symbolic {
         /// @param valueType Underlying value type
         SymbolicExpr(ExprKind kind, Type valueType) : kind_(kind), valueType_(valueType) {}
 
-        /// @brief Simplify expression if it's linear, just call clone() otherwise.
-        utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExprIfLinear() const;
+        /// @brief Simplify a linear expression through the active factory.
+        ExprHandle simplifiedExprIfLinear() const;
 
         /*-------------- Bridge ----------------- */
         static utils::expected<std::string, GetACSLError> callGetACSL(
