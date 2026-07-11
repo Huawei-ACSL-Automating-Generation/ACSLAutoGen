@@ -517,6 +517,41 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(nodes.contains(two.get().get()));
     }
 
+    TEST(PathTest, PostIncrementReturnsOldHandleAndStoresNewHandle) {
+        ASTExtractor extractor(R"c(
+            int func(int value) {
+                value++;
+                return value;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        auto *var  = extractor.findFirstDecl<ParmVarDecl>();
+        auto *inc  = extractor.findFirstStmt<UnaryOperator>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(var, nullptr);
+        ASSERT_NE(inc, nullptr);
+        ASSERT_TRUE(inc->isPostfix());
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(
+            func, extractor.getSourceManager(), extractor.getLangOptions());
+        Path path(context, point);
+        path.allocMemory(var, true);
+
+        auto oldValue = path.getVarStateHandle(var);
+        auto expectedNew = symbolic::Expr{context.getExprFactory(), oldValue}
+                               .binary(symbolic::BinaryOpExpr::Operator::Add,
+                                       symbolic::LiteralExpr{context.getExprFactory(), 1})
+                               .handle();
+        auto result = path.evalExpr(inc);
+
+        ASSERT_TRUE(result.first.empty());
+        ASSERT_EQ(result.second.size(), 1u);
+        EXPECT_EQ(result.second[0].get().get(), oldValue.get().get());
+        EXPECT_EQ(path.getVarStateHandle(var).get().get(), expectedNew.get().get());
+    }
+
     TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
         MemoryModel mm;
 

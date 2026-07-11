@@ -2298,44 +2298,36 @@ namespace acslg::analyzer::symbolic {
     //   - X * sizeofBytes  -> X
     //   - sizeofBytes      -> 1
     // Otherwise returns the input unchanged.
+    inline ExprHandle strip_sizeof_factor(ExprFactory &factory,
+                                          ExprHandle in,
+                                          std::uint64_t sizeofBytes) {
+        using detail::LiteralExprNode;
+
+        if (auto *lit = in.dyn_cast<LiteralExprNode>()) {
+            const auto value = static_cast<std::uint64_t>(lit->getLiteralValue());
+            return value == sizeofBytes ? factory.literal(std::uint64_t{1}) : in;
+        }
+
+        if (auto *bin = in.dyn_cast<BinaryOpExpr>();
+            bin && bin->getOperator() == BinaryOpExpr::Operator::Multiply) {
+            auto left  = bin->getLeft();
+            auto right = bin->getRight();
+            if (auto *literal = dyn_cast<LiteralExprNode>(left.get());
+                literal && static_cast<std::uint64_t>(literal->getLiteralValue()) == sizeofBytes)
+                return factory.importExpr(*right);
+            if (auto *literal = dyn_cast<LiteralExprNode>(right.get());
+                literal && static_cast<std::uint64_t>(literal->getLiteralValue()) == sizeofBytes)
+                return factory.importExpr(*left);
+        }
+        return in;
+    }
+
     inline ::acslg::utils::not_null<std::unique_ptr<::acslg::analyzer::symbolic::SymbolicExpr>> strip_sizeof_factor(
         ::acslg::utils::not_null<std::unique_ptr<::acslg::analyzer::symbolic::SymbolicExpr>> in,
         std::uint64_t sizeofBytes) {
-        using ::acslg::analyzer::symbolic::BinaryOpExpr;
-        using ::acslg::analyzer::symbolic::detail::LiteralExprNode;
-        using ::acslg::analyzer::symbolic::SymbolicExpr;
         auto &factory = ExprFactoryScope::current();
-
-        // Literal equals sizeofBytes -> return 1
-        if (auto *lit = dyn_cast<LiteralExprNode>(in.get().get())) {
-            const auto v = static_cast<std::uint64_t>(lit->getLiteralValue());
-            if (v == sizeofBytes) {
-                return factory.cloneExpr(factory.literal(std::uint64_t{1}));
-            }
-            return in;
-        }
-
-        // Multiply(sizeofBytes, X) or Multiply(X, sizeofBytes) -> return X
-        if (auto *bin = dyn_cast<BinaryOpExpr>(in.get().get())) {
-            using Op = BinaryOpExpr::Operator;
-            if (bin->getOperator() == Op::Multiply) {
-                auto L = bin->getLeft();
-                auto R = bin->getRight();
-
-                if (auto *lLit = dyn_cast<LiteralExprNode>(L.get())) {
-                    if (static_cast<std::uint64_t>(lLit->getLiteralValue()) == sizeofBytes) {
-                        return factory.importAndCloneExpr(*R);
-                    }
-                }
-                if (auto *rLit = dyn_cast<LiteralExprNode>(R.get())) {
-                    if (static_cast<std::uint64_t>(rLit->getLiteralValue()) == sizeofBytes) {
-                        return factory.importAndCloneExpr(*L);
-                    }
-                }
-            }
-        }
-
-        return in;
+        return factory.cloneExpr(
+            strip_sizeof_factor(factory, factory.importExpr(*in), sizeofBytes));
     }
 
 } // namespace acslg::analyzer::symbolic

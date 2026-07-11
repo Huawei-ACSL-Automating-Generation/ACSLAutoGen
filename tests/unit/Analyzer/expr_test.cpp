@@ -743,6 +743,23 @@ namespace acslg::test::unit::analyzer {
         };
     } // namespace
 
+    TEST(ExprFactoryTest, StripSizeofFactorPreservesHandleIdentity) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto value = factory.rangeIndex("count");
+        auto product = factory.binary(factory.literal(std::uint64_t{8}),
+                                      symbolic::BinaryOpExpr::Operator::Multiply, value);
+
+        auto stripped = symbolic::strip_sizeof_factor(factory, product, 8);
+        auto literal = symbolic::strip_sizeof_factor(
+            factory, factory.literal(std::uint64_t{8}), 8);
+        auto unchanged = symbolic::strip_sizeof_factor(factory, product, 4);
+
+        EXPECT_EQ(stripped.get().get(), value.get().get());
+        EXPECT_EQ(literal.get().get(), factory.literal(std::uint64_t{1}).get().get());
+        EXPECT_EQ(unchanged.get().get(), product.get().get());
+    }
+
     TEST(ExprFactoryTest, ReusesEqualNodesButSeparatesHashCollisions) {
         symbolic::ExprFactory factory;
 

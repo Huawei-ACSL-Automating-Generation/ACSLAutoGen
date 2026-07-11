@@ -783,11 +783,6 @@ namespace acslg::analyzer {
         auto getStartPoint() const -> const auto & { return startPoint_; }
 
       private:
-        using OwnedEvalResult =
-            std::pair<std::vector<utils::not_null<std::unique_ptr<Path>>>, Formulas>;
-
-        OwnedEvalResult evalOwnedExpr(const clang::Expr *expr);
-
         // Map: variable record definition ID -> corresponding symbolic address.
         std::unordered_map<const clang::VarDecl *, symbolic::AddrHandle> varAddr_;
 
