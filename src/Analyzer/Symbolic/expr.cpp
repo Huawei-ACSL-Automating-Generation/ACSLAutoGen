@@ -1045,16 +1045,6 @@ namespace acslg::analyzer::symbolic {
         return factory.cloneExpr(simplifiedExprHandle(factory, *this));
     }
 
-    std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> SymbolicExpr::
-        tryEvalAsSymbolAddr() const {
-        auto &factory = ExprFactoryScope::current();
-        auto address = tryEvalAsSymbolAddrHandle(factory, *this);
-        if (!address)
-            return std::nullopt;
-        return cloneSymbolAddress(*address);
-    }
-
-
     /**
      * @brief Simplify a linear expression by rebuilding it as a minimal sum of terms.
      * @return Simplified clone when expression is linear; otherwise a plain clone.
@@ -2219,47 +2209,6 @@ namespace acslg::analyzer::symbolic {
             return false;
         return std::ranges::equal(fields_, st->fields_,
                                   [](auto &lhs, auto &rhs) { return *lhs == *rhs; });
-    }
-
-    std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> detail::BinaryOpExprNode::
-        doTryEvalAsSymbolAddr() const {
-        auto lhs = callTryEvalAsAddr(*left_), rhs = callTryEvalAsAddr(*right_);
-        if (lhs && rhs)
-            return std::nullopt;
-        if (lhs == std::nullopt && rhs == std::nullopt)
-            return std::nullopt;
-
-        auto &factory = ExprFactoryScope::current();
-        AddrHandle addr = lhs ? factory.importAddress(*lhs.value())
-                              : factory.importAddress(*rhs.value());
-        if (lhs) {
-            if (!isValidOffsetOrLength(*right_))
-                return std::nullopt;
-            auto expr = factory.importExpr(*right_);
-            switch (op_) {
-                using enum Operator;
-                case Add: addr = factory.withAddedOffset(addr, expr); break;
-                case Subtract: addr = factory.withSubtractedOffset(addr, expr); break;
-
-                default: return std::nullopt;
-            }
-        } else {
-            if (!isValidOffsetOrLength(*left_))
-                return std::nullopt;
-            auto expr = factory.importExpr(*left_);
-            switch (op_) {
-                using enum Operator;
-                case Add: addr = factory.withAddedOffset(addr, expr); break;
-                case Subtract: return std::nullopt;
-                default: return std::nullopt;
-            }
-        }
-        return cloneSymbolAddress(addr);
-    }
-
-    std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> SymbolAddress::
-        doTryEvalAsSymbolAddr() const {
-        return cloneSymbolAddress(*this);
     }
 
     SymbolicExpr::UsedMap SymbolValue::collectUsedSymbols() const { return {{hash(), this}}; }

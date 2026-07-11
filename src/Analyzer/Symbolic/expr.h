@@ -416,10 +416,6 @@ namespace acslg::analyzer::symbolic {
             return std::pair{std::move(merged), std::move(hashIndexMap)};
         }
 
-        /// @brief Try to evaluate the expression to an symbol address.
-        /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
-        std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> tryEvalAsSymbolAddr() const;
-
         /**
          * @brief Attempt to evaluate the expression to a concrete integer constant.
          * @return Constant value when expression is linear and homogeneous; nullopt otherwise.
@@ -507,11 +503,6 @@ namespace acslg::analyzer::symbolic {
             return e.doGetACSL(config, usedPoints, currentPoint, parentPrec, isRightChild);
         }
 
-        static std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> callTryEvalAsAddr(
-            const SymbolicExpr &e) {
-            return e.doTryEvalAsSymbolAddr();
-        }
-
       private:
         utils::not_null<std::unique_ptr<SymbolicExpr>> cloneWithValType(Type newType) const {
             auto result = clone();
@@ -522,14 +513,6 @@ namespace acslg::analyzer::symbolic {
         void setValType(Type newType) { valueType_ = newType; }
         friend class ExprFactory;
         friend ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr);
-
-        /// @brief Try to evaluate the expression to an symbol address.
-        /// @return Returning `std::nullopt` indicates that the expression is not a valid address.
-        virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
-            const {
-            // TODO: cache the result.
-            return std::nullopt;
-        };
 
         virtual utils::expected<std::string, GetACSLError> doGetACSL(
             const GetACSLConfig &config,
@@ -812,9 +795,6 @@ namespace acslg::analyzer::symbolic {
             std::optional<SourcePoint> currentPoint,
             unsigned parentPrec,
             bool isRightChild) const override;
-
-        virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
-            const override;
 
       private:
         ExprChild left_;
@@ -1816,9 +1796,6 @@ namespace acslg::analyzer::symbolic {
             std::optional<SourcePoint> currentPoint,
             unsigned parentPrec,
             bool isRightChilds) const override;
-        virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
-            const override;
-
         // Address
       public:
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
@@ -1967,12 +1944,6 @@ namespace acslg::analyzer::symbolic {
         };
 
       private:
-        virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
-            const override {
-            ERROR("VariableAddress should not appear in expressions, and therefore, this function "
-                  "should not be called.");
-        };
-
         utils::expected<std::string, GetACSLError> doGetACSL(
             const GetACSLConfig &config,
             std::unordered_set<SourcePoint> &usedPoints,
@@ -2069,12 +2040,6 @@ namespace acslg::analyzer::symbolic {
         };
 
       private:
-        virtual std::optional<utils::not_null<std::unique_ptr<SymbolAddress>>> doTryEvalAsSymbolAddr()
-            const override {
-            ERROR("FieldAddress should not appear in expressions, and therefore, this function "
-                  "should not be called.");
-        };
-
         utils::expected<std::string, GetACSLError> doGetACSL(
             const GetACSLConfig &config,
             std::unordered_set<SourcePoint> &usedPoints,
