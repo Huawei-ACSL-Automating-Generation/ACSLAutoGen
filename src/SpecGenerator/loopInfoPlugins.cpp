@@ -654,7 +654,7 @@ namespace acslg::spec_generator {
                         if (isLocal == std::nullopt)
                             UNREACHABLE();
                     }
-                    indexRealAddr = factory.importAddress(*it->second);
+                    indexRealAddr = it->second;
                 } else {
                     ERROR("A varDecl* has no Address mapped, something must goes wrong.");
                 }

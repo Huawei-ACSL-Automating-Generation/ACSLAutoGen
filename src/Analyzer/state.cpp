@@ -173,8 +173,7 @@ namespace acslg::analyzer {
 
         // Union variable addresses so that both paths agree on storage locations.
         for (const auto &[var, addr] : other.varAddr_)
-            varAddr_.emplace(
-                var, cloneVariableAddress(context_.getExprFactory().importAddress(*addr)));
+            varAddr_.emplace(var, context_.getExprFactory().importAddress(*addr));
 
         // Collect all addresses touched by either path to merge differing symbolic values.
         MemoryModel::KeySet addresses;
@@ -285,7 +284,7 @@ namespace acslg::analyzer {
         if (auto declRef = dyn_cast<clang::DeclRefExpr>(lexpr)) {
             if (auto varDecl = llvm::dyn_cast<clang::VarDecl>(declRef->getDecl())) {
                 if (auto it = varAddr_.find(varDecl->getCanonicalDecl()); it != varAddr_.end()) {
-                    return context_.getExprFactory().importAddress(*it->second);
+                    return it->second;
                 } else {
                     ERROR("varState has no `VarDecl*` of `DeclRefExpr`, undefined variable?");
                 }
@@ -403,8 +402,8 @@ namespace acslg::analyzer {
             }
             ERROR("SymbolValue '" + canonicalVar->getNameAsString() + "' has no allocated address");
         }
-        auto addr  = varIt->second.get().get();
-        auto value = memoryState_.readHandle(*addr);
+        auto addr  = varIt->second;
+        auto value = memoryState_.readHandle(addr);
         if (value == std::nullopt)
             ERROR("SymbolValue '" + canonicalVar->getNameAsString() +
                   "' has no memory state entry for allocated address");
@@ -414,27 +413,24 @@ namespace acslg::analyzer {
     /// @brief Return a const reference to accumulated path conditions.
     const PathConditions &Path::getPathConditions() const { return pathConditions_; }
 
-    utils::not_null<symbolic::VariableAddress *> Path::allocMemory(const clang::VarDecl *var,
-                                                                   bool initSymbolic) {
+    symbolic::AddrHandle Path::allocMemory(const clang::VarDecl *var, bool initSymbolic) {
         auto canonicalVar = var->getCanonicalDecl();
         if (varAddr_.contains(canonicalVar)) {
             // All `symbolic::VariableAddress` built from same canonicalVar are same.
-            return varAddr_.at(canonicalVar).get().get();
+            return varAddr_.at(canonicalVar);
         }
-        auto newAddr = makeVariableAddress(context_.getExprFactory(), var);
-        auto rawPtr  = newAddr.get();
-        varAddr_.emplace(canonicalVar, std::move(newAddr));
+        auto newAddr = context_.getExprFactory().variableAddress(var);
+        varAddr_.emplace(canonicalVar, newAddr);
 
         if (initSymbolic) {
             // Initialize with a symbolic value corresponding to the variable type.
-            auto addrHandle = context_.getExprFactory().importAddress(*rawPtr);
-            auto initSym    = getSymbol(var->getType(), addrHandle, startPoint_);
-            memoryState_.write(addrHandle, context_.getExprFactory().importExpr(*initSym));
+            auto initSym = getSymbol(var->getType(), newAddr, startPoint_);
+            memoryState_.write(newAddr, context_.getExprFactory().importExpr(*initSym));
         } else {
             // Prevent uninitialized variables.
-            memoryState_.write(*rawPtr, buildUnknown(context_.getExprFactory()).into_underlying());
+            memoryState_.write(newAddr, context_.getExprFactory().unknown());
         }
-        return rawPtr;
+        return newAddr;
     }
 
     /**
@@ -532,9 +528,7 @@ namespace acslg::analyzer {
         auto cloned           = std::make_unique<Path>(context_, startPoint_);
         cloned->currentState_ = currentState_;
         for (const auto &entry : varAddr_)
-            cloned->varAddr_.emplace(entry.first,
-                                     cloneVariableAddress(
-                                         context_.getExprFactory().importAddress(*entry.second)));
+            cloned->varAddr_.emplace(entry.first, entry.second);
         cloned->memoryState_ = memoryState_;
         for (const auto &cond : pathConditions_)
             cloned->pathConditions_.emplace(cond);
@@ -1346,9 +1340,7 @@ namespace acslg::analyzer {
                             for (const auto &[vd, addrPtr] : callerSnapshot->varAddr_) {
                                 if (!p->varAddr_.contains(vd)) {
                                     p->varAddr_.emplace(
-                                        vd, cloneVariableAddress(
-                                                p->context_.getExprFactory().importAddress(
-                                                    *addrPtr)));
+                                        vd, p->context_.getExprFactory().importAddress(*addrPtr));
                                 }
                                 if (auto val = callerSnapshot->memoryState_.readHandle(*addrPtr)) {
                                     auto &dstAddr = p->varAddr_.at(vd);
@@ -2849,8 +2841,7 @@ namespace acslg::analyzer {
                     continue;
                 }
 
-                auto varAddr       = path->allocMemory(varDecl);
-                auto varAddrHandle = context_.getExprFactory().importAddress(*varAddr);
+                auto varAddrHandle = path->allocMemory(varDecl);
 
                 if (initExpr == nullptr) {
                     // TODO: add default initialization for basic types.

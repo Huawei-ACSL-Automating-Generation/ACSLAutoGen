@@ -316,13 +316,38 @@ namespace acslg::test::unit::analyzer {
         auto point = symbolic::SourcePoint::fromFuncDecl(
             func, extractor.getSourceManager(), extractor.getLangOptions());
         Path path(context, point);
-        auto legacyAddress = path.allocMemory(var);
-        auto expected = context.getExprFactory().importAddress(*legacyAddress);
+        auto expected = path.allocMemory(var);
 
         auto first  = path.extractLValueHandle(varExpr);
         auto second = path.extractLValueHandle(varExpr);
         EXPECT_EQ(first.get().get(), expected.get().get());
         EXPECT_EQ(second.get().get(), first.get().get());
+    }
+
+    TEST(PathTest, VariableAddressHandlesSurviveAllocationAndClone) {
+        ASTExtractor extractor(R"c(
+            void func(void) {
+                int value;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        auto *var  = extractor.findFirstDecl<VarDecl>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(var, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(
+            func, extractor.getSourceManager(), extractor.getLangOptions());
+        Path path(context, point);
+
+        auto first  = path.allocMemory(var);
+        auto second = path.allocMemory(var);
+        auto cloned = path.clone();
+
+        EXPECT_EQ(first.get().get(), second.get().get());
+        EXPECT_EQ(cloned->getVarAddr().at(var).get().get(), first.get().get());
+        EXPECT_EQ(first.get().get(), context.getExprFactory().variableAddress(var).get().get());
     }
 
     TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
@@ -521,6 +546,7 @@ namespace acslg::test::unit::analyzer {
         ASSERT_EQ(pathA->getVarAddr().size(), 2u);
         EXPECT_TRUE(pathA->getVarAddr().contains(var0));
         EXPECT_TRUE(pathA->getVarAddr().contains(var1));
+        EXPECT_EQ(pathA->getVarAddr().at(var1).get().get(), addr1B.get().get());
 
         auto gotVal1 = pathA->getMemoryState().read(*pathA->getVarAddr().at(var0));
         ASSERT_TRUE(gotVal1);

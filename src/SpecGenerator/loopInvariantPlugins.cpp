@@ -1432,7 +1432,7 @@ namespace acslg::spec_generator {
                     entryAndCurrentInfo.symbolicLoopEntry->getContext().getSourceManager(),
                     entryAndCurrentInfo.symbolicLoopEntry->getContext().getLangOptions());
                 DEBUG("ParadigmMaxMinPlugin: pointAfterLoop label -> " + pointAfterLoop.getLabel());
-                symb::AddressBox maxAddrBox{*maxAddrIt->second};
+                symb::AddressBox maxAddrBox{maxAddrIt->second};
                 normalPostInfo.memoryMap.emplace(
                     maxAddrBox,
                     makeMaxMinOverRangeHandle(factory, arrayRange, "k", *extremum,

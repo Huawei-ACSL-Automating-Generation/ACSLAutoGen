@@ -692,10 +692,9 @@ namespace acslg::analyzer {
          * @brief Allocate symbolic memory for a variable if not already allocated.
          * @param var [in] Variable declaration to allocate.
          * @param initSymbolic [in] When true, initialize with a symbolic value for the variable type.
-         * @return Pointer to the symbolic variable address.
+         * @return Interned handle to the symbolic variable address.
          */
-        utils::not_null<symbolic::VariableAddress *> allocMemory(const clang::VarDecl *,
-                                                                 bool initSymbolic = false);
+        symbolic::AddrHandle allocMemory(const clang::VarDecl *, bool initSymbolic = false);
 
         /**
          * @brief Write a symbolic value to the specified address in memory.
@@ -784,9 +783,7 @@ namespace acslg::analyzer {
 
       private:
         // Map: variable record definition ID -> corresponding symbolic address.
-        std::unordered_map<const clang::VarDecl *,
-                           utils::not_null<std::unique_ptr<symbolic::VariableAddress>>>
-            varAddr_;
+        std::unordered_map<const clang::VarDecl *, symbolic::AddrHandle> varAddr_;
 
         MemoryModel memoryState_;
 
