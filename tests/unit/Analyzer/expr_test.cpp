@@ -43,6 +43,18 @@ namespace acslg::test::unit::analyzer {
         }
 
         ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+        cloneLiteralForLegacyTest(int64_t value) {
+            auto &factory = symbolic::ExprFactoryScope::current();
+            return factory.cloneExpr(factory.literal(value));
+        }
+
+        ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+        cloneRangeIndexForLegacyTest(std::string_view name) {
+            auto &factory = symbolic::ExprFactoryScope::current();
+            return factory.cloneExpr(factory.rangeIndex(name));
+        }
+
+        ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         cloneBinaryForLegacyTest(
             ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> lhs,
             symbolic::BinaryOpExpr::Operator op,
@@ -733,8 +745,8 @@ namespace acslg::test::unit::analyzer {
             ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> clone()
                 const override {
                 return cloneBinaryForLegacyTest(
-                    symbolic::makeLiteralExpr(1), symbolic::BinaryOpExpr::Operator::Add,
-                    symbolic::makeLiteralExpr(2));
+                    cloneLiteralForLegacyTest(1), symbolic::BinaryOpExpr::Operator::Add,
+                    cloneLiteralForLegacyTest(2));
             }
 
             std::string dump() const override { return "base-simplified-probe"; }
@@ -1089,8 +1101,8 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactoryScope scope(factory);
         auto simplified = legacy.simplifiedExpr();
         auto expected = cloneBinaryForLegacyTest(
-            symbolic::makeLiteralExpr(1), symbolic::BinaryOpExpr::Operator::Add,
-            symbolic::makeLiteralExpr(2));
+            cloneLiteralForLegacyTest(1), symbolic::BinaryOpExpr::Operator::Add,
+            cloneLiteralForLegacyTest(2));
 
         EXPECT_EQ(factory.importExpr(*simplified), factory.importExpr(*expected));
     }
@@ -1131,10 +1143,10 @@ namespace acslg::test::unit::analyzer {
                 .handle());
         auto predicate = cloneBinaryForLegacyTest(
             cloneWithFactory(factory, *x), symbolic::BinaryOpExpr::Operator::Equal,
-            symbolic::makeLiteralExpr(0));
+            cloneLiteralForLegacyTest(0));
         auto wrapped = cloneBinaryForLegacyTest(
             std::move(predicate), symbolic::BinaryOpExpr::Operator::Equal,
-            symbolic::makeLiteralExpr(1));
+            cloneLiteralForLegacyTest(1));
 
         auto simplified = wrapped->simplifiedExpr();
         auto *returnedPredicate =
@@ -1178,7 +1190,7 @@ namespace acslg::test::unit::analyzer {
             return cloneBinaryForLegacyTest(
                 std::move(unary),
                 symbolic::BinaryOpExpr::Operator::Add,
-                symbolic::makeLiteralExpr(2));
+                cloneLiteralForLegacyTest(2));
         }();
 
         auto imported = factory.importExpr(*legacy);
@@ -1393,9 +1405,9 @@ namespace acslg::test::unit::analyzer {
         auto makePred =
             []() -> ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>> {
             auto pred = cloneBinaryForLegacyTest(
-                symbolic::makeRangeIndexExpr("i"),
+                cloneRangeIndexForLegacyTest("i"),
                 symbolic::BinaryOpExpr::Operator::LessThan,
-                symbolic::makeLiteralExpr(3));
+                cloneLiteralForLegacyTest(3));
             std::unique_ptr<const symbolic::SymbolicExpr> constPred =
                 std::move(pred).into_underlying();
             return ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
@@ -1500,9 +1512,9 @@ namespace acslg::test::unit::analyzer {
         auto rangeBase = range->getBaseInfo();
 
         auto pred = cloneBinaryForLegacyTest(
-            symbolic::makeRangeIndexExpr("i"),
+            cloneRangeIndexForLegacyTest("i"),
             symbolic::BinaryOpExpr::Operator::LessThan,
-            symbolic::makeLiteralExpr(3));
+            cloneLiteralForLegacyTest(3));
 
         std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
         std::unique_ptr<const symbolic::SymbolicExpr> constPred =
@@ -1623,7 +1635,7 @@ namespace acslg::test::unit::analyzer {
             "i",
             symbolic::QuantifierOverRange::Quantifier::ForAll,
             ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
-                symbolic::makeRangeIndexExpr("i").into_underlying()}};
+                cloneRangeIndexForLegacyTest("i").into_underlying()}};
         auto substitutedQuantifier =
             symbolic::getRangeIndexSubstitutedHandle(factory, quantifier, rangeBase, one);
         const auto &quantifierNode =
@@ -1636,7 +1648,7 @@ namespace acslg::test::unit::analyzer {
             "i",
             symbolic::MaxMinOverRange::Extremum::Max,
             ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
-                symbolic::makeRangeIndexExpr("i").into_underlying()},
+                cloneRangeIndexForLegacyTest("i").into_underlying()},
             point};
         auto substitutedMax =
             symbolic::getRangeIndexSubstitutedHandle(factory, max, rangeBase, one);
@@ -2688,13 +2700,13 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory rebuildFactory;
         symbolic::ExprFactoryScope rebuildScope(rebuildFactory);
         auto withOffset =
-            original->withOffset(symbolic::makeLiteralExpr(5));
+            original->withOffset(cloneLiteralForLegacyTest(5));
         auto withLength =
-            withOffset->withLength(symbolic::makeLiteralExpr(3));
-        auto addedOffset = withOffset->withAddedOffset(symbolic::makeLiteralExpr(2));
-        auto subtractedOffset = withOffset->withSubtractedOffset(symbolic::makeLiteralExpr(2));
-        auto addedLengthFromScalar = original->withAddedLength(symbolic::makeLiteralExpr(2));
-        auto addedLength = withLength->withAddedLength(symbolic::makeLiteralExpr(2));
+            withOffset->withLength(cloneLiteralForLegacyTest(3));
+        auto addedOffset = withOffset->withAddedOffset(cloneLiteralForLegacyTest(2));
+        auto subtractedOffset = withOffset->withSubtractedOffset(cloneLiteralForLegacyTest(2));
+        auto addedLengthFromScalar = original->withAddedLength(cloneLiteralForLegacyTest(2));
+        auto addedLength = withLength->withAddedLength(cloneLiteralForLegacyTest(2));
         auto withoutLength = withLength->withoutLength();
         auto resetOffset   = withLength->withResetOffset();
 
@@ -2854,7 +2866,7 @@ namespace acslg::test::unit::analyzer {
 
         auto updated = [&]() {
             symbolic::ExprFactoryScope scope(factory);
-            return structure->withFieldValue(0, symbolic::makeLiteralExpr(42));
+            return structure->withFieldValue(0, cloneLiteralForLegacyTest(42));
         }();
 
         EXPECT_EQ(*structure->getFieldValue(0), *originalField0);

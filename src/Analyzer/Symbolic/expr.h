@@ -2195,8 +2195,6 @@ namespace acslg::analyzer::symbolic {
                                                             AddrHandle from,
                                                             SourcePoint fromPoint);
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeLiteralExpr(int64_t value);
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeRangeIndexExpr(std::string_view name);
     std::unique_ptr<SymbolValue> cloneSymbolValue(ExprHandle value);
     std::unique_ptr<SymbolValue> makeSymbolValue(ExprFactory &factory,
                                                  SymbolicExpr::Type varType,

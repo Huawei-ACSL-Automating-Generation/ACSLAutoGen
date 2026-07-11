@@ -833,14 +833,6 @@ namespace acslg::analyzer::symbolic {
         }
     } // namespace
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeLiteralExpr(int64_t value) {
-        return ExprFactoryScope::current().cloneExpr(ExprFactoryScope::current().literal(value));
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeRangeIndexExpr(std::string_view name) {
-        return ExprFactoryScope::current().cloneExpr(ExprFactoryScope::current().rangeIndex(name));
-    }
-
     std::unique_ptr<SymbolValue> cloneSymbolValue(ExprHandle value) {
         return std::make_unique<SymbolValue>(value.cast<SymbolValue>());
     }
