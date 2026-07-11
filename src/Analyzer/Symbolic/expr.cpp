@@ -415,14 +415,6 @@ namespace acslg::analyzer::symbolic {
         return Substituter{factory, rangeBase, indexExpr}.run(expr);
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> ExprChild::clone() const {
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            return factory.cloneExpr(factory.importExpr(*get()));
-        }
-        return get()->clone();
-    }
-
     ExprChild ExprChild::copy() const {
         if (ExprFactoryScope::hasCurrent())
             return ExprChild{ExprFactoryScope::current().importExpr(*get())};
@@ -2126,10 +2118,10 @@ namespace acslg::analyzer::symbolic {
     }
 
     SymbolAddress::SymbolAddress(const SymbolAddress &other)
-        : Address(other), Symbol(other), offset_(other.offset_.clone()),
+        : Address(other), Symbol(other), offset_(other.offset_.copy()),
           fromPoint_(other.fromPoint_), length_(std::nullopt) {
         if (other.length_)
-            length_.emplace(other.length_.value().clone());
+            length_.emplace(other.length_.value().copy());
         if (other.fromAddr_ == std::nullopt)
             fromAddr_ = std::nullopt;
         else
