@@ -2105,6 +2105,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
         symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
         auto varAddr = factory.variableAddress(var);
         auto structure = factory.structure(record, layout, varAddr, point);
         const auto &structureNode = structure.cast<symbolic::Structure>();
@@ -2652,66 +2653,23 @@ namespace acslg::test::unit::analyzer {
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
         symbolic::ExprFactory factory;
-        auto structureExpr = [&]() {
-            symbolic::ExprFactoryScope scope(factory);
-            return makeStructureCloneWithFacade(factory, var->getType(), var, point);
-        }();
-        auto *structure = symbolic::cast<symbolic::Structure>(structureExpr.get().get());
-        auto originalField0 = cloneWithFactory(factory, *structure->getFieldValue(0));
-        auto originalField1 = cloneWithFactory(factory, *structure->getFieldValue(1));
-
-        auto updated = [&]() {
-            symbolic::ExprFactoryScope scope(factory);
-            return structure->withFieldValue(0, cloneLiteralForLegacyTest(42));
-        }();
-
-        EXPECT_EQ(*structure->getFieldValue(0), *originalField0);
-        EXPECT_EQ(*structure->getFieldValue(1), *originalField1);
-
-        auto *updatedField0 =
-            symbolic::cast<symbolic::detail::LiteralExprNode>(
-                updated->getFieldValue(0).get());
-        EXPECT_EQ(updatedField0->getLiteralValue(), 42);
-        EXPECT_EQ(*updated->getFieldValue(1), *originalField1);
-    }
-
-    TEST(StructureRebuildTest, ScopedFieldUpdateRebuildsThroughFactory) {
-        ASTExtractor e;
-        e.init(R"c(
-            struct S {
-                int a;
-                int b;
-            };
-
-            int f(void) {
-                struct S s;
-                return 0;
-            }
-        )c");
-
-        auto *func = e.findFunc("f");
-        ASSERT_NE(func, nullptr);
-        auto *var = e.findFirstDecl<VarDecl>();
-        ASSERT_NE(var, nullptr);
-        auto point =
-            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
-
-        symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-
-        auto structureExpr = makeStructureCloneWithFacade(factory, var->getType(), var, point);
-        auto *structure = symbolic::cast<symbolic::Structure>(structureExpr.get().get());
+        auto *record = var->getType()->getAsRecordDecl()->getDefinition();
+        auto &layout = record->getASTContext().getASTRecordLayout(record);
+        auto structure = factory.structure(record, layout, factory.variableAddress(var), point);
+        const auto &original = structure.cast<symbolic::Structure>();
+        auto originalField0 = factory.importExpr(*original.getFieldValue(0));
+        auto originalField1 = factory.importExpr(*original.getFieldValue(1));
         auto replacement = factory.literal(42);
 
-        auto sizeBefore = factory.size();
-        auto updated = structure->withFieldValue(0, factory.cloneExpr(replacement));
-        EXPECT_GT(factory.size(), sizeBefore);
+        auto updated = factory.withField(structure, 0, replacement);
+        EXPECT_EQ(updated, factory.withField(structure, 0, replacement));
 
-        auto importedOriginal = factory.importExpr(*structure);
-        auto expectedUpdated = factory.withField(importedOriginal, 0, replacement);
-        EXPECT_EQ(factory.importExpr(*updated), expectedUpdated);
-        EXPECT_EQ(*updated->getFieldValue(0).get(), *replacement.get().get());
-        EXPECT_EQ(*updated->getFieldValue(1).get(), *structure->getFieldValue(1).get());
+        const auto &updatedNode = updated.cast<symbolic::Structure>();
+        EXPECT_EQ(original.getFieldValue(0).get(), originalField0.get().get());
+        EXPECT_EQ(original.getFieldValue(1).get(), originalField1.get().get());
+        EXPECT_EQ(updatedNode.getFieldValue(0).get(), replacement.get().get());
+        EXPECT_EQ(updatedNode.getFieldValue(1).get(), originalField1.get().get());
     }
 
     TEST(StructureRebuildTest, ScopedValueSubstitutionRebuildsFieldsThroughFactory) {

@@ -1046,9 +1046,6 @@ namespace acslg::analyzer::symbolic {
         static bool classof(const Symbol *e) { return e->getKind() == Symbol::Kind::K_Structure; }
 
         size_t getNumFields() const { return info_.getNumFields(); }
-        utils::not_null<std::unique_ptr<Structure>> withFieldValue(
-            size_t index,
-            utils::not_null<std::unique_ptr<SymbolicExpr>> expr) const;
         utils::not_null<const SymbolicExpr *> getFieldValue(size_t index) const {
             if (index >= fields_.size())
                 ERROR("Out-of-bounds access");

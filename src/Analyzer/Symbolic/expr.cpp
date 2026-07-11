@@ -2410,16 +2410,6 @@ namespace acslg::analyzer::symbolic {
         return *this;
     }
 
-    utils::not_null<std::unique_ptr<Structure>> Structure::withFieldValue(
-        size_t index,
-        utils::not_null<std::unique_ptr<SymbolicExpr>> expr) const {
-        if (index >= fields_.size())
-            ERROR("Out-of-bounds access");
-        auto &factory = ExprFactoryScope::current();
-        return cloneStructure(factory.withField(
-            factory.importExpr(*this), index, factory.importExpr(*expr)));
-    }
-
     Structure::Structure(Info info, std::vector<ExprHandle> fields)
         : SymbolicExpr(
               ExprKind::K_Structure,
