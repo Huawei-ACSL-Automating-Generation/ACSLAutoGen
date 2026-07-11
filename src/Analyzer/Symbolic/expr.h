@@ -40,6 +40,7 @@ namespace acslg::analyzer::symbolic {
     class ExprFactory;
     class ExprFactoryScope;
     class ExprHandle;
+    class AddrHandle;
     struct SymbolAddrBaseInfo;
 
     namespace detail {
@@ -1167,24 +1168,39 @@ namespace acslg::analyzer::symbolic {
     class AddressBox {
       public:
         explicit AddressBox(utils::not_null<std::unique_ptr<Address>> p) noexcept
-            : ptr_(std::move(p)) {}
-        AddressBox(const Address &other) : ptr_(other.addressClone()) {};
+            : owned_(std::move(p).into_underlying()), ptr_(owned_.get()) {}
+        explicit AddressBox(AddrHandle handle) noexcept;
+        AddressBox(const Address &other)
+            : owned_(other.addressClone().into_underlying()), ptr_(owned_.get()) {};
 
-        AddressBox(const AddressBox &other) : ptr_(other.ptr_->addressClone()) {}
+        AddressBox(const AddressBox &other) {
+            if (other.owned_) {
+                owned_ = other.ptr_->addressClone().into_underlying();
+                ptr_   = owned_.get();
+            } else {
+                ptr_ = other.ptr_;
+            }
+        }
         AddressBox &operator=(const AddressBox &other) {
             if (this == &other)
                 return *this;
-            ptr_ = other.ptr_->addressClone();
+            if (other.owned_) {
+                owned_ = other.ptr_->addressClone().into_underlying();
+                ptr_   = owned_.get();
+            } else {
+                owned_.reset();
+                ptr_ = other.ptr_;
+            }
             return *this;
         }
 
         AddressBox(AddressBox &&) noexcept            = default;
         AddressBox &operator=(AddressBox &&) noexcept = default;
 
-        operator Address &() { return *ptr_; }
+        operator Address &() { return const_cast<Address &>(*ptr_); }
         operator const Address &() const { return *ptr_; }
 
-        Address &get() { return *ptr_; }
+        Address &get() { return const_cast<Address &>(*ptr_); }
         const Address &get() const { return *ptr_; }
 
         friend bool operator==(const AddressBox &a, const AddressBox &b) {
@@ -1196,7 +1212,8 @@ namespace acslg::analyzer::symbolic {
         std::size_t hash() const noexcept { return ptr_->hash(); }
 
       private:
-        utils::not_null<std::unique_ptr<Address>> ptr_;
+        std::unique_ptr<Address> owned_;
+        const Address *ptr_;
     };
 
     struct AddressBoxHash {
@@ -1252,6 +1269,8 @@ namespace acslg::analyzer::symbolic {
       private:
         const Address *ptr_;
     };
+
+    inline AddressBox::AddressBox(AddrHandle handle) noexcept : ptr_(handle.get().get()) {}
 
     class AddressChild {
       public:

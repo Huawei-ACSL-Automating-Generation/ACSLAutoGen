@@ -273,14 +273,14 @@ namespace acslg::analyzer {
          * @param base Base info for the symbol address.
          * @param off Offset within the base.
          * @param len Length of the range.
-         * @return A unique_ptr to the composed Address.
+         * @return Factory-owned handle to the composed Address.
          * @note Length must be non-zero.
          */
         template <class Owner>
-        static std::unique_ptr<symbolic::Address> compose_address(Owner &owner,
-                                                                  symbolic::SymbolAddrBaseInfo base,
-                                                                  uint64_t off,
-                                                                  uint64_t len) {
+        static symbolic::AddrHandle compose_address(Owner &owner,
+                                                    symbolic::SymbolAddrBaseInfo base,
+                                                    uint64_t off,
+                                                    uint64_t len) {
             if (len == 0)
                 ERROR("Length should not be 0, something goes wrong.");
 
@@ -304,7 +304,7 @@ namespace acslg::analyzer {
                                                   offset, length);
                 return symbolic::Addr::symbol(base.pointeeType_, base.fromPoint_, offset, length);
             }();
-            return addr->addressClone().into_underlying();
+            return addr.handle();
         }
 
         /// Helper to access variable address map from owner
@@ -380,17 +380,19 @@ namespace acslg::analyzer {
                 switch (phase_) {
                     case Phase::VarAddr: {
                         const symbolic::Address &addr = var_outer_->first;
-                        return R{addr, var_outer_->second.get()};
+                        return R{symbolic::AddressBox{owner_.factory().importAddress(addr)},
+                                 var_outer_->second.get()};
                     }
                     case Phase::Const: {
                         const symbolic::SymbolAddrBaseInfo &base = c_outer_->first;
                         const auto [off, offPlusLen]             = c_inner_->first;
                         auto addr = compose_address(owner_, base, off, offPlusLen - off);
-                        return R{std::move(addr), c_inner_->second.get()};
+                        return R{symbolic::AddressBox{addr}, c_inner_->second.get()};
                     }
                     case Phase::Symb: {
                         const symbolic::Address &addr = s_inner_->first;
-                        return R{addr, s_inner_->second.get()};
+                        return R{symbolic::AddressBox{owner_.factory().importAddress(addr)},
+                                 s_inner_->second.get()};
                     }
                     case Phase::Field: {
                         // Handle Structure fields
@@ -404,12 +406,10 @@ namespace acslg::analyzer {
                             std::ranges::next(st.getInfo().definition_->field_begin(), index)
                                 ->getType();
                         auto &factory = owner_.factory();
-                        auto addr = factory
-                                        .fieldAddress(fieldType, st.getInfo().definition_,
-                                                      factory.importAddress(baseAddr.get()), index)
-                                        ->addressClone()
-                                        .into_underlying();
-                        return R{std::move(addr), st.getFieldValue(index).get()};
+                        auto addr = factory.fieldAddress(fieldType, st.getInfo().definition_,
+                                                         factory.importAddress(baseAddr.get()),
+                                                         index);
+                        return R{symbolic::AddressBox{addr}, st.getFieldValue(index).get()};
                     }
                     default: break;
                 }

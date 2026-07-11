@@ -287,6 +287,14 @@ namespace acslg::test::unit::analyzer {
         auto result = getReturnExprOfFirstPath(*postState)->simplifiedExpr();
         auto *lit   = symbolic::cast<symbolic::detail::LiteralExprNode>(result.get().get());
         EXPECT_EQ(lit->getLiteralValue(), 12);
+
+        size_t flatCount = 0;
+        for (auto &&[addr, value] : postState->getPaths().front()->getMemoryState().flat()) {
+            auto interned = postState->getExprFactory().importAddress(addr.get());
+            EXPECT_EQ(&addr.get(), interned.get().get());
+            ++flatCount;
+        }
+        EXPECT_GE(flatCount, 2u);
     }
 
     TEST(PathTest, ExtractLValueHandleReusesFactoryAddress) {
@@ -377,12 +385,14 @@ namespace acslg::test::unit::analyzer {
     }
 
     TEST_F(MemoryModelTest, Flat_Yields_All_Three_Categories) {
+        auto &factory = symbolic::ExprFactoryScope::current();
         MemoryModel mm;
 
         // noOffset
         auto baseA  = makeVariableAddr(1);
         auto eA     = makeSymbolValue(1);
         auto saveEA = cloneExpr(*eA);
+        auto addrAHandle = factory.importAddress(baseA);
         mm.write(baseA, std::move(eA));
 
         // constantRange
@@ -390,22 +400,28 @@ namespace acslg::test::unit::analyzer {
                                     /*len=*/makeLiteralExpr(2).into_underlying());
         auto eB     = makeSymbolValue(2);
         auto saveEB = cloneExpr(*eB);
+        auto addrBHandle = factory.importAddress(rangeB);
         mm.write(rangeB, std::move(eB));
 
         // symbolicRange
         auto rangeC = makeRangeAddr(3, /*off=*/makeSymbolValue(3), nullptr);
         auto eC     = makeSymbolValue(3);
-        auto saveEC = eC.get();
+        auto saveEC = cloneExpr(*eC);
+        auto addrCHandle = factory.importAddress(rangeC);
         mm.write(rangeC, std::move(eC));
 
         bool fA = false, fB = false, fC = false;
         for (auto &&[addr, value] : mm.flat()) {
-            if (*value == *saveEA)
+            if (*value == *saveEA) {
                 fA = true;
-            else if (*value == *saveEB)
+                EXPECT_EQ(&addr.get(), addrAHandle.get().get());
+            } else if (*value == *saveEB) {
                 fB = true;
-            else if (*value == *saveEC)
+                EXPECT_EQ(&addr.get(), addrBHandle.get().get());
+            } else if (*value == *saveEC) {
                 fC = true;
+                EXPECT_EQ(&addr.get(), addrCHandle.get().get());
+            }
         }
 
         EXPECT_TRUE(fA);
