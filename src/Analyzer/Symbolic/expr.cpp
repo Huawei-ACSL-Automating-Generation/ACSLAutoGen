@@ -418,7 +418,7 @@ namespace acslg::analyzer::symbolic {
     utils::not_null<std::unique_ptr<SymbolicExpr>> ExprChild::clone() const {
         if (ExprFactoryScope::hasCurrent()) {
             auto &factory = ExprFactoryScope::current();
-            return factory.importAndCloneExpr(*get());
+            return factory.cloneExpr(factory.importExpr(*get()));
         }
         return get()->clone();
     }

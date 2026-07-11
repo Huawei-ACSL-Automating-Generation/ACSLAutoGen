@@ -39,7 +39,7 @@ namespace acslg::test::unit::analyzer {
         ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         cloneWithFactory(symbolic::ExprFactory &factory,
                          const symbolic::SymbolicExpr &expr) {
-            return factory.importAndCloneExpr(expr);
+            return factory.cloneExpr(factory.importExpr(expr));
         }
 
         ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
