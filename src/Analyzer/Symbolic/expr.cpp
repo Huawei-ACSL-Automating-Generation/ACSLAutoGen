@@ -993,9 +993,9 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolicExpr::simplifiedExpr() const {
+    ExprHandle SymbolicExpr::simplifiedExpr() const {
         auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(simplifiedExprHandle(factory, *this));
+        return simplifiedExprHandle(factory, *this);
     }
 
     /**
@@ -1809,26 +1809,6 @@ namespace acslg::analyzer::symbolic {
             return valueStr.error();
 
         return prefix + std::move(valueStr.value()) + suffix;
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::simplifiedExpr() const {
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(simplifiedExprHandle(factory, *this));
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::simplifiedExpr() const {
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(simplifiedExprHandle(factory, *this));
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::simplifiedExpr() const {
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(simplifiedExprHandle(factory, *this));
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::simplifiedExpr() const {
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(simplifiedExprHandle(factory, *this));
     }
 
     const detail::LiteralExprNode *detail::LiteralExprNode::evalToConstExpr() const {

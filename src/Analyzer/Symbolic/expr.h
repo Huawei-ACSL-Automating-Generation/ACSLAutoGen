@@ -375,7 +375,7 @@ namespace acslg::analyzer::symbolic {
 
         /// @brief Get a simplified version of the expression.
         /// @return Simplified expression.
-        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const;
+        virtual ExprHandle simplifiedExpr() const;
 
         using UsedMap   = std::unordered_map<size_t, utils::not_null<const Symbol *>>;
         using HashIdMap = std::unordered_map<size_t, size_t>;
@@ -674,7 +674,6 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         const detail::LiteralExprNode *evalToConstExpr() const override;
 
@@ -771,7 +770,6 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         const detail::LiteralExprNode *evalToConstExpr() const override;
 
@@ -849,7 +847,6 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual std::size_t hash() const override;
         const detail::LiteralExprNode *evalToConstExpr() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
@@ -1767,7 +1764,6 @@ namespace acslg::analyzer::symbolic {
       public:
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
-        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::size_t hash() const override;
         // StInG: Support functions for affine invariant analysis
@@ -1908,7 +1904,7 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
 
-        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override {
+        ExprHandle simplifiedExpr() const override {
             ERROR("VariableAddress should not appear in expressions, and therefore, this function "
                   "should not be called.");
         };
@@ -2002,7 +1998,7 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
 
-        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> simplifiedExpr() const override {
+        ExprHandle simplifiedExpr() const override {
             ERROR("FieldAddress should not appear in expressions, and therefore, this function "
                   "should not be called.");
         };
