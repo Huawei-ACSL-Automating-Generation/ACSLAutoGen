@@ -496,9 +496,11 @@ namespace acslg::test::unit::analyzer {
         ASSERT_NE(var0, nullptr);
         std::string name0 = var0->getNameAsString();
         auto symVal0      = makeSymbolValue(0);
+        auto &factory     = symbolic::ExprFactoryScope::current();
 
         // Prefix increment (e.g., ++x)
-        auto preInc = symbolic::makeUnaryExpr(UnaryOpExpr::Operator::PreInc, std::move(symVal0));
+        auto preInc = factory.unary(UnaryOpExpr::Operator::PreInc,
+                                    factory.importExpr(*symVal0));
         auto resPre = preInc->getACSL(config);
         ASSERT_TRUE(resPre);
         EXPECT_EQ(resPre.value().first, "++" + name0);
@@ -509,7 +511,8 @@ namespace acslg::test::unit::analyzer {
         auto symVal1      = makeSymbolValue(1);
 
         // Postfix increment (e.g., x++)
-        auto postInc = symbolic::makeUnaryExpr(UnaryOpExpr::Operator::PostInc, std::move(symVal1));
+        auto postInc = factory.unary(UnaryOpExpr::Operator::PostInc,
+                                     factory.importExpr(*symVal1));
         auto resPost = postInc->getACSL(config);
         ASSERT_TRUE(resPost);
         EXPECT_EQ(resPost.value().first, name1 + "++");
@@ -1160,9 +1163,10 @@ namespace acslg::test::unit::analyzer {
 
         auto legacy = [&]() {
             symbolic::ExprFactoryScope scope(factory);
+            auto unary = factory.cloneExpr(factory.unary(
+                symbolic::UnaryOpExpr::Operator::Minus, factory.literal(int64_t{1})));
             return symbolic::makeBinaryExpr(
-                symbolic::makeUnaryExpr(symbolic::UnaryOpExpr::Operator::Minus,
-                                        symbolic::makeLiteralExpr(1)),
+                std::move(unary),
                 symbolic::BinaryOpExpr::Operator::Add,
                 symbolic::makeLiteralExpr(2));
         }();

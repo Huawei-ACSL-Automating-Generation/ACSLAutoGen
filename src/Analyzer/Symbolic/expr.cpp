@@ -837,13 +837,6 @@ namespace acslg::analyzer::symbolic {
         return ExprFactoryScope::current().cloneExpr(ExprFactoryScope::current().literal(value));
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> makeUnaryExpr(
-        UnaryOpExpr::Operator op,
-        utils::not_null<std::unique_ptr<SymbolicExpr>> expr) {
-        auto &factory = ExprFactoryScope::current();
-        return factory.cloneExpr(factory.unary(op, factory.importExpr(*expr)));
-    }
-
     utils::not_null<std::unique_ptr<SymbolicExpr>> makeBinaryExpr(
         utils::not_null<std::unique_ptr<SymbolicExpr>> lhs,
         BinaryOpExpr::Operator op,
