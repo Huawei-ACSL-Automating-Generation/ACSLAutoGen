@@ -98,8 +98,6 @@ namespace acslg::analyzer {
             return factory.importExpr(expr);
         }
 
-        using symbolic::cloneVariableAddress;
-        using symbolic::makeVariableAddress;
     } // namespace
 
     /**

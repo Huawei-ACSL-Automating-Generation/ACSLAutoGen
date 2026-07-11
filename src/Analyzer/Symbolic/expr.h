@@ -2129,16 +2129,7 @@ namespace acslg::analyzer::symbolic {
                          std::optional<AddrHandle> from,
                          SourcePoint fromPoint);
 
-    std::unique_ptr<SymbolValue> cloneSymbolValue(ExprHandle value);
-    std::unique_ptr<SymbolValue> makeSymbolValue(ExprFactory &factory,
-                                                 SymbolicExpr::Type varType,
-                                                 std::unique_ptr<Address> from,
-                                                 SourcePoint fromPoint);
     std::unique_ptr<SymbolAddress> cloneSymbolAddress(AddrHandle address);
-    std::unique_ptr<VariableAddress> cloneVariableAddress(AddrHandle address);
-    std::unique_ptr<VariableAddress> makeVariableAddress(
-        ExprFactory &factory,
-        utils::not_null<const clang::VarDecl *> from);
 
     enum class Operator : unsigned {
 #define ALL_OP(name, tok, prec, isRightAssoc) name,

@@ -308,7 +308,7 @@ namespace acslg::test::utils {
     }
 
     symbolic::VariableAddress FixtureWithCode::makeVariableAddr(unsigned int id) {
-        return *symbolic::makeVariableAddress(exprFactory_, getVarDecl(id));
+        return exprFactory_.variableAddress(getVarDecl(id)).cast<symbolic::VariableAddress>();
     }
 
     not_null<unique_ptr<symbolic::SymbolicExpr>> FixtureWithCode::makeLiteralExpr(uint64_t value) {
@@ -346,11 +346,10 @@ namespace acslg::test::utils {
     unique_ptr<symbolic::SymbolValue> FixtureWithCode::makeSymbolValue(
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
-        return symbolic::makeSymbolValue(
-            exprFactory_,
+        auto value = exprFactory_.symbolValue(
             symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::UInt, id},
-            symbolic::makeVariableAddress(exprFactory_, getVarDecl(id)),
-            fromPoint.value_or(defaultPoint));
+            exprFactory_.variableAddress(getVarDecl(id)), fromPoint.value_or(defaultPoint));
+        return std::make_unique<symbolic::SymbolValue>(value.cast<symbolic::SymbolValue>());
     }
 
     symbolic::SymbolAddress FixtureWithCode::makeSimpleSymbolAddr(

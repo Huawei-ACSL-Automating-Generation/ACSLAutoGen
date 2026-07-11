@@ -2001,7 +2001,8 @@ namespace acslg::test::unit::analyzer {
             symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::Int, 32},
             varAddrA, point);
         EXPECT_EQ(symbolValue.cast<symbolic::SymbolValue>().getFromAddrHandle(), varAddrA);
-        auto clonedValue = symbolic::cloneSymbolValue(symbolValue);
+        auto clonedExpr = symbolValue->clone();
+        auto *clonedValue = symbolic::cast<symbolic::SymbolValue>(clonedExpr.get().get());
         EXPECT_EQ(clonedValue->getFromAddrHandle(), varAddrA);
 
         auto defaultSymAddr = factory.symbolAddress(
