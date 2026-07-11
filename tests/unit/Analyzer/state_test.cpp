@@ -315,6 +315,42 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(returnExpr->get().get(), expected.get().get());
     }
 
+    TEST(ProgramStateTest, ScopeExitReusesSurvivingPathConditionHandle) {
+        ASTExtractor extractor(R"c(
+            void func(int keep) {
+                int local;
+            }
+        )c");
+        auto *func     = extractor.findFirstDecl<FunctionDecl>();
+        auto *declStmt = extractor.findFirstStmt<DeclStmt>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(declStmt, nullptr);
+        ASSERT_EQ(func->getNumParams(), 1u);
+        auto *local = dyn_cast<VarDecl>(declStmt->getSingleDecl());
+        ASSERT_NE(local, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        ASSERT_EQ(state.getPaths().size(), 1u);
+
+        auto &path = *state.getPaths().front();
+        path.allocMemory(local, true);
+        auto keepValue  = path.getVarStateHandle(func->getParamDecl(0));
+        auto localValue = path.getVarStateHandle(local);
+        symbolic::LiteralExpr zero{context.getExprFactory(), 0};
+        auto keepCond = symbolic::Expr{context.getExprFactory(), keepValue}.greaterThan(zero);
+        auto localCond = symbolic::Expr{context.getExprFactory(), localValue}.greaterThan(zero);
+        path.insertPathCondition(keepCond.logicalAnd(localCond).handle());
+
+        state.step(func->getBody());
+
+        ASSERT_EQ(path.getPathConditions().size(), 1u);
+        EXPECT_EQ(path.getPathConditions().begin()->get().get(), keepCond.handle().get().get());
+        EXPECT_FALSE(path.getVarAddr().contains(local));
+    }
+
     TEST(ProgramStateTest, CompoundAssignmentStoresInternedOperation) {
         ASTExtractor extractor(R"c(
             int func(int x, int y) {

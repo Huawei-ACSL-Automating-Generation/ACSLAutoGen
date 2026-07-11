@@ -75,10 +75,7 @@ namespace acslg::analyzer {
             return false;
         }
 
-        utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
-        cloneExpr(symbolic::ExprFactory &factory, const symbolic::SymbolicExpr &expr);
-
-        std::unique_ptr<symbolic::SymbolicExpr> dropLocalConjuncts(
+        std::optional<symbolic::ExprHandle> dropLocalConjuncts(
             symbolic::ExprFactory &factory,
             const symbolic::SymbolicExpr &expr,
             const std::unordered_set<const clang::VarDecl *> &locals) {
@@ -87,26 +84,18 @@ namespace acslg::analyzer {
                 auto lhs = dropLocalConjuncts(factory, *bin->getLeft(), locals);
                 auto rhs = dropLocalConjuncts(factory, *bin->getRight(), locals);
                 if (!lhs && !rhs)
-                    return nullptr;
+                    return std::nullopt;
                 if (!lhs)
                     return rhs;
                 if (!rhs)
                     return lhs;
-                auto rebuilt =
-                    factory.binary(factory.importExpr(*lhs),
-                                   symbolic::BinaryOpExpr::Operator::LogicalAnd,
-                                   factory.importExpr(*rhs));
-                return cloneExpr(factory, *rebuilt).into_underlying();
+                return factory.binary(lhs.value(), symbolic::BinaryOpExpr::Operator::LogicalAnd,
+                                      rhs.value());
             }
 
             if (containsLocalVar(expr, locals))
-                return nullptr;
-            return cloneExpr(factory, expr).into_underlying();
-        }
-
-        utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
-        cloneExpr(symbolic::ExprFactory &factory, const symbolic::SymbolicExpr &expr) {
-            return factory.importAndCloneExpr(expr);
+                return std::nullopt;
+            return factory.importExpr(expr);
         }
 
         using symbolic::cloneStructure;
@@ -2350,10 +2339,7 @@ namespace acslg::analyzer {
                 DEBUG("stepping clang::Expr...");
                 stepExpr(expr);
             })
-            .Case<clang::ImplicitCastExpr>(
-                [](const clang::ImplicitCastExpr *) -> std::unique_ptr<symbolic::SymbolicExpr> {
-                    UNREACHABLE();
-                })
+            .Case<clang::ImplicitCastExpr>([](const clang::ImplicitCastExpr *) { UNREACHABLE(); })
             .Case<clang::CaseStmt>([this](const clang::CaseStmt *caseStmt) {
                 DEBUG("stepping CaseStmt...");
                 // Can only be met during step(SwitchStmt), just ignore it.
@@ -2447,7 +2433,7 @@ namespace acslg::analyzer {
                         dropLocalConjuncts(path->context_.getExprFactory(), *cond, localVars);
                     if (!stripped)
                         continue;
-                    filtered.emplace(path->context_.getExprFactory().importExpr(*stripped));
+                    filtered.emplace(stripped.value());
                 }
                 path->pathConditions_ = std::move(filtered);
             }
