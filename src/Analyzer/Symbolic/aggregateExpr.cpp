@@ -247,7 +247,7 @@ namespace acslg::analyzer::symbolic {
         if (!nStr)
             return nStr.error();
 
-        auto rangeFrom = range().getFromAddr();
+        auto rangeFrom = range().getFromAddrHandle();
         if (rangeFrom == std::nullopt)
             return GetACSLError::HeapAddress;
 
@@ -256,9 +256,8 @@ namespace acslg::analyzer::symbolic {
         bool hasAt = !(prefix.empty() || suffix.empty());
 
         // Build the pointer expression used inside the summation body.
-        auto aStr =
-            callGetACSLOfValueProxy(*range().getFromAddr().value(), config, usedPoints, fromPoint_,
-                                    hasAt ? 0 : getPrecedence(Operator::Subscript), false);
+        auto aStr = callGetACSLOfValueProxy(**rangeFrom, config, usedPoints, fromPoint_,
+                                            hasAt ? 0 : getPrecedence(Operator::Subscript), false);
         if (!aStr)
             return aStr.error();
 
