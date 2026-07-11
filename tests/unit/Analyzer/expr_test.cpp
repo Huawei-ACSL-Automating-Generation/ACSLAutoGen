@@ -43,6 +43,16 @@ namespace acslg::test::unit::analyzer {
         }
 
         ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
+        cloneBinaryForLegacyTest(
+            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> lhs,
+            symbolic::BinaryOpExpr::Operator op,
+            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> rhs) {
+            auto &factory = symbolic::ExprFactoryScope::current();
+            return factory.cloneExpr(
+                factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
+        }
+
+        ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         makeStructureCloneWithFacade(symbolic::ExprFactory &factory,
                                      clang::QualType type,
                                      ::acslg::utils::not_null<const clang::VarDecl *> var,
@@ -461,25 +471,25 @@ namespace acslg::test::unit::analyzer {
         config.noStateLabelFunctionAt = true;
 
         // Simple addition: 5 + 3
-        auto exprSimple = symbolic::makeBinaryExpr(
+        auto exprSimple = cloneBinaryForLegacyTest(
             makeLiteralExpr(5), BinaryOpExpr::Operator::Add, makeLiteralExpr(3));
         auto resSimple  = exprSimple->getACSL(config);
         ASSERT_TRUE(resSimple);
         EXPECT_EQ(resSimple.value().first, "5 + 3");
 
         // Nested addition (left-child nested): (1 + 2) + 3 -> "1 + 2 + 3"
-        auto innerLeft = symbolic::makeBinaryExpr(
+        auto innerLeft = cloneBinaryForLegacyTest(
             makeLiteralExpr(1), BinaryOpExpr::Operator::Add, makeLiteralExpr(2));
-        auto exprLeft = symbolic::makeBinaryExpr(
+        auto exprLeft = cloneBinaryForLegacyTest(
             std::move(innerLeft), BinaryOpExpr::Operator::Add, makeLiteralExpr(3));
         auto resLeft = exprLeft->getACSL(config);
         ASSERT_TRUE(resLeft);
         EXPECT_EQ(resLeft.value().first, "1 + 2 + 3");
 
         // Nested addition (right-child nested): 1 + (2 + 3) -> "1 + (2 + 3)"
-        auto innerRight = symbolic::makeBinaryExpr(
+        auto innerRight = cloneBinaryForLegacyTest(
             makeLiteralExpr(2), BinaryOpExpr::Operator::Add, makeLiteralExpr(3));
-        auto exprRight = symbolic::makeBinaryExpr(
+        auto exprRight = cloneBinaryForLegacyTest(
             makeLiteralExpr(1), BinaryOpExpr::Operator::Add, std::move(innerRight));
         auto resRight = exprRight->getACSL(config);
         ASSERT_TRUE(resRight);
@@ -722,7 +732,7 @@ namespace acslg::test::unit::analyzer {
 
             ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> clone()
                 const override {
-                return symbolic::makeBinaryExpr(
+                return cloneBinaryForLegacyTest(
                     symbolic::makeLiteralExpr(1), symbolic::BinaryOpExpr::Operator::Add,
                     symbolic::makeLiteralExpr(2));
             }
@@ -1078,7 +1088,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto simplified = legacy.simplifiedExpr();
-        auto expected = symbolic::makeBinaryExpr(
+        auto expected = cloneBinaryForLegacyTest(
             symbolic::makeLiteralExpr(1), symbolic::BinaryOpExpr::Operator::Add,
             symbolic::makeLiteralExpr(2));
 
@@ -1119,10 +1129,10 @@ namespace acslg::test::unit::analyzer {
         auto x = factory.cloneExpr(
             symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
                 .handle());
-        auto predicate = symbolic::makeBinaryExpr(
+        auto predicate = cloneBinaryForLegacyTest(
             cloneWithFactory(factory, *x), symbolic::BinaryOpExpr::Operator::Equal,
             symbolic::makeLiteralExpr(0));
-        auto wrapped = symbolic::makeBinaryExpr(
+        auto wrapped = cloneBinaryForLegacyTest(
             std::move(predicate), symbolic::BinaryOpExpr::Operator::Equal,
             symbolic::makeLiteralExpr(1));
 
@@ -1165,7 +1175,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::ExprFactoryScope scope(factory);
             auto unary = factory.cloneExpr(factory.unary(
                 symbolic::UnaryOpExpr::Operator::Minus, factory.literal(int64_t{1})));
-            return symbolic::makeBinaryExpr(
+            return cloneBinaryForLegacyTest(
                 std::move(unary),
                 symbolic::BinaryOpExpr::Operator::Add,
                 symbolic::makeLiteralExpr(2));
@@ -1382,7 +1392,7 @@ namespace acslg::test::unit::analyzer {
 
         auto makePred =
             []() -> ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>> {
-            auto pred = symbolic::makeBinaryExpr(
+            auto pred = cloneBinaryForLegacyTest(
                 symbolic::makeRangeIndexExpr("i"),
                 symbolic::BinaryOpExpr::Operator::LessThan,
                 symbolic::makeLiteralExpr(3));
@@ -1489,7 +1499,7 @@ namespace acslg::test::unit::analyzer {
         auto range = symbolic::cloneSymbolAddress(rangeHandle);
         auto rangeBase = range->getBaseInfo();
 
-        auto pred = symbolic::makeBinaryExpr(
+        auto pred = cloneBinaryForLegacyTest(
             symbolic::makeRangeIndexExpr("i"),
             symbolic::BinaryOpExpr::Operator::LessThan,
             symbolic::makeLiteralExpr(3));

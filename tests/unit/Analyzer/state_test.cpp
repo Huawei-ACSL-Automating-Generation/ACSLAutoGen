@@ -1033,8 +1033,11 @@ namespace acslg::test::unit::analyzer {
     namespace {
         using ExprUP = ::acslg::utils::not_null<unique_ptr<symbolic::SymbolicExpr>>;
         auto makeAdd(ExprUP a, ExprUP b) {
-            return symbolic::makeBinaryExpr(std::move(a), symbolic::BinaryOpExpr::Operator::Add,
-                                            std::move(b))
+            auto &factory = symbolic::ExprFactoryScope::current();
+            return factory
+                .cloneExpr(factory.binary(factory.importExpr(*a),
+                                          symbolic::BinaryOpExpr::Operator::Add,
+                                          factory.importExpr(*b)))
                 .into_underlying();
         }
     } // namespace
