@@ -2891,27 +2891,6 @@ namespace acslg::analyzer::symbolic {
 
     bool is_symbol_addr(const Address &a) noexcept { return isa<SymbolAddress>(a); }
 
-    bool isFrom(const SymbolicExpr &expr, const Address &fromAddr, SourcePoint fromPoint) {
-        auto symbol = dyn_cast<const Symbol>(&expr);
-        if (symbol == nullptr)
-            return false;
-
-        if (symbol->getFromPoint() == std::nullopt || symbol->getFromPoint().value() != fromPoint)
-            return false;
-
-        if (auto symbolValue = dyn_cast<const SymbolValue>(symbol))
-            return fromAddr == *symbolValue->getFromAddrHandle();
-        if (auto symbolAddr = dyn_cast<const SymbolAddress>(symbol)) {
-            auto from = symbolAddr->getFromAddrHandle();
-            return from && fromAddr == **from;
-        }
-
-        auto from = symbol->getFromAddr();
-        if (from == std::nullopt)
-            return false;
-        return fromAddr == *from.value();
-    }
-
     namespace {
         std::optional<AddrHandle> getStructureFromAddrHandle(ExprFactory &factory,
                                                              const Structure &structure) {
@@ -2952,11 +2931,25 @@ namespace acslg::analyzer::symbolic {
             return symbolAddr->getFromAddrHandle();
         if (auto structure = dyn_cast<const Structure>(&symbol))
             return getStructureFromAddrHandle(factory, *structure);
+        return std::nullopt;
+    }
 
-        auto from = symbol.getFromAddr();
-        if (from == std::nullopt)
-            return std::nullopt;
-        return factory.importAddress(*from.value());
+    bool isFrom(const SymbolicExpr &expr, const Address &fromAddr, SourcePoint fromPoint) {
+        auto *symbol = dyn_cast<const Symbol>(&expr);
+        if (symbol == nullptr)
+            return false;
+
+        auto point = symbol->getFromPoint();
+        if (!point || *point != fromPoint)
+            return false;
+
+        if (ExprFactoryScope::hasCurrent()) {
+            auto from = getFromAddrHandle(ExprFactoryScope::current(), *symbol);
+            return from && fromAddr == **from;
+        }
+
+        auto from = symbol->getFromAddr();
+        return from && fromAddr == *from.value();
     }
 
     namespace {
