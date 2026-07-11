@@ -1781,21 +1781,7 @@ namespace acslg::analyzer::symbolic {
 
         utils::not_null<const SymbolicExpr *> getOffset() const { return offset_.get(); }
 
-        utils::not_null<std::unique_ptr<SymbolAddress>> withOffset(
-            utils::not_null<std::unique_ptr<SymbolicExpr>> offset) const;
-        utils::not_null<std::unique_ptr<SymbolAddress>> withAddedOffset(
-            utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const;
-        utils::not_null<std::unique_ptr<SymbolAddress>> withSubtractedOffset(
-            utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const;
-        utils::not_null<std::unique_ptr<SymbolAddress>> withResetOffset() const;
-
         auto getLength() const -> const auto & { return length_; }
-
-        utils::not_null<std::unique_ptr<SymbolAddress>> withLength(
-            utils::not_null<std::unique_ptr<SymbolicExpr>> len) const;
-        utils::not_null<std::unique_ptr<SymbolAddress>> withAddedLength(
-            utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const;
-        utils::not_null<std::unique_ptr<SymbolAddress>> withoutLength() const;
 
         std::optional<ExprHandle> getRightBound() const;
         SymbolAddrBaseInfo getBaseInfo() const;

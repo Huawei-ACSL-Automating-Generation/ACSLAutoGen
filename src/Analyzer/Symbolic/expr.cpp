@@ -2352,69 +2352,6 @@ namespace acslg::analyzer::symbolic {
             length_.emplace(*length);
     }
 
-    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withOffset(
-        utils::not_null<std::unique_ptr<SymbolicExpr>> offset) const {
-        if (!isValidOffsetOrLength(*offset))
-            ERROR("Invalid offset.");
-        auto &factory = ExprFactoryScope::current();
-        Addr addr{factory, factory.importAddress(*this)};
-        Expr offsetExpr{factory, factory.importExpr(*offset)};
-        return cloneSymbolAddress(addr.withOffset(offsetExpr).handle());
-    }
-
-    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withAddedOffset(
-        utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
-        if (!isValidOffsetOrLength(*extra))
-            ERROR("Invalid offset.");
-        auto &factory = ExprFactoryScope::current();
-        Addr addr{factory, factory.importAddress(*this)};
-        Expr extraExpr{factory, factory.importExpr(*extra)};
-        return cloneSymbolAddress(addr.withAddedOffset(extraExpr).handle());
-    }
-
-    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withSubtractedOffset(
-        utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
-        if (!isValidOffsetOrLength(*extra))
-            ERROR("Invalid offset.");
-        auto &factory = ExprFactoryScope::current();
-        Addr addr{factory, factory.importAddress(*this)};
-        Expr extraExpr{factory, factory.importExpr(*extra)};
-        return cloneSymbolAddress(addr.withSubtractedOffset(extraExpr).handle());
-    }
-
-    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withResetOffset() const {
-        auto &factory = ExprFactoryScope::current();
-        Addr addr{factory, factory.importAddress(*this)};
-        LiteralExpr zero{factory, static_cast<int64_t>(ZERO_OFFSET)};
-        return cloneSymbolAddress(addr.withOffset(zero).handle());
-    }
-
-    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withLength(
-        utils::not_null<std::unique_ptr<SymbolicExpr>> len) const {
-        if (!isValidOffsetOrLength(*len))
-            ERROR("Invalid Length.");
-        auto &factory = ExprFactoryScope::current();
-        Addr addr{factory, factory.importAddress(*this)};
-        Expr length{factory, factory.importExpr(*len)};
-        return cloneSymbolAddress(addr.withLength(length).handle());
-    }
-
-    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withAddedLength(
-        utils::not_null<std::unique_ptr<SymbolicExpr>> extra) const {
-        if (!isValidOffsetOrLength(*extra))
-            ERROR("Invalid offset.");
-        auto &factory = ExprFactoryScope::current();
-        Addr addr{factory, factory.importAddress(*this)};
-        Expr extraExpr{factory, factory.importExpr(*extra)};
-        return cloneSymbolAddress(addr.withAddedLength(extraExpr).handle());
-    }
-
-    utils::not_null<std::unique_ptr<SymbolAddress>> SymbolAddress::withoutLength() const {
-        auto &factory = ExprFactoryScope::current();
-        Addr addr{factory, factory.importAddress(*this)};
-        return cloneSymbolAddress(addr.withoutLength().handle());
-    }
-
     size_t SymbolAddrBaseInfo::hash() const {
         return utils::hash_val(fromPoint_.hash(), fromAddr_ ? fromAddr_.value()->hash() : 0);
     }

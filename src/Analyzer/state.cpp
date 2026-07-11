@@ -970,7 +970,7 @@ namespace acslg::analyzer {
                             // explicit range tracking, this statement can be uncommented to
                             // re-enable length assignment.
 
-                            // addr = addr->withLength(std::move(lengthInElems));
+                            // addr = addr.withLength(lengthInElems);
 
                             // Materialize the first element symbol at the allocated base address.
                             memoryState_.write(addr.handle(), factory.unknown());
