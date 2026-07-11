@@ -1616,7 +1616,7 @@ namespace acslg::spec_generator {
             //   that common value
             // - Otherwise return nullopt (meaning the initial value may differ across entry paths)
             auto sameValueOnRealEntries = [&](const symb::SymbolicExpr &expr)
-                -> std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> {
+                -> std::optional<symb::ExprHandle> {
                 std::optional<symb::ExprHandle> commonValue;
                 for (auto &entry : loopEntry.getPaths()) {
                     auto subedExpr = symb::getSubstitutedExprHandle(
@@ -1628,7 +1628,7 @@ namespace acslg::spec_generator {
                 }
                 if (commonValue == std::nullopt)
                     return std::nullopt;
-                return factory.cloneExpr(commonValue.value());
+                return commonValue;
             }; // sameValueOnRealEntries ends
 
             symb::HashExprHandleMap hashExprMapForSub{};
@@ -1745,10 +1745,10 @@ namespace acslg::spec_generator {
                 if (indexStep > 0) {
                     auto leftBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
                     if (leftBound == std::nullopt)
-                        leftBound = factory.cloneExpr(indexInfo.indexPattern.initialValue);
+                        leftBound = factory.importExpr(*indexInfo.indexPattern.initialValue);
+                    assert(leftBound);
                     auto leftExpected =
                         leftBound.value()->getACSL({}, entryAndCurrentInfo.loopEntryPoint);
-                    assert(leftBound);
                     auto rightExpected =
                         indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true});
                     assert(rightExpected);
@@ -1764,10 +1764,10 @@ namespace acslg::spec_generator {
                     assert(leftExpected);
                     auto rightBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
                     if (rightBound == std::nullopt)
-                        rightBound = factory.cloneExpr(indexInfo.indexPattern.initialValue);
+                        rightBound = factory.importExpr(*indexInfo.indexPattern.initialValue);
+                    assert(rightBound);
                     auto rightExpected =
                         rightBound.value()->getACSL({}, entryAndCurrentInfo.loopEntryPoint);
-                    assert(rightBound);
                     leftBoundStr = leftExpected.value().first;
                     usedPoints.insert(std::make_move_iterator(leftExpected.value().second.begin()),
                                       std::make_move_iterator(leftExpected.value().second.end()));
