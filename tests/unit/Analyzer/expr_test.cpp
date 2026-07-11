@@ -2087,6 +2087,10 @@ namespace acslg::test::unit::analyzer {
         auto structure = factory.structure(record, layout, varAddr, point);
         const auto &structureNode = structure.cast<symbolic::Structure>();
 
+        auto structureFrom = symbolic::getFromAddrHandle(factory, structureNode);
+        ASSERT_TRUE(structureFrom);
+        EXPECT_EQ(*structureFrom, varAddr);
+
         ASSERT_EQ(structureNode.getNumFields(), 3u);
         auto field0 = structureNode.getFieldValue(0);
         auto field1 = structureNode.getFieldValue(1);

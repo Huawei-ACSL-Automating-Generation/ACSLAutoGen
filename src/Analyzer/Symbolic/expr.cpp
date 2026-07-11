@@ -2913,11 +2913,46 @@ namespace acslg::analyzer::symbolic {
         return fromAddr == *from.value();
     }
 
+    namespace {
+        std::optional<AddrHandle> getStructureFromAddrHandle(ExprFactory &factory,
+                                                             const Structure &structure) {
+            std::optional<AddrHandle> commonBase;
+            std::optional<SourcePoint> commonPoint;
+            for (size_t index = 0; index < structure.getNumFields(); ++index) {
+                auto *symbol = dyn_cast<const Symbol>(structure.getFieldValue(index).get());
+                if (symbol == nullptr)
+                    return std::nullopt;
+
+                auto from = getFromAddrHandle(factory, *symbol);
+                if (!from)
+                    return std::nullopt;
+                auto *fieldAddr = from->dyn_cast<FieldAddress>();
+                if (fieldAddr == nullptr || fieldAddr->getFieldIndex() != index)
+                    return std::nullopt;
+
+                auto base = factory.importAddress(*fieldAddr->getBaseAddr());
+                auto point = symbol->getFromPoint();
+                if (!point)
+                    return std::nullopt;
+                if (!commonBase) {
+                    commonBase = base;
+                    commonPoint = *point;
+                    continue;
+                }
+                if (**commonBase != *base || *commonPoint != *point)
+                    return std::nullopt;
+            }
+            return commonBase;
+        }
+    } // namespace
+
     std::optional<AddrHandle> getFromAddrHandle(ExprFactory &factory, const Symbol &symbol) {
         if (auto symbolValue = dyn_cast<const SymbolValue>(&symbol))
             return symbolValue->getFromAddrHandle();
         if (auto symbolAddr = dyn_cast<const SymbolAddress>(&symbol))
             return symbolAddr->getFromAddrHandle();
+        if (auto structure = dyn_cast<const Structure>(&symbol))
+            return getStructureFromAddrHandle(factory, *structure);
 
         auto from = symbol.getFromAddr();
         if (from == std::nullopt)
