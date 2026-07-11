@@ -484,7 +484,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(cloned->getVarStateHandle(var).get().get(), stored->get().get());
     }
 
-    TEST(PathTest, EvalExprHandlesPreservesInternedConditionalResults) {
+    TEST(PathTest, EvalExprPreservesInternedConditionalResults) {
         ASTExtractor extractor(R"c(
             int func(int value) {
                 return value ? 1 : 2;
@@ -504,7 +504,7 @@ namespace acslg::test::unit::analyzer {
         Path path(context, point);
         path.allocMemory(var, true);
 
-        auto result = path.evalExprHandles(cond);
+        auto result = path.evalExpr(cond);
         ASSERT_EQ(result.first.size(), 1u);
         ASSERT_EQ(result.second.size(), 2u);
 

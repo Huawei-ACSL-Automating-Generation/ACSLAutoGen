@@ -489,7 +489,7 @@ namespace acslg::spec_generator {
             }
 
             // Evaluate condExpr directly on the entry path, and require it to be non-branching.
-            auto [_, evalExprs] = symbolEntry->evalExprHandles(loopInfo.condExpr);
+            auto [_, evalExprs] = symbolEntry->evalExpr(loopInfo.condExpr);
             if (evalExprs.size() != 1)
                 ERROR("Branching is not allowed here.");
             auto &loopCond = evalExprs.front();
@@ -1333,7 +1333,7 @@ namespace acslg::spec_generator {
                         if (!maxValue.isa<symb::SymbolValue>())
                             return;
 
-                        auto evalResult = path->evalExprHandles(elementExpr);
+                        auto evalResult = path->evalExpr(elementExpr);
                         if (evalResult.second.size() != 1)
                             ERROR("Branch isn't permitted here.");
                         auto &elementValue = evalResult.second.front();

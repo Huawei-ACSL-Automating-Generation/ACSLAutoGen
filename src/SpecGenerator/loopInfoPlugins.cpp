@@ -341,13 +341,13 @@ namespace acslg::spec_generator {
 
             auto unchangedAfterOneRound = [&](const clang::Expr *expr) -> bool {
                 auto state            = entryAndCurrentInfo.symbolicLoopCurrent->clone();
-                auto [_, valueVector] = entryPath->evalExprHandles(expr);
+                auto [_, valueVector] = entryPath->evalExpr(expr);
                 if (valueVector.size() != 1)
                     ERROR("Do not support branch at here");
                 auto preValue = std::move(valueVector[0]);
 
                 for (auto &path : state->getPaths()) {
-                    tie(std::ignore, valueVector) = path->evalExprHandles(expr);
+                    tie(std::ignore, valueVector) = path->evalExpr(expr);
                     if (valueVector.size() != 1)
                         ERROR("Do not support branch at here");
                     auto currentValue = std::move(valueVector[0]);
@@ -505,7 +505,7 @@ namespace acslg::spec_generator {
                 }
 
                 auto [_, values] =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExprHandles(index);
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExpr(index);
                 if (values.size() != 1)
                     UNREACHABLE();
                 indexValue = std::move(values.at(0));
@@ -516,7 +516,7 @@ namespace acslg::spec_generator {
                         ->extractLValueHandle(index);
 
                 if (unchangedAfterOneRound(bound)) {
-                    auto evalResult = entryPath->evalExprHandles(bound);
+                    auto evalResult = entryPath->evalExpr(bound);
                     if (evalResult.second.size() != 1)
                         ERROR("This location does not support control flow branches.");
                     boundValue = evalResult.second.front();
@@ -590,7 +590,7 @@ namespace acslg::spec_generator {
                 }
 
                 auto [_, values] =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExprHandles(
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExpr(
                         unaryExpr);
                 if (values.size() != 1)
                     UNREACHABLE();
@@ -661,7 +661,7 @@ namespace acslg::spec_generator {
                 }
 
                 auto [_, values] =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExprHandles(
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExpr(
                         refExpr);
                 if (values.size() != 1)
                     UNREACHABLE();

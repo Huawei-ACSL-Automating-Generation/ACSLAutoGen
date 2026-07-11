@@ -633,8 +633,7 @@ namespace acslg::analyzer {
      */
     class Path {
       public:
-        using EvalResult = std::pair<std::vector<utils::not_null<std::unique_ptr<Path>>>, Formulas>;
-        using EvalHandleResult =
+        using EvalResult =
             std::pair<std::vector<utils::not_null<std::unique_ptr<Path>>>,
                       std::vector<symbolic::ExprHandle>>;
 
@@ -771,10 +770,9 @@ namespace acslg::analyzer {
         /**
          * @brief Evaluate a clang expression symbolically.
          * @param expr [in] Expression to evaluate.
-         * @return Pair of forked paths (if branching occurs) and resulting symbolic values.
+         * @return Pair of forked paths and factory-owned symbolic value handles.
          */
         EvalResult evalExpr(const clang::Expr *expr);
-        EvalHandleResult evalExprHandles(const clang::Expr *expr);
         friend class ProgramState;
 
         auto getVarAddr() const -> const auto & { return varAddr_; };
@@ -787,6 +785,11 @@ namespace acslg::analyzer {
         auto getStartPoint() const -> const auto & { return startPoint_; }
 
       private:
+        using OwnedEvalResult =
+            std::pair<std::vector<utils::not_null<std::unique_ptr<Path>>>, Formulas>;
+
+        OwnedEvalResult evalOwnedExpr(const clang::Expr *expr);
+
         // Map: variable record definition ID -> corresponding symbolic address.
         std::unordered_map<const clang::VarDecl *, symbolic::AddrHandle> varAddr_;
 
