@@ -297,6 +297,20 @@ namespace acslg::test::unit::analyzer {
         EXPECT_GE(flatCount, 2u);
     }
 
+    TEST(ProgramStateTest, ReturnEvaluationStoresFactoryHandle) {
+        auto postState = execOnFirstFunc(R"c(
+            int func(void) {
+                return 42;
+            }
+        )c");
+        ASSERT_EQ(postState->getPaths().size(), 1u);
+        const auto &returnExpr = postState->getPaths().front()->getReturnExpr();
+        ASSERT_TRUE(returnExpr.has_value());
+
+        auto expected = postState->getExprFactory().literal(42);
+        EXPECT_EQ(returnExpr->get().get(), expected.get().get());
+    }
+
     TEST(PathTest, ExtractLValueHandleReusesFactoryAddress) {
         ASTExtractor extractor(R"c(
             void func(void) {

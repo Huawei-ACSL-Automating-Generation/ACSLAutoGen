@@ -2575,12 +2575,12 @@ namespace acslg::analyzer {
             std::vector<utils::not_null<std::unique_ptr<Path>>> updatedPaths;
 
             for (auto &path : newState->paths_) {
-                Path::EvalResult eval = path->evalExpr(branchConds[i]);
+                Path::EvalHandleResult eval = path->evalExprHandles(branchConds[i]);
 
                 size_t m = eval.second.size();
                 for (size_t j = 0; j < m; ++j) {
                     auto newPath = (j == 0) ? std::move(path) : std::move(eval.first[j - 1]);
-                    auto cond    = std::move(eval.second[j]);
+                    auto cond    = eval.second[j];
                     if (auto lit = cond->evalToConstExpr()) {
                         const bool isTrue = (lit->getLiteralValue() != 0);
 
@@ -2592,7 +2592,7 @@ namespace acslg::analyzer {
                         }
                     }
 
-                    newPath->insertPathCondition(std::move(cond));
+                    newPath->insertPathCondition(cond);
                     updatedPaths.push_back(std::move(newPath));
                 }
             }
@@ -2621,11 +2621,11 @@ namespace acslg::analyzer {
                 continue;
             }
 
-            Path::EvalResult eval = path->evalExpr(branchConds[idx]);
+            Path::EvalHandleResult eval = path->evalExprHandles(branchConds[idx]);
 
             for (size_t j = 0; j < eval.second.size(); ++j) {
                 auto newPath = (j == 0) ? std::move(path) : std::move(eval.first[j - 1]);
-                auto cond    = std::move(eval.second[j]);
+                auto cond    = eval.second[j];
 
                 if (auto lit = cond->evalToConstExpr()) {
                     const bool isTrue = (lit->getLiteralValue() != 0);
@@ -2637,7 +2637,8 @@ namespace acslg::analyzer {
                     }
                 }
 
-                newPath->insertPathCondition(createLNotExpr(std::move(cond)));
+                symbolic::Expr condExpr{context_.getExprFactory(), cond};
+                newPath->insertPathCondition(condExpr.logicalNot().handle());
                 worklist.emplace(std::move(newPath), idx + 1);
             }
         }
@@ -2723,16 +2724,16 @@ namespace acslg::analyzer {
                 continue;
             }
 
-            Path::EvalResult eval = pathPtr->evalExpr(expr);
+            Path::EvalHandleResult eval = pathPtr->evalExprHandles(expr);
             auto &generatedPaths  = eval.first;
-            Formulas &results     = eval.second;
+            auto &results         = eval.second;
 
             size_t n = results.size();
             for (size_t i = 0; i < n; ++i) {
                 auto newPath = i == 0 ? std::move(pathPtr) : std::move(generatedPaths[i - 1]);
 
                 DEBUG("ReturnStmt value: " << results[i]->dump());
-                newPath->setReturnExpr(std::move(results[i]));
+                newPath->setReturnExpr(results[i]);
                 updatedPaths.emplace_back(std::move(newPath));
             }
         }
