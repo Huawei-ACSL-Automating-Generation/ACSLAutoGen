@@ -313,18 +313,16 @@ namespace acslg::spec_generator {
             auto &entryPath = entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0);
 
             auto sameAddressBetweenEveryPaths = [&](const clang::Expr *expr)
-                -> std::optional<utils::not_null<std::unique_ptr<symb::Address>>> {
-                auto lValue = std::optional<utils::not_null<std::unique_ptr<symb::Address>>>{};
+                -> std::optional<symb::AddrHandle> {
+                auto lValue = std::optional<symb::AddrHandle>{};
                 for (auto &path : loopEntry.getPaths()) {
                     if (lValue == std::nullopt) {
-                        lValue.emplace(path->extractLValue(expr));
+                        lValue.emplace(path->extractLValueHandle(expr));
                         continue;
                     }
 
-                    auto nowLValue = path->extractLValue(expr);
+                    auto nowLValue = path->extractLValueHandle(expr);
                     if (*lValue.value() != *nowLValue) {
-                        // lValue and nowLValue are both std::unique_ptr<Address> and not
-                        // equal.
                         return std::nullopt;
                     }
                 }
@@ -459,8 +457,8 @@ namespace acslg::spec_generator {
             }
 
             std::optional<utils::not_null<const clang::Expr *>> indexExpr;
-            std::optional<utils::not_null<std::unique_ptr<symb::Address>>> indexRealAddr;
-            std::optional<utils::not_null<std::unique_ptr<symb::Address>>> indexSymbolicAddr;
+            std::optional<symb::AddrHandle> indexRealAddr;
+            std::optional<symb::AddrHandle> indexSymbolicAddr;
             std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> indexValue;
             std::optional<clang::BinaryOperator::Opcode> opCode;
             auto &factory = symb::ExprFactoryScope::current();
@@ -489,7 +487,7 @@ namespace acslg::spec_generator {
 
                         for (auto &prePath : preState.getPaths()) {
                             if (prePath->isActive()) {
-                                if (prePath->getMemoryState().contains(*addr.value()))
+                                if (prePath->getMemoryState().contains(addr.value()))
                                     isLocal = false;
                                 else
                                     isLocal = true;
@@ -500,7 +498,7 @@ namespace acslg::spec_generator {
                         if (isLocal == std::nullopt)
                             UNREACHABLE();
                     }
-                    indexRealAddr = std::move(*addr);
+                    indexRealAddr = *addr;
                 } else {
                     INFO("Same expr in different analyzer::Path points to different location!");
                     return false;
@@ -513,7 +511,9 @@ namespace acslg::spec_generator {
                 indexValue = std::move(values.at(0));
 
                 indexSymbolicAddr =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(index);
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths()
+                        .at(0)
+                        ->extractLValueHandle(index);
 
                 if (unchangedAfterOneRound(bound)) {
                     auto evalResult = entryPath->evalExpr(bound);
@@ -572,7 +572,7 @@ namespace acslg::spec_generator {
 
                         for (auto &prePath : preState.getPaths()) {
                             if (prePath->isActive()) {
-                                if (prePath->getMemoryState().contains(*addr.value()))
+                                if (prePath->getMemoryState().contains(addr.value()))
                                     isLocal = false;
                                 else
                                     isLocal = true;
@@ -583,7 +583,7 @@ namespace acslg::spec_generator {
                         if (isLocal == std::nullopt)
                             UNREACHABLE();
                     }
-                    indexRealAddr = std::move(*addr);
+                    indexRealAddr = *addr;
                 } else {
                     INFO("Same expr in different analyzer::Path points to different location!");
                     return false;
@@ -596,7 +596,7 @@ namespace acslg::spec_generator {
                 indexValue = std::move(values.at(0));
 
                 indexSymbolicAddr =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValueHandle(
                         unaryExpr);
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
@@ -654,7 +654,7 @@ namespace acslg::spec_generator {
                         if (isLocal == std::nullopt)
                             UNREACHABLE();
                     }
-                    indexRealAddr = it->second->addressClone();
+                    indexRealAddr = factory.importAddress(*it->second);
                 } else {
                     ERROR("A varDecl* has no Address mapped, something must goes wrong.");
                 }
@@ -666,7 +666,9 @@ namespace acslg::spec_generator {
                 indexValue = std::move(values.at(0));
 
                 indexSymbolicAddr =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(refExpr);
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths()
+                        .at(0)
+                        ->extractLValueHandle(refExpr);
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
                 boundValue = symb::LiteralExpr{factory, 0}.handle();
@@ -696,9 +698,8 @@ namespace acslg::spec_generator {
                 UNREACHABLE();
             loopInfo.indexInfo =
                 LoopInfo::IndexInfo{.indexExpr          = std::move(indexExpr.value()),
-                                    .indexRealAddr      = factory.importAddress(*indexRealAddr.value()),
-                                    .indexSymbolicAddr =
-                                        factory.importAddress(*indexSymbolicAddr.value()),
+                                    .indexRealAddr      = indexRealAddr.value(),
+                                    .indexSymbolicAddr = indexSymbolicAddr.value(),
                                     .indexSymbolicValue = factory.importExpr(*indexValue.value()),
                                     .op                 = std::move(opCode.value()),
                                     .indexBound         = boundValue.value(),

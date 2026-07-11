@@ -1146,14 +1146,14 @@ namespace acslg::spec_generator {
                 }
 
                 auto getAddress = [&](const clang::Expr *expr)
-                    -> std::optional<utils::not_null<std::unique_ptr<symb::Address>>> {
+                    -> std::optional<symb::AddrHandle> {
                     if (expr == nullptr)
                         return std::nullopt;
                     try {
                         // May pass some strange expr to extractAddress.
                         return entryAndCurrentInfo.symbolicLoopEntry->getPaths()
                             .at(0)
-                            ->extractLValue(expr);
+                            ->extractLValueHandle(expr);
                     } catch (...) { return std::nullopt; }
                 }; // getAddress end
 
@@ -1162,11 +1162,11 @@ namespace acslg::spec_generator {
                     if (expr == nullptr)
                         return false;
 
-                    auto makeArrayAddress = [&](clang::QualType type, const symb::Address &base) {
+                    auto makeArrayAddress = [&](clang::QualType type, symb::AddrHandle base) {
                         auto fromPoint =
                             entryAndCurrentInfo.symbolicLoopEntry->getStartPoint();
                         auto &factory = symb::ExprFactoryScope::current();
-                        symb::Addr baseAddr{factory, factory.importAddress(base)};
+                        symb::Addr baseAddr{factory, base};
                         return symb::Addr::symbol(type, baseAddr, fromPoint).handle();
                     };
 
@@ -1182,9 +1182,7 @@ namespace acslg::spec_generator {
                             if (auto acslExpected = addr.value()->getACSLOfValue(
                                     {.noStateLabelFunctionAt = true})) {
                                 param_array = acslExpected.value().first;
-                                if (auto *symbolAddr =
-                                        symb::dyn_cast<symb::Address>(addr.value().get().get()))
-                                    arrayAddr = makeArrayAddress(arraySub->getType(), *symbolAddr);
+                                arrayAddr = makeArrayAddress(arraySub->getType(), addr.value());
                                 return true;
                             }
                         return false;
@@ -1205,9 +1203,7 @@ namespace acslg::spec_generator {
                                 if (auto acslExpected = addr.value()->getACSLOfValue(
                                         {.noStateLabelFunctionAt = true})) {
                                     param_array = acslExpected.value().first;
-                                    if (auto *symbolAddr =
-                                            symb::dyn_cast<symb::Address>(addr.value().get().get()))
-                                        arrayAddr = makeArrayAddress(unary->getType(), *symbolAddr);
+                                    arrayAddr = makeArrayAddress(unary->getType(), addr.value());
                                     return true;
                                 }
                             return false;
@@ -1226,9 +1222,7 @@ namespace acslg::spec_generator {
                             if (auto acslExpected = addr.value()->getACSLOfValue(
                                     {.noStateLabelFunctionAt = true})) {
                                 param_array = acslExpected.value().first;
-                                if (auto *symbolAddr =
-                                        symb::dyn_cast<symb::Address>(addr.value().get().get()))
-                                    arrayAddr = makeArrayAddress(declRef->getType(), *symbolAddr);
+                                arrayAddr = makeArrayAddress(declRef->getType(), addr.value());
                                 return true;
                             }
                             return false;
