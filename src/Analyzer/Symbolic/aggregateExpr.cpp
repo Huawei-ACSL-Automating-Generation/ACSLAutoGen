@@ -134,12 +134,6 @@ namespace acslg::analyzer::symbolic {
         return *symbolAddr;
     }
 
-    ExprChild OverRangeExpr::makeRangeChild(
-        utils::not_null<std::unique_ptr<const SymbolAddress>> range) {
-        return ExprChild::fromConstOwned(utils::not_null<std::unique_ptr<const SymbolicExpr>>{
-            std::move(range).into_underlying()});
-    }
-
     std::string OverRangeExpr::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
@@ -344,36 +338,6 @@ namespace acslg::analyzer::symbolic {
         expr_      = other.expr_.copy();
         fromPoint_ = other.fromPoint_;
         return *this;
-    }
-
-    MaxMinOverRange::Init MaxMinOverRange::makeInit(
-        utils::not_null<std::unique_ptr<const SymbolAddress>> range) {
-        return Init{deriveType(range->getPointeeType()), std::move(range)};
-    }
-
-    MaxMinOverRange::MaxMinOverRange(Init init,
-                                     std::string_view indexName,
-                                     Extremum extremum,
-                                     SourcePoint fromPoint)
-        : OverRangeExpr(ExprKind::K_MaxMinOverRange,
-                        init.type,
-                        std::move(init.range),
-                        indexName),
-          Symbol(Kind::K_MaxMinOverRange),
-          extremum_(extremum), expr_(makeDefaultExpr(range(), indexName, fromPoint)),
-          fromPoint_(std::move(fromPoint)) {}
-
-    MaxMinOverRange::MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
-                                     std::string_view indexName,
-                                     Extremum extremum,
-                                     SourcePoint fromPoint)
-        : MaxMinOverRange(makeInit(std::move(range)), indexName, extremum, std::move(fromPoint)) {}
-
-    ExprHandle MaxMinOverRange::makeDefaultExpr(
-        const SymbolAddress &range,
-        std::string_view indexName,
-        const SourcePoint &fromPoint) {
-        return makeMaxMinDefaultBody(ExprFactoryScope::current(), range, indexName, fromPoint);
     }
 
     std::string MaxMinOverRange::dump() const {

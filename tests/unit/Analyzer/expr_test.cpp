@@ -1403,8 +1403,11 @@ namespace acslg::test::unit::analyzer {
             factory.importAddress(*ownedQuantifierRange), "i",
             symbolic::QuantifierOverRange::Quantifier::ForAll,
             factory.importExpr(*ownedPredicate)};
-        symbolic::MaxMinOverRange max{
-            makeRange(), "i", symbolic::MaxMinOverRange::Extremum::Max, point};
+        auto ownedMaxRange = makeRange();
+        auto maxHandle = symbolic::makeMaxMinOverRangeHandle(
+            factory, factory.importAddress(*ownedMaxRange), "i",
+            symbolic::MaxMinOverRange::Extremum::Max, point);
+        const auto &max = maxHandle.cast<symbolic::MaxMinOverRange>();
 
         auto importedSum = factory.importExpr(sum);
         auto sumRange    = factory.importExpr(sum.getRange());
@@ -1529,16 +1532,10 @@ namespace acslg::test::unit::analyzer {
         auto rangeHandle = factory.symbolAddress(
             var->getType(), factory.variableAddress(var), point);
         rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
-        auto range = cloneSymbolAddressForLegacyTest(rangeHandle);
-        auto rangeBase = range->getBaseInfo();
-
-        std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
-        symbolic::MaxMinOverRange max{
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
-                std::move(constRange)},
-            "i",
-            symbolic::MaxMinOverRange::Extremum::Max,
-            point};
+        auto rangeBase = rangeHandle.cast<symbolic::SymbolAddress>().getBaseInfo();
+        auto maxHandle = symbolic::makeMaxMinOverRangeHandle(
+            factory, rangeHandle, "i", symbolic::MaxMinOverRange::Extremum::Max, point);
+        const auto &max = maxHandle.cast<symbolic::MaxMinOverRange>();
 
         auto indexedRange = factory.withOffset(rangeHandle, factory.rangeIndex("i"));
         indexedRange      = factory.withoutLength(indexedRange);
@@ -1581,20 +1578,15 @@ namespace acslg::test::unit::analyzer {
                 var->getType(), factory.variableAddress(var), point);
             rangeHandle = factory.withOffset(rangeHandle, factory.rangeIndex("i"));
             rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
-            return cloneSymbolAddressForLegacyTest(rangeHandle);
-        };
-        auto makeConstRange = [](std::unique_ptr<symbolic::SymbolAddress> range) {
-            std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
-            return ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
-                std::move(constRange)};
+            return rangeHandle;
         };
 
         auto one   = factory.literal(int64_t{1});
         auto three = factory.literal(int64_t{3});
 
         auto sumRange = makeRange();
-        auto rangeBase = sumRange->getBaseInfo();
-        symbolic::SumOverRange sum{factory.importAddress(*sumRange), "i", point};
+        auto rangeBase = sumRange.cast<symbolic::SymbolAddress>().getBaseInfo();
+        symbolic::SumOverRange sum{sumRange, "i", point};
         auto substitutedSum =
             symbolic::getRangeIndexSubstitutedHandle(factory, sum, rangeBase, one);
         const auto &sumNode = substitutedSum.cast<symbolic::SumOverRange>();
@@ -1604,7 +1596,7 @@ namespace acslg::test::unit::analyzer {
 
         auto quantRange = makeRange();
         symbolic::QuantifierOverRange quantifier{
-            factory.importAddress(*quantRange), "i",
+            quantRange, "i",
             symbolic::QuantifierOverRange::Quantifier::ForAll,
             factory.rangeIndex("i")};
         auto substitutedQuantifier =
@@ -1615,12 +1607,8 @@ namespace acslg::test::unit::analyzer {
 
         auto maxRange = makeRange();
         symbolic::MaxMinOverRange max{
-            makeConstRange(std::move(maxRange)),
-            "i",
-            symbolic::MaxMinOverRange::Extremum::Max,
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
-                cloneRangeIndexForLegacyTest("i").into_underlying()},
-            point};
+            maxRange, "i", symbolic::MaxMinOverRange::Extremum::Max,
+            factory.rangeIndex("i"), point};
         auto substitutedMax =
             symbolic::getRangeIndexSubstitutedHandle(factory, max, rangeBase, one);
         const auto &maxNode = substitutedMax.cast<symbolic::MaxMinOverRange>();

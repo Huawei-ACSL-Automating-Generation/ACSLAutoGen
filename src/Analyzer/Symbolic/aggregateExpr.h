@@ -91,15 +91,6 @@ namespace acslg::analyzer::symbolic {
         std::string_view getIndexName() const { return indexName_; }
 
       protected:
-        OverRangeExpr(ExprKind kind,
-                      Type type,
-                      utils::not_null<std::unique_ptr<const SymbolAddress>> range,
-                      std::string_view indexName)
-            : SymbolicExpr(kind, type), range_(makeRangeChild(std::move(range))),
-              indexName_(indexName) {
-            if (!this->range().getLength())
-                ERROR("`range_` is not a memory *range*.");
-        }
         OverRangeExpr(ExprKind kind, Type type, AddrHandle range, std::string_view indexName)
             : SymbolicExpr(kind, type), range_(range.asExpr()), indexName_(indexName) {
             if (!this->range().getLength())
@@ -107,8 +98,6 @@ namespace acslg::analyzer::symbolic {
         }
 
         const SymbolAddress &range() const;
-        static ExprChild makeRangeChild(
-            utils::not_null<std::unique_ptr<const SymbolAddress>> range);
 
         ExprChild range_;
         std::string indexName_;
@@ -242,22 +231,6 @@ namespace acslg::analyzer::symbolic {
         MaxMinOverRange &operator=(const MaxMinOverRange &);
         MaxMinOverRange &operator=(MaxMinOverRange &&) = default;
 
-        MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
-                        std::string_view indexName,
-                        Extremum extremum,
-                        SourcePoint fromPoint);
-        MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
-                        std::string_view indexName,
-                        Extremum extremum,
-                        utils::not_null<std::unique_ptr<const SymbolicExpr>> expr,
-                        SourcePoint fromPoint)
-            : OverRangeExpr(ExprKind::K_MaxMinOverRange,
-                            expr->getValType(),
-                            std::move(range),
-                            indexName),
-              Symbol(Kind::K_MaxMinOverRange), extremum_(extremum),
-              expr_(ExprChild::fromConstOwned(std::move(expr))),
-              fromPoint_(std::move(fromPoint)) {}
         MaxMinOverRange(AddrHandle range,
                         std::string_view indexName,
                         Extremum extremum,
@@ -302,22 +275,6 @@ namespace acslg::analyzer::symbolic {
         Extremum extremum_;
         ExprChild expr_;
         SourcePoint fromPoint_;
-
-        static ExprHandle makeDefaultExpr(
-            const SymbolAddress &range,
-            std::string_view indexName,
-            const SourcePoint &fromPoint);
-
-      private:
-        struct Init {
-            Type type;
-            utils::not_null<std::unique_ptr<const SymbolAddress>> range;
-        };
-        static Init makeInit(utils::not_null<std::unique_ptr<const SymbolAddress>> range);
-        MaxMinOverRange(Init init,
-                        std::string_view indexName,
-                        Extremum extremum,
-                        SourcePoint fromPoint);
     };
 
     ExprHandle makeSumOverRangeHandle(ExprFactory &factory,
