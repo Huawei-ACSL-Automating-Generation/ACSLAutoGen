@@ -1123,11 +1123,10 @@ namespace acslg::analyzer {
             auto n    = vm.numVars;
             auto half = n / 2;
 
-            std::unordered_map<int, utils::not_null<unique_ptr<symbolic::SymbolicExpr>>>
-                resolvedExprs;
+            std::unordered_map<int, symbolic::ExprHandle> resolvedExprs;
             for (size_t i = half; i < n; ++i) {
                 auto trueDecl = vm.varDecls.at(i - half);
-                resolvedExprs.emplace(i, factory.cloneExpr(initPath.getVarStateHandle(trueDecl)));
+                resolvedExprs.emplace(i, initPath.getVarStateHandle(trueDecl));
             }
 
             auto &cs = poly.constraints();
@@ -1172,7 +1171,7 @@ namespace acslg::analyzer {
                         if (idx == target)
                             continue;
 
-                        symbolic::SymbolicExpr *base = resolvedExprs.at(idx).get().get();
+                        const symbolic::SymbolicExpr *base = resolvedExprs.at(idx).get().get();
 
                         auto term = cloneExpr(*base);
                         if (coeff != 1) {
@@ -1196,7 +1195,7 @@ namespace acslg::analyzer {
                             buildLiteral(coeffs[target].get_si()));
                     }
 
-                    auto [_, ok] = resolvedExprs.emplace(target, std::move(rhs));
+                    auto [_, ok] = resolvedExprs.emplace(target, factory.importExpr(*rhs));
                     if (!ok)
                         UNREACHABLE();
 
@@ -1211,7 +1210,7 @@ namespace acslg::analyzer {
                 auto varDecl = vm.varDecls.at(i);
                 auto &addr   = initPath.getVarAddr().at(varDecl);
                 if (resolvedExprs.contains(i)) {
-                    auto [_, ok] = newVars.emplace(*addr, factory.importExpr(*resolvedExprs.at(i)));
+                    auto [_, ok] = newVars.emplace(*addr, resolvedExprs.at(i));
                     if (!ok)
                         UNREACHABLE();
                 }
@@ -1225,7 +1224,7 @@ namespace acslg::analyzer {
                     if (c == 0)
                         continue;
 
-                    symbolic::SymbolicExpr *base = nullptr;
+                    const symbolic::SymbolicExpr *base = nullptr;
                     if (resolvedExprs.contains(i))
                         base = resolvedExprs.at(i).get().get();
                     else {
