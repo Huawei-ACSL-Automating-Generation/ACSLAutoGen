@@ -1397,8 +1397,12 @@ namespace acslg::test::unit::analyzer {
 
         auto ownedSumRange = makeRange();
         symbolic::SumOverRange sum{factory.importAddress(*ownedSumRange), "i", point};
+        auto ownedQuantifierRange = makeRange();
+        auto ownedPredicate       = makePred();
         symbolic::QuantifierOverRange quantifier{
-            makeRange(), "i", symbolic::QuantifierOverRange::Quantifier::ForAll, makePred()};
+            factory.importAddress(*ownedQuantifierRange), "i",
+            symbolic::QuantifierOverRange::Quantifier::ForAll,
+            factory.importExpr(*ownedPredicate)};
         symbolic::MaxMinOverRange max{
             makeRange(), "i", symbolic::MaxMinOverRange::Extremum::Max, point};
 
@@ -1483,24 +1487,12 @@ namespace acslg::test::unit::analyzer {
         auto rangeHandle = factory.symbolAddress(
             var->getType(), factory.variableAddress(var), point);
         rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
-        auto range = cloneSymbolAddressForLegacyTest(rangeHandle);
-        auto rangeBase = range->getBaseInfo();
-
-        auto pred = cloneBinaryForLegacyTest(
-            cloneRangeIndexForLegacyTest("i"),
-            symbolic::BinaryOpExpr::Operator::LessThan,
-            cloneLiteralForLegacyTest(3));
-
-        std::unique_ptr<const symbolic::SymbolAddress> constRange = std::move(range);
-        std::unique_ptr<const symbolic::SymbolicExpr> constPred =
-            std::move(pred).into_underlying();
+        auto rangeBase = rangeHandle.cast<symbolic::SymbolAddress>().getBaseInfo();
+        auto pred = factory.binary(factory.rangeIndex("i"),
+                                   symbolic::BinaryOpExpr::Operator::LessThan,
+                                   factory.literal(int64_t{3}));
         symbolic::QuantifierOverRange quantifier{
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
-                std::move(constRange)},
-            "i",
-            symbolic::QuantifierOverRange::Quantifier::ForAll,
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
-                std::move(constPred)}};
+            rangeHandle, "i", symbolic::QuantifierOverRange::Quantifier::ForAll, pred};
 
         auto clone = quantifier.clone();
         EXPECT_EQ(*clone, quantifier);
@@ -1612,11 +1604,9 @@ namespace acslg::test::unit::analyzer {
 
         auto quantRange = makeRange();
         symbolic::QuantifierOverRange quantifier{
-            makeConstRange(std::move(quantRange)),
-            "i",
+            factory.importAddress(*quantRange), "i",
             symbolic::QuantifierOverRange::Quantifier::ForAll,
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
-                cloneRangeIndexForLegacyTest("i").into_underlying()}};
+            factory.rangeIndex("i")};
         auto substitutedQuantifier =
             symbolic::getRangeIndexSubstitutedHandle(factory, quantifier, rangeBase, one);
         const auto &quantifierNode =

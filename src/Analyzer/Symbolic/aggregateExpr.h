@@ -181,15 +181,6 @@ namespace acslg::analyzer::symbolic {
         QuantifierOverRange &operator=(const QuantifierOverRange &);
         QuantifierOverRange &operator=(QuantifierOverRange &&) = default;
 
-        QuantifierOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
-                            std::string_view indexName,
-                            Quantifier quant,
-                            utils::not_null<std::unique_ptr<const SymbolicExpr>> pred)
-            : OverRangeExpr(ExprKind::K_QuantifierOverRange,
-                            Type{ScalarKind::Bool, 8},
-                            std::move(range),
-                            indexName),
-              quant_(quant), pred_(ExprChild::fromConstOwned(std::move(pred))) {}
         QuantifierOverRange(AddrHandle range,
                             std::string_view indexName,
                             Quantifier quant,
