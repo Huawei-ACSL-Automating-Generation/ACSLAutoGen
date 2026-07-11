@@ -914,15 +914,6 @@ namespace acslg::analyzer::symbolic {
         return cloneStructure(factory.structure(record, layout, fromHandle, std::move(fromPoint)));
     }
 
-    utils::not_null<std::unique_ptr<UnknownExpr>> UnknownExpr::makeUnknown() {
-        auto &factory = ExprFactoryScope::current();
-        auto cloned = factory.cloneExpr(factory.unknown()).into_underlying();
-        auto unknown = dyn_cast<UnknownExpr>(cloned);
-        if (!unknown)
-            UNREACHABLE();
-        return utils::not_null<std::unique_ptr<UnknownExpr>>{std::move(unknown)};
-    }
-
     ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr) {
         ExprFactoryScope scope(factory);
         if (expr.isUnknown())

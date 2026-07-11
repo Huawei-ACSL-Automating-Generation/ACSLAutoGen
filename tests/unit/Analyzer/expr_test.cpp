@@ -1257,18 +1257,6 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(a.isa<symbolic::UnknownExpr>());
     }
 
-    TEST(ExprFactoryTest, LegacyUnknownBuilderUsesCurrentFactory) {
-        ASSERT_FALSE(symbolic::ExprFactoryScope::hasCurrent());
-        ASSERT_DEATH({ (void)symbolic::UnknownExpr::makeUnknown(); }, "");
-
-        symbolic::ExprFactory factory;
-        symbolic::ExprFactoryScope scope(factory);
-
-        auto unknown = symbolic::UnknownExpr::makeUnknown();
-
-        EXPECT_EQ(factory.importExpr(*unknown), factory.unknown());
-    }
-
     TEST(ExprFactoryTest, RangeIndexBuilderAndImportReuseNode) {
         symbolic::ExprFactory factory;
 
