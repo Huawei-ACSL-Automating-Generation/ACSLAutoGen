@@ -1875,21 +1875,29 @@ namespace acslg::analyzer::symbolic {
     };
 
     struct SymbolAddrBaseInfo {
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> fromAddr_;
+        std::optional<AddressChild> fromAddr_;
         SourcePoint fromPoint_;
         clang::QualType pointeeType_;
 
         SymbolAddrBaseInfo(std::optional<utils::not_null<std::unique_ptr<const Address>>> fromAddr,
                            SourcePoint fromPoint,
                            clang::QualType pointeeType)
-            : fromAddr_(std::move(fromAddr)), fromPoint_(std::move(fromPoint)),
+            : fromAddr_(std::nullopt), fromPoint_(std::move(fromPoint)),
+              pointeeType_(pointeeType) {
+            if (fromAddr)
+                fromAddr_.emplace(AddressChild::fromConstOwned(std::move(fromAddr.value())));
+        }
+        SymbolAddrBaseInfo(AddrHandle fromAddr,
+                           SourcePoint fromPoint,
+                           clang::QualType pointeeType)
+            : fromAddr_(AddressChild{fromAddr}), fromPoint_(std::move(fromPoint)),
               pointeeType_(pointeeType) {}
         SymbolAddrBaseInfo(const SymbolAddrBaseInfo &);
         SymbolAddrBaseInfo &operator=(const SymbolAddrBaseInfo &other) {
             if (&other == this)
                 return *this;
             if (other.fromAddr_)
-                fromAddr_ = other.fromAddr_.value()->addressClone().into_underlying();
+                fromAddr_.emplace(other.fromAddr_.value().copy());
             else
                 fromAddr_ = std::nullopt;
             fromPoint_   = other.fromPoint_;

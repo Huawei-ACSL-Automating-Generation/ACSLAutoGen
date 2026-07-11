@@ -1995,6 +1995,13 @@ namespace acslg::test::unit::analyzer {
         const auto &defaultSymAddrNode = defaultSymAddr.cast<symbolic::SymbolAddress>();
         ASSERT_TRUE(defaultSymAddrNode.getFromAddrHandle());
         EXPECT_EQ(*defaultSymAddrNode.getFromAddrHandle(), varAddrA);
+        auto defaultBase = defaultSymAddrNode.getBaseInfo();
+        ASSERT_TRUE(defaultBase.fromAddr_);
+        ASSERT_TRUE(defaultBase.fromAddr_->handle());
+        EXPECT_EQ(*defaultBase.fromAddr_->handle(), varAddrA);
+        auto copiedBase = defaultBase;
+        ASSERT_TRUE(copiedBase.fromAddr_->handle());
+        EXPECT_EQ(*copiedBase.fromAddr_->handle(), varAddrA);
         auto clonedAddr = symbolic::cloneSymbolAddress(defaultSymAddr);
         ASSERT_TRUE(clonedAddr->getFromAddrHandle());
         EXPECT_EQ(*clonedAddr->getFromAddrHandle(), varAddrA);

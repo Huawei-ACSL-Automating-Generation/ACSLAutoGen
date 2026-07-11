@@ -2311,11 +2311,11 @@ namespace acslg::analyzer::symbolic {
     }
 
     SymbolAddrBaseInfo::SymbolAddrBaseInfo(const SymbolAddrBaseInfo &other)
-        : fromPoint_(other.fromPoint_) {
+        : fromPoint_(other.fromPoint_), pointeeType_(other.pointeeType_) {
         if (other.fromAddr_ == std::nullopt)
             fromAddr_ = std::nullopt;
         else
-            fromAddr_ = other.fromAddr_.value()->addressClone().into_underlying();
+            fromAddr_.emplace(other.fromAddr_.value().copy());
     }
 
     SymbolAddress::SymbolAddress(
@@ -2451,8 +2451,7 @@ namespace acslg::analyzer::symbolic {
     SymbolAddrBaseInfo SymbolAddress::getBaseInfo() const {
         if (fromAddr_ == std::nullopt)
             return SymbolAddrBaseInfo{std::nullopt, fromPoint_, pointeeType_};
-        return SymbolAddrBaseInfo{fromAddr_.value().clone().into_underlying(), fromPoint_,
-                                  pointeeType_};
+        return SymbolAddrBaseInfo{getFromAddrHandle().value(), fromPoint_, pointeeType_};
     }
 
     int SymbolAddress::getDimension() const {
