@@ -788,26 +788,6 @@ namespace acslg::analyzer::symbolic {
         return intern(std::make_unique<Structure>(structureNode.getInfo(), std::move(fields)));
     }
 
-    namespace {
-        ExprChild makeDefaultSymbolAddressOffsetChild() {
-            auto &factory = ExprFactoryScope::current();
-            return ExprChild{factory.literal(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET))};
-        }
-
-        ExprChild makeSymbolAddressOffsetChild(
-            std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> offset) {
-            if (offset != std::nullopt)
-                return ExprChild::fromConstOwned(std::move(offset.value()));
-            return makeDefaultSymbolAddressOffsetChild();
-        }
-
-        ExprChild makeSymbolAddressOffsetChild(std::optional<ExprHandle> offset) {
-            if (offset != std::nullopt)
-                return ExprChild{offset.value()};
-            return makeDefaultSymbolAddressOffsetChild();
-        }
-    } // namespace
-
     ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr) {
         ExprFactoryScope scope(factory);
         if (expr.isUnknown())
@@ -2132,40 +2112,6 @@ namespace acslg::analyzer::symbolic {
             fromAddr_ = std::nullopt;
         else
             fromAddr_.emplace(other.fromAddr_.value().copy());
-    }
-
-    SymbolAddress::SymbolAddress(
-        const clang::QualType pointeeType,
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
-        SourcePoint fromPoint,
-        std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> offset,
-        std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> length)
-        : Address(SymbolicExpr::ExprKind::K_SymbolAddress,
-                  SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
-                  pointeeType),
-          Symbol(Kind::K_SymbolAddress), offset_(makeSymbolAddressOffsetChild(std::move(offset))),
-          fromAddr_(std::nullopt), fromPoint_(fromPoint), length_(std::nullopt) {
-        if (from)
-            fromAddr_.emplace(AddressChild::fromConstOwned(std::move(from.value())));
-        if (length != std::nullopt)
-            length_.emplace(ExprChild::fromConstOwned(std::move(length.value())));
-    }
-
-    SymbolAddress::SymbolAddress(
-        const clang::QualType pointeeType,
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
-        SourcePoint fromPoint,
-        std::optional<ExprHandle> offset,
-        std::optional<ExprHandle> length)
-        : Address(SymbolicExpr::ExprKind::K_SymbolAddress,
-                  SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
-                  pointeeType),
-          Symbol(Kind::K_SymbolAddress), offset_(makeSymbolAddressOffsetChild(offset)),
-          fromAddr_(std::nullopt), fromPoint_(fromPoint), length_(std::nullopt) {
-        if (from)
-            fromAddr_.emplace(AddressChild::fromConstOwned(std::move(from.value())));
-        if (length != std::nullopt)
-            length_.emplace(length.value());
     }
 
     SymbolAddress::SymbolAddress(FactoryNodeTag,

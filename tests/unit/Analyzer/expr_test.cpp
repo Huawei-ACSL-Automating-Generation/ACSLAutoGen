@@ -437,13 +437,13 @@ namespace acslg::test::unit::analyzer {
 
         auto var = getVarDecl(0);
         auto point = getSourcePoint(0);
-        symbolic::SymbolAddress sym{var->getType(), std::nullopt, point};
+        auto symHandle = factory.symbolAddress(var->getType(), std::nullopt, point);
+        const auto &sym = symHandle.cast<symbolic::SymbolAddress>();
 
         auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, point);
         auto *resultAddr = symbolic::cast<symbolic::Address>(result.get().get());
 
-        EXPECT_EQ(factory.importAddress(*resultAddr),
-                  factory.symbolAddress(var->getType(), std::nullopt, point));
+        EXPECT_EQ(factory.importAddress(*resultAddr), symHandle);
     }
 
     TEST_F(SubstituteTest, ResolvedValueNotAddressShouldError) {
@@ -2051,34 +2051,6 @@ namespace acslg::test::unit::analyzer {
             symbolic::cast<symbolic::FieldAddress>(clonedAddress.get().get());
         ASSERT_TRUE(clonedField->getBaseAddr().handle());
         EXPECT_EQ(*clonedField->getBaseAddr().handle(), varAddrA);
-    }
-
-    TEST(ExprFactoryTest, LegacySymbolAddressDefaultOffsetUsesCurrentFactory) {
-        ASTExtractor e;
-        e.init(R"c(
-            int f(void) {
-                int x = 0;
-                return x;
-            }
-        )c");
-
-        auto *func = e.findFunc("f");
-        ASSERT_NE(func, nullptr);
-        auto *var = e.findFirstDecl<VarDecl>();
-        ASSERT_NE(var, nullptr);
-        auto point =
-            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
-
-        ASSERT_FALSE(symbolic::ExprFactoryScope::hasCurrent());
-        ASSERT_DEATH({ symbolic::SymbolAddress addr(var->getType(), std::nullopt, point); }, "");
-
-        symbolic::ExprFactory factory;
-        symbolic::ExprFactoryScope scope(factory);
-        symbolic::SymbolAddress addr(var->getType(), std::nullopt, point);
-
-        EXPECT_EQ(addr.getOffset().get(), factory.literal(int64_t{0}).get().get());
-        EXPECT_EQ(factory.importAddress(addr),
-                  factory.symbolAddress(var->getType(), std::nullopt, point));
     }
 
     TEST(ExprFactoryTest, StructureBuilderInitializesFieldHandles) {

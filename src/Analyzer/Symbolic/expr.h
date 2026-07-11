@@ -1713,18 +1713,6 @@ namespace acslg::analyzer::symbolic {
         SymbolAddress(const SymbolAddress &other);
         SymbolAddress(SymbolAddress &&) = default;
 
-        SymbolAddress(const clang::QualType pointeeType,
-                      std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
-                      SourcePoint fromPoint,
-                      std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> offset =
-                          std::nullopt,
-                      std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> length =
-                          std::nullopt);
-        SymbolAddress(const clang::QualType pointeeType,
-                      std::optional<utils::not_null<std::unique_ptr<const Address>>> from,
-                      SourcePoint fromPoint,
-                      std::optional<ExprHandle> offset,
-                      std::optional<ExprHandle> length);
         SymbolAddress(FactoryNodeTag,
                       clang::QualType pointeeType,
                       std::optional<AddrHandle> from,
