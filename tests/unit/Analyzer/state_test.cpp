@@ -802,14 +802,9 @@ namespace acslg::test::unit::analyzer {
     }
 
     namespace {
-        using ExprUP = ::acslg::utils::not_null<unique_ptr<symbolic::SymbolicExpr>>;
-        auto makeAdd(ExprUP a, ExprUP b) {
+        auto makeAdd(symbolic::ExprHandle a, symbolic::ExprHandle b) {
             auto &factory = symbolic::ExprFactoryScope::current();
-            return factory
-                .binary(factory.importExpr(*a), symbolic::BinaryOpExpr::Operator::Add,
-                        factory.importExpr(*b))
-                ->clone()
-                .into_underlying();
+            return factory.binary(a, symbolic::BinaryOpExpr::Operator::Add, b);
         }
     } // namespace
 
@@ -818,17 +813,17 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 31;
 
         // X, X+1, X+2 each represents a single address (non-range → [off, off+1))
-        auto X  = makeSymbolValue(901); // symbolic SymbolValue expression (example)
-        auto X1 = makeAdd(cloneExpr(*X), makeLiteralExpr(1U));
-        auto X2 = makeAdd(cloneExpr(*X), makeLiteralExpr(2U));
+        auto X = internForTest(makeSymbolValue(901));
+        auto &factory = symbolic::ExprFactoryScope::current();
+        auto X1 = makeAdd(X, factory.literal(1U));
+        auto X2 = makeAdd(X, factory.literal(2U));
 
-        auto a0 = makeRangeAddr(baseId, /*off=*/std::move(X), /*len=*/nullptr);  // single @ X
-        auto a1 = makeRangeAddr(baseId, /*off=*/std::move(X1), /*len=*/nullptr); // single @ X+1
-        auto a2 = makeRangeAddr(baseId, /*off=*/std::move(X2), /*len=*/nullptr); // single @ X+2
+        auto a0 = makeRangeAddr(baseId, X, std::nullopt);  // single @ X
+        auto a1 = makeRangeAddr(baseId, X1, std::nullopt); // single @ X+1
+        auto a2 = makeRangeAddr(baseId, X2, std::nullopt); // single @ X+2
 
         // Same value
-        auto v  = makeSymbolValue(7777);
-        auto sv = cloneExpr(*v);
+        auto v = makeSymbolValue(7777);
         mm.write(a0, internForTest(v));
         mm.write(a1, internForTest(makeSymbolValue(7777)));
         mm.write(a2, internForTest(makeSymbolValue(7777)));
@@ -843,14 +838,14 @@ namespace acslg::test::unit::analyzer {
         MemoryModel mm;
         const unsigned baseId = 32;
 
-        auto X  = makeSymbolValue(902);
-        auto X2 = makeAdd(cloneExpr(*X), makeLiteralExpr(2U));
+        auto X = internForTest(makeSymbolValue(902));
+        auto &factory = symbolic::ExprFactoryScope::current();
+        auto X2 = makeAdd(X, factory.literal(2U));
 
-        auto a0 = makeRangeAddr(baseId, std::move(X), nullptr);  // single @ X
-        auto a2 = makeRangeAddr(baseId, std::move(X2), nullptr); // single @ X+2
+        auto a0 = makeRangeAddr(baseId, X, std::nullopt);  // single @ X
+        auto a2 = makeRangeAddr(baseId, X2, std::nullopt); // single @ X+2
 
-        auto v  = makeSymbolValue(8888);
-        auto sv = cloneExpr(*v);
+        auto v = makeSymbolValue(8888);
         mm.write(a0, internForTest(v));
         mm.write(a2, internForTest(makeSymbolValue(8888))); // same value but with a gap of 1
 
@@ -864,15 +859,16 @@ namespace acslg::test::unit::analyzer {
         MemoryModel mm;
         const unsigned baseId = 33;
 
-        auto X  = makeSymbolValue(903);
-        auto X1 = makeAdd(cloneExpr(*X), makeLiteralExpr(1U));
+        auto X = internForTest(makeSymbolValue(903));
+        auto &factory = symbolic::ExprFactoryScope::current();
+        auto X1 = makeAdd(X, factory.literal(1U));
 
-        auto a0 = makeRangeAddr(baseId, std::move(X), nullptr);  // single @ X
-        auto a1 = makeRangeAddr(baseId, std::move(X1), nullptr); // single @ X+1
+        auto a0 = makeRangeAddr(baseId, X, std::nullopt);  // single @ X
+        auto a1 = makeRangeAddr(baseId, X1, std::nullopt); // single @ X+1
 
         auto v1 = makeSymbolValue(10001);
         auto v2 = makeSymbolValue(10002);
-        auto s1 = cloneExpr(*v1);
+        auto s1 = internForTest(v1);
         mm.write(a0, internForTest(v1));
         mm.write(a1, internForTest(v2)); // different value
 
@@ -897,20 +893,21 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseB = 42;
 
         // For two different bases, write X and X+1 with the same values
-        auto XA  = makeSymbolValue(910);
-        auto X1A = makeAdd(cloneExpr(*XA), makeLiteralExpr(1U));
-        auto a0A = makeRangeAddr(baseA, std::move(XA), nullptr);
-        auto a1A = makeRangeAddr(baseA, std::move(X1A), nullptr);
+        auto XA = internForTest(makeSymbolValue(910));
+        auto &factory = symbolic::ExprFactoryScope::current();
+        auto X1A = makeAdd(XA, factory.literal(1U));
+        auto a0A = makeRangeAddr(baseA, XA, std::nullopt);
+        auto a1A = makeRangeAddr(baseA, X1A, std::nullopt);
 
-        auto XB  = makeSymbolValue(910); // same construction but different base
-        auto X1B = makeAdd(cloneExpr(*XB), makeLiteralExpr(1U));
-        auto a0B = makeRangeAddr(baseB, std::move(XB), nullptr);
-        auto a1B = makeRangeAddr(baseB, std::move(X1B), nullptr);
+        auto XB = internForTest(makeSymbolValue(910)); // same construction but different base
+        auto X1B = makeAdd(XB, factory.literal(1U));
+        auto a0B = makeRangeAddr(baseB, XB, std::nullopt);
+        auto a1B = makeRangeAddr(baseB, X1B, std::nullopt);
 
         auto vA  = makeSymbolValue(1212);
-        auto svA = cloneExpr(*vA);
+        auto svA = internForTest(vA);
         auto vB  = makeSymbolValue(1212);
-        auto svB = cloneExpr(*vB);
+        auto svB = internForTest(vB);
 
         mm.write(a0A, internForTest(vA));
         mm.write(a1A, internForTest(makeSymbolValue(1212)));
@@ -941,16 +938,17 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 34;
 
         // Start: a single address X
-        auto X  = makeSymbolValue(904);
-        auto a0 = makeRangeAddr(baseId, std::move(X), nullptr); // single @ X
+        auto X = internForTest(makeSymbolValue(904));
+        auto a0 = makeRangeAddr(baseId, X, std::nullopt); // single @ X
 
         // Successor: [X+1, X+1 + 3) → len = 3
-        auto X1 = makeAdd(makeSymbolValue(904), makeLiteralExpr(1U));
-        auto a1 = makeRangeAddr(baseId, std::move(X1), makeLiteralExpr(3U).into_underlying());
+        auto &factory = symbolic::ExprFactoryScope::current();
+        auto X1 = makeAdd(X, factory.literal(1U));
+        auto a1 = makeRangeAddr(baseId, X1, factory.literal(3U));
 
         // Same value
         auto v  = makeSymbolValue(1313);
-        auto sv = cloneExpr(*v);
+        auto sv = internForTest(v);
         mm.write(a0, internForTest(v));
         mm.write(a1, internForTest(makeSymbolValue(1313)));
 

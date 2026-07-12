@@ -345,6 +345,17 @@ namespace acslg::test::utils {
             .cast<symbolic::SymbolAddress>();
     }
 
+    symbolic::SymbolAddress FixtureWithCode::makeRangeAddr(
+        unsigned int id,
+        symbolic::ExprHandle offset,
+        optional<symbolic::ExprHandle> len,
+        optional<symbolic::SourcePoint> fromPoint) {
+        return exprFactory_
+            .symbolAddress(QualType{}, exprFactory_.variableAddress(getVarDecl(id)),
+                           fromPoint.value_or(defaultPoint), offset, len)
+            .cast<symbolic::SymbolAddress>();
+    }
+
     unique_ptr<symbolic::SymbolValue> FixtureWithCode::makeSymbolValue(
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
