@@ -117,10 +117,6 @@ namespace acslg::analyzer::symbolic {
           Symbol(Kind::K_SumOverRange),
           fromPoint_(std::move(fromPoint)) {}
 
-    OverRangeExpr::OverRangeExpr(const OverRangeExpr &other)
-        : SymbolicExpr(other), range_(other.range_),
-          indexName_(other.indexName_) {}
-
     const SymbolAddress &OverRangeExpr::range() const {
         auto *symbolAddr = dyn_cast<const SymbolAddress>(range_.get().get());
         if (symbolAddr == nullptr)

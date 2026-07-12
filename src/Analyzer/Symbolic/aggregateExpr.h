@@ -17,7 +17,7 @@ namespace acslg::analyzer::symbolic {
      */
     class SymbolAddress::RangeIndex : public SymbolicExpr {
       public:
-        RangeIndex(const RangeIndex &)            = default;
+        RangeIndex(const RangeIndex &)            = delete;
         RangeIndex(RangeIndex &&)                 = default;
         RangeIndex &operator=(const RangeIndex &) = delete;
         RangeIndex &operator=(RangeIndex &&)      = delete;
@@ -65,7 +65,7 @@ namespace acslg::analyzer::symbolic {
      */
     class OverRangeExpr : public SymbolicExpr {
       public:
-        OverRangeExpr(const OverRangeExpr &);
+        OverRangeExpr(const OverRangeExpr &) = delete;
         OverRangeExpr(OverRangeExpr &&) = default;
         OverRangeExpr &operator=(const OverRangeExpr &) = delete;
         OverRangeExpr &operator=(OverRangeExpr &&) = delete;
