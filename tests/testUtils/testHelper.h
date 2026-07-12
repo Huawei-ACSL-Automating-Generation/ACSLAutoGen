@@ -89,7 +89,7 @@ namespace acslg::test::utils {
         FixtureWithCode();
         ::acslg::utils::not_null<const clang::VarDecl *> getVarDecl(unsigned int id);
         ::acslg::utils::not_null<const clang::FunctionDecl *> getFuncDecl(unsigned int id);
-        analyzer::symbolic::VariableAddress makeVariableAddr(unsigned int id);
+        analyzer::symbolic::AddrHandle makeVariableAddr(unsigned int id);
         analyzer::symbolic::SymbolAddress makeRangeAddr(
             unsigned int id,
             analyzer::symbolic::ExprHandle offset,

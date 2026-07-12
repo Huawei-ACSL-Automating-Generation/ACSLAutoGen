@@ -459,7 +459,7 @@ namespace acslg::test::unit::analyzer {
         auto baseA  = makeVariableAddr(1);
         auto eA     = makeSymbolValue(1);
         auto saveEA = internForTest(eA);
-        auto addrAHandle = factory.importAddress(baseA);
+        auto addrAHandle = baseA;
         mm.write(baseA, internForTest(eA));
 
         // constantRange

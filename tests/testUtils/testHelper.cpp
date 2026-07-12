@@ -306,8 +306,8 @@ namespace acslg::test::utils {
         return funcDecls.at(funcIdCountMap.at(id));
     }
 
-    symbolic::VariableAddress FixtureWithCode::makeVariableAddr(unsigned int id) {
-        return exprFactory_.variableAddress(getVarDecl(id)).cast<symbolic::VariableAddress>();
+    symbolic::AddrHandle FixtureWithCode::makeVariableAddr(unsigned int id) {
+        return exprFactory_.variableAddress(getVarDecl(id));
     }
 
     symbolic::SymbolAddress FixtureWithCode::makeRangeAddr(

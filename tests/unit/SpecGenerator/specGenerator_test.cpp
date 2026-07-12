@@ -30,7 +30,7 @@ namespace acslg::test::unit::spec_generator {
                                         factory.literal(int64_t{4}));
         auto valueHandle = factory.binary(factory.literal(int64_t{5}), Multiply,
                                           factory.literal(int64_t{6}));
-        AddressBox addr{factory.importAddress(makeVariableAddr(0))};
+        AddressBox addr{makeVariableAddr(0)};
 
         PostPIInfo piInfo;
         piInfo.memoryMap.emplace(addr, valueHandle);

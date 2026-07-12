@@ -372,8 +372,8 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto result = symbolic::getSubstitutedExprHandle(factory, varAddr, *path, defaultPoint);
-        ASSERT_EQ(*result, varAddr);
+        auto result = symbolic::getSubstitutedExprHandle(factory, *varAddr, *path, defaultPoint);
+        ASSERT_EQ(*result, *varAddr);
     }
 
     TEST_F(SubstituteTest, FromPointMismatchReturnsUnchangedSymbolAddr) {
