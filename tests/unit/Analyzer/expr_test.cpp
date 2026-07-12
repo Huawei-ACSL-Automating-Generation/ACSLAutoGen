@@ -680,11 +680,6 @@ namespace acslg::test::unit::analyzer {
             explicit CollisionExpr(int id)
                 : SymbolicExpr(ExprKind::K_UnknownExpr, Type{ScalarKind::Void, 0}), id_(id) {}
 
-            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> clone()
-                const override {
-                return std::make_unique<CollisionExpr>(id_);
-            }
-
             std::string dump() const override { return "collision:" + std::to_string(id_); }
 
             bool equal(const symbolic::SymbolicExpr &other) const override {

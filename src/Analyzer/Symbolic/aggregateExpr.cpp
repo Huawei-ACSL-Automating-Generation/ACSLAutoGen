@@ -159,10 +159,6 @@ namespace acslg::analyzer::symbolic {
 
     std::size_t OverRangeExpr::hash() const { return utils::hash_val(range().hash()); }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::clone() const {
-        return std::make_unique<RangeIndex>(*this);
-    };
-
     std::string SymbolAddress::RangeIndex::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;

@@ -1057,21 +1057,6 @@ namespace acslg::analyzer::symbolic {
         return result.value();
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::LiteralExprNode::clone() const {
-        switch (getLiteralType()) {
-            case LiteralType::Boolean: return std::make_unique<detail::LiteralExprNode>(data_.boolValue);
-            case LiteralType::Int: return std::make_unique<detail::LiteralExprNode>(data_.intValue);
-            case LiteralType::UnsignedInt: return std::make_unique<detail::LiteralExprNode>(data_.uintValue);
-            case LiteralType::Short: return std::make_unique<detail::LiteralExprNode>(data_.shortValue);
-            case LiteralType::UnsignedShort:
-                return std::make_unique<detail::LiteralExprNode>(data_.ushortValue);
-            case LiteralType::Int64: return std::make_unique<detail::LiteralExprNode>(data_.int64Value);
-            case LiteralType::UInt64: return std::make_unique<detail::LiteralExprNode>(data_.uint64Value);
-        }
-
-        UNREACHABLE();
-    }
-
     ExprHandle detail::LiteralExprNode::importInto(ExprFactory &factory) const {
         switch (getLiteralType()) {
             case LiteralType::Boolean: return factory.literal(data_.boolValue);
@@ -1084,38 +1069,6 @@ namespace acslg::analyzer::symbolic {
         }
 
         UNREACHABLE();
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::clone() const {
-        return std::make_unique<BinaryOpExpr>(left_.handle(), op_, right_.handle());
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::clone() const {
-        return std::make_unique<UnaryOpExpr>(op_, expr_.handle());
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::clone() const {
-        return std::make_unique<UnknownExpr>();
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolValue::clone() const {
-        return std::make_unique<SymbolValue>(*this);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::clone() const {
-        return std::make_unique<SymbolAddress>(*this);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> VariableAddress::clone() const {
-        return std::make_unique<VariableAddress>(*this);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> FieldAddress::clone() const {
-        return std::make_unique<FieldAddress>(*this);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> Structure::clone() const {
-        return std::make_unique<Structure>(*this);
     }
 
     int64_t detail::LiteralExprNode::getLiteralValue() const {

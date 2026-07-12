@@ -297,10 +297,6 @@ namespace acslg::analyzer::symbolic {
         ExprKind getKind() const { return kind_; }
         Type getValType() const { return valueType_; }
 
-        /// @brief Clone the expression.
-        /// @return Deep copy of the expression.
-        virtual utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const = 0;
-
         /// @brief Dump debug string of the expression.
         /// @return Human-readable representation.
         virtual std::string dump() const = 0;
@@ -663,7 +659,6 @@ namespace acslg::analyzer::symbolic {
         LiteralType getLiteralType() const { return type_; }
         ExprHandle importInto(ExprFactory &factory) const;
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::size_t hash() const override;
         const detail::LiteralExprNode *evalToConstExpr() const override;
@@ -745,7 +740,6 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<const SymbolicExpr *> getRight() const { return right_.get(); }
         Operator getOperator() const { return op_; }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::size_t hash() const override;
         const detail::LiteralExprNode *evalToConstExpr() const override;
@@ -818,7 +812,6 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<const SymbolicExpr *> getSub() const { return expr_.get(); }
         Operator getOperator() const { return op_; }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::size_t hash() const override;
         const detail::LiteralExprNode *evalToConstExpr() const override;
@@ -861,7 +854,6 @@ namespace acslg::analyzer::symbolic {
             return expr->getKind() == ExprKind::K_UnknownExpr;
         }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual std::size_t hash() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
@@ -1005,7 +997,6 @@ namespace acslg::analyzer::symbolic {
         }
         auto getInfo() const -> const auto & { return info_; }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         std::optional<SourcePoint> getFromPoint() const override;
         virtual std::size_t hash() const override;
@@ -1680,7 +1671,6 @@ namespace acslg::analyzer::symbolic {
 
         // SymbolExpr
       public:
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
         virtual bool equal(const SymbolicExpr &expr) const override;
         virtual std::size_t hash() const override;
@@ -1813,7 +1803,6 @@ namespace acslg::analyzer::symbolic {
             return expr->getKind() == ExprKind::K_VariableAddress;
         }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
 
         ExprHandle simplifiedExpr() const override {
@@ -1893,7 +1882,6 @@ namespace acslg::analyzer::symbolic {
             return expr->getKind() == ExprKind::K_FieldAddress;
         }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
 
         ExprHandle simplifiedExpr() const override {
@@ -1973,7 +1961,6 @@ namespace acslg::analyzer::symbolic {
         }
         static bool classof(const Symbol *e) { return e->getKind() == Symbol::Kind::K_SymbolValue; }
 
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
         std::string dump() const override;
 
         virtual std::size_t hash() const override;

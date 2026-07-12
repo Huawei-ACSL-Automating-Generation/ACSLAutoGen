@@ -35,11 +35,6 @@ namespace acslg::analyzer::symbolic {
         // SymbolicExpr
       public:
         /**
-         * @brief Clone the range index.
-         * @return Newly allocated RangeIndex.
-         */
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override;
-        /**
          * @brief Dump a human-readable representation.
          * @return Textual description.
          */
@@ -120,12 +115,6 @@ namespace acslg::analyzer::symbolic {
         SumOverRange(AddrHandle range, std::string_view indexName, SourcePoint fromPoint);
 
         // SymbolicExpr
-        /**
-         * @brief Clone the sum-over-range expression.
-         */
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override {
-            return std::make_unique<SumOverRange>(*this);
-        };
         /// @brief Dump a readable description of the sum.
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
@@ -184,10 +173,6 @@ namespace acslg::analyzer::symbolic {
         const SymbolicExpr &getPredicate() const { return *pred_; }
 
         // SymbolicExpr
-        /// @brief Clone the quantified expression.
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override {
-            return std::make_unique<QuantifierOverRange>(*this);
-        };
         /// @brief Dump the quantifier, range, and predicate.
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
@@ -247,9 +232,6 @@ namespace acslg::analyzer::symbolic {
         const SymbolicExpr &getExpr() const { return *expr_; }
 
         // SymbolicExpr
-        utils::not_null<std::unique_ptr<SymbolicExpr>> clone() const override {
-            return std::make_unique<MaxMinOverRange>(*this);
-        };
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override {
