@@ -121,15 +121,6 @@ namespace acslg::analyzer::symbolic {
         : SymbolicExpr(other), range_(other.range_),
           indexName_(other.indexName_) {}
 
-    OverRangeExpr &OverRangeExpr::operator=(const OverRangeExpr &other) {
-        if (&other == this)
-            return *this;
-        SymbolicExpr::operator=(other);
-        range_     = other.range_;
-        indexName_ = other.indexName_;
-        return *this;
-    }
-
     const SymbolAddress &OverRangeExpr::range() const {
         auto *symbolAddr = dyn_cast<const SymbolAddress>(range_.get().get());
         if (symbolAddr == nullptr)
@@ -243,15 +234,6 @@ namespace acslg::analyzer::symbolic {
                              {"suffix", suffix}});
     }
 
-    QuantifierOverRange &QuantifierOverRange::operator=(const QuantifierOverRange &other) {
-        if (&other == this)
-            return *this;
-        OverRangeExpr::operator=(other);
-        quant_ = other.quant_;
-        pred_  = other.pred_;
-        return *this;
-    }
-
     std::string QuantifierOverRange::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
@@ -326,17 +308,6 @@ namespace acslg::analyzer::symbolic {
                              {"n", nStr.value()},
                              {"entailOrAnd", entailOrAnd},
                              {"pred", predStr.value()}});
-    }
-
-    MaxMinOverRange &MaxMinOverRange::operator=(const MaxMinOverRange &other) {
-        if (&other == this)
-            return *this;
-        OverRangeExpr::operator=(other);
-        Symbol::operator=(other);
-        extremum_  = other.extremum_;
-        expr_      = other.expr_;
-        fromPoint_ = other.fromPoint_;
-        return *this;
     }
 
     std::string MaxMinOverRange::dump() const {

@@ -1,7 +1,7 @@
 /**
  * @file expr.cpp
- * @brief Implements symbolic expression hierarchy utilities and helpers for cloning, comparison,
- *        simplification, and ACSL conversion.
+ * @brief Implements symbolic expression hierarchy utilities for comparison, simplification, and
+ *        ACSL conversion.
  */
 #include "expr.h"
 
@@ -2161,28 +2161,10 @@ namespace acslg::analyzer::symbolic {
     VariableAddress::VariableAddress(const VariableAddress &other)
         : Address(other), from_(other.from_) {}
 
-    VariableAddress &VariableAddress::operator=(const VariableAddress &other) {
-        if (this == &other)
-            return *this;
-        Address::operator=(other);
-        from_ = other.from_;
-        return *this;
-    }
-
     FieldAddress::FieldAddress(const FieldAddress &other)
         : Address(other), definition_(other.definition_),
           baseAddr_(other.baseAddr_),
           fieldIndex_(other.fieldIndex_) {}
-
-    FieldAddress &FieldAddress::operator=(const FieldAddress &other) {
-        if (this == &other)
-            return *this;
-        Address::operator=(other);
-        definition_ = other.definition_;
-        baseAddr_   = other.baseAddr_;
-        fieldIndex_ = other.fieldIndex_;
-        return *this;
-    }
 
     Structure::Structure(Info info, std::vector<ExprHandle> fields)
         : SymbolicExpr(

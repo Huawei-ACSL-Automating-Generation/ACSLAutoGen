@@ -5,6 +5,7 @@
 #include <clang/AST/AST.h>
 #include <clang/AST/Decl.h>
 #include <limits>
+#include <type_traits>
 
 #include "ASTExtractor.h"
 #include "Context/context.h"
@@ -20,6 +21,12 @@ using ::testing::HasSubstr;
 namespace acslg::test::unit::analyzer {
     using namespace acslg::analyzer;
     using namespace utils;
+
+    static_assert(!std::is_copy_assignable_v<symbolic::detail::LiteralExprNode>);
+    static_assert(!std::is_move_assignable_v<symbolic::detail::BinaryOpExprNode>);
+    static_assert(!std::is_copy_assignable_v<symbolic::SymbolAddress>);
+    static_assert(!std::is_copy_assignable_v<symbolic::Structure>);
+    static_assert(!std::is_move_assignable_v<symbolic::QuantifierOverRange>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {

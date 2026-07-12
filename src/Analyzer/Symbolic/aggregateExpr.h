@@ -5,7 +5,6 @@
 #ifndef __ACSLG_SRC_ANALYZER_SYMBOLIC_AGGREGATEEXPR_H__
 #define __ACSLG_SRC_ANALYZER_SYMBOLIC_AGGREGATEEXPR_H__
 
-#include <memory>
 #include <string_view>
 
 #include "expr.h"
@@ -20,8 +19,8 @@ namespace acslg::analyzer::symbolic {
       public:
         RangeIndex(const RangeIndex &)            = default;
         RangeIndex(RangeIndex &&)                 = default;
-        RangeIndex &operator=(const RangeIndex &) = default;
-        RangeIndex &operator=(RangeIndex &&)      = default;
+        RangeIndex &operator=(const RangeIndex &) = delete;
+        RangeIndex &operator=(RangeIndex &&)      = delete;
 
         static bool classof(const SymbolicExpr *e) {
             return e->getKind() == ExprKind::K_RangeIndex;
@@ -68,8 +67,8 @@ namespace acslg::analyzer::symbolic {
       public:
         OverRangeExpr(const OverRangeExpr &);
         OverRangeExpr(OverRangeExpr &&) = default;
-        OverRangeExpr &operator=(const OverRangeExpr &);
-        OverRangeExpr &operator=(OverRangeExpr &&) = default;
+        OverRangeExpr &operator=(const OverRangeExpr &) = delete;
+        OverRangeExpr &operator=(OverRangeExpr &&) = delete;
         virtual ~OverRangeExpr()                   = default;
 
         static bool classof(const SymbolicExpr *e) {
@@ -109,8 +108,8 @@ namespace acslg::analyzer::symbolic {
 
         SumOverRange(const SumOverRange &)            = default;
         SumOverRange(SumOverRange &&)                 = default;
-        SumOverRange &operator=(const SumOverRange &) = default;
-        SumOverRange &operator=(SumOverRange &&)      = default;
+        SumOverRange &operator=(const SumOverRange &) = delete;
+        SumOverRange &operator=(SumOverRange &&)      = delete;
 
         SumOverRange(AddrHandle range, std::string_view indexName, SourcePoint fromPoint);
 
@@ -156,8 +155,8 @@ namespace acslg::analyzer::symbolic {
             : OverRangeExpr(other), quant_(other.quant_),
               pred_(other.pred_) {}
         QuantifierOverRange(QuantifierOverRange &&) = default;
-        QuantifierOverRange &operator=(const QuantifierOverRange &);
-        QuantifierOverRange &operator=(QuantifierOverRange &&) = default;
+        QuantifierOverRange &operator=(const QuantifierOverRange &) = delete;
+        QuantifierOverRange &operator=(QuantifierOverRange &&) = delete;
 
         QuantifierOverRange(AddrHandle range,
                             std::string_view indexName,
@@ -213,8 +212,8 @@ namespace acslg::analyzer::symbolic {
             : OverRangeExpr(other), Symbol(other), extremum_(other.extremum_),
               expr_(other.expr_), fromPoint_(other.fromPoint_) {}
         MaxMinOverRange(MaxMinOverRange &&) = default;
-        MaxMinOverRange &operator=(const MaxMinOverRange &);
-        MaxMinOverRange &operator=(MaxMinOverRange &&) = default;
+        MaxMinOverRange &operator=(const MaxMinOverRange &) = delete;
+        MaxMinOverRange &operator=(MaxMinOverRange &&) = delete;
 
         MaxMinOverRange(AddrHandle range,
                         std::string_view indexName,

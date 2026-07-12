@@ -287,9 +287,9 @@ namespace acslg::analyzer::symbolic {
 
         virtual ~SymbolicExpr()                       = default;
         SymbolicExpr(const SymbolicExpr &)            = default;
-        SymbolicExpr &operator=(const SymbolicExpr &) = default;
+        SymbolicExpr &operator=(const SymbolicExpr &) = delete;
         SymbolicExpr(SymbolicExpr &&)                 = default;
-        SymbolicExpr &operator=(SymbolicExpr &&)      = default;
+        SymbolicExpr &operator=(SymbolicExpr &&)      = delete;
 
         static bool classof(const SymbolicExpr *) { return true; }
         static bool classof(const Symbol *) { return true; }
@@ -884,9 +884,9 @@ namespace acslg::analyzer::symbolic {
       public:
         virtual ~Symbol()                 = default;
         Symbol(const Symbol &)            = default;
-        Symbol &operator=(const Symbol &) = default;
+        Symbol &operator=(const Symbol &) = delete;
         Symbol(Symbol &&)                 = default;
-        Symbol &operator=(Symbol &&)      = default;
+        Symbol &operator=(Symbol &&)      = delete;
 
         enum class Kind {
             K_Structure,
@@ -1032,9 +1032,9 @@ namespace acslg::analyzer::symbolic {
       public:
         virtual ~Address()                  = default;
         Address(const Address &)            = default;
-        Address &operator=(const Address &) = default;
+        Address &operator=(const Address &) = delete;
         Address(Address &&)                 = default;
-        Address &operator=(Address &&)      = default;
+        Address &operator=(Address &&)      = delete;
 
         static bool classof(const SymbolicExpr *e) {
             auto k = e->getKind();
@@ -1787,9 +1787,9 @@ namespace acslg::analyzer::symbolic {
     class VariableAddress : public Address {
       public:
         VariableAddress(const VariableAddress &other);
-        VariableAddress &operator=(const VariableAddress &other);
+        VariableAddress &operator=(const VariableAddress &other) = delete;
         VariableAddress(VariableAddress &&)            = default;
-        VariableAddress &operator=(VariableAddress &&) = default;
+        VariableAddress &operator=(VariableAddress &&) = delete;
 
         bool operator==(const VariableAddress &other) const { return equal(other); }
 
@@ -1862,7 +1862,7 @@ namespace acslg::analyzer::symbolic {
     class FieldAddress : public Address {
       public:
         FieldAddress(const FieldAddress &other);
-        FieldAddress &operator=(const FieldAddress &other);
+        FieldAddress &operator=(const FieldAddress &other) = delete;
         FieldAddress(FieldAddress &&) = default;
 
         FieldAddress(const clang::QualType pointeeType,
