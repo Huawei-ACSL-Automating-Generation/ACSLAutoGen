@@ -2161,11 +2161,6 @@ namespace acslg::analyzer::symbolic {
     VariableAddress::VariableAddress(const VariableAddress &other)
         : Address(other), from_(other.from_) {}
 
-    FieldAddress::FieldAddress(const FieldAddress &other)
-        : Address(other), definition_(other.definition_),
-          baseAddr_(other.baseAddr_),
-          fieldIndex_(other.fieldIndex_) {}
-
     Structure::Structure(Info info, std::vector<ExprHandle> fields)
         : SymbolicExpr(
               ExprKind::K_Structure,

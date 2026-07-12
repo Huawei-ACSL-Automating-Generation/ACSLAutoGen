@@ -24,6 +24,7 @@ namespace acslg::test::unit::analyzer {
 
     static_assert(!std::is_copy_assignable_v<symbolic::detail::LiteralExprNode>);
     static_assert(!std::is_move_assignable_v<symbolic::detail::BinaryOpExprNode>);
+    static_assert(!std::is_copy_constructible_v<symbolic::FieldAddress>);
     static_assert(!std::is_copy_assignable_v<symbolic::SymbolAddress>);
     static_assert(!std::is_copy_assignable_v<symbolic::Structure>);
     static_assert(!std::is_move_assignable_v<symbolic::QuantifierOverRange>);
@@ -41,12 +42,6 @@ namespace acslg::test::unit::analyzer {
                 }
             }
             return nullptr;
-        }
-
-        std::unique_ptr<symbolic::SymbolAddress> cloneSymbolAddressForLegacyTest(
-            symbolic::AddrHandle address) {
-            return std::make_unique<symbolic::SymbolAddress>(
-                address.cast<symbolic::SymbolAddress>());
         }
 
         symbolic::ExprHandle makeStructureWithFacade(
@@ -1981,9 +1976,6 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(defaultBase.fromAddr_->handle(), varAddrA);
         auto copiedBase = defaultBase;
         EXPECT_EQ(copiedBase.fromAddr_->handle(), varAddrA);
-        auto clonedAddr = cloneSymbolAddressForLegacyTest(defaultSymAddr);
-        ASSERT_TRUE(clonedAddr->getFromAddrHandle());
-        EXPECT_EQ(*clonedAddr->getFromAddrHandle(), varAddrA);
         EXPECT_EQ(defaultSymAddrNode.getOffset().get(),
                   factory.literal(static_cast<int64_t>(symbolic::SymbolAddress::ZERO_OFFSET))
                       .get()
@@ -2380,11 +2372,10 @@ namespace acslg::test::unit::analyzer {
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
         symbolic::ExprFactory setupFactory;
-        auto legacyPtr = cloneSymbolAddressForLegacyTest(
-            symbolic::Addr::symbol(setupFactory, var->getType(), point)
-                .withOffset(symbolic::LiteralExpr{setupFactory, int64_t{4}})
-                .handle());
-        const auto &legacy = *legacyPtr;
+        auto source = symbolic::Addr::symbol(setupFactory, var->getType(), point)
+                          .withOffset(symbolic::LiteralExpr{setupFactory, int64_t{4}})
+                          .handle();
+        const auto &legacy = source.cast<symbolic::SymbolAddress>();
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
@@ -2414,10 +2405,9 @@ namespace acslg::test::unit::analyzer {
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
         symbolic::ExprFactory setupFactory;
-        auto legacyAddr = cloneSymbolAddressForLegacyTest(
-            symbolic::Addr::symbol(setupFactory, var->getType(), point).handle());
+        auto legacyAddr = symbolic::Addr::symbol(setupFactory, var->getType(), point).handle();
         auto legacyAdd = setupFactory.binary(
-            setupFactory.importExpr(*legacyAddr), symbolic::BinaryOpExpr::Operator::Add,
+            legacyAddr.asExpr(), symbolic::BinaryOpExpr::Operator::Add,
             setupFactory.literal(int64_t{4}));
 
         symbolic::ExprFactory factory;
@@ -2516,7 +2506,7 @@ namespace acslg::test::unit::analyzer {
                   expectedExtendedLength.get().get());
     }
 
-    TEST(ExprFactoryTest, ImportsLegacySymbolAddressRangeChildrenAsHandles) {
+    TEST(ExprFactoryTest, ImportsCrossFactorySymbolAddressRangeChildrenAsHandles) {
         ASTExtractor e;
         e.init(R"c(
             int f(void) {
@@ -2532,17 +2522,14 @@ namespace acslg::test::unit::analyzer {
         auto point =
             symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
 
+        symbolic::ExprFactory setupFactory;
+        auto source = setupFactory.symbolAddress(
+            var->getType(), setupFactory.variableAddress(var), point,
+            setupFactory.literal(int64_t{4}), setupFactory.literal(int64_t{2}));
+        const auto &legacy = source.cast<symbolic::SymbolAddress>();
+
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto legacyPtr = cloneSymbolAddressForLegacyTest(
-            symbolic::Addr::symbol(
-                var->getType(),
-                symbolic::Addr::variable(var),
-                point,
-                symbolic::LiteralExpr{factory, int64_t{4}},
-                symbolic::LiteralExpr{factory, int64_t{2}})
-                .handle());
-        const auto &legacy = *legacyPtr;
 
         auto importedA = factory.importExpr(legacy);
         auto importedB = factory.importExpr(legacy);

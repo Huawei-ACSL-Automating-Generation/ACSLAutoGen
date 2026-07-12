@@ -1861,7 +1861,7 @@ namespace acslg::analyzer::symbolic {
     /// @brief Represents the address of a C Structure's member.
     class FieldAddress : public Address {
       public:
-        FieldAddress(const FieldAddress &other);
+        FieldAddress(const FieldAddress &) = delete;
         FieldAddress &operator=(const FieldAddress &other) = delete;
         FieldAddress(FieldAddress &&) = default;
 
