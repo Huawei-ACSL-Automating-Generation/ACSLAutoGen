@@ -17,7 +17,7 @@ namespace acslg::test::utils {
     std::string doAll(const std::string_view code);
     std::unique_ptr<analyzer::ProgramState> execOnFirstFunc(const std::string &code);
     analyzer::symbolic::ExprFactory &getLastExprFactory();
-    ::acslg::utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>> getReturnExprOfFirstPath(
+    analyzer::symbolic::ExprHandle getReturnExprOfFirstPath(
         const analyzer::ProgramState &state);
     ::acslg::utils::not_null<std::unique_ptr<analyzer::ProgramState>> getPostStateOfFirstLoop(
         const std::string_view code);

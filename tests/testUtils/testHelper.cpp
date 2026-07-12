@@ -100,8 +100,7 @@ namespace acslg::test::utils {
         return postState;
     }
 
-    not_null<unique_ptr<symbolic::SymbolicExpr>> getReturnExprOfFirstPath(
-        const ProgramState &state) {
+    symbolic::ExprHandle getReturnExprOfFirstPath(const ProgramState &state) {
         if (state.getPaths().empty())
             ERROR("Empty paths_!");
         auto &firstPath  = state.getPaths()[0];
@@ -109,7 +108,7 @@ namespace acslg::test::utils {
         if (returnExpr == nullopt)
             ERROR("There is no returnExpr!");
         auto &factory = state.getExprFactory();
-        return factory.importExpr(*returnExpr.value())->clone();
+        return factory.importExpr(*returnExpr.value());
     }
 
     not_null<unique_ptr<ProgramState>> getPostStateOfFirstLoop(const string_view code) {
