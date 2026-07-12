@@ -964,10 +964,6 @@ namespace acslg::analyzer::symbolic {
             size_t getNumFields() const { return layout_.getFieldCount(); }
         };
 
-        Structure(const clang::RecordDecl *RD,
-                  const clang::ASTRecordLayout &layout,
-                  utils::not_null<std::unique_ptr<const Address>> from,
-                  SourcePoint fromPoint);
         Structure(Info info, std::vector<ExprHandle> fields);
 
         Structure(const Structure &other) : SymbolicExpr(other), Symbol(other), info_(other.info_) {

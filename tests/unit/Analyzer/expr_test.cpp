@@ -2159,7 +2159,7 @@ namespace acslg::test::unit::analyzer {
                   factory.structure(record, layout, factory.variableAddress(st), point));
     }
 
-    TEST(ExprFactoryTest, ScopedLegacyStructureConstructorUsesFactoryFields) {
+    TEST(ExprFactoryTest, StructureBuilderUsesFactoryFields) {
         ASTExtractor e;
         e.init(R"c(
             struct Inner {
@@ -2192,13 +2192,9 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        std::unique_ptr<const symbolic::Address> from =
-            factory.variableAddress(st)->addressClone().into_underlying();
-        symbolic::Structure legacy{
-            record, layout,
-            ::acslg::utils::not_null<std::unique_ptr<const symbolic::Address>>{
-                std::move(from)},
-            point};
+        auto structureHandle =
+            factory.structure(record, layout, factory.variableAddress(st), point);
+        const auto &structure = structureHandle.cast<symbolic::Structure>();
 
         std::vector<const FieldDecl *> fields;
         for (const auto *field : record->fields())
@@ -2209,14 +2205,14 @@ namespace acslg::test::unit::analyzer {
         auto field0Addr = factory.fieldAddress(fields[0]->getType(), record, fromHandle, 0);
         auto expectedField0 =
             factory.symbolValue(symbolic::deriveType(fields[0]->getType()), field0Addr, point);
-        EXPECT_EQ(legacy.getFieldValue(0).get(), expectedField0.get().get());
+        EXPECT_EQ(structure.getFieldValue(0).get(), expectedField0.get().get());
 
         auto field1Addr = factory.fieldAddress(fields[1]->getType(), record, fromHandle, 1);
         auto arrayType = llvm::cast<ArrayType>(fields[1]->getType());
         auto expectedField1 = factory.symbolAddress(
             arrayType->getElementType(), field1Addr, point, std::nullopt,
             factory.literal(uint64_t{3}));
-        EXPECT_EQ(legacy.getFieldValue(1).get(), expectedField1.get().get());
+        EXPECT_EQ(structure.getFieldValue(1).get(), expectedField1.get().get());
 
         auto field2Addr = factory.fieldAddress(fields[2]->getType(), record, fromHandle, 2);
         auto *nestedRecord = fields[2]->getType()->getAsRecordDecl();
@@ -2227,7 +2223,7 @@ namespace acslg::test::unit::analyzer {
             nestedRecord->getASTContext().getASTRecordLayout(nestedRecord);
         auto expectedField2 =
             factory.structure(nestedRecord, nestedLayout, field2Addr, point);
-        EXPECT_EQ(legacy.getFieldValue(2).get(), expectedField2.get().get());
+        EXPECT_EQ(structure.getFieldValue(2).get(), expectedField2.get().get());
     }
 
     TEST(ExprFactoryTest, StructureBuilderInitializesUnknownFieldHandles) {

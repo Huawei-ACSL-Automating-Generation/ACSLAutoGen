@@ -2161,53 +2161,6 @@ namespace acslg::analyzer::symbolic {
             fields_.emplace_back(field);
     }
 
-    Structure::Structure(const clang::RecordDecl *RD,
-                         const clang::ASTRecordLayout &layout,
-                         utils::not_null<std::unique_ptr<const Address>> from,
-                         SourcePoint fromPoint)
-        : SymbolicExpr(
-              ExprKind::K_Structure,
-              Type{ScalarKind::Structure, static_cast<unsigned>(layout.getSize().getQuantity()) *
-                                              8 /*By default, char is 8-bit.*/}),
-          Symbol(Kind::K_Structure), info_(Info{RD, layout}) {
-        auto &factory = ExprFactoryScope::current();
-        Addr fromAddr{factory, factory.importAddress(*from)};
-
-        fields_.reserve(info_.layout_.getFieldCount());
-        for (auto field : info_.definition_->fields()) {
-            auto index          = field->getFieldIndex();
-            clang::QualType fty = field->getType();
-            auto fieldAddr = fromAddr.field(fty, info_.definition_, index);
-
-            if (fty->isStructureType()) {
-                auto nestedRD = fty->getAsRecordDecl();
-                if (!nestedRD || !nestedRD->isCompleteDefinition())
-                    ERROR("Incomplete nested struct definition");
-                nestedRD           = nestedRD->getDefinition();
-                auto &nestedLayout = nestedRD->getASTContext().getASTRecordLayout(nestedRD);
-                fields_.emplace_back(
-                    factory.structure(nestedRD, nestedLayout, fieldAddr.handle(), fromPoint));
-            } else if (fty->isPointerType()) {
-                fields_.emplace_back(Addr::symbol(fty, fieldAddr, fromPoint).asExpr().handle());
-            } else if (fty->isArrayType()) {
-                auto arrayType = llvm::cast<clang::ArrayType>(fty);
-                auto elemTy    = arrayType->getElementType();
-                auto *cat      = llvm::dyn_cast<clang::ConstantArrayType>(fty.getTypePtr());
-                auto arrayAddr = Addr::symbol(elemTy, fieldAddr, fromPoint);
-                if (cat) {
-                    LiteralExpr length{factory, cat->getSize().getZExtValue()};
-                    arrayAddr = arrayAddr.withLength(length);
-                }
-                fields_.emplace_back(arrayAddr.asExpr().handle());
-            } else {
-                fields_.emplace_back(
-                    Expr::symbolValue(deriveType(fty), fieldAddr, fromPoint).handle());
-            }
-        }
-        if (fields_.size() != info_.layout_.getFieldCount())
-            UNREACHABLE();
-    }
-
     SymbolValue::SymbolValue(const SymbolValue &other)
         : SymbolicExpr(other), Symbol(Kind::K_SymbolValue),
           fromAddr_(other.fromAddr_),
