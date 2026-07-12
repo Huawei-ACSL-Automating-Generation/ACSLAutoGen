@@ -185,7 +185,7 @@ namespace acslg::analyzer {
         using StoredValue = symbolic::ExprHandle;
 
         /// SymbolValue address to symbolic expression mapping
-        std::unordered_map<symbolic::VariableAddress, StoredValue> memoryMap_variableAddr_;
+        symbolic::AddressBoxMap<StoredValue> memoryMap_variableAddr_;
 
         /**
          * @brief Constant range mapping.
@@ -330,9 +330,7 @@ namespace acslg::analyzer {
             R operator*() const {
                 switch (phase_) {
                     case Phase::VarAddr: {
-                        const symbolic::Address &addr = var_outer_->first;
-                        return R{symbolic::AddressBox{owner_.factory().importAddress(addr)},
-                                 var_outer_->second.get()};
+                        return R{var_outer_->first, var_outer_->second.get()};
                     }
                     case Phase::Const: {
                         const symbolic::SymbolAddrBaseInfo &base = c_outer_->first;

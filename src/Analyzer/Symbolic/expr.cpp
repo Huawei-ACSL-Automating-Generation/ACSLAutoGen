@@ -2158,9 +2158,6 @@ namespace acslg::analyzer::symbolic {
 
     int FieldAddress::getDimension() const { return baseAddr_->getDimension(); }
 
-    VariableAddress::VariableAddress(const VariableAddress &other)
-        : Address(other), from_(other.from_) {}
-
     Structure::Structure(Info info, std::vector<ExprHandle> fields)
         : SymbolicExpr(
               ExprKind::K_Structure,

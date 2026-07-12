@@ -1786,7 +1786,7 @@ namespace acslg::analyzer::symbolic {
     /// @brief Represents the address of a C variable.
     class VariableAddress : public Address {
       public:
-        VariableAddress(const VariableAddress &other);
+        VariableAddress(const VariableAddress &) = delete;
         VariableAddress &operator=(const VariableAddress &other) = delete;
         VariableAddress(VariableAddress &&)            = default;
         VariableAddress &operator=(VariableAddress &&) = delete;

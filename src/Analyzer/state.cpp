@@ -1748,7 +1748,9 @@ namespace acslg::analyzer {
 
     MemoryModel::MemoryModel(const MemoryModel &other) : MemoryModel(other.factory()) {
         for (auto &[addr, value] : other.memoryMap_variableAddr_) {
-            memoryMap_variableAddr_.emplace(addr, copyStoredValueFrom(other, value));
+            memoryMap_variableAddr_.emplace(
+                symbolic::AddressBox{factory().importAddress(addr.get())},
+                copyStoredValueFrom(other, value));
         }
         for (auto &[baseInfo, rangeValueMap] : other.memoryMap_constantRange_) {
             auto &mapToFill = memoryMap_constantRange_[baseInfo];
@@ -1772,7 +1774,9 @@ namespace acslg::analyzer {
         clear();
 
         for (auto &[addr, value] : other.memoryMap_variableAddr_) {
-            memoryMap_variableAddr_.emplace(addr, copyStoredValueFrom(other, value));
+            memoryMap_variableAddr_.emplace(
+                symbolic::AddressBox{factory().importAddress(addr.get())},
+                copyStoredValueFrom(other, value));
         }
         for (auto &[baseInfo, rangeValueMap] : other.memoryMap_constantRange_) {
             auto &mapToFill = memoryMap_constantRange_[baseInfo];
@@ -1793,8 +1797,9 @@ namespace acslg::analyzer {
 
     std::optional<symbolic::ExprHandle> MemoryModel::read(const symbolic::Address &addr) const {
         if (auto varAddr = symbolic::dyn_cast<const symbolic::VariableAddress>(&addr)) {
-            if (memoryMap_variableAddr_.contains(*varAddr))
-                return memoryMap_variableAddr_.at(*varAddr);
+            if (auto it = memoryMap_variableAddr_.find(*varAddr);
+                it != memoryMap_variableAddr_.end())
+                return it->second;
             return std::nullopt;
         } else if (auto symbolAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
             auto baseInfo = symbolAddr->getBaseInfo();
@@ -1873,7 +1878,8 @@ namespace acslg::analyzer {
 
     void MemoryModel::writeImported(const symbolic::Address &addr, StoredValue valueHandle) {
         if (auto varAddr = symbolic::dyn_cast<const symbolic::VariableAddress>(&addr)) {
-            memoryMap_variableAddr_.insert_or_assign(*varAddr, valueHandle);
+            memoryMap_variableAddr_.insert_or_assign(
+                symbolic::AddressBox{factory().importAddress(*varAddr)}, valueHandle);
             return;
         } else if (auto symbolAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
             auto baseInfo = symbolAddr->getBaseInfo();
@@ -1974,7 +1980,7 @@ namespace acslg::analyzer {
     void MemoryModel::eraseExpiredLocals(
         const std::unordered_set<const clang::VarDecl *> &localVars) {
         std::erase_if(memoryMap_variableAddr_, [&](auto const &kv) {
-            auto fromRoot = kv.first.getFromRoot();
+            auto fromRoot = kv.first.get().getFromRoot();
             if (fromRoot == std::nullopt)
                 UNREACHABLE(); // VarriableAddress should have a *from*.
             return localVars.contains(fromRoot.value());
