@@ -1122,8 +1122,7 @@ namespace acslg::analyzer {
 
                         symbolic::Addr srcBase{factory, srcAddr.value()};
                         auto srcBaseWithoutLength = srcBase.withoutLength();
-                        symbolic::SymbolAddress::RangeIndex rangeIndex{"i"};
-                        symbolic::Expr rangeIndexExpr{factory, factory.importExpr(rangeIndex)};
+                        symbolic::Expr rangeIndexExpr{factory, factory.rangeIndex("i")};
                         auto srcIndexed = srcBaseWithoutLength.withAddedOffset(rangeIndexExpr);
 
                         auto valueExpr =
