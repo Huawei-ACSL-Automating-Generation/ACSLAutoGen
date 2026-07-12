@@ -36,27 +36,6 @@ namespace acslg::test::unit::analyzer {
             return nullptr;
         }
 
-        ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
-        cloneLiteralForLegacyTest(int64_t value) {
-            auto &factory = symbolic::ExprFactoryScope::current();
-            return factory.literal(value)->clone();
-        }
-
-        ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
-        cloneRangeIndexForLegacyTest(std::string_view name) {
-            auto &factory = symbolic::ExprFactoryScope::current();
-            return factory.rangeIndex(name)->clone();
-        }
-
-        ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
-        cloneBinaryForLegacyTest(
-            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> lhs,
-            symbolic::BinaryOpExpr::Operator op,
-            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> rhs) {
-            auto &factory = symbolic::ExprFactoryScope::current();
-            return factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs))->clone();
-        }
-
         std::unique_ptr<symbolic::SymbolAddress> cloneSymbolAddressForLegacyTest(
             symbolic::AddrHandle address) {
             return std::make_unique<symbolic::SymbolAddress>(
@@ -491,33 +470,29 @@ namespace acslg::test::unit::analyzer {
     TEST_F(GetACSLTest, BinaryOp_AdditionAndPrecedence) {
         SymbolicExpr::GetACSLConfig config;
         config.noStateLabelFunctionAt = true;
+        auto &factory = symbolic::ExprFactoryScope::current();
 
         // Simple addition: 5 + 3
-        auto exprSimple = cloneBinaryForLegacyTest(
-            cloneLiteralForLegacyTest(5), BinaryOpExpr::Operator::Add,
-            cloneLiteralForLegacyTest(3));
+        auto exprSimple = factory.binary(factory.literal(5), BinaryOpExpr::Operator::Add,
+                                         factory.literal(3));
         auto resSimple  = exprSimple->getACSL(config);
         ASSERT_TRUE(resSimple);
         EXPECT_EQ(resSimple.value().first, "5 + 3");
 
         // Nested addition (left-child nested): (1 + 2) + 3 -> "1 + 2 + 3"
-        auto innerLeft = cloneBinaryForLegacyTest(
-            cloneLiteralForLegacyTest(1), BinaryOpExpr::Operator::Add,
-            cloneLiteralForLegacyTest(2));
-        auto exprLeft = cloneBinaryForLegacyTest(
-            std::move(innerLeft), BinaryOpExpr::Operator::Add,
-            cloneLiteralForLegacyTest(3));
+        auto innerLeft = factory.binary(factory.literal(1), BinaryOpExpr::Operator::Add,
+                                        factory.literal(2));
+        auto exprLeft =
+            factory.binary(innerLeft, BinaryOpExpr::Operator::Add, factory.literal(3));
         auto resLeft = exprLeft->getACSL(config);
         ASSERT_TRUE(resLeft);
         EXPECT_EQ(resLeft.value().first, "1 + 2 + 3");
 
         // Nested addition (right-child nested): 1 + (2 + 3) -> "1 + (2 + 3)"
-        auto innerRight = cloneBinaryForLegacyTest(
-            cloneLiteralForLegacyTest(2), BinaryOpExpr::Operator::Add,
-            cloneLiteralForLegacyTest(3));
-        auto exprRight = cloneBinaryForLegacyTest(
-            cloneLiteralForLegacyTest(1), BinaryOpExpr::Operator::Add,
-            std::move(innerRight));
+        auto innerRight = factory.binary(factory.literal(2), BinaryOpExpr::Operator::Add,
+                                         factory.literal(3));
+        auto exprRight =
+            factory.binary(factory.literal(1), BinaryOpExpr::Operator::Add, innerRight);
         auto resRight = exprRight->getACSL(config);
         ASSERT_TRUE(resRight);
         EXPECT_EQ(resRight.value().first, "1 + (2 + 3)");
@@ -1367,7 +1342,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(substitutedAddr.get().get(), varAddr.asExpr().get().get());
     }
 
-    TEST(ExprFactoryTest, ImportsLegacyAggregateChildrenAsHandles) {
+    TEST(ExprFactoryTest, ImportsAggregateChildrenAsHandles) {
         ASTExtractor e;
         e.init(R"c(
             int f(void) {
@@ -1386,40 +1361,29 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        auto makeRange =
-            [&]() -> ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>> {
+        auto makeRange = [&]() {
             auto from  = symbolic::Addr::variable(var);
             auto range = symbolic::Addr::symbol(var->getType(), from, point)
                              .withLength(symbolic::LiteralExpr{factory, int64_t{3}});
-            std::unique_ptr<const symbolic::SymbolAddress> constRange =
-                cloneSymbolAddressForLegacyTest(range.handle());
-            return ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolAddress>>{
-                std::move(constRange)};
+            return range.handle();
         };
 
-        auto makePred =
-            []() -> ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>> {
-            auto pred = cloneBinaryForLegacyTest(
-                cloneRangeIndexForLegacyTest("i"),
-                symbolic::BinaryOpExpr::Operator::LessThan,
-                cloneLiteralForLegacyTest(3));
-            std::unique_ptr<const symbolic::SymbolicExpr> constPred =
-                std::move(pred).into_underlying();
-            return ::acslg::utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>{
-                std::move(constPred)};
+        auto makePred = [&]() {
+            return factory.binary(factory.rangeIndex("i"),
+                                  symbolic::BinaryOpExpr::Operator::LessThan,
+                                  factory.literal(3));
         };
 
-        auto ownedSumRange = makeRange();
-        symbolic::SumOverRange sum{factory.importAddress(*ownedSumRange), "i", point};
-        auto ownedQuantifierRange = makeRange();
-        auto ownedPredicate       = makePred();
+        auto sumRangeHandle = makeRange();
+        symbolic::SumOverRange sum{sumRangeHandle, "i", point};
+        auto quantifierRangeHandle = makeRange();
+        auto predicate = makePred();
         symbolic::QuantifierOverRange quantifier{
-            factory.importAddress(*ownedQuantifierRange), "i",
-            symbolic::QuantifierOverRange::Quantifier::ForAll,
-            factory.importExpr(*ownedPredicate)};
-        auto ownedMaxRange = makeRange();
+            quantifierRangeHandle, "i",
+            symbolic::QuantifierOverRange::Quantifier::ForAll, predicate};
+        auto maxRangeHandle = makeRange();
         auto maxHandle = symbolic::makeMaxMinOverRangeHandle(
-            factory, factory.importAddress(*ownedMaxRange), "i",
+            factory, maxRangeHandle, "i",
             symbolic::MaxMinOverRange::Extremum::Max, point);
         const auto &max = maxHandle.cast<symbolic::MaxMinOverRange>();
 
