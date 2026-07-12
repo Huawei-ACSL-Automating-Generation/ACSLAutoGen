@@ -364,7 +364,7 @@ namespace acslg::test::utils {
     }
 
     symbolic::SymbolAddress FixtureWithCode::makePointAddr(unsigned int id, uint64_t off) {
-        return makeRangeAddr(id, makeLiteralExpr(off).into_underlying(), nullptr);
+        return makeRangeAddr(id, exprFactory_.literal(off), std::nullopt);
     }
 
     ::testing::AssertionResult FixtureWithCode::ExpectReadEqAt(
