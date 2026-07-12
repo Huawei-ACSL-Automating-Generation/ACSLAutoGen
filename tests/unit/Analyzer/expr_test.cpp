@@ -337,7 +337,7 @@ namespace acslg::test::unit::analyzer {
     TEST_F(SubstituteTest, SymbolAddrResolvedBaseAndOffsetApplied) {
         auto originAddr = makeVariableAddr(3);
         auto realAddr   = makeSimpleSymbolAddr(4);
-        mm.write(originAddr, symbolic::ExprFactoryScope::current().importExpr(realAddr));
+        mm.write(originAddr, realAddr.asExpr());
 
         // Var(g5) = 3
         mm.write(makeVariableAddr(5), internForTest(makeConstU64(3)));
@@ -350,11 +350,11 @@ namespace acslg::test::unit::analyzer {
         auto sym = makeRangeAddr(/*origin id*/ 3, internForTest(offset), std::nullopt, point);
 
         // expect: realAddr (g4) + 7
-        auto expected = makePointAddr(/*real id*/ 4, /*off*/ 7).simplifiedExpr();
+        auto expected = makePointAddr(/*real id*/ 4, /*off*/ 7)->simplifiedExpr();
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, point);
+        auto result = symbolic::getSubstitutedExprHandle(factory, *sym, *path, point);
         ASSERT_EQ(*result->simplifiedExpr(), *expected);
     }
 
@@ -363,8 +363,8 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, defaultPoint);
-        ASSERT_EQ(*result, sym);
+        auto result = symbolic::getSubstitutedExprHandle(factory, *sym, *path, defaultPoint);
+        ASSERT_EQ(*result, *sym);
     }
 
     TEST_F(SubstituteTest, NonSymbolAddrReturnsImportedHandle) {
@@ -379,7 +379,7 @@ namespace acslg::test::unit::analyzer {
     TEST_F(SubstituteTest, FromPointMismatchReturnsUnchangedSymbolAddr) {
         auto originAddr = makeVariableAddr(8);
         auto realAddr   = makeSimpleSymbolAddr(9);
-        mm.write(originAddr, symbolic::ExprFactoryScope::current().importExpr(realAddr));
+        mm.write(originAddr, realAddr.asExpr());
 
         auto point = getSourcePoint(0);
         auto offset = makeConstU64(1);
@@ -389,8 +389,8 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, otherPoint);
-        ASSERT_EQ(*result, sym);
+        auto result = symbolic::getSubstitutedExprHandle(factory, *sym, *path, otherPoint);
+        ASSERT_EQ(*result, *sym);
     }
 
     TEST_F(SubstituteTest, ScopedFromPointMismatchImportsUnchangedSymbolAddr) {
@@ -399,17 +399,17 @@ namespace acslg::test::unit::analyzer {
 
         auto originAddr = makeVariableAddr(8);
         auto realAddr   = makeSimpleSymbolAddr(9);
-        mm.write(originAddr, symbolic::ExprFactoryScope::current().importExpr(realAddr));
+        mm.write(originAddr, realAddr.asExpr());
 
         auto point = getSourcePoint(0);
         auto offset = makeConstU64(1);
         auto sym = makeRangeAddr(/*origin id*/ 8, internForTest(offset), std::nullopt, point);
 
         auto otherPoint = getSourcePoint(1);
-        auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, otherPoint);
+        auto result = symbolic::getSubstitutedExprHandle(factory, *sym, *path, otherPoint);
         auto *resultAddr = symbolic::cast<symbolic::Address>(result.get().get());
 
-        EXPECT_EQ(factory.importAddress(*resultAddr), factory.importAddress(sym));
+        EXPECT_EQ(factory.importAddress(*resultAddr), factory.importAddress(*sym));
     }
 
     TEST_F(SubstituteTest, ScopedNoBaseSymbolAddrSubstitutionUsesFactory) {
@@ -437,7 +437,7 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        ASSERT_DEATH(symbolic::getSubstitutedExprHandle(factory, sym, *path, point), "");
+        ASSERT_DEATH(symbolic::getSubstitutedExprHandle(factory, *sym, *path, point), "");
         SUCCEED();
     }
 
@@ -557,12 +557,12 @@ namespace acslg::test::unit::analyzer {
         // Case 1: offset = 2
         auto addr2 = makeRangeAddr(0, literalHandleForTest(2), std::nullopt);
         // ACSL should be "baseName + 2"
-        auto resACSL = addr2.getACSL(config);
+        auto resACSL = addr2->getACSL(config);
         ASSERT_TRUE(resACSL);
         EXPECT_EQ(resACSL.value().first, baseName + " + 2");
         EXPECT_TRUE(resACSL.value().second.empty());
         // ACSLOfValue should be "baseName[2]"
-        auto resVal = addr2.getACSLOfValue(config);
+        auto resVal = addr2->getACSLOfValue(config);
         ASSERT_TRUE(resVal);
         EXPECT_EQ(resVal.value().first, baseName + "[2]");
         EXPECT_TRUE(resVal.value().second.empty());
@@ -570,12 +570,12 @@ namespace acslg::test::unit::analyzer {
         // Case 2: offset = 0 (no offset effectively)
         auto addr0 = makeRangeAddr(0, literalHandleForTest(0), std::nullopt);
         // ACSL should be just "baseName"
-        auto resACSL0 = addr0.getACSL(config);
+        auto resACSL0 = addr0->getACSL(config);
         ASSERT_TRUE(resACSL0);
         EXPECT_EQ(resACSL0.value().first, baseName);
         EXPECT_TRUE(resACSL0.value().second.empty());
         // ACSLOfValue should be "*baseName"
-        auto resVal0 = addr0.getACSLOfValue(config);
+        auto resVal0 = addr0->getACSLOfValue(config);
         ASSERT_TRUE(resVal0);
         EXPECT_EQ(resVal0.value().first, "*" + baseName);
         EXPECT_TRUE(resVal0.value().second.empty());
@@ -593,7 +593,7 @@ namespace acslg::test::unit::analyzer {
         // offset = 5, length = 3 => [5 .. 7]
         auto addrRange =
             makeRangeAddr(0, literalHandleForTest(5), literalHandleForTest(3));
-        auto resRange  = addrRange.getACSLOfValue(config);
+        auto resRange  = addrRange->getACSLOfValue(config);
         ASSERT_TRUE(resRange);
         EXPECT_EQ(resRange.value().first, baseName + "[5 .. 7]");
         EXPECT_TRUE(resRange.value().second.empty());
@@ -606,21 +606,22 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        auto rightBound = addrRange.getRightBound();
+        const auto &addrRangeNode = addrRange.cast<symbolic::SymbolAddress>();
+        auto rightBound = addrRangeNode.getRightBound();
         ASSERT_TRUE(rightBound);
 
-        auto expected = factory.binary(factory.importExpr(*addrRange.getOffset()),
+        auto expected = factory.binary(factory.importExpr(*addrRangeNode.getOffset()),
                                        BinaryOpExpr::Operator::Add,
-                                       factory.importExpr(*addrRange.getLength().value()));
+                                       factory.importExpr(*addrRangeNode.getLength().value()));
         EXPECT_EQ(rightBound.value(), expected);
-        EXPECT_EQ(addrRange.getRightBound(), rightBound);
+        EXPECT_EQ(addrRangeNode.getRightBound(), rightBound);
 
         auto *rightBoundNode =
             symbolic::cast<symbolic::BinaryOpExpr>(rightBound.value().get().get());
         EXPECT_EQ(rightBoundNode->getLeft().get(),
-                  factory.importExpr(*addrRange.getOffset()).get().get());
+                  factory.importExpr(*addrRangeNode.getOffset()).get().get());
         EXPECT_EQ(rightBoundNode->getRight().get(),
-                  factory.importExpr(*addrRange.getLength().value()).get().get());
+                  factory.importExpr(*addrRangeNode.getLength().value()).get().get());
     }
 
     // Test usage of \\at(...) when predefinedLabels is set.
@@ -638,11 +639,11 @@ namespace acslg::test::unit::analyzer {
 
         // Attach the source point to the address
         auto addr = makeRangeAddr(0, literalHandleForTest(2), std::nullopt, sp);
-        auto resACSL = addr.getACSL(config);
+        auto resACSL = addr->getACSL(config);
         ASSERT_TRUE(resACSL);
         EXPECT_EQ(resACSL.value().first, "\\at(" + baseName + ", Old) + 2");
         EXPECT_TRUE(resACSL.value().second.empty());
-        auto resVal = addr.getACSLOfValue(config);
+        auto resVal = addr->getACSLOfValue(config);
         ASSERT_TRUE(resVal);
         EXPECT_EQ(resVal.value().first, "\\at(" + baseName + ", Old)[2]");
     }
@@ -670,12 +671,12 @@ namespace acslg::test::unit::analyzer {
 
         auto addr = makeRangeAddr(0, literalHandleForTest(2), std::nullopt, filtered);
 
-        auto resACSL = addr.getACSL(config);
+        auto resACSL = addr->getACSL(config);
         ASSERT_TRUE(resACSL);
         EXPECT_EQ(resACSL.value().first, baseName + " + 2");
         EXPECT_TRUE(resACSL.value().second.empty());
 
-        auto resVal = addr.getACSLOfValue(config);
+        auto resVal = addr->getACSLOfValue(config);
         ASSERT_TRUE(resVal);
         EXPECT_EQ(resVal.value().first, baseName + "[2]");
         EXPECT_TRUE(resVal.value().second.empty());

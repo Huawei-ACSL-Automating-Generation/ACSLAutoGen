@@ -310,15 +310,13 @@ namespace acslg::test::utils {
         return exprFactory_.variableAddress(getVarDecl(id));
     }
 
-    symbolic::SymbolAddress FixtureWithCode::makeRangeAddr(
+    symbolic::AddrHandle FixtureWithCode::makeRangeAddr(
         unsigned int id,
         symbolic::ExprHandle offset,
         optional<symbolic::ExprHandle> len,
         optional<symbolic::SourcePoint> fromPoint) {
-        return exprFactory_
-            .symbolAddress(QualType{}, exprFactory_.variableAddress(getVarDecl(id)),
-                           fromPoint.value_or(defaultPoint), offset, len)
-            .cast<symbolic::SymbolAddress>();
+        return exprFactory_.symbolAddress(QualType{}, exprFactory_.variableAddress(getVarDecl(id)),
+                                          fromPoint.value_or(defaultPoint), offset, len);
     }
 
     unique_ptr<symbolic::SymbolValue> FixtureWithCode::makeSymbolValue(
@@ -330,16 +328,14 @@ namespace acslg::test::utils {
         return std::make_unique<symbolic::SymbolValue>(value.cast<symbolic::SymbolValue>());
     }
 
-    symbolic::SymbolAddress FixtureWithCode::makeSimpleSymbolAddr(
+    symbolic::AddrHandle FixtureWithCode::makeSimpleSymbolAddr(
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
-        return exprFactory_
-            .symbolAddress(QualType{}, exprFactory_.variableAddress(getVarDecl(id)),
-                           fromPoint.value_or(defaultPoint))
-            .cast<symbolic::SymbolAddress>();
+        return exprFactory_.symbolAddress(QualType{}, exprFactory_.variableAddress(getVarDecl(id)),
+                                          fromPoint.value_or(defaultPoint));
     }
 
-    symbolic::SymbolAddress FixtureWithCode::makePointAddr(unsigned int id, uint64_t off) {
+    symbolic::AddrHandle FixtureWithCode::makePointAddr(unsigned int id, uint64_t off) {
         return makeRangeAddr(id, exprFactory_.literal(off), std::nullopt);
     }
 

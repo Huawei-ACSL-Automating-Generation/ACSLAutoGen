@@ -90,7 +90,7 @@ namespace acslg::test::utils {
         ::acslg::utils::not_null<const clang::VarDecl *> getVarDecl(unsigned int id);
         ::acslg::utils::not_null<const clang::FunctionDecl *> getFuncDecl(unsigned int id);
         analyzer::symbolic::AddrHandle makeVariableAddr(unsigned int id);
-        analyzer::symbolic::SymbolAddress makeRangeAddr(
+        analyzer::symbolic::AddrHandle makeRangeAddr(
             unsigned int id,
             analyzer::symbolic::ExprHandle offset,
             std::optional<analyzer::symbolic::ExprHandle> len,
@@ -98,10 +98,10 @@ namespace acslg::test::utils {
         std::unique_ptr<analyzer::symbolic::SymbolValue> makeSymbolValue(
             unsigned int id,
             std::optional<analyzer::symbolic::SourcePoint> fromPoint = std::nullopt);
-        analyzer::symbolic::SymbolAddress makeSimpleSymbolAddr(
+        analyzer::symbolic::AddrHandle makeSimpleSymbolAddr(
             unsigned int id,
             std::optional<analyzer::symbolic::SourcePoint> fromPoint = std::nullopt);
-        analyzer::symbolic::SymbolAddress makePointAddr(unsigned int id, std::uint64_t off);
+        analyzer::symbolic::AddrHandle makePointAddr(unsigned int id, std::uint64_t off);
         ::testing::AssertionResult ExpectReadEqAt(analyzer::MemoryModel &mm,
                                                   unsigned id,
                                                   uint64_t off,

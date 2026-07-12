@@ -439,8 +439,7 @@ namespace acslg::test::unit::analyzer {
         auto &factory = symbolic::ExprFactoryScope::current();
         MemoryModel mm;
 
-        auto legacyAddr = makeRangeAddr(1, makeLiteralHandle(3), std::nullopt);
-        auto addr       = factory.importAddress(legacyAddr);
+        auto addr = makeRangeAddr(1, makeLiteralHandle(3), std::nullopt);
         auto value = factory.literal(int64_t{42});
 
         mm.write(addr, value);
@@ -452,7 +451,6 @@ namespace acslg::test::unit::analyzer {
     }
 
     TEST_F(MemoryModelTest, Flat_Yields_All_Three_Categories) {
-        auto &factory = symbolic::ExprFactoryScope::current();
         MemoryModel mm;
 
         // noOffset
@@ -467,7 +465,7 @@ namespace acslg::test::unit::analyzer {
                                     /*len=*/makeLiteralHandle(2));
         auto eB     = makeSymbolValue(2);
         auto saveEB = internForTest(eB);
-        auto addrBHandle = factory.importAddress(rangeB);
+        auto addrBHandle = rangeB;
         mm.write(rangeB, internForTest(eB));
 
         // symbolicRange
@@ -475,7 +473,7 @@ namespace acslg::test::unit::analyzer {
             makeRangeAddr(3, /*off=*/internForTest(makeSymbolValue(3)), std::nullopt);
         auto eC     = makeSymbolValue(3);
         auto saveEC = internForTest(eC);
-        auto addrCHandle = factory.importAddress(rangeC);
+        auto addrCHandle = rangeC;
         mm.write(rangeC, internForTest(eC));
 
         bool fA = false, fB = false, fC = false;
@@ -916,9 +914,11 @@ namespace acslg::test::unit::analyzer {
                 continue;
             auto symbolAddr = symbolic::dyn_cast<symbolic::SymbolAddress>(&addr.get());
             ASSERT_NE(symbolAddr, nullptr);
-            if (symbolAddr->getBaseInfo() == a0A.getBaseInfo())
+            if (symbolAddr->getBaseInfo() ==
+                a0A.cast<symbolic::SymbolAddress>().getBaseInfo())
                 ++cntA;
-            if (symbolAddr->getBaseInfo() == a0B.getBaseInfo())
+            if (symbolAddr->getBaseInfo() ==
+                a0B.cast<symbolic::SymbolAddress>().getBaseInfo())
                 ++cntB;
         }
         EXPECT_EQ(cntA, 1u);
@@ -951,7 +951,9 @@ namespace acslg::test::unit::analyzer {
         for (auto &&[addr, value] : mm.flat()) {
             auto symbolAddr = symbolic::dyn_cast<symbolic::SymbolAddress>(&addr.get());
             ASSERT_NE(symbolAddr, nullptr);
-            if (symbolAddr->getBaseInfo() == a0.getBaseInfo() && *value == *sv) {
+            if (symbolAddr->getBaseInfo() ==
+                    a0.cast<symbolic::SymbolAddress>().getBaseInfo() &&
+                *value == *sv) {
                 // If length is accessible and constant, also assert == 4
                 if (auto &len = symbolAddr->getLength()) {
                     if (auto c = len.value()->tryEvalAsConstant()) {
