@@ -75,7 +75,7 @@ namespace acslg::analyzer::symbolic {
         };
 
         if (auto *literal = expr.dyn_cast<const detail::LiteralExprNode>())
-            return internTyped(std::make_unique<detail::LiteralExprNode>(*literal));
+            return internTyped(literal->rebuildNode());
 
         if (expr.isa<detail::UnknownExprNode>())
             return internTyped(std::make_unique<detail::UnknownExprNode>());
@@ -1066,6 +1066,22 @@ namespace acslg::analyzer::symbolic {
             case LiteralType::UnsignedShort: return factory.literal(data_.ushortValue);
             case LiteralType::Int64: return factory.literal(data_.int64Value);
             case LiteralType::UInt64: return factory.literal(data_.uint64Value);
+        }
+
+        UNREACHABLE();
+    }
+
+    std::unique_ptr<detail::LiteralExprNode> detail::LiteralExprNode::rebuildNode() const {
+        switch (getLiteralType()) {
+            case LiteralType::Boolean: return std::make_unique<LiteralExprNode>(data_.boolValue);
+            case LiteralType::Int: return std::make_unique<LiteralExprNode>(data_.intValue);
+            case LiteralType::UnsignedInt:
+                return std::make_unique<LiteralExprNode>(data_.uintValue);
+            case LiteralType::Short: return std::make_unique<LiteralExprNode>(data_.shortValue);
+            case LiteralType::UnsignedShort:
+                return std::make_unique<LiteralExprNode>(data_.ushortValue);
+            case LiteralType::Int64: return std::make_unique<LiteralExprNode>(data_.int64Value);
+            case LiteralType::UInt64: return std::make_unique<LiteralExprNode>(data_.uint64Value);
         }
 
         UNREACHABLE();

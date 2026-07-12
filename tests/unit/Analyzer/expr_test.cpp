@@ -23,6 +23,7 @@ namespace acslg::test::unit::analyzer {
     using namespace utils;
 
     static_assert(!std::is_copy_assignable_v<symbolic::detail::LiteralExprNode>);
+    static_assert(!std::is_copy_constructible_v<symbolic::detail::LiteralExprNode>);
     static_assert(!std::is_move_assignable_v<symbolic::detail::BinaryOpExprNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::FieldAddress>);
     static_assert(!std::is_copy_constructible_v<symbolic::VariableAddress>);
@@ -839,6 +840,12 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedOne, factory.withValType(one, targetType));
         EXPECT_EQ(factory.withValType(typedOne, targetType), typedOne);
         EXPECT_EQ(typedOne->getValType(), targetType);
+
+        auto large = factory.literal(std::numeric_limits<std::uint64_t>::max());
+        auto typedLarge = factory.withValType(large, targetType);
+        EXPECT_EQ(typedLarge.cast<symbolic::detail::LiteralExprNode>().getLiteralType(),
+                  symbolic::detail::LiteralExprNode::LiteralType::UInt64);
+        EXPECT_EQ(factory.withValType(typedLarge, large.getValType()), large);
 
         symbolic::ExprFactoryScope scope(factory);
         symbolic::Expr facade{one};

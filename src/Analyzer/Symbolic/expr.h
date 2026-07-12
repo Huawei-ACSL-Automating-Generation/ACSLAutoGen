@@ -595,20 +595,7 @@ namespace acslg::analyzer::symbolic {
             UInt64
         };
 
-        LiteralExprNode(const LiteralExprNode &other)
-            : SymbolicExpr(other), type_(other.type_) {
-            switch (type_) {
-                case LiteralType::Boolean: data_.boolValue = other.data_.boolValue; break;
-                case LiteralType::Int: data_.intValue = other.data_.intValue; break;
-                case LiteralType::UnsignedInt: data_.uintValue = other.data_.uintValue; break;
-                case LiteralType::Short: data_.shortValue = other.data_.shortValue; break;
-                case LiteralType::UnsignedShort:
-                    data_.ushortValue = other.data_.ushortValue;
-                    break;
-                case LiteralType::Int64: data_.int64Value = other.data_.int64Value; break;
-                case LiteralType::UInt64: data_.uint64Value = other.data_.uint64Value; break;
-            }
-        }
+        LiteralExprNode(const LiteralExprNode &) = delete;
 
         LiteralExprNode(bool value)
             : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Bool, 1}),
@@ -658,6 +645,7 @@ namespace acslg::analyzer::symbolic {
 
         LiteralType getLiteralType() const { return type_; }
         ExprHandle importInto(ExprFactory &factory) const;
+        std::unique_ptr<LiteralExprNode> rebuildNode() const;
 
         std::string dump() const override;
         virtual std::size_t hash() const override;
