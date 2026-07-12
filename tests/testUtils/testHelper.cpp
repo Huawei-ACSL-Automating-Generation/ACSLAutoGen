@@ -319,13 +319,13 @@ namespace acslg::test::utils {
                                           fromPoint.value_or(defaultPoint), offset, len);
     }
 
-    unique_ptr<symbolic::SymbolValue> FixtureWithCode::makeSymbolValue(
+    symbolic::ExprHandle FixtureWithCode::makeSymbolValue(
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
         auto value = exprFactory_.symbolValue(
             symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::UInt, id},
             exprFactory_.variableAddress(getVarDecl(id)), fromPoint.value_or(defaultPoint));
-        return std::make_unique<symbolic::SymbolValue>(value.cast<symbolic::SymbolValue>());
+        return value;
     }
 
     symbolic::AddrHandle FixtureWithCode::makeSimpleSymbolAddr(

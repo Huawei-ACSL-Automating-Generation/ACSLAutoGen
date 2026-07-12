@@ -1945,7 +1945,7 @@ namespace acslg::analyzer::symbolic {
             : SymbolicExpr(ExprKind::K_SymbolValue, varType), Symbol(Kind::K_SymbolValue),
               fromAddr_(from), fromPoint_(std::move(fromPoint)) {}
 
-        SymbolValue(const SymbolValue &other);
+        SymbolValue(const SymbolValue &) = delete;
         SymbolValue(SymbolValue &&) = default;
 
         static bool classof(const SymbolicExpr *expr) {

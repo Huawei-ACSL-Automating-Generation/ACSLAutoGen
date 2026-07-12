@@ -31,6 +31,7 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_copy_constructible_v<symbolic::SumOverRange>);
     static_assert(!std::is_copy_constructible_v<symbolic::QuantifierOverRange>);
     static_assert(!std::is_copy_constructible_v<symbolic::MaxMinOverRange>);
+    static_assert(!std::is_copy_constructible_v<symbolic::SymbolValue>);
     static_assert(!std::is_copy_assignable_v<symbolic::SymbolAddress>);
     static_assert(!std::is_copy_assignable_v<symbolic::Structure>);
     static_assert(!std::is_move_assignable_v<symbolic::QuantifierOverRange>);
@@ -206,7 +207,7 @@ namespace acslg::test::unit::analyzer {
             return ExprFactoryScope::current().literal(value);
         }
 
-        ExprHandle makeAdd(unique_ptr<SymbolicExpr> a, unique_ptr<SymbolicExpr> b) {
+        ExprHandle makeAdd(ExprHandle a, ExprHandle b) {
             auto &factory = ExprFactoryScope::current();
             return factory.binary(factory.importExpr(*a), BinaryOpExpr::Operator::Add,
                                   factory.importExpr(*b));
@@ -310,7 +311,7 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto expected = makeAdd(makeConstU64(1), makeConstU64(2));
+        auto expected = makeAdd(factory.literal(uint64_t{1}), factory.literal(uint64_t{2}));
         auto result = symbolic::getSubstitutedExprHandle(factory, *expr, *path, point);
         ASSERT_EQ(*result, *expected);
     }
@@ -347,7 +348,7 @@ namespace acslg::test::unit::analyzer {
 
         // symAddr: base=origin(g3), offset=(Var(g5,point) + 4), from=point
         auto vVar   = makeSymbolValue(5, point);
-        auto offset = makeAdd(unique_ptr<SymbolicExpr>(vVar.release()), makeConstU64(4));
+        auto offset = makeAdd(vVar, symbolic::ExprFactoryScope::current().literal(uint64_t{4}));
         auto sym = makeRangeAddr(/*origin id*/ 3, internForTest(offset), std::nullopt, point);
 
         // expect: realAddr (g4) + 7

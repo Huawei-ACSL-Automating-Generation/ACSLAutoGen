@@ -95,7 +95,7 @@ namespace acslg::test::utils {
             analyzer::symbolic::ExprHandle offset,
             std::optional<analyzer::symbolic::ExprHandle> len,
             std::optional<analyzer::symbolic::SourcePoint> fromPoint = std::nullopt);
-        std::unique_ptr<analyzer::symbolic::SymbolValue> makeSymbolValue(
+        analyzer::symbolic::ExprHandle makeSymbolValue(
             unsigned int id,
             std::optional<analyzer::symbolic::SourcePoint> fromPoint = std::nullopt);
         analyzer::symbolic::AddrHandle makeSimpleSymbolAddr(

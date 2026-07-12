@@ -2160,11 +2160,6 @@ namespace acslg::analyzer::symbolic {
             fields_.emplace_back(field);
     }
 
-    SymbolValue::SymbolValue(const SymbolValue &other)
-        : SymbolicExpr(other), Symbol(Kind::K_SymbolValue),
-          fromAddr_(other.fromAddr_),
-          fromPoint_(other.fromPoint_) {}
-
     std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprKind t) {
         switch (t) {
             using enum SymbolicExpr::ExprKind;
