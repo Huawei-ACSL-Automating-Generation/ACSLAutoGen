@@ -200,7 +200,9 @@ namespace acslg::test::unit::analyzer {
 
     namespace {
         using namespace symbolic;
-        unique_ptr<SymbolicExpr> makeConstU64(uint64_t v) { return make_unique<detail::LiteralExprNode>(v); }
+        ExprHandle makeConstU64(uint64_t value) {
+            return ExprFactoryScope::current().literal(value);
+        }
 
         template <class ExprPtr> ExprHandle internForTest(const ExprPtr &expr) {
             return ExprFactoryScope::current().importExpr(*expr);
