@@ -365,7 +365,7 @@ namespace acslg::test::unit::analyzer {
     TEST_F(SubstituteTest, SymbolAddrResolvedBaseAndOffsetApplied) {
         auto originAddr = makeVariableAddr(3);
         auto realAddr   = makeSimpleSymbolAddr(4);
-        mm.write(originAddr, internForTest(realAddr.clone()));
+        mm.write(originAddr, symbolic::ExprFactoryScope::current().importExpr(realAddr));
 
         // Var(g5) = 3
         mm.write(makeVariableAddr(5), internForTest(makeConstU64(3)));
@@ -386,7 +386,7 @@ namespace acslg::test::unit::analyzer {
         ASSERT_EQ(*result->simplifiedExpr(), *expected);
     }
 
-    TEST_F(SubstituteTest, SymbolAddrUnresolvedReturnsClone) {
+    TEST_F(SubstituteTest, SymbolAddrUnresolvedReturnsImportedHandle) {
         auto sym = makeSimpleSymbolAddr(/*origin id*/ 6);
 
         symbolic::ExprFactory factory;
@@ -395,7 +395,7 @@ namespace acslg::test::unit::analyzer {
         ASSERT_EQ(*result, sym);
     }
 
-    TEST_F(SubstituteTest, NonSymbolAddrIsCloned) {
+    TEST_F(SubstituteTest, NonSymbolAddrReturnsImportedHandle) {
         auto varAddr = makeVariableAddr(7);
 
         symbolic::ExprFactory factory;
@@ -407,7 +407,7 @@ namespace acslg::test::unit::analyzer {
     TEST_F(SubstituteTest, FromPointMismatchReturnsUnchangedSymbolAddr) {
         auto originAddr = makeVariableAddr(8);
         auto realAddr   = makeSimpleSymbolAddr(9);
-        mm.write(originAddr, internForTest(realAddr.clone()));
+        mm.write(originAddr, symbolic::ExprFactoryScope::current().importExpr(realAddr));
 
         auto point = getSourcePoint(0);
         auto offset = makeConstU64(1);
@@ -427,7 +427,7 @@ namespace acslg::test::unit::analyzer {
 
         auto originAddr = makeVariableAddr(8);
         auto realAddr   = makeSimpleSymbolAddr(9);
-        mm.write(originAddr, internForTest(realAddr.clone()));
+        mm.write(originAddr, symbolic::ExprFactoryScope::current().importExpr(realAddr));
 
         auto point = getSourcePoint(0);
         auto offset = makeConstU64(1);
@@ -832,24 +832,6 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(negA.isa<symbolic::UnaryOpExpr>());
         EXPECT_TRUE(negA.isa<symbolic::detail::UnaryOpExprNode>());
         EXPECT_EQ(negA.cast<symbolic::UnaryOpExpr>().getSub().get(), oneA.get().get());
-    }
-
-    TEST(ExprFactoryTest, CloneOfFactoryBuiltOperationsPreservesChildHandles) {
-        symbolic::ExprFactory factory;
-
-        auto one = factory.literal(1);
-        auto two = factory.literal(2);
-        auto sum = factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
-        auto neg = factory.unary(symbolic::UnaryOpExpr::Operator::Minus, one);
-
-        auto sumClone = sum->clone();
-        auto *sumNode = symbolic::cast<symbolic::BinaryOpExpr>(sumClone.get().get());
-        EXPECT_EQ(sumNode->getLeft().get(), one.get().get());
-        EXPECT_EQ(sumNode->getRight().get(), two.get().get());
-
-        auto negClone = neg->clone();
-        auto *negNode = symbolic::cast<symbolic::UnaryOpExpr>(negClone.get().get());
-        EXPECT_EQ(negNode->getSub().get(), one.get().get());
     }
 
     TEST(ExprFactoryTest, WithValTypeDoesNotMutateFactorySharedOperation) {
@@ -2049,9 +2031,6 @@ namespace acslg::test::unit::analyzer {
             symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::Int, 32},
             varAddrA, point);
         EXPECT_EQ(symbolValue.cast<symbolic::SymbolValue>().getFromAddrHandle(), varAddrA);
-        auto clonedExpr = symbolValue->clone();
-        auto *clonedValue = symbolic::cast<symbolic::SymbolValue>(clonedExpr.get().get());
-        EXPECT_EQ(clonedValue->getFromAddrHandle(), varAddrA);
 
         auto defaultSymAddr = factory.symbolAddress(
             firstField->getType(), std::optional<symbolic::AddrHandle>{varAddrA}, point);
@@ -2090,10 +2069,6 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(fieldAddrA.isa<symbolic::FieldAddress>());
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle(), varAddrA);
-        auto clonedAddress = fieldAddrA->clone();
-        auto *clonedField =
-            symbolic::cast<symbolic::FieldAddress>(clonedAddress.get().get());
-        EXPECT_EQ(clonedField->getBaseAddr().handle(), varAddrA);
     }
 
     TEST(ExprFactoryTest, ImportsAddressAndSymbolValueGraphsIntoTargetFactory) {
@@ -2197,12 +2172,6 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(arrayAddr->getLength().value().get().get(),
                   factory.literal(uint64_t{2}).get().get());
 
-        auto structureClone = structureNode.clone();
-        auto *clonedStructure =
-            symbolic::cast<symbolic::Structure>(structureClone.get().get());
-        EXPECT_EQ(clonedStructure->getFieldValue(0).get(), field0.get());
-        EXPECT_EQ(clonedStructure->getFieldValue(1).get(), field1.get());
-        EXPECT_EQ(clonedStructure->getFieldValue(2).get(), field2.get());
     }
 
     TEST(ExprFactoryTest, ScopedGetSymbolBuildsThroughFactory) {
