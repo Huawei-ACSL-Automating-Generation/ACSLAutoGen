@@ -415,20 +415,6 @@ namespace acslg::analyzer::symbolic {
         return Substituter{factory, rangeBase, indexExpr}.run(expr);
     }
 
-    utils::not_null<std::unique_ptr<Address>> AddressChild::clone() const {
-        return get()->addressClone();
-    }
-
-    AddressChild AddressChild::copy() const {
-        if (ExprFactoryScope::hasCurrent())
-            return AddressChild{ExprFactoryScope::current().importAddress(*get())};
-        if (handle_)
-            return AddressChild{*handle_};
-        std::unique_ptr<const Address> cloned = get()->addressClone().into_underlying();
-        return AddressChild::fromConstOwned(
-            utils::not_null<std::unique_ptr<const Address>>{std::move(cloned)});
-    }
-
     AddrHandle ExprFactory::importAddress(const Address &address) {
         return AddrHandle{cast<const Address>(importExpr(address).get().get())};
     }
@@ -2076,7 +2062,7 @@ namespace acslg::analyzer::symbolic {
         if (other.fromAddr_ == std::nullopt)
             fromAddr_ = std::nullopt;
         else
-            fromAddr_.emplace(other.fromAddr_.value().copy());
+            fromAddr_.emplace(other.fromAddr_.value());
     }
 
     SymbolAddrBaseInfo::SymbolAddrBaseInfo(const SymbolAddrBaseInfo &other)
@@ -2084,7 +2070,7 @@ namespace acslg::analyzer::symbolic {
         if (other.fromAddr_ == std::nullopt)
             fromAddr_ = std::nullopt;
         else
-            fromAddr_.emplace(other.fromAddr_.value().copy());
+            fromAddr_.emplace(other.fromAddr_.value());
     }
 
     SymbolAddress::SymbolAddress(FactoryNodeTag,
@@ -2149,7 +2135,7 @@ namespace acslg::analyzer::symbolic {
 
     FieldAddress::FieldAddress(const FieldAddress &other)
         : Address(other), definition_(other.definition_),
-          baseAddr_(other.baseAddr_.copy()),
+          baseAddr_(other.baseAddr_),
           fieldIndex_(other.fieldIndex_) {}
 
     FieldAddress &FieldAddress::operator=(const FieldAddress &other) {
@@ -2157,7 +2143,7 @@ namespace acslg::analyzer::symbolic {
             return *this;
         Address::operator=(other);
         definition_ = other.definition_;
-        baseAddr_   = other.baseAddr_.copy();
+        baseAddr_   = other.baseAddr_;
         fieldIndex_ = other.fieldIndex_;
         return *this;
     }
@@ -2224,7 +2210,7 @@ namespace acslg::analyzer::symbolic {
 
     SymbolValue::SymbolValue(const SymbolValue &other)
         : SymbolicExpr(other), Symbol(Kind::K_SymbolValue),
-          fromAddr_(other.fromAddr_.copy()),
+          fromAddr_(other.fromAddr_),
           fromPoint_(other.fromPoint_) {}
 
     std::ostream &operator<<(std::ostream &os, SymbolicExpr::ExprKind t) {

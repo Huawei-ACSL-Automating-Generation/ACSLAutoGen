@@ -1993,11 +1993,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(*defaultSymAddrNode.getFromAddrHandle(), varAddrA);
         auto defaultBase = defaultSymAddrNode.getBaseInfo();
         ASSERT_TRUE(defaultBase.fromAddr_);
-        ASSERT_TRUE(defaultBase.fromAddr_->handle());
-        EXPECT_EQ(*defaultBase.fromAddr_->handle(), varAddrA);
+        EXPECT_EQ(defaultBase.fromAddr_->handle(), varAddrA);
         auto copiedBase = defaultBase;
-        ASSERT_TRUE(copiedBase.fromAddr_->handle());
-        EXPECT_EQ(*copiedBase.fromAddr_->handle(), varAddrA);
+        EXPECT_EQ(copiedBase.fromAddr_->handle(), varAddrA);
         auto clonedAddr = cloneSymbolAddressForLegacyTest(defaultSymAddr);
         ASSERT_TRUE(clonedAddr->getFromAddrHandle());
         EXPECT_EQ(*clonedAddr->getFromAddrHandle(), varAddrA);
@@ -2024,13 +2022,11 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(fieldAddrA, fieldAddrB);
         EXPECT_TRUE(fieldAddrA.isa<symbolic::FieldAddress>());
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
-        ASSERT_TRUE(fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle());
-        EXPECT_EQ(*fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle(), varAddrA);
+        EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle(), varAddrA);
         auto clonedAddress = fieldAddrA->addressClone();
         auto *clonedField =
             symbolic::cast<symbolic::FieldAddress>(clonedAddress.get().get());
-        ASSERT_TRUE(clonedField->getBaseAddr().handle());
-        EXPECT_EQ(*clonedField->getBaseAddr().handle(), varAddrA);
+        EXPECT_EQ(clonedField->getBaseAddr().handle(), varAddrA);
     }
 
     TEST(ExprFactoryTest, StructureBuilderInitializesFieldHandles) {

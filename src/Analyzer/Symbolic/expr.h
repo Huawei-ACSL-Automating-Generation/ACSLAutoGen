@@ -1207,30 +1207,14 @@ namespace acslg::analyzer::symbolic {
       public:
         explicit AddressChild(AddrHandle handle) : handle_(handle) {}
 
-        static AddressChild fromConstOwned(
-            utils::not_null<std::unique_ptr<const Address>> owned) {
-            return AddressChild{ConstOwnedTag{}, std::move(owned)};
-        }
-
-        utils::not_null<const Address *> get() const {
-            if (handle_)
-                return handle_->get();
-            return owned_->get().get();
-        }
+        utils::not_null<const Address *> get() const { return handle_.get(); }
 
         const Address &operator*() const { return *get(); }
         const Address *operator->() const { return get().get(); }
-        utils::not_null<std::unique_ptr<Address>> clone() const;
-        AddressChild copy() const;
-        std::optional<AddrHandle> handle() const { return handle_; }
+        AddrHandle handle() const { return handle_; }
 
       private:
-        struct ConstOwnedTag {};
-        AddressChild(ConstOwnedTag, utils::not_null<std::unique_ptr<const Address>> owned)
-            : owned_(std::move(owned)) {}
-
-        std::optional<AddrHandle> handle_;
-        std::optional<utils::not_null<std::unique_ptr<const Address>>> owned_;
+        AddrHandle handle_;
     };
 
     std::optional<AddrHandle> tryEvalAsSymbolAddrHandle(ExprFactory &factory,
@@ -1792,7 +1776,7 @@ namespace acslg::analyzer::symbolic {
             if (&other == this)
                 return *this;
             if (other.fromAddr_)
-                fromAddr_.emplace(other.fromAddr_.value().copy());
+                fromAddr_.emplace(other.fromAddr_.value());
             else
                 fromAddr_ = std::nullopt;
             fromPoint_   = other.fromPoint_;
@@ -1907,19 +1891,6 @@ namespace acslg::analyzer::symbolic {
         FieldAddress &operator=(const FieldAddress &other);
         FieldAddress(FieldAddress &&) = default;
 
-        FieldAddress(const clang::QualType pointeeType,
-                     const clang::RecordDecl *RD,
-                     utils::not_null<std::unique_ptr<const Address>> baseAddr,
-                     size_t fieldIndex)
-            : Address(SymbolicExpr::ExprKind::K_FieldAddress,
-                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
-                      pointeeType),
-              definition_(RD), baseAddr_(AddressChild::fromConstOwned(std::move(baseAddr))),
-              fieldIndex_(fieldIndex) {
-            if (!RD->isCompleteDefinition())
-                ERROR("Incomplete struct definition");
-            definition_ = RD->getDefinition();
-        };
         FieldAddress(const clang::QualType pointeeType,
                      const clang::RecordDecl *RD,
                      AddrHandle baseAddr,
