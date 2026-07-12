@@ -2006,12 +2006,6 @@ namespace acslg::analyzer::symbolic {
     /// Origin can't be nullptr, use nullopt.
     class SymbolValue : public SymbolicExpr, public Symbol {
       public:
-        SymbolValue(Type varType,
-                    utils::not_null<std::unique_ptr<const Address>> from,
-                    SourcePoint fromPoint)
-            : SymbolicExpr(ExprKind::K_SymbolValue, varType), Symbol(Kind::K_SymbolValue),
-              fromAddr_(AddressChild::fromConstOwned(std::move(from))),
-              fromPoint_(std::move(fromPoint)) {}
         SymbolValue(Type varType, AddrHandle from, SourcePoint fromPoint)
             : SymbolicExpr(ExprKind::K_SymbolValue, varType), Symbol(Kind::K_SymbolValue),
               fromAddr_(from), fromPoint_(std::move(fromPoint)) {}
