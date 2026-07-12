@@ -310,10 +310,6 @@ namespace acslg::test::utils {
         return exprFactory_.variableAddress(getVarDecl(id)).cast<symbolic::VariableAddress>();
     }
 
-    not_null<unique_ptr<symbolic::SymbolicExpr>> FixtureWithCode::makeLiteralExpr(uint64_t value) {
-        return exprFactory_.literal(value)->clone();
-    }
-
     symbolic::SymbolAddress FixtureWithCode::makeRangeAddr(
         unsigned int id,
         unique_ptr<const symbolic::SymbolicExpr> offset,

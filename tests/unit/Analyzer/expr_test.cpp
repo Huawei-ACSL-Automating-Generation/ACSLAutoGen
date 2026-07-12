@@ -497,25 +497,30 @@ namespace acslg::test::unit::analyzer {
 
         // Simple addition: 5 + 3
         auto exprSimple = cloneBinaryForLegacyTest(
-            makeLiteralExpr(5), BinaryOpExpr::Operator::Add, makeLiteralExpr(3));
+            cloneLiteralForLegacyTest(5), BinaryOpExpr::Operator::Add,
+            cloneLiteralForLegacyTest(3));
         auto resSimple  = exprSimple->getACSL(config);
         ASSERT_TRUE(resSimple);
         EXPECT_EQ(resSimple.value().first, "5 + 3");
 
         // Nested addition (left-child nested): (1 + 2) + 3 -> "1 + 2 + 3"
         auto innerLeft = cloneBinaryForLegacyTest(
-            makeLiteralExpr(1), BinaryOpExpr::Operator::Add, makeLiteralExpr(2));
+            cloneLiteralForLegacyTest(1), BinaryOpExpr::Operator::Add,
+            cloneLiteralForLegacyTest(2));
         auto exprLeft = cloneBinaryForLegacyTest(
-            std::move(innerLeft), BinaryOpExpr::Operator::Add, makeLiteralExpr(3));
+            std::move(innerLeft), BinaryOpExpr::Operator::Add,
+            cloneLiteralForLegacyTest(3));
         auto resLeft = exprLeft->getACSL(config);
         ASSERT_TRUE(resLeft);
         EXPECT_EQ(resLeft.value().first, "1 + 2 + 3");
 
         // Nested addition (right-child nested): 1 + (2 + 3) -> "1 + (2 + 3)"
         auto innerRight = cloneBinaryForLegacyTest(
-            makeLiteralExpr(2), BinaryOpExpr::Operator::Add, makeLiteralExpr(3));
+            cloneLiteralForLegacyTest(2), BinaryOpExpr::Operator::Add,
+            cloneLiteralForLegacyTest(3));
         auto exprRight = cloneBinaryForLegacyTest(
-            makeLiteralExpr(1), BinaryOpExpr::Operator::Add, std::move(innerRight));
+            cloneLiteralForLegacyTest(1), BinaryOpExpr::Operator::Add,
+            std::move(innerRight));
         auto resRight = exprRight->getACSL(config);
         ASSERT_TRUE(resRight);
         EXPECT_EQ(resRight.value().first, "1 + (2 + 3)");

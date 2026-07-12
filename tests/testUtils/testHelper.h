@@ -90,8 +90,6 @@ namespace acslg::test::utils {
         ::acslg::utils::not_null<const clang::VarDecl *> getVarDecl(unsigned int id);
         ::acslg::utils::not_null<const clang::FunctionDecl *> getFuncDecl(unsigned int id);
         analyzer::symbolic::VariableAddress makeVariableAddr(unsigned int id);
-        ::acslg::utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-        makeLiteralExpr(std::uint64_t value);
         analyzer::symbolic::SymbolAddress makeRangeAddr(
             unsigned int id,
             std::unique_ptr<const analyzer::symbolic::SymbolicExpr> offset,
