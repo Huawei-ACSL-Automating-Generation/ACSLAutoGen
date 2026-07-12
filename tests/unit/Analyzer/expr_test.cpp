@@ -375,7 +375,7 @@ namespace acslg::test::unit::analyzer {
         // symAddr: base=origin(g3), offset=(Var(g5,point) + 4), from=point
         auto vVar   = makeSymbolValue(5, point);
         auto offset = makeAdd(unique_ptr<SymbolicExpr>(vVar.release()), makeConstU64(4));
-        auto sym    = makeRangeAddr(/*origin id*/ 3, std::move(offset), nullptr, point);
+        auto sym = makeRangeAddr(/*origin id*/ 3, internForTest(offset), std::nullopt, point);
 
         // expect: realAddr (g4) + 7
         auto expected = makePointAddr(/*real id*/ 4, /*off*/ 7).simplifiedExpr();
@@ -410,7 +410,8 @@ namespace acslg::test::unit::analyzer {
         mm.write(originAddr, internForTest(realAddr.clone()));
 
         auto point = getSourcePoint(0);
-        auto sym   = makeRangeAddr(/*origin id*/ 8, makeConstU64(1), nullptr, point);
+        auto offset = makeConstU64(1);
+        auto sym = makeRangeAddr(/*origin id*/ 8, internForTest(offset), std::nullopt, point);
 
         auto otherPoint = getSourcePoint(1);
 
@@ -429,7 +430,8 @@ namespace acslg::test::unit::analyzer {
         mm.write(originAddr, internForTest(realAddr.clone()));
 
         auto point = getSourcePoint(0);
-        auto sym   = makeRangeAddr(/*origin id*/ 8, makeConstU64(1), nullptr, point);
+        auto offset = makeConstU64(1);
+        auto sym = makeRangeAddr(/*origin id*/ 8, internForTest(offset), std::nullopt, point);
 
         auto otherPoint = getSourcePoint(1);
         auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, otherPoint);
@@ -458,7 +460,8 @@ namespace acslg::test::unit::analyzer {
         mm.write(originAddr, internForTest(makeConstU64(5)));
 
         auto point = getSourcePoint(0);
-        auto sym   = makeRangeAddr(/*origin id*/ 10, makeConstU64(0), nullptr, point);
+        auto offset = makeConstU64(0);
+        auto sym = makeRangeAddr(/*origin id*/ 10, internForTest(offset), std::nullopt, point);
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);

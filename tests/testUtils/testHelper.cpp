@@ -312,26 +312,6 @@ namespace acslg::test::utils {
 
     symbolic::SymbolAddress FixtureWithCode::makeRangeAddr(
         unsigned int id,
-        unique_ptr<const symbolic::SymbolicExpr> offset,
-        unique_ptr<const symbolic::SymbolicExpr> len,
-        optional<symbolic::SourcePoint> fromPoint) {
-        auto baseHandle = exprFactory_.variableAddress(getVarDecl(id));
-        optional<symbolic::ExprHandle> offsetHandle;
-        if (offset != nullptr)
-            offsetHandle = exprFactory_.importExpr(*offset);
-
-        optional<symbolic::ExprHandle> lenHandle;
-        if (len != nullptr)
-            lenHandle = exprFactory_.importExpr(*len);
-
-        return exprFactory_
-            .symbolAddress(QualType{}, baseHandle, fromPoint.value_or(defaultPoint), offsetHandle,
-                           lenHandle)
-            .cast<symbolic::SymbolAddress>();
-    }
-
-    symbolic::SymbolAddress FixtureWithCode::makeRangeAddr(
-        unsigned int id,
         symbolic::ExprHandle offset,
         optional<symbolic::ExprHandle> len,
         optional<symbolic::SourcePoint> fromPoint) {

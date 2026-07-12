@@ -471,7 +471,8 @@ namespace acslg::test::unit::analyzer {
         mm.write(rangeB, internForTest(eB));
 
         // symbolicRange
-        auto rangeC = makeRangeAddr(3, /*off=*/makeSymbolValue(3), nullptr);
+        auto rangeC =
+            makeRangeAddr(3, /*off=*/internForTest(makeSymbolValue(3)), std::nullopt);
         auto eC     = makeSymbolValue(3);
         auto saveEC = internForTest(eC);
         auto addrCHandle = factory.importAddress(rangeC);

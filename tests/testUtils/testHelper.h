@@ -92,11 +92,6 @@ namespace acslg::test::utils {
         analyzer::symbolic::VariableAddress makeVariableAddr(unsigned int id);
         analyzer::symbolic::SymbolAddress makeRangeAddr(
             unsigned int id,
-            std::unique_ptr<const analyzer::symbolic::SymbolicExpr> offset,
-            std::unique_ptr<const analyzer::symbolic::SymbolicExpr> len,
-            std::optional<analyzer::symbolic::SourcePoint> fromPoint = std::nullopt);
-        analyzer::symbolic::SymbolAddress makeRangeAddr(
-            unsigned int id,
             analyzer::symbolic::ExprHandle offset,
             std::optional<analyzer::symbolic::ExprHandle> len,
             std::optional<analyzer::symbolic::SourcePoint> fromPoint = std::nullopt);
