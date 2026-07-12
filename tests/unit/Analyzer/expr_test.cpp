@@ -39,19 +39,19 @@ namespace acslg::test::unit::analyzer {
         ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         cloneWithFactory(symbolic::ExprFactory &factory,
                          const symbolic::SymbolicExpr &expr) {
-            return factory.cloneExpr(factory.importExpr(expr));
+            return factory.importExpr(expr)->clone();
         }
 
         ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         cloneLiteralForLegacyTest(int64_t value) {
             auto &factory = symbolic::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.literal(value));
+            return factory.literal(value)->clone();
         }
 
         ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         cloneRangeIndexForLegacyTest(std::string_view name) {
             auto &factory = symbolic::ExprFactoryScope::current();
-            return factory.cloneExpr(factory.rangeIndex(name));
+            return factory.rangeIndex(name)->clone();
         }
 
         ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
@@ -60,8 +60,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::BinaryOpExpr::Operator op,
             ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> rhs) {
             auto &factory = symbolic::ExprFactoryScope::current();
-            return factory.cloneExpr(
-                factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs)));
+            return factory.binary(factory.importExpr(*lhs), op, factory.importExpr(*rhs))->clone();
         }
 
         std::unique_ptr<symbolic::SymbolAddress> cloneSymbolAddressForLegacyTest(
@@ -78,7 +77,7 @@ namespace acslg::test::unit::analyzer {
             auto *record = type->getAsRecordDecl()->getDefinition();
             auto &layout = record->getASTContext().getASTRecordLayout(record);
             auto from    = symbolic::Addr::variable(var);
-            return factory.cloneExpr(factory.structure(record, layout, from.handle(), point));
+            return factory.structure(record, layout, from.handle(), point)->clone();
         }
 
         class SourcePointTest : public ::testing::Test {
@@ -225,8 +224,9 @@ namespace acslg::test::unit::analyzer {
         unique_ptr<SymbolicExpr> makeAdd(unique_ptr<SymbolicExpr> a, unique_ptr<SymbolicExpr> b) {
             auto &factory = ExprFactoryScope::current();
             return factory
-                .cloneExpr(factory.binary(factory.importExpr(*a), BinaryOpExpr::Operator::Add,
-                                          factory.importExpr(*b)))
+                .binary(factory.importExpr(*a), BinaryOpExpr::Operator::Add,
+                        factory.importExpr(*b))
+                ->clone()
                 .into_underlying();
         }
 
@@ -1056,9 +1056,9 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto from = symbolic::Addr::variable(var);
-        auto x = factory.cloneExpr(
-            symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
-                .handle());
+        auto x = symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
+                     .handle()
+                     ->clone();
         auto xHandle = factory.importExpr(*x);
         NonLinearBinaryProbe legacyProduct{
             xHandle, symbolic::BinaryOpExpr::Operator::Multiply, xHandle};
@@ -1134,9 +1134,9 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto from = symbolic::Addr::variable(var);
-        auto x = factory.cloneExpr(
-            symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
-                .handle());
+        auto x = symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
+                     .handle()
+                     ->clone();
         auto predicate = cloneBinaryForLegacyTest(
             cloneWithFactory(factory, *x), symbolic::BinaryOpExpr::Operator::Equal,
             cloneLiteralForLegacyTest(0));
@@ -1161,10 +1161,11 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        auto expr = factory.cloneExpr(
-            factory.binary(factory.literal(int64_t{1}),
-                           symbolic::BinaryOpExpr::Operator::Add,
-                           factory.literal(int64_t{2})));
+        auto expr = factory
+                        .binary(factory.literal(int64_t{1}),
+                                symbolic::BinaryOpExpr::Operator::Add,
+                                factory.literal(int64_t{2}))
+                        ->clone();
 
         auto *literal = expr->evalToConstExpr();
 
@@ -1181,8 +1182,10 @@ namespace acslg::test::unit::analyzer {
 
         auto legacy = [&]() {
             symbolic::ExprFactoryScope scope(factory);
-            auto unary = factory.cloneExpr(factory.unary(
-                symbolic::UnaryOpExpr::Operator::Minus, factory.literal(int64_t{1})));
+            auto unary = factory
+                             .unary(symbolic::UnaryOpExpr::Operator::Minus,
+                                    factory.literal(int64_t{1}))
+                             ->clone();
             return cloneBinaryForLegacyTest(
                 std::move(unary),
                 symbolic::BinaryOpExpr::Operator::Add,

@@ -109,7 +109,7 @@ namespace acslg::test::utils {
         if (returnExpr == nullopt)
             ERROR("There is no returnExpr!");
         auto &factory = state.getExprFactory();
-        return factory.cloneExpr(factory.importExpr(*returnExpr.value()));
+        return factory.importExpr(*returnExpr.value())->clone();
     }
 
     not_null<unique_ptr<ProgramState>> getPostStateOfFirstLoop(const string_view code) {
@@ -312,17 +312,17 @@ namespace acslg::test::utils {
     }
 
     not_null<unique_ptr<symbolic::SymbolicExpr>> FixtureWithCode::makeLiteralExpr(uint64_t value) {
-        return exprFactory_.cloneExpr(exprFactory_.literal(value));
+        return exprFactory_.literal(value)->clone();
     }
 
     not_null<unique_ptr<symbolic::SymbolicExpr>> FixtureWithCode::makeRangeIndexExpr(
         string_view name) {
-        return exprFactory_.cloneExpr(exprFactory_.rangeIndex(name));
+        return exprFactory_.rangeIndex(name)->clone();
     }
 
     not_null<unique_ptr<symbolic::SymbolicExpr>> FixtureWithCode::cloneExpr(
         const symbolic::SymbolicExpr &expr) {
-        return exprFactory_.cloneExpr(exprFactory_.importExpr(expr));
+        return exprFactory_.importExpr(expr)->clone();
     }
 
     symbolic::SymbolAddress FixtureWithCode::makeRangeAddr(

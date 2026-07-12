@@ -223,14 +223,15 @@ namespace acslg::test::unit::analyzer {
         detail::LiteralExprNode liter_1(1), liter_2(2U);
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto un_1 = factory.cloneExpr(
-            factory.unary(UnaryOpExpr::Operator::Minus, factory.literal(3)));
+        auto un_1 =
+            factory.unary(UnaryOpExpr::Operator::Minus, factory.literal(3))->clone();
 
         auto addr = path.allocMemory(varDecl);
 
-        auto bin_1 = factory.cloneExpr(factory.binary(
-            factory.importExpr(*addr), BinaryOpExpr::Operator::Equal,
-            factory.importExpr(liter_1)));
+        auto bin_1 = factory
+                         .binary(factory.importExpr(*addr), BinaryOpExpr::Operator::Equal,
+                                 factory.importExpr(liter_1))
+                         ->clone();
 
         EXPECT_CALL(path, convertExpr)
             .WillOnce(Return(un_1->clone()))
@@ -1040,9 +1041,9 @@ namespace acslg::test::unit::analyzer {
         auto makeAdd(ExprUP a, ExprUP b) {
             auto &factory = symbolic::ExprFactoryScope::current();
             return factory
-                .cloneExpr(factory.binary(factory.importExpr(*a),
-                                          symbolic::BinaryOpExpr::Operator::Add,
-                                          factory.importExpr(*b)))
+                .binary(factory.importExpr(*a), symbolic::BinaryOpExpr::Operator::Add,
+                        factory.importExpr(*b))
+                ->clone()
                 .into_underlying();
         }
     } // namespace

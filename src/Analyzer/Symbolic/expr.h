@@ -1234,10 +1234,6 @@ namespace acslg::analyzer::symbolic {
 
         ExprHandle importExpr(const SymbolicExpr &expr);
         AddrHandle importAddress(const Address &address);
-        utils::not_null<std::unique_ptr<SymbolicExpr>> cloneExpr(ExprHandle expr) {
-            return expr->cloneWithValType(expr->getValType());
-        }
-
         AddrHandle variableAddress(utils::not_null<const clang::VarDecl *> from);
         AddrHandle symbolAddress(
             clang::QualType pointeeType,
