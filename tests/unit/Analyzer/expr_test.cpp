@@ -768,9 +768,12 @@ namespace acslg::test::unit::analyzer {
     TEST(ExprFactoryTest, ReusesEqualNodesButSeparatesHashCollisions) {
         symbolic::ExprFactory factory;
 
-        auto a = factory.intern(std::make_unique<CollisionExpr>(1));
-        auto b = factory.intern(std::make_unique<CollisionExpr>(1));
-        auto c = factory.intern(std::make_unique<CollisionExpr>(2));
+        auto a = symbolic::detail::ExprFactoryInternals::intern(
+            factory, std::make_unique<CollisionExpr>(1));
+        auto b = symbolic::detail::ExprFactoryInternals::intern(
+            factory, std::make_unique<CollisionExpr>(1));
+        auto c = symbolic::detail::ExprFactoryInternals::intern(
+            factory, std::make_unique<CollisionExpr>(2));
 
         EXPECT_EQ(a, b);
         EXPECT_NE(a, c);

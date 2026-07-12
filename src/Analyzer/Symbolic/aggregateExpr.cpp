@@ -31,8 +31,9 @@ namespace acslg::analyzer::symbolic {
                                       const SymbolAddress &range,
                                       std::string_view indexName,
                                       SourcePoint fromPoint) {
-        return factory.intern(std::make_unique<SumOverRange>(
-            factory.importAddress(range), indexName, std::move(fromPoint)));
+        return detail::ExprFactoryInternals::intern(
+            factory, std::make_unique<SumOverRange>(
+                         factory.importAddress(range), indexName, std::move(fromPoint)));
     }
 
     ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
@@ -50,8 +51,9 @@ namespace acslg::analyzer::symbolic {
                                              std::string_view indexName,
                                              QuantifierOverRange::Quantifier quantifier,
                                              ExprHandle predicate) {
-        return factory.intern(std::make_unique<QuantifierOverRange>(
-            range, indexName, quantifier, predicate));
+        return detail::ExprFactoryInternals::intern(
+            factory,
+            std::make_unique<QuantifierOverRange>(range, indexName, quantifier, predicate));
     }
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
@@ -90,8 +92,9 @@ namespace acslg::analyzer::symbolic {
                                          MaxMinOverRange::Extremum extremum,
                                          ExprHandle body,
                                          SourcePoint fromPoint) {
-        return factory.intern(std::make_unique<MaxMinOverRange>(
-            range, indexName, extremum, body, std::move(fromPoint)));
+        return detail::ExprFactoryInternals::intern(
+            factory, std::make_unique<MaxMinOverRange>(
+                         range, indexName, extremum, body, std::move(fromPoint)));
     }
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,

@@ -47,6 +47,7 @@ namespace acslg::analyzer::symbolic {
         class LiteralExprNode;
         class UnaryOpExprNode;
         class BinaryOpExprNode;
+        struct ExprFactoryInternals;
     }
 
     using UnaryOpExpr = detail::UnaryOpExprNode;
@@ -1257,16 +1258,27 @@ namespace acslg::analyzer::symbolic {
                              SourcePoint fromPoint);
         ExprHandle withField(ExprHandle structure, size_t index, ExprHandle value);
 
-        ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node);
-
         size_t size() const { return owned_.size(); }
 
       private:
+        friend struct detail::ExprFactoryInternals;
+
+        ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node);
         AddrHandle internAddress(utils::not_null<std::unique_ptr<Address>> node);
 
         std::vector<std::unique_ptr<SymbolicExpr>> owned_;
         std::unordered_map<size_t, std::vector<const SymbolicExpr *>> interned_;
     };
+
+    namespace detail {
+        struct ExprFactoryInternals {
+            static ExprHandle intern(
+                ExprFactory &factory,
+                utils::not_null<std::unique_ptr<SymbolicExpr>> node) {
+                return factory.intern(std::move(node));
+            }
+        };
+    } // namespace detail
 
     class ExprFactoryScope {
       public:
