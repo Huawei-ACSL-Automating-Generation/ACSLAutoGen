@@ -1434,7 +1434,7 @@ namespace acslg::test::unit::analyzer {
         auto sumRange    = factory.importExpr(sum.getRange());
         const auto &sumNode = importedSum.cast<symbolic::SumOverRange>();
         EXPECT_EQ(&sumNode.getRange(), sumRange.get().get());
-        EXPECT_EQ(importedSum, factory.importExpr(*sum.clone()));
+        EXPECT_EQ(importedSum, factory.importExpr(sum));
 
         auto importedQuantifier = factory.importExpr(quantifier);
         auto quantifierRange    = factory.importExpr(quantifier.getRange());
@@ -1443,7 +1443,7 @@ namespace acslg::test::unit::analyzer {
             importedQuantifier.cast<symbolic::QuantifierOverRange>();
         EXPECT_EQ(&quantifierNode.getRange(), quantifierRange.get().get());
         EXPECT_EQ(&quantifierNode.getPredicate(), quantifierPred.get().get());
-        EXPECT_EQ(importedQuantifier, factory.importExpr(*quantifier.clone()));
+        EXPECT_EQ(importedQuantifier, factory.importExpr(quantifier));
 
         auto importedMax = factory.importExpr(max);
         auto maxRange    = factory.importExpr(max.getRange());
@@ -1451,10 +1451,10 @@ namespace acslg::test::unit::analyzer {
         const auto &maxNode = importedMax.cast<symbolic::MaxMinOverRange>();
         EXPECT_EQ(&maxNode.getRange(), maxRange.get().get());
         EXPECT_EQ(&maxNode.getExpr(), maxBody.get().get());
-        EXPECT_EQ(importedMax, factory.importExpr(*max.clone()));
+        EXPECT_EQ(importedMax, factory.importExpr(max));
     }
 
-    TEST(SumOverRangeRebuildTest, RangeUsesExprChildAcrossCloneAndSubstitution) {
+    TEST(SumOverRangeRebuildTest, RangeUsesExprChildAcrossImportAndSubstitution) {
         ASTExtractor e;
         e.init(R"c(
             int f(void) {
@@ -1479,10 +1479,10 @@ namespace acslg::test::unit::analyzer {
         auto rangeBase = rangeHandle.cast<symbolic::SymbolAddress>().getBaseInfo();
         symbolic::SumOverRange sum{rangeHandle, "i", point};
 
-        auto clone = sum.clone();
-        EXPECT_EQ(*clone, sum);
-        const auto &clonedSum = *symbolic::cast<symbolic::SumOverRange>(clone.get().get());
-        EXPECT_EQ(&clonedSum.getRange(), rangeHandle.get().get());
+        auto imported = factory.importExpr(sum);
+        EXPECT_EQ(*imported, sum);
+        EXPECT_EQ(&imported.cast<symbolic::SumOverRange>().getRange(),
+                  rangeHandle.get().get());
 
         auto index = factory.literal(int64_t{1});
         auto substituted =
@@ -1490,7 +1490,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_NE(*substituted, sum);
     }
 
-    TEST(QuantifierOverRangeRebuildTest, PredicateUsesExprChildAcrossCloneAndSubstitution) {
+    TEST(QuantifierOverRangeRebuildTest, PredicateUsesExprChildAcrossImportAndSubstitution) {
         ASTExtractor e;
         e.init(R"c(
             int f(void) {
@@ -1518,12 +1518,11 @@ namespace acslg::test::unit::analyzer {
         symbolic::QuantifierOverRange quantifier{
             rangeHandle, "i", symbolic::QuantifierOverRange::Quantifier::ForAll, pred};
 
-        auto clone = quantifier.clone();
-        EXPECT_EQ(*clone, quantifier);
-        const auto &clonedQuantifier =
-            *symbolic::cast<symbolic::QuantifierOverRange>(clone.get().get());
-        EXPECT_EQ(&clonedQuantifier.getRange(), rangeHandle.get().get());
-        EXPECT_EQ(&clonedQuantifier.getPredicate(),
+        auto imported = factory.importExpr(quantifier);
+        EXPECT_EQ(*imported, quantifier);
+        const auto &importedQuantifier = imported.cast<symbolic::QuantifierOverRange>();
+        EXPECT_EQ(&importedQuantifier.getRange(), rangeHandle.get().get());
+        EXPECT_EQ(&importedQuantifier.getPredicate(),
                   factory.importExpr(quantifier.getPredicate()).get().get());
 
         auto index = factory.literal(int64_t{1});
@@ -1532,7 +1531,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_NE(*substituted, quantifier);
     }
 
-    TEST(MaxMinOverRangeRebuildTest, BodyUsesExprChildAcrossCloneAndSubstitution) {
+    TEST(MaxMinOverRangeRebuildTest, BodyUsesExprChildAcrossImportAndSubstitution) {
         ASTExtractor e;
         e.init(R"c(
             int f(void) {
@@ -1564,11 +1563,11 @@ namespace acslg::test::unit::analyzer {
             symbolic::getSymbol(rangeHandle->getPointeeType(), indexedRange, point);
         EXPECT_EQ(&max.getExpr(), expectedBody.get().get());
 
-        auto clone = max.clone();
-        EXPECT_EQ(*clone, max);
-        const auto &clonedMax = *symbolic::cast<symbolic::MaxMinOverRange>(clone.get().get());
-        EXPECT_EQ(&clonedMax.getRange(), rangeHandle.get().get());
-        EXPECT_EQ(&clonedMax.getExpr(), factory.importExpr(max.getExpr()).get().get());
+        auto imported = factory.importExpr(max);
+        EXPECT_EQ(*imported, max);
+        const auto &importedMax = imported.cast<symbolic::MaxMinOverRange>();
+        EXPECT_EQ(&importedMax.getRange(), rangeHandle.get().get());
+        EXPECT_EQ(&importedMax.getExpr(), factory.importExpr(max.getExpr()).get().get());
 
         auto index = factory.literal(int64_t{1});
         auto substituted =
