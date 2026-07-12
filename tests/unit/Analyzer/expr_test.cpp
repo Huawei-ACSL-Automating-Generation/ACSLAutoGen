@@ -37,12 +37,6 @@ namespace acslg::test::unit::analyzer {
         }
 
         ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
-        cloneWithFactory(symbolic::ExprFactory &factory,
-                         const symbolic::SymbolicExpr &expr) {
-            return factory.importExpr(expr)->clone();
-        }
-
-        ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
         cloneLiteralForLegacyTest(int64_t value) {
             auto &factory = symbolic::ExprFactoryScope::current();
             return factory.literal(value)->clone();
@@ -69,15 +63,15 @@ namespace acslg::test::unit::analyzer {
                 address.cast<symbolic::SymbolAddress>());
         }
 
-        ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>
-        makeStructureCloneWithFacade(symbolic::ExprFactory &factory,
-                                     clang::QualType type,
-                                     ::acslg::utils::not_null<const clang::VarDecl *> var,
-                                     symbolic::SourcePoint point) {
+        symbolic::ExprHandle makeStructureWithFacade(
+            symbolic::ExprFactory &factory,
+            clang::QualType type,
+            ::acslg::utils::not_null<const clang::VarDecl *> var,
+            symbolic::SourcePoint point) {
             auto *record = type->getAsRecordDecl()->getDefinition();
             auto &layout = record->getASTContext().getASTRecordLayout(record);
             auto from    = symbolic::Addr::variable(var);
-            return factory.structure(record, layout, from.handle(), point)->clone();
+            return factory.structure(record, layout, from.handle(), point);
         }
 
         class SourcePointTest : public ::testing::Test {
@@ -316,7 +310,7 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto exprBefore = cloneWithFactory(factory, *varNode);
+        auto exprBefore = factory.importExpr(*varNode);
         auto result =
             symbolic::getSubstitutedExprHandle(factory, *varNode, *path, getSourcePoint(42));
 
@@ -1096,8 +1090,7 @@ namespace acslg::test::unit::analyzer {
                   factory.importExpr(*rebuilt->getLeft().get()).get().get());
         EXPECT_EQ(rebuilt->getRight().get(),
                   factory.importExpr(*rebuilt->getRight().get()).get().get());
-        EXPECT_EQ(factory.importExpr(*simplified),
-                  factory.importExpr(*cloneWithFactory(factory, *simplified)));
+        EXPECT_EQ(simplified, factory.importExpr(*simplified));
     }
 
     TEST(ExprFactoryTest, ScopedSimplifiedNonLinearFallbackImportsThroughFactory) {
@@ -2631,18 +2624,18 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory setupFactory;
         auto legacyExpr = [&]() {
             symbolic::ExprFactoryScope setupScope(setupFactory);
-            return makeStructureCloneWithFacade(setupFactory, var->getType(), var, point);
+            return makeStructureWithFacade(setupFactory, var->getType(), var, point);
         }();
-        auto *legacyStructure = symbolic::cast<symbolic::Structure>(legacyExpr.get().get());
+        const auto &legacyStructure = legacyExpr.cast<symbolic::Structure>();
 
         symbolic::ExprFactory factory;
-        auto importedA = factory.importExpr(*legacyStructure);
-        auto importedB = factory.importExpr(*legacyStructure);
+        auto importedA = factory.importExpr(legacyStructure);
+        auto importedB = factory.importExpr(legacyStructure);
         EXPECT_EQ(importedA, importedB);
 
         const auto &importedStructure = importedA.cast<symbolic::Structure>();
-        auto importedField0 = factory.importExpr(*legacyStructure->getFieldValue(0));
-        auto importedField1 = factory.importExpr(*legacyStructure->getFieldValue(1));
+        auto importedField0 = factory.importExpr(*legacyStructure.getFieldValue(0));
+        auto importedField1 = factory.importExpr(*legacyStructure.getFieldValue(1));
 
         EXPECT_EQ(importedStructure.getFieldValue(0).get(), importedField0.get().get());
         EXPECT_EQ(importedStructure.getFieldValue(1).get(), importedField1.get().get());
@@ -2713,21 +2706,21 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        auto structureExpr = makeStructureCloneWithFacade(factory, var->getType(), var, point);
-        auto *structure = symbolic::cast<symbolic::Structure>(structureExpr.get().get());
+        auto structureExpr = makeStructureWithFacade(factory, var->getType(), var, point);
+        const auto &structure = structureExpr.cast<symbolic::Structure>();
         auto replacement = factory.literal(42);
 
         symbolic::HashExprHandleMap substitutions;
-        substitutions.emplace(structure->getFieldValue(0)->hash(),
+        substitutions.emplace(structure.getFieldValue(0)->hash(),
                               replacement);
 
         auto substituted =
-            symbolic::getSubstitutedValueHandle(factory, *structure, substitutions);
+            symbolic::getSubstitutedValueHandle(factory, structure, substitutions);
         const auto &substitutedStructure =
             substituted.cast<symbolic::Structure>();
 
         EXPECT_EQ(substitutedStructure.getFieldValue(0).get(), replacement.get().get());
         EXPECT_EQ(substitutedStructure.getFieldValue(1).get(),
-                  factory.importExpr(*structure->getFieldValue(1)).get().get());
+                  factory.importExpr(*structure.getFieldValue(1)).get().get());
     }
 } // namespace acslg::test::unit::analyzer
