@@ -897,6 +897,98 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedFacade.getValType(), targetType);
     }
 
+    TEST(ExprFactoryTest, WithValTypeImportsCrossFactoryOperationChildren) {
+        symbolic::ExprFactory source;
+        auto sourceOne = source.literal(1);
+        auto sourceTwo = source.literal(2);
+        auto sourceSum = source.binary(
+            sourceOne, symbolic::BinaryOpExpr::Operator::Add, sourceTwo);
+
+        symbolic::ExprFactory target;
+        auto targetType = symbolic::SymbolicExpr::Type{
+            symbolic::SymbolicExpr::ScalarKind::UInt, 64};
+        auto typedSum = target.withValType(sourceSum, targetType);
+        const auto &typedNode = typedSum.cast<symbolic::BinaryOpExpr>();
+        auto targetOne = target.literal(1);
+        auto targetTwo = target.literal(2);
+
+        EXPECT_EQ(typedSum->getValType(), targetType);
+        EXPECT_EQ(typedNode.getLeft().get(), targetOne.get().get());
+        EXPECT_EQ(typedNode.getRight().get(), targetTwo.get().get());
+        EXPECT_NE(typedNode.getLeft().get(), sourceOne.get().get());
+        EXPECT_NE(typedNode.getRight().get(), sourceTwo.get().get());
+        EXPECT_EQ(typedSum, target.withValType(sourceSum, targetType));
+    }
+
+    TEST(ExprFactoryTest, WithValTypeImportsCrossFactoryAddressAndAggregateChildren) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int value = 0;
+                return value;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory source;
+        auto sourceBase = source.variableAddress(var);
+        auto sourceOffset = source.binary(
+            source.literal(1), symbolic::BinaryOpExpr::Operator::Add, source.literal(2));
+        auto sourceLength = source.literal(4);
+        auto sourceRange = source.symbolAddress(
+            var->getType(), sourceBase, point, sourceOffset, sourceLength);
+        auto sourcePredicate = source.binary(
+            source.rangeIndex("i"), symbolic::BinaryOpExpr::Operator::LessThan,
+            source.literal(4));
+        auto sourceBody = source.literal(7);
+        auto sourceSum = symbolic::makeSumOverRangeHandle(
+            source, sourceRange.cast<symbolic::SymbolAddress>(), "i", point);
+        auto sourceQuantifier = symbolic::makeQuantifierOverRangeHandle(
+            source, sourceRange, "i", symbolic::QuantifierOverRange::Quantifier::ForAll,
+            sourcePredicate);
+        auto sourceMax = symbolic::makeMaxMinOverRangeHandle(
+            source, sourceRange, "i", symbolic::MaxMinOverRange::Extremum::Max,
+            sourceBody, point);
+
+        symbolic::ExprFactory target;
+        auto boolType = symbolic::SymbolicExpr::Type{
+            symbolic::SymbolicExpr::ScalarKind::Bool, 8};
+        auto uintType = symbolic::SymbolicExpr::Type{
+            symbolic::SymbolicExpr::ScalarKind::UInt, 64};
+        auto typedRange = target.withValType(sourceRange.asExpr(), boolType);
+        auto typedSum = target.withValType(sourceSum, uintType);
+        auto typedQuantifier = target.withValType(sourceQuantifier, uintType);
+        auto typedMax = target.withValType(sourceMax, uintType);
+
+        auto targetBase = target.variableAddress(var);
+        auto targetOffset = target.binary(
+            target.literal(1), symbolic::BinaryOpExpr::Operator::Add, target.literal(2));
+        auto targetLength = target.literal(4);
+        const auto &typedRangeNode = typedRange.cast<symbolic::SymbolAddress>();
+        ASSERT_TRUE(typedRangeNode.getFromAddrHandle());
+        ASSERT_TRUE(typedRangeNode.getLength());
+        EXPECT_EQ(*typedRangeNode.getFromAddrHandle(), targetBase);
+        EXPECT_EQ(typedRangeNode.getOffset().get(), targetOffset.get().get());
+        EXPECT_EQ(typedRangeNode.getLength().value().get(), targetLength.get().get());
+
+        auto targetRange = target.importAddress(*sourceRange);
+        EXPECT_EQ(&typedSum.cast<symbolic::SumOverRange>().getRange(), targetRange.get().get());
+        EXPECT_EQ(&typedQuantifier.cast<symbolic::QuantifierOverRange>().getRange(),
+                  targetRange.get().get());
+        EXPECT_EQ(&typedQuantifier.cast<symbolic::QuantifierOverRange>().getPredicate(),
+                  target.importExpr(*sourcePredicate).get().get());
+        EXPECT_EQ(&typedMax.cast<symbolic::MaxMinOverRange>().getRange(),
+                  targetRange.get().get());
+        EXPECT_EQ(&typedMax.cast<symbolic::MaxMinOverRange>().getExpr(),
+                  target.importExpr(*sourceBody).get().get());
+    }
+
     TEST(ExprFactoryTest, ValueSubstitutionHandleMapImportsReplacement) {
         symbolic::ExprFactory factory;
 

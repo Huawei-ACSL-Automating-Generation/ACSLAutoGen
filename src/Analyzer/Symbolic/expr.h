@@ -505,12 +505,6 @@ namespace acslg::analyzer::symbolic {
         }
 
       private:
-        utils::not_null<std::unique_ptr<SymbolicExpr>> cloneWithValType(Type newType) const {
-            auto result = clone();
-            result->setValType(newType);
-            return result;
-        }
-
         void setValType(Type newType) { valueType_ = newType; }
         friend class ExprFactory;
         friend ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr);
@@ -604,6 +598,21 @@ namespace acslg::analyzer::symbolic {
             Int64,
             UInt64
         };
+
+        LiteralExprNode(const LiteralExprNode &other)
+            : SymbolicExpr(other), type_(other.type_) {
+            switch (type_) {
+                case LiteralType::Boolean: data_.boolValue = other.data_.boolValue; break;
+                case LiteralType::Int: data_.intValue = other.data_.intValue; break;
+                case LiteralType::UnsignedInt: data_.uintValue = other.data_.uintValue; break;
+                case LiteralType::Short: data_.shortValue = other.data_.shortValue; break;
+                case LiteralType::UnsignedShort:
+                    data_.ushortValue = other.data_.ushortValue;
+                    break;
+                case LiteralType::Int64: data_.int64Value = other.data_.int64Value; break;
+                case LiteralType::UInt64: data_.uint64Value = other.data_.uint64Value; break;
+            }
+        }
 
         LiteralExprNode(bool value)
             : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Bool, 1}),

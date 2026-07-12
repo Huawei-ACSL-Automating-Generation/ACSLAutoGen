@@ -67,7 +67,84 @@ namespace acslg::analyzer::symbolic {
     ExprHandle ExprFactory::withValType(ExprHandle expr, SymbolicExpr::Type newType) {
         if (expr->getValType() == newType)
             return expr;
-        return intern(expr->cloneWithValType(newType));
+
+        auto internTyped = [this, newType](auto node) {
+            node->setValType(newType);
+            std::unique_ptr<SymbolicExpr> base = std::move(node);
+            return intern(utils::not_null<std::unique_ptr<SymbolicExpr>>{std::move(base)});
+        };
+
+        if (auto *literal = expr.dyn_cast<const detail::LiteralExprNode>())
+            return internTyped(std::make_unique<detail::LiteralExprNode>(*literal));
+
+        if (expr.isa<detail::UnknownExprNode>())
+            return internTyped(std::make_unique<detail::UnknownExprNode>());
+
+        if (auto *index = expr.dyn_cast<const SymbolAddress::RangeIndex>())
+            return internTyped(std::make_unique<SymbolAddress::RangeIndex>(index->getName()));
+
+        if (auto *unaryExpr = expr.dyn_cast<const detail::UnaryOpExprNode>())
+            return internTyped(std::make_unique<detail::UnaryOpExprNode>(
+                unaryExpr->getOperator(), importExpr(*unaryExpr->getSub())));
+
+        if (auto *binaryExpr = expr.dyn_cast<const detail::BinaryOpExprNode>())
+            return internTyped(std::make_unique<detail::BinaryOpExprNode>(
+                importExpr(*binaryExpr->getLeft()), binaryExpr->getOperator(),
+                importExpr(*binaryExpr->getRight())));
+
+        if (auto *variableAddr = expr.dyn_cast<const VariableAddress>())
+            return internTyped(std::make_unique<VariableAddress>(variableAddr->getFrom()));
+
+        if (auto *fieldAddr = expr.dyn_cast<const FieldAddress>())
+            return internTyped(std::make_unique<FieldAddress>(
+                fieldAddr->getPointeeType(), fieldAddr->getDefinition(),
+                importAddress(*fieldAddr->getBaseAddr()), fieldAddr->getFieldIndex()));
+
+        if (auto *symbolAddr = expr.dyn_cast<const SymbolAddress>()) {
+            std::optional<AddrHandle> from;
+            if (auto existingFrom = symbolAddr->getFromAddrHandle())
+                from = importAddress(**existingFrom);
+
+            std::optional<ExprHandle> length;
+            if (const auto &existingLength = symbolAddr->getLength(); existingLength)
+                length = importExpr(*existingLength.value());
+
+            return internTyped(std::make_unique<SymbolAddress>(
+                SymbolAddress::FactoryNodeTag{}, symbolAddr->getPointeeType(), from,
+                symbolAddr->getFromPoint().value(), importExpr(*symbolAddr->getOffset()), length));
+        }
+
+        if (auto *symbolVal = expr.dyn_cast<const SymbolValue>())
+            return internTyped(std::make_unique<SymbolValue>(
+                symbolVal->getValType(), importAddress(*symbolVal->getFromAddrHandle()),
+                symbolVal->getFromPoint().value()));
+
+        if (auto *structure = expr.dyn_cast<const Structure>()) {
+            std::vector<ExprHandle> fields;
+            fields.reserve(structure->getNumFields());
+            for (auto field : structure->fieldsValues())
+                fields.push_back(importExpr(*field));
+            return internTyped(
+                std::make_unique<Structure>(structure->getInfo(), std::move(fields)));
+        }
+
+        if (auto *sum = expr.dyn_cast<const SumOverRange>())
+            return internTyped(std::make_unique<SumOverRange>(
+                importAddress(sum->getRange()), sum->getIndexName(),
+                sum->getFromPoint().value()));
+
+        if (auto *quantifier = expr.dyn_cast<const QuantifierOverRange>())
+            return internTyped(std::make_unique<QuantifierOverRange>(
+                importAddress(quantifier->getRange()), quantifier->getIndexName(),
+                quantifier->getQuantifier(), importExpr(quantifier->getPredicate())));
+
+        if (auto *maxMin = expr.dyn_cast<const MaxMinOverRange>())
+            return internTyped(std::make_unique<MaxMinOverRange>(
+                importAddress(maxMin->getRange()), maxMin->getIndexName(),
+                maxMin->getExtremum(), importExpr(maxMin->getExpr()),
+                maxMin->getFromPoint().value()));
+
+        ERROR("Unsupported SymbolicExpr type in ExprFactory::withValType: " + expr.dump());
     }
 
     ExprHandle getSubstitutedValueHandle(ExprFactory &factory,
