@@ -1223,12 +1223,13 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(facade.handle(), imported);
     }
 
-    TEST(ExprFactoryTest, ImportsLegacyUInt64LiteralWithoutValueNarrowing) {
-        symbolic::ExprFactory factory;
+    TEST(ExprFactoryTest, ImportsCrossFactoryUInt64LiteralWithoutValueNarrowing) {
         const auto large = std::numeric_limits<std::uint64_t>::max();
-        symbolic::detail::LiteralExprNode legacy{large};
+        symbolic::ExprFactory sourceFactory;
+        auto source = sourceFactory.literal(large);
 
-        auto imported = factory.importExpr(legacy);
+        symbolic::ExprFactory factory;
+        auto imported = factory.importExpr(*source);
         auto expected = factory.literal(large);
 
         EXPECT_EQ(imported, expected);
@@ -1256,8 +1257,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(k, i);
         EXPECT_TRUE(k.isa<symbolic::SymbolAddress::RangeIndex>());
 
-        symbolic::SymbolAddress::RangeIndex legacy{"j"};
-        auto imported = factory.importExpr(legacy);
+        symbolic::ExprFactory sourceFactory;
+        auto source = sourceFactory.rangeIndex("j");
+        auto imported = factory.importExpr(*source);
 
         EXPECT_EQ(imported, k);
     }
@@ -1286,9 +1288,10 @@ namespace acslg::test::unit::analyzer {
         auto replacement =
             factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
 
-        symbolic::SymbolAddress::RangeIndex legacy{"i"};
+        auto rangeIndexHandle = factory.rangeIndex("i");
         auto substituted =
-            symbolic::getRangeIndexSubstitutedHandle(factory, legacy, rangeBase, replacement);
+            symbolic::getRangeIndexSubstitutedHandle(factory, *rangeIndexHandle, rangeBase,
+                                                      replacement);
         const auto &node = substituted.cast<symbolic::BinaryOpExpr>();
 
         EXPECT_EQ(node.getLeft().get(), one.get().get());
@@ -1797,7 +1800,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(symbolValue.isa<symbolic::SymbolValue>());
     }
 
-    TEST(AddrFacadeTest, ImportsLegacyAddressThroughCurrentFactory) {
+    TEST(AddrFacadeTest, ImportsCrossFactoryAddressThroughCurrentFactory) {
         ASTExtractor e;
         e.init(R"c(
             int f(void) {
@@ -1814,8 +1817,9 @@ namespace acslg::test::unit::analyzer {
 
         auto handle = factory.variableAddress(var);
         symbolic::Addr addr{handle};
-        symbolic::VariableAddress legacy{var};
-        symbolic::Addr imported{legacy};
+        symbolic::ExprFactory sourceFactory;
+        auto source = sourceFactory.variableAddress(var);
+        symbolic::Addr imported{*source};
 
         EXPECT_EQ(&addr.factory(), &factory);
         EXPECT_EQ(addr.handle(), handle);
