@@ -198,18 +198,10 @@ namespace acslg::test::unit::analyzer {
             return ExprFactoryScope::current().literal(value);
         }
 
-        unique_ptr<SymbolicExpr> makeAdd(unique_ptr<SymbolicExpr> a, unique_ptr<SymbolicExpr> b) {
+        ExprHandle makeAdd(unique_ptr<SymbolicExpr> a, unique_ptr<SymbolicExpr> b) {
             auto &factory = ExprFactoryScope::current();
-            return factory
-                .binary(factory.importExpr(*a), BinaryOpExpr::Operator::Add,
-                        factory.importExpr(*b))
-                ->clone()
-                .into_underlying();
-        }
-
-        template <class T>
-        static ::acslg::utils::not_null<unique_ptr<T>> makeNotNull(unique_ptr<T> p) {
-            return ::acslg::utils::not_null<unique_ptr<T>>(std::move(p));
+            return factory.binary(factory.importExpr(*a), BinaryOpExpr::Operator::Add,
+                                  factory.importExpr(*b));
         }
 
         struct SubstituteTest : public FixtureWithCode {
@@ -306,7 +298,7 @@ namespace acslg::test::unit::analyzer {
         // expr = Var(g1, point) + Var(g2, point)
         auto aVar = makeSymbolValue(1, point);
         auto bVar = makeSymbolValue(2, point);
-        auto expr = makeNotNull(makeAdd(std::move(aVar), std::move(bVar)));
+        auto expr = makeAdd(std::move(aVar), std::move(bVar));
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
