@@ -581,7 +581,6 @@ namespace acslg::analyzer::symbolic {
 
         const SymbolicExpr &operator*() const { return *get(); }
         const SymbolicExpr *operator->() const { return get().get(); }
-        ExprChild copy() const;
 
         ExprHandle handle() const { return handle_; }
 
@@ -977,7 +976,7 @@ namespace acslg::analyzer::symbolic {
             std::ranges::transform(
                 other.fields_, std::back_inserter(fields_),
                 [](const ExprChild &field) -> ExprChild {
-                    return field.copy();
+                    return field;
                 });
         }
 

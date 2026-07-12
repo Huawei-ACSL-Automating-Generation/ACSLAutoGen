@@ -115,14 +115,14 @@ namespace acslg::analyzer::symbolic {
           fromPoint_(std::move(fromPoint)) {}
 
     OverRangeExpr::OverRangeExpr(const OverRangeExpr &other)
-        : SymbolicExpr(other), range_(other.range_.copy()),
+        : SymbolicExpr(other), range_(other.range_),
           indexName_(other.indexName_) {}
 
     OverRangeExpr &OverRangeExpr::operator=(const OverRangeExpr &other) {
         if (&other == this)
             return *this;
         SymbolicExpr::operator=(other);
-        range_     = other.range_.copy();
+        range_     = other.range_;
         indexName_ = other.indexName_;
         return *this;
     }
@@ -249,7 +249,7 @@ namespace acslg::analyzer::symbolic {
             return *this;
         OverRangeExpr::operator=(other);
         quant_ = other.quant_;
-        pred_  = other.pred_.copy();
+        pred_  = other.pred_;
         return *this;
     }
 
@@ -335,7 +335,7 @@ namespace acslg::analyzer::symbolic {
         OverRangeExpr::operator=(other);
         Symbol::operator=(other);
         extremum_  = other.extremum_;
-        expr_      = other.expr_.copy();
+        expr_      = other.expr_;
         fromPoint_ = other.fromPoint_;
         return *this;
     }

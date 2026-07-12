@@ -165,7 +165,7 @@ namespace acslg::analyzer::symbolic {
 
         QuantifierOverRange(const QuantifierOverRange &other)
             : OverRangeExpr(other), quant_(other.quant_),
-              pred_(other.pred_.copy()) {}
+              pred_(other.pred_) {}
         QuantifierOverRange(QuantifierOverRange &&) = default;
         QuantifierOverRange &operator=(const QuantifierOverRange &);
         QuantifierOverRange &operator=(QuantifierOverRange &&) = default;
@@ -226,7 +226,7 @@ namespace acslg::analyzer::symbolic {
 
         MaxMinOverRange(const MaxMinOverRange &other)
             : OverRangeExpr(other), Symbol(other), extremum_(other.extremum_),
-              expr_(other.expr_.copy()), fromPoint_(other.fromPoint_) {}
+              expr_(other.expr_), fromPoint_(other.fromPoint_) {}
         MaxMinOverRange(MaxMinOverRange &&) = default;
         MaxMinOverRange &operator=(const MaxMinOverRange &);
         MaxMinOverRange &operator=(MaxMinOverRange &&) = default;

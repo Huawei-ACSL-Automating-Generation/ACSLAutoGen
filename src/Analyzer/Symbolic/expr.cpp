@@ -415,10 +415,6 @@ namespace acslg::analyzer::symbolic {
         return Substituter{factory, rangeBase, indexExpr}.run(expr);
     }
 
-    ExprChild ExprChild::copy() const {
-        return ExprChild{handle_};
-    }
-
     utils::not_null<std::unique_ptr<Address>> AddressChild::clone() const {
         return get()->addressClone();
     }
@@ -2073,10 +2069,10 @@ namespace acslg::analyzer::symbolic {
     }
 
     SymbolAddress::SymbolAddress(const SymbolAddress &other)
-        : Address(other), Symbol(other), offset_(other.offset_.copy()),
+        : Address(other), Symbol(other), offset_(other.offset_),
           fromPoint_(other.fromPoint_), length_(std::nullopt) {
         if (other.length_)
-            length_.emplace(other.length_.value().copy());
+            length_.emplace(other.length_.value());
         if (other.fromAddr_ == std::nullopt)
             fromAddr_ = std::nullopt;
         else
