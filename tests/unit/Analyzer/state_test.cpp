@@ -21,6 +21,10 @@ namespace acslg::test::unit::analyzer {
         return symbolic::ExprFactoryScope::current().importExpr(*expr);
     }
 
+    symbolic::ExprHandle makeLiteralHandle(uint64_t value) {
+        return symbolic::ExprFactoryScope::current().literal(value);
+    }
+
     namespace {
         struct MemoryModelTest : public FixtureWithCode {};
 
@@ -34,7 +38,9 @@ namespace acslg::test::unit::analyzer {
             std::unique_ptr<Path> pathA;
             std::unique_ptr<Path> pathB;
 
-            auto makeLiteral(int v) { return makeLiteralExpr(static_cast<uint64_t>(v)); }
+            auto makeLiteral(int v) {
+                return acslContext.getExprFactory().literal(static_cast<uint64_t>(v));
+            }
         };
     } // namespace
 
@@ -433,7 +439,7 @@ namespace acslg::test::unit::analyzer {
         auto &factory = symbolic::ExprFactoryScope::current();
         MemoryModel mm;
 
-        auto legacyAddr = makeRangeAddr(1, makeLiteralExpr(3).into_underlying(), nullptr);
+        auto legacyAddr = makeRangeAddr(1, makeLiteralHandle(3), std::nullopt);
         auto addr       = factory.importAddress(legacyAddr);
         auto value = factory.literal(int64_t{42});
 
@@ -457,8 +463,8 @@ namespace acslg::test::unit::analyzer {
         mm.write(baseA, internForTest(eA));
 
         // constantRange
-        auto rangeB = makeRangeAddr(2, /*off=*/makeLiteralExpr(4).into_underlying(),
-                                    /*len=*/makeLiteralExpr(2).into_underlying());
+        auto rangeB = makeRangeAddr(2, /*off=*/makeLiteralHandle(4),
+                                    /*len=*/makeLiteralHandle(2));
         auto eB     = makeSymbolValue(2);
         auto saveEB = internForTest(eB);
         auto addrBHandle = factory.importAddress(rangeB);
@@ -495,29 +501,25 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 10;
 
         // A: [0,10)
-        auto aRange = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
-                                    makeLiteralExpr(10U).into_underlying());
+        auto aRange = makeRangeAddr(baseId, makeLiteralHandle(0U), makeLiteralHandle(10U));
         auto eA     = makeSymbolValue(100);
         auto saveA  = internForTest(eA);
         mm.write(aRange, saveA);
 
         // B: [3,8)
-        auto bRange = makeRangeAddr(baseId, makeLiteralExpr(3U).into_underlying(),
-                                    makeLiteralExpr(5U).into_underlying());
+        auto bRange = makeRangeAddr(baseId, makeLiteralHandle(3U), makeLiteralHandle(5U));
         auto eB     = makeSymbolValue(200);
         auto saveB  = internForTest(eB);
         mm.write(bRange, saveB);
 
         // C: [1,3)
-        auto cRange = makeRangeAddr(baseId, makeLiteralExpr(1U).into_underlying(),
-                                    makeLiteralExpr(2U).into_underlying());
+        auto cRange = makeRangeAddr(baseId, makeLiteralHandle(1U), makeLiteralHandle(2U));
         auto eC     = makeSymbolValue(300);
         auto saveC  = internForTest(eC);
         mm.write(cRange, saveC);
 
         // D: [7,10)
-        auto dRange = makeRangeAddr(baseId, makeLiteralExpr(7U).into_underlying(),
-                                    makeLiteralExpr(3U).into_underlying());
+        auto dRange = makeRangeAddr(baseId, makeLiteralHandle(7U), makeLiteralHandle(3U));
         auto eD     = makeSymbolValue(400);
         auto saveD  = internForTest(eD);
         mm.write(dRange, saveD);
@@ -545,8 +547,7 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 11;
 
         // X: [5,9)
-        auto r     = makeRangeAddr(baseId, makeLiteralExpr(5U).into_underlying(),
-                                   makeLiteralExpr(4U).into_underlying());
+        auto r = makeRangeAddr(baseId, makeLiteralHandle(5U), makeLiteralHandle(4U));
         auto eX    = makeSymbolValue(500);
         auto saveX = internForTest(eX);
         mm.write(r, saveX);
@@ -683,15 +684,13 @@ namespace acslg::test::unit::analyzer {
 
         // Two adjacent constant ranges with the same value
         // [0,3) value=V
-        auto r1 = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
-                                makeLiteralExpr(3U).into_underlying());
+        auto r1 = makeRangeAddr(baseId, makeLiteralHandle(0U), makeLiteralHandle(3U));
         auto v  = makeSymbolValue(1000);
         auto sv = internForTest(v);
         mm.write(r1, sv);
 
         // [3,5) value=V
-        auto r2 = makeRangeAddr(baseId, makeLiteralExpr(3U).into_underlying(),
-                                makeLiteralExpr(2U).into_underlying());
+        auto r2 = makeRangeAddr(baseId, makeLiteralHandle(3U), makeLiteralHandle(2U));
         auto v2 = makeSymbolValue(1000); // same value
         mm.write(r2, internForTest(v2));
 
@@ -712,15 +711,13 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 22;
 
         // [0,3) value=V1
-        auto r1 = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
-                                makeLiteralExpr(3U).into_underlying());
+        auto r1 = makeRangeAddr(baseId, makeLiteralHandle(0U), makeLiteralHandle(3U));
         auto v1 = makeSymbolValue(1111);
         auto s1 = internForTest(v1);
         mm.write(r1, s1);
 
         // [3,5) value=V2 (different value)
-        auto r2 = makeRangeAddr(baseId, makeLiteralExpr(3U).into_underlying(),
-                                makeLiteralExpr(2U).into_underlying());
+        auto r2 = makeRangeAddr(baseId, makeLiteralHandle(3U), makeLiteralHandle(2U));
         auto v2 = makeSymbolValue(2222);
         auto s2 = internForTest(v2);
         mm.write(r2, s2);
@@ -743,12 +740,9 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 23;
 
         // [0,2) + [2,5) + [5,7) with the same value
-        auto r1 = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
-                                makeLiteralExpr(2U).into_underlying());
-        auto r2 = makeRangeAddr(baseId, makeLiteralExpr(2U).into_underlying(),
-                                makeLiteralExpr(3U).into_underlying());
-        auto r3 = makeRangeAddr(baseId, makeLiteralExpr(5U).into_underlying(),
-                                makeLiteralExpr(2U).into_underlying());
+        auto r1 = makeRangeAddr(baseId, makeLiteralHandle(0U), makeLiteralHandle(2U));
+        auto r2 = makeRangeAddr(baseId, makeLiteralHandle(2U), makeLiteralHandle(3U));
+        auto r3 = makeRangeAddr(baseId, makeLiteralHandle(5U), makeLiteralHandle(2U));
 
         auto v = makeSymbolValue(3333);
         auto s = internForTest(v);
@@ -771,12 +765,9 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 24;
 
         // [0,2) V, [2,5) W, [5,7) V → cannot merge into one due to the middle different value
-        auto r1 = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
-                                makeLiteralExpr(2U).into_underlying());
-        auto r2 = makeRangeAddr(baseId, makeLiteralExpr(2U).into_underlying(),
-                                makeLiteralExpr(3U).into_underlying());
-        auto r3 = makeRangeAddr(baseId, makeLiteralExpr(5U).into_underlying(),
-                                makeLiteralExpr(2U).into_underlying());
+        auto r1 = makeRangeAddr(baseId, makeLiteralHandle(0U), makeLiteralHandle(2U));
+        auto r2 = makeRangeAddr(baseId, makeLiteralHandle(2U), makeLiteralHandle(3U));
+        auto r3 = makeRangeAddr(baseId, makeLiteralHandle(5U), makeLiteralHandle(2U));
 
         auto v = makeSymbolValue(4444);
         auto s = internForTest(v);
@@ -979,8 +970,7 @@ namespace acslg::test::unit::analyzer {
         const unsigned baseId = 10;
 
         // A: [0,10) -> i
-        auto aRange = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
-                                    makeLiteralExpr(10U).into_underlying());
+        auto aRange = makeRangeAddr(baseId, makeLiteralHandle(0U), makeLiteralHandle(10U));
         auto rangeIndex = symbolic::ExprFactoryScope::current().rangeIndex("i");
         mm.write(aRange, rangeIndex);
 
