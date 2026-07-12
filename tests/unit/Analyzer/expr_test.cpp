@@ -1973,10 +1973,6 @@ namespace acslg::test::unit::analyzer {
         symbolic::AddressBox copiedHandleBox{handleBox};
         EXPECT_EQ(&handleBox.get(), varAddrA.get().get());
         EXPECT_EQ(&copiedHandleBox.get(), varAddrA.get().get());
-        symbolic::AddressBox ownedBox{varAddrA->addressClone()};
-        symbolic::AddressBox copiedOwnedBox{ownedBox};
-        EXPECT_EQ(ownedBox, copiedOwnedBox);
-        EXPECT_NE(&ownedBox.get(), &copiedOwnedBox.get());
 
         auto symbolValue = factory.symbolValue(
             symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::Int, 32},

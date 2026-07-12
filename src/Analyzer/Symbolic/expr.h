@@ -1094,8 +1094,6 @@ namespace acslg::analyzer::symbolic {
 
     class AddressBox {
       public:
-        explicit AddressBox(utils::not_null<std::unique_ptr<Address>> p) noexcept
-            : owned_(std::move(p).into_underlying()), ptr_(owned_.get()) {}
         explicit AddressBox(AddrHandle handle) noexcept;
         AddressBox(const Address &other)
             : owned_(other.addressClone().into_underlying()), ptr_(owned_.get()) {};
