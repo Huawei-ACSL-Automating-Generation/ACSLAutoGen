@@ -1779,19 +1779,14 @@ namespace acslg::analyzer::symbolic {
         SourcePoint fromPoint_;
         clang::QualType pointeeType_;
 
-        SymbolAddrBaseInfo(std::optional<utils::not_null<std::unique_ptr<const Address>>> fromAddr,
+        SymbolAddrBaseInfo(std::optional<AddrHandle> fromAddr,
                            SourcePoint fromPoint,
                            clang::QualType pointeeType)
             : fromAddr_(std::nullopt), fromPoint_(std::move(fromPoint)),
               pointeeType_(pointeeType) {
             if (fromAddr)
-                fromAddr_.emplace(AddressChild::fromConstOwned(std::move(fromAddr.value())));
+                fromAddr_.emplace(*fromAddr);
         }
-        SymbolAddrBaseInfo(AddrHandle fromAddr,
-                           SourcePoint fromPoint,
-                           clang::QualType pointeeType)
-            : fromAddr_(AddressChild{fromAddr}), fromPoint_(std::move(fromPoint)),
-              pointeeType_(pointeeType) {}
         SymbolAddrBaseInfo(const SymbolAddrBaseInfo &);
         SymbolAddrBaseInfo &operator=(const SymbolAddrBaseInfo &other) {
             if (&other == this)
