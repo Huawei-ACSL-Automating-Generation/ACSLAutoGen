@@ -968,15 +968,7 @@ namespace acslg::analyzer::symbolic {
 
         Structure(Info info, std::vector<ExprHandle> fields);
 
-        Structure(const Structure &other) : SymbolicExpr(other), Symbol(other), info_(other.info_) {
-            fields_.clear();
-            fields_.reserve(other.fields_.size());
-            std::ranges::transform(
-                other.fields_, std::back_inserter(fields_),
-                [](const ExprChild &field) -> ExprChild {
-                    return field;
-                });
-        }
+        Structure(const Structure &) = delete;
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_Structure;

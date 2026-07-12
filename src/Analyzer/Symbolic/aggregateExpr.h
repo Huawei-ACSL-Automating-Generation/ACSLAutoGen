@@ -106,7 +106,7 @@ namespace acslg::analyzer::symbolic {
             return e->getKind() == Symbol::Kind::K_SumOverRange;
         }
 
-        SumOverRange(const SumOverRange &)            = default;
+        SumOverRange(const SumOverRange &)            = delete;
         SumOverRange(SumOverRange &&)                 = default;
         SumOverRange &operator=(const SumOverRange &) = delete;
         SumOverRange &operator=(SumOverRange &&)      = delete;
@@ -151,9 +151,7 @@ namespace acslg::analyzer::symbolic {
             Exist
         };
 
-        QuantifierOverRange(const QuantifierOverRange &other)
-            : OverRangeExpr(other), quant_(other.quant_),
-              pred_(other.pred_) {}
+        QuantifierOverRange(const QuantifierOverRange &) = delete;
         QuantifierOverRange(QuantifierOverRange &&) = default;
         QuantifierOverRange &operator=(const QuantifierOverRange &) = delete;
         QuantifierOverRange &operator=(QuantifierOverRange &&) = delete;
@@ -208,9 +206,7 @@ namespace acslg::analyzer::symbolic {
             Min
         };
 
-        MaxMinOverRange(const MaxMinOverRange &other)
-            : OverRangeExpr(other), Symbol(other), extremum_(other.extremum_),
-              expr_(other.expr_), fromPoint_(other.fromPoint_) {}
+        MaxMinOverRange(const MaxMinOverRange &) = delete;
         MaxMinOverRange(MaxMinOverRange &&) = default;
         MaxMinOverRange &operator=(const MaxMinOverRange &) = delete;
         MaxMinOverRange &operator=(MaxMinOverRange &&) = delete;
