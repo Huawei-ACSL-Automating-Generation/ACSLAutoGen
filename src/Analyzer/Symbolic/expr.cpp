@@ -416,11 +416,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprChild ExprChild::copy() const {
-        if (ExprFactoryScope::hasCurrent())
-            return ExprChild{ExprFactoryScope::current().importExpr(*get())};
-        if (handle_)
-            return ExprChild{*handle_};
-        return ExprChild{owned_->get()->clone()};
+        return ExprChild{handle_};
     }
 
     utils::not_null<std::unique_ptr<Address>> AddressChild::clone() const {
@@ -1014,30 +1010,11 @@ namespace acslg::analyzer::symbolic {
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::BinaryOpExprNode::clone() const {
-        auto leftHandle  = left_.handle();
-        auto rightHandle = right_.handle();
-        if (leftHandle && rightHandle)
-            return std::make_unique<BinaryOpExpr>(*leftHandle, op_, *rightHandle);
-
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            return factory.cloneExpr(factory.binary(factory.importExpr(*left_), op_,
-                                                    factory.importExpr(*right_)));
-        }
-
-        return std::make_unique<BinaryOpExpr>(left_->clone(), op_, right_->clone());
+        return std::make_unique<BinaryOpExpr>(left_.handle(), op_, right_.handle());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> detail::UnaryOpExprNode::clone() const {
-        if (auto handle = expr_.handle())
-            return std::make_unique<UnaryOpExpr>(op_, *handle);
-
-        if (ExprFactoryScope::hasCurrent()) {
-            auto &factory = ExprFactoryScope::current();
-            return factory.cloneExpr(factory.unary(op_, factory.importExpr(*expr_)));
-        }
-
-        return std::make_unique<UnaryOpExpr>(op_, expr_->clone());
+        return std::make_unique<UnaryOpExpr>(op_, expr_.handle());
     }
 
     utils::not_null<std::unique_ptr<SymbolicExpr>> UnknownExpr::clone() const {

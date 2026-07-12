@@ -576,29 +576,17 @@ namespace acslg::analyzer::symbolic {
     class ExprChild {
       public:
         explicit ExprChild(ExprHandle handle) : handle_(handle) {}
-        explicit ExprChild(utils::not_null<std::unique_ptr<SymbolicExpr>> owned)
-            : ExprChild(ConstOwnedTag{}, utils::not_null<std::unique_ptr<const SymbolicExpr>>{
-                  std::move(owned).into_underlying()}) {}
 
-        utils::not_null<const SymbolicExpr *> get() const {
-            if (handle_)
-                return handle_->get();
-            return owned_->get().get();
-        }
+        utils::not_null<const SymbolicExpr *> get() const { return handle_.get(); }
 
         const SymbolicExpr &operator*() const { return *get(); }
         const SymbolicExpr *operator->() const { return get().get(); }
         ExprChild copy() const;
 
-        std::optional<ExprHandle> handle() const { return handle_; }
+        ExprHandle handle() const { return handle_; }
 
       private:
-        struct ConstOwnedTag {};
-        ExprChild(ConstOwnedTag, utils::not_null<std::unique_ptr<const SymbolicExpr>> owned)
-            : owned_(std::move(owned)) {}
-
-        std::optional<ExprHandle> handle_;
-        std::optional<utils::not_null<std::unique_ptr<const SymbolicExpr>>> owned_;
+        ExprHandle handle_;
     };
 
     namespace detail {
@@ -736,13 +724,6 @@ namespace acslg::analyzer::symbolic {
             }
         }
 
-        // TODO(style): May use template to unify constructors.
-        BinaryOpExprNode(utils::not_null<std::unique_ptr<SymbolicExpr>> left,
-                         Operator op,
-                         utils::not_null<std::unique_ptr<SymbolicExpr>> right)
-            : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()), left_(std::move(left)),
-              op_(op), right_(std::move(right)) {}
-
         BinaryOpExprNode(ExprHandle left, Operator op, ExprHandle right)
             : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()), left_(left), op_(op),
               right_(right) {}
@@ -817,10 +798,6 @@ namespace acslg::analyzer::symbolic {
                 default: ERROR("Unknown operator");
             }
         }
-
-        UnaryOpExprNode(Operator op, utils::not_null<std::unique_ptr<SymbolicExpr>> expr)
-            : SymbolicExpr(ExprKind::K_UnaryOpExpr, expr->getValType()), op_(op),
-              expr_(std::move(expr)) {}
 
         UnaryOpExprNode(Operator op, ExprHandle expr)
             : SymbolicExpr(ExprKind::K_UnaryOpExpr, expr->getValType()), op_(op), expr_(expr) {}
