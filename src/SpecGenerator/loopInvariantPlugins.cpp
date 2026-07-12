@@ -702,8 +702,9 @@ namespace acslg::spec_generator {
                 // 1) Try to lift the address to a range form (more compact assigns; use range addr
                 // in the post-state as well).
                 if (auto range = tryGetAsRange(addr)) {
+                    symb::AddressBox rangeBox{factory.importAddress(range.value())};
                     if (pattern) {
-                        auto [_, ok] = memoryMap.emplace(range.value(), unknownHandle());
+                        auto [_, ok] = memoryMap.emplace(rangeBox, unknownHandle());
                         // todo
                         // std::make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(),
                         // Add,
@@ -722,7 +723,7 @@ namespace acslg::spec_generator {
                         if (!ok && !indexInfo.preciseLoopCount->isUnknown())
                             UNREACHABLE();
                     } else {
-                        auto [_, ok] = memoryMap.emplace(range.value(), unknownHandle());
+                        auto [_, ok] = memoryMap.emplace(rangeBox, unknownHandle());
 
                         // Deal with loops like
                         // {
@@ -737,7 +738,7 @@ namespace acslg::spec_generator {
                         if (!ok && !indexInfo.preciseLoopCount->isUnknown())
                             UNREACHABLE();
                     }
-                    assignedAddrs.emplace_back(std::move(range.value()));
+                    assignedAddrs.emplace_back(rangeBox);
                 } else {
                     // Use lambda to eliminate nested if
                     [&]() {
@@ -890,7 +891,9 @@ namespace acslg::spec_generator {
                 }
                 for (auto &[addr, _] : patternInfo.interruptedPathPatternsMaps.at(i)) {
                     if (auto range = tryGetAsRange(addr)) {
-                        postMemoryMap.emplace(std::move(range.value()), unknownHandle());
+                        postMemoryMap.emplace(
+                            symb::AddressBox{factory.importAddress(range.value())},
+                            unknownHandle());
                     } else {
                         postMemoryMap.emplace(addr, unknownHandle());
                     }

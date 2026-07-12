@@ -338,7 +338,8 @@ namespace acslg::spec_generator {
                          subedValue->dump() + "} is discarded.");
                     continue;
                 }
-                toUpdate.memoryMap.insert_or_assign(*subedAddr, subedValue);
+                toUpdate.memoryMap.insert_or_assign(
+                    symb::AddressBox{factory.importAddress(*subedAddr)}, subedValue);
             }
 
             for (const auto &cond : info.pathConds) {

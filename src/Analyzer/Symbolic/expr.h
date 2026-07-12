@@ -1095,30 +1095,8 @@ namespace acslg::analyzer::symbolic {
     class AddressBox {
       public:
         explicit AddressBox(AddrHandle handle) noexcept;
-        AddressBox(const Address &other)
-            : owned_(other.addressClone().into_underlying()), ptr_(owned_.get()) {};
-
-        AddressBox(const AddressBox &other) {
-            if (other.owned_) {
-                owned_ = other.ptr_->addressClone().into_underlying();
-                ptr_   = owned_.get();
-            } else {
-                ptr_ = other.ptr_;
-            }
-        }
-        AddressBox &operator=(const AddressBox &other) {
-            if (this == &other)
-                return *this;
-            if (other.owned_) {
-                owned_ = other.ptr_->addressClone().into_underlying();
-                ptr_   = owned_.get();
-            } else {
-                owned_.reset();
-                ptr_ = other.ptr_;
-            }
-            return *this;
-        }
-
+        AddressBox(const AddressBox &)                = default;
+        AddressBox &operator=(const AddressBox &)     = default;
         AddressBox(AddressBox &&) noexcept            = default;
         AddressBox &operator=(AddressBox &&) noexcept = default;
 
@@ -1137,7 +1115,6 @@ namespace acslg::analyzer::symbolic {
         std::size_t hash() const noexcept { return ptr_->hash(); }
 
       private:
-        std::unique_ptr<Address> owned_;
         const Address *ptr_;
     };
 
