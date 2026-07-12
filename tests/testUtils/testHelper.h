@@ -92,10 +92,6 @@ namespace acslg::test::utils {
         analyzer::symbolic::VariableAddress makeVariableAddr(unsigned int id);
         ::acslg::utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
         makeLiteralExpr(std::uint64_t value);
-        ::acslg::utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-        makeRangeIndexExpr(std::string_view name);
-        ::acslg::utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-        cloneExpr(const analyzer::symbolic::SymbolicExpr &expr);
         analyzer::symbolic::SymbolAddress makeRangeAddr(
             unsigned int id,
             std::unique_ptr<const analyzer::symbolic::SymbolicExpr> offset,

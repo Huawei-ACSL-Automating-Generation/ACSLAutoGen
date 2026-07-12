@@ -981,8 +981,8 @@ namespace acslg::test::unit::analyzer {
         // A: [0,10) -> i
         auto aRange = makeRangeAddr(baseId, makeLiteralExpr(0U).into_underlying(),
                                     makeLiteralExpr(10U).into_underlying());
-        auto rangeIndex = makeRangeIndexExpr("i");
-        mm.write(aRange, internForTest(rangeIndex));
+        auto rangeIndex = symbolic::ExprFactoryScope::current().rangeIndex("i");
+        mm.write(aRange, rangeIndex);
 
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 0, symbolic::detail::LiteralExprNode{uint64_t{0}}));
         EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 1, symbolic::detail::LiteralExprNode{uint64_t{1}}));
