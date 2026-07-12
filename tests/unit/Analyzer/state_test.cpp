@@ -221,15 +221,20 @@ namespace acslg::test::unit::analyzer {
         TestPath path;
         Expr *expr = (Expr *)1;
         detail::LiteralExprNode liter_1(1), liter_2(2U);
-        UnaryOpExpr un_1(UnaryOpExpr::Operator::Minus, make_unique<detail::LiteralExprNode>(3));
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto un_1 = factory.cloneExpr(
+            factory.unary(UnaryOpExpr::Operator::Minus, factory.literal(3)));
 
         auto addr = path.allocMemory(varDecl);
 
-        BinaryOpExpr bin_1(addr->clone(), BinaryOpExpr::Operator::Equal, liter_1.clone());
+        auto bin_1 = factory.cloneExpr(factory.binary(
+            factory.importExpr(*addr), BinaryOpExpr::Operator::Equal,
+            factory.importExpr(liter_1)));
 
         EXPECT_CALL(path, convertExpr)
-            .WillOnce(Return(un_1.clone()))
-            .WillOnce(Return(bin_1.clone()))
+            .WillOnce(Return(un_1->clone()))
+            .WillOnce(Return(bin_1->clone()))
             .WillOnce(Return(liter_2.clone()));
 
         path.insertVarState(addr, expr);

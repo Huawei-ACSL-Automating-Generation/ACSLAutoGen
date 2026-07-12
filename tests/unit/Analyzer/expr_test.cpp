@@ -223,8 +223,11 @@ namespace acslg::test::unit::analyzer {
         }
 
         unique_ptr<SymbolicExpr> makeAdd(unique_ptr<SymbolicExpr> a, unique_ptr<SymbolicExpr> b) {
-            return make_unique<BinaryOpExpr>(std::move(a), BinaryOpExpr::Operator::Add,
-                                             std::move(b));
+            auto &factory = ExprFactoryScope::current();
+            return factory
+                .cloneExpr(factory.binary(factory.importExpr(*a), BinaryOpExpr::Operator::Add,
+                                          factory.importExpr(*b)))
+                .into_underlying();
         }
 
         template <class T>
@@ -1056,9 +1059,9 @@ namespace acslg::test::unit::analyzer {
         auto x = factory.cloneExpr(
             symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
                 .handle());
+        auto xHandle = factory.importExpr(*x);
         NonLinearBinaryProbe legacyProduct{
-            cloneWithFactory(factory, *x), symbolic::BinaryOpExpr::Operator::Multiply,
-            cloneWithFactory(factory, *x)};
+            xHandle, symbolic::BinaryOpExpr::Operator::Multiply, xHandle};
 
         auto simplified = legacyProduct.callSimplifiedExprIfLinear();
         const auto &product = simplified.cast<symbolic::BinaryOpExpr>();
@@ -1215,29 +1218,6 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(imported.get().get(), expected.get().get());
         EXPECT_EQ(imported.cast<symbolic::detail::LiteralExprNode>().getLiteralType(),
                   symbolic::detail::LiteralExprNode::LiteralType::UInt64);
-    }
-
-    TEST(ExprFactoryTest, ScopedLegacyOperationCloneImportsChildren) {
-        symbolic::ExprFactory factory;
-        symbolic::ExprFactoryScope scope(factory);
-
-        auto legacyBinary = make_unique<symbolic::BinaryOpExpr>(
-            make_unique<symbolic::detail::LiteralExprNode>(int64_t{1}),
-            symbolic::BinaryOpExpr::Operator::Add,
-            make_unique<symbolic::detail::LiteralExprNode>(int64_t{2}));
-        auto clonedBinary = legacyBinary->clone();
-        auto &binary = *symbolic::cast<symbolic::BinaryOpExpr>(clonedBinary.get().get());
-
-        EXPECT_EQ(binary.getLeft().get(), factory.literal(int64_t{1}).get().get());
-        EXPECT_EQ(binary.getRight().get(), factory.literal(int64_t{2}).get().get());
-
-        auto legacyUnary = make_unique<symbolic::UnaryOpExpr>(
-            symbolic::UnaryOpExpr::Operator::Minus,
-            make_unique<symbolic::detail::LiteralExprNode>(int64_t{3}));
-        auto clonedUnary = legacyUnary->clone();
-        auto &unary = *symbolic::cast<symbolic::UnaryOpExpr>(clonedUnary.get().get());
-
-        EXPECT_EQ(unary.getSub().get(), factory.literal(int64_t{3}).get().get());
     }
 
     TEST(ExprFactoryTest, UnknownBuilderReusesUnknownNode) {
@@ -2421,17 +2401,16 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory setupFactory;
         auto legacyAddr = cloneSymbolAddressForLegacyTest(
             symbolic::Addr::symbol(setupFactory, var->getType(), point).handle());
-        auto legacyOffset = setupFactory.cloneExpr(setupFactory.literal(int64_t{4}));
-        symbolic::BinaryOpExpr legacyAdd(std::move(legacyAddr),
-                                         symbolic::BinaryOpExpr::Operator::Add,
-                                         std::move(legacyOffset));
+        auto legacyAdd = setupFactory.binary(
+            setupFactory.importExpr(*legacyAddr), symbolic::BinaryOpExpr::Operator::Add,
+            setupFactory.literal(int64_t{4}));
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto expected =
             factory.symbolAddress(var->getType(), std::nullopt, point, factory.literal(int64_t{4}));
 
-        auto evaluatedHandle = symbolic::tryEvalAsSymbolAddrHandle(factory, legacyAdd);
+        auto evaluatedHandle = symbolic::tryEvalAsSymbolAddrHandle(factory, *legacyAdd);
         ASSERT_TRUE(evaluatedHandle);
         EXPECT_EQ(*evaluatedHandle, expected);
         EXPECT_EQ(evaluatedHandle->cast<symbolic::SymbolAddress>().getOffset().get(),
