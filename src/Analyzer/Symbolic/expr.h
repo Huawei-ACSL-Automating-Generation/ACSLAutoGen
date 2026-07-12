@@ -580,11 +580,6 @@ namespace acslg::analyzer::symbolic {
             : ExprChild(ConstOwnedTag{}, utils::not_null<std::unique_ptr<const SymbolicExpr>>{
                   std::move(owned).into_underlying()}) {}
 
-        static ExprChild fromConstOwned(
-            utils::not_null<std::unique_ptr<const SymbolicExpr>> owned) {
-            return ExprChild{ConstOwnedTag{}, std::move(owned)};
-        }
-
         utils::not_null<const SymbolicExpr *> get() const {
             if (handle_)
                 return handle_->get();
