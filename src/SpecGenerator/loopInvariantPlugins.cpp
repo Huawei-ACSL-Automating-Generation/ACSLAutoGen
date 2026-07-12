@@ -106,14 +106,6 @@ namespace acslg::spec_generator {
                                               std::forward<FactoryRebuild>(factoryRebuild));
         }
 
-        template <typename FactoryRebuild>
-        symb::SymbolAddress rebuildSymbolAddress(const symb::SymbolAddress &address,
-                                                 FactoryRebuild &&factoryRebuild) {
-            auto rebuilt = rebuildSymbolAddressHandle(
-                address, std::forward<FactoryRebuild>(factoryRebuild));
-            return symb::SymbolAddress(rebuilt.template cast<symb::SymbolAddress>());
-        }
-
         symb::ExprHandle unknownHandle() {
             return symb::Expr::unknown().handle();
         }
@@ -617,7 +609,7 @@ namespace acslg::spec_generator {
             }; // isLocal end
 
             auto tryGetAsRange =
-                [&](const symb::Address &addr) -> std::optional<symb::SymbolAddress> {
+                [&](const symb::Address &addr) -> std::optional<symb::AddrHandle> {
                 // If `addr` is not a SymbolAddress (e.g. a plain variable address), we cannot lift
                 // it to a range form.
                 auto symbolAddr = symb::dyn_cast<const symb::SymbolAddress>(&addr);
@@ -636,7 +628,7 @@ namespace acslg::spec_generator {
                         TODO();
                     // Case A: the base address itself moves linearly (x-step). Reset the offset to
                     // zero and set length to loopCount to represent a contiguous writable range.
-                    auto result = rebuildSymbolAddress(
+                    auto result = rebuildSymbolAddressHandle(
                         *symbolAddr,
                         [](symb::ExprFactory &factory, symb::AddrHandle address) {
                             return factory.withOffset(
@@ -648,7 +640,7 @@ namespace acslg::spec_generator {
                         !indexInfo.preciseLoopCount->isUnknown() ? indexInfo.preciseLoopCount
                                                                  : indexInfo.maxLoopCount;
                     auto lengthExpr = symb::Expr{factory, loopCount}.simplified();
-                    auto resultWithLength = rebuildSymbolAddress(
+                    auto resultWithLength = rebuildSymbolAddressHandle(
                         result,
                         [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
                             return factory.withLength(address, lengthExpr.handle());
@@ -667,7 +659,7 @@ namespace acslg::spec_generator {
                             TODO();
                         // Case B: the base is stable but the offset changes linearly (typical for
                         // p[i] where i changes). Use the initial offset and set length = loopCount.
-                        auto result = rebuildSymbolAddress(
+                        auto result = rebuildSymbolAddressHandle(
                             *symbolAddr,
                             [&pattern](symb::ExprFactory &factory, symb::AddrHandle address) {
                                 return factory.withOffset(
@@ -678,7 +670,7 @@ namespace acslg::spec_generator {
                             !indexInfo.preciseLoopCount->isUnknown() ? indexInfo.preciseLoopCount
                                                                      : indexInfo.maxLoopCount;
                         auto lengthExpr = symb::Expr{factory, loopCount}.simplified();
-                        auto resultWithLength = rebuildSymbolAddress(
+                        auto resultWithLength = rebuildSymbolAddressHandle(
                             result,
                             [&lengthExpr](symb::ExprFactory &factory, symb::AddrHandle address) {
                                 return factory.withLength(address, lengthExpr.handle());
@@ -702,7 +694,7 @@ namespace acslg::spec_generator {
                 // 1) Try to lift the address to a range form (more compact assigns; use range addr
                 // in the post-state as well).
                 if (auto range = tryGetAsRange(addr)) {
-                    symb::AddressBox rangeBox{factory.importAddress(range.value())};
+                    symb::AddressBox rangeBox{*range};
                     if (pattern) {
                         auto [_, ok] = memoryMap.emplace(rangeBox, unknownHandle());
                         // todo
@@ -892,7 +884,7 @@ namespace acslg::spec_generator {
                 for (auto &[addr, _] : patternInfo.interruptedPathPatternsMaps.at(i)) {
                     if (auto range = tryGetAsRange(addr)) {
                         postMemoryMap.emplace(
-                            symb::AddressBox{factory.importAddress(range.value())},
+                            symb::AddressBox{*range},
                             unknownHandle());
                     } else {
                         postMemoryMap.emplace(addr, unknownHandle());
