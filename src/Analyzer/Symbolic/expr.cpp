@@ -1023,18 +1023,6 @@ namespace acslg::analyzer::symbolic {
         return std::make_unique<Structure>(*this);
     }
 
-    utils::not_null<std::unique_ptr<Address>> SymbolAddress::addressClone() const {
-        return std::make_unique<SymbolAddress>(*this);
-    }
-
-    utils::not_null<std::unique_ptr<Address>> VariableAddress::addressClone() const {
-        return std::make_unique<VariableAddress>(*this);
-    }
-
-    utils::not_null<std::unique_ptr<Address>> FieldAddress::addressClone() const {
-        return std::make_unique<FieldAddress>(*this);
-    }
-
     int64_t detail::LiteralExprNode::getLiteralValue() const {
         switch (getLiteralType()) {
             case LiteralType::Boolean: return data_.boolValue;

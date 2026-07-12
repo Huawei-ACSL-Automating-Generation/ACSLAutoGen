@@ -1057,7 +1057,6 @@ namespace acslg::analyzer::symbolic {
         }
         virtual std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const = 0;
         virtual int getDimension() const                                                   = 0;
-        virtual utils::not_null<std::unique_ptr<Address>> addressClone() const             = 0;
 
         auto getPointeeType() const -> const auto & { return pointeeType_; }
 
@@ -1698,7 +1697,6 @@ namespace acslg::analyzer::symbolic {
       public:
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;
-        virtual utils::not_null<std::unique_ptr<Address>> addressClone() const override;
 
       private:
         utils::expected<std::string, GetACSLError> doGetACSLOfValue(
@@ -1810,7 +1808,6 @@ namespace acslg::analyzer::symbolic {
         auto getFrom() const -> const auto & { return from_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;
-        virtual utils::not_null<std::unique_ptr<Address>> addressClone() const override;
 
         // StInG: Support functions for affine invariant analysis
         UsedMap collectUsedSymbols() const override {
@@ -1893,7 +1890,6 @@ namespace acslg::analyzer::symbolic {
         auto getFieldIndex() const -> const auto & { return fieldIndex_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;
-        virtual utils::not_null<std::unique_ptr<Address>> addressClone() const override;
 
         // StInG: Support functions for affine invariant analysis
         UsedMap collectUsedSymbols() const override {

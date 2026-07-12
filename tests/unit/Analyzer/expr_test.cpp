@@ -2019,7 +2019,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(fieldAddrA.isa<symbolic::FieldAddress>());
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle(), varAddrA);
-        auto clonedAddress = fieldAddrA->addressClone();
+        auto clonedAddress = fieldAddrA->clone();
         auto *clonedField =
             symbolic::cast<symbolic::FieldAddress>(clonedAddress.get().get());
         EXPECT_EQ(clonedField->getBaseAddr().handle(), varAddrA);
