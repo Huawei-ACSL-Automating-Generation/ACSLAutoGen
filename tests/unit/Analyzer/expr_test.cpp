@@ -746,39 +746,6 @@ namespace acslg::test::unit::analyzer {
             }
         };
 
-        class BaseSimplifiedProbe final : public symbolic::SymbolicExpr {
-          public:
-            BaseSimplifiedProbe()
-                : SymbolicExpr(ExprKind::K_UnknownExpr, Type{ScalarKind::Void, 0}) {}
-
-            ::acslg::utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> clone()
-                const override {
-                return cloneBinaryForLegacyTest(
-                    cloneLiteralForLegacyTest(1), symbolic::BinaryOpExpr::Operator::Add,
-                    cloneLiteralForLegacyTest(2));
-            }
-
-            std::string dump() const override { return "base-simplified-probe"; }
-
-            bool equal(const symbolic::SymbolicExpr &other) const override {
-                return symbolic::dyn_cast<const BaseSimplifiedProbe>(&other) != nullptr;
-            }
-
-            std::size_t hash() const override { return 314159; }
-
-            bool isLinear() const override { return false; }
-            int getMaxDegree() const override { return -1; }
-
-          private:
-            ::acslg::utils::expected<std::string, GetACSLError> doGetACSL(
-                const GetACSLConfig &,
-                std::unordered_set<symbolic::SourcePoint> &,
-                std::optional<symbolic::SourcePoint>,
-                unsigned,
-                bool) const override {
-                return dump();
-            }
-        };
     } // namespace
 
     TEST(ExprFactoryTest, StripSizeofFactorPreservesHandleIdentity) {
@@ -808,6 +775,13 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(a, b);
         EXPECT_NE(a, c);
         EXPECT_EQ(factory.size(), 2u);
+    }
+
+    TEST(ExprFactoryTest, ImportRejectsUnsupportedDynamicExpressionTypes) {
+        symbolic::ExprFactory factory;
+        CollisionExpr unsupported{1};
+
+        EXPECT_DEATH((void)factory.importExpr(unsupported), "");
     }
 
     TEST(ExprFactoryTest, TypedBuildersReuseEqualLiteralAndOperationNodes) {
@@ -1071,19 +1045,6 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(product.getRight().get(),
                   factory.importExpr(*product.getRight().get()).get().get());
         EXPECT_EQ(simplified, factory.importExpr(legacyProduct));
-    }
-
-    TEST(ExprFactoryTest, ScopedDefaultSimplifiedExprImportsCloneThroughFactory) {
-        BaseSimplifiedProbe legacy;
-
-        symbolic::ExprFactory factory;
-        symbolic::ExprFactoryScope scope(factory);
-        auto simplified = legacy.simplifiedExpr();
-        auto expected = cloneBinaryForLegacyTest(
-            cloneLiteralForLegacyTest(1), symbolic::BinaryOpExpr::Operator::Add,
-            cloneLiteralForLegacyTest(2));
-
-        EXPECT_EQ(factory.importExpr(*simplified), factory.importExpr(*expected));
     }
 
     TEST(ExprFactoryTest, SimplifiedExprHandleReturnsInternedNode) {
@@ -2026,6 +1987,54 @@ namespace acslg::test::unit::analyzer {
         auto *clonedField =
             symbolic::cast<symbolic::FieldAddress>(clonedAddress.get().get());
         EXPECT_EQ(clonedField->getBaseAddr().handle(), varAddrA);
+    }
+
+    TEST(ExprFactoryTest, ImportsAddressAndSymbolValueGraphsIntoTargetFactory) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct S { int field; };
+            void f(void) { struct S value; }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto *record = e.findFirstDecl<RecordDecl>();
+        ASSERT_NE(record, nullptr);
+        record = record->getDefinition();
+        ASSERT_NE(record, nullptr);
+        auto *field = *record->field_begin();
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory source;
+        auto sourceVariable = source.variableAddress(var);
+        auto sourceField =
+            source.fieldAddress(field->getType(), record, sourceVariable, field->getFieldIndex());
+        auto sourceValue = source.symbolValue(symbolic::deriveType(field->getType()),
+                                              sourceField, point);
+
+        symbolic::ExprFactory target;
+        auto importedVariable = target.importAddress(*sourceVariable);
+        auto importedField    = target.importAddress(*sourceField);
+        auto importedValue    = target.importExpr(*sourceValue);
+
+        auto expectedVariable = target.variableAddress(var);
+        auto expectedField =
+            target.fieldAddress(field->getType(), record, expectedVariable, field->getFieldIndex());
+        auto expectedValue = target.symbolValue(symbolic::deriveType(field->getType()),
+                                                expectedField, point);
+
+        EXPECT_EQ(importedVariable, expectedVariable);
+        EXPECT_EQ(importedField, expectedField);
+        EXPECT_EQ(importedValue, expectedValue);
+        EXPECT_EQ(importedField.cast<symbolic::FieldAddress>().getBaseAddr().handle(),
+                  expectedVariable);
+        EXPECT_EQ(importedValue.cast<symbolic::SymbolValue>().getFromAddrHandle(), expectedField);
+        EXPECT_NE(importedVariable.get().get(), sourceVariable.get().get());
+        EXPECT_NE(importedField.get().get(), sourceField.get().get());
+        EXPECT_NE(importedValue.get().get(), sourceValue.get().get());
     }
 
     TEST(ExprFactoryTest, StructureBuilderInitializesFieldHandles) {

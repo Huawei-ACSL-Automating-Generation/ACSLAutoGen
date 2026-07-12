@@ -445,6 +445,17 @@ namespace acslg::analyzer::symbolic {
             return preserveImportedType(binary(left, binaryExpr->getOperator(), right));
         }
 
+        if (auto *variableAddr = dyn_cast<VariableAddress>(&expr))
+            return preserveImportedType(variableAddress(variableAddr->getFrom()).asExpr());
+
+        if (auto *fieldAddr = dyn_cast<FieldAddress>(&expr)) {
+            auto base = importAddress(*fieldAddr->getBaseAddr());
+            return preserveImportedType(
+                fieldAddress(fieldAddr->getPointeeType(), fieldAddr->getDefinition(), base,
+                             fieldAddr->getFieldIndex())
+                    .asExpr());
+        }
+
         if (auto *symbolAddr = dyn_cast<SymbolAddress>(&expr)) {
             auto from = symbolAddr->getFromAddrHandle();
             if (from)
@@ -454,44 +465,51 @@ namespace acslg::analyzer::symbolic {
             if (const auto &legacyLength = symbolAddr->getLength(); legacyLength)
                 length = importExpr(*legacyLength.value());
 
-            return symbolAddress(symbolAddr->getPointeeType(), from,
-                                 symbolAddr->getFromPoint().value(),
-                                 importExpr(*symbolAddr->getOffset()), length)
-                .asExpr();
+            return preserveImportedType(
+                symbolAddress(symbolAddr->getPointeeType(), from,
+                              symbolAddr->getFromPoint().value(),
+                              importExpr(*symbolAddr->getOffset()), length)
+                    .asExpr());
         }
+
+        if (auto *symbolVal = dyn_cast<SymbolValue>(&expr))
+            return preserveImportedType(
+                symbolValue(symbolVal->getValType(), importAddress(*symbolVal->getFromAddrHandle()),
+                            symbolVal->getFromPoint().value()));
 
         if (auto *structure = dyn_cast<Structure>(&expr)) {
             std::vector<ExprHandle> fields;
             fields.reserve(structure->getNumFields());
             for (auto field : structure->fieldsValues())
                 fields.push_back(importExpr(*field));
-            return intern(std::make_unique<Structure>(structure->getInfo(), std::move(fields)));
+            return preserveImportedType(
+                intern(std::make_unique<Structure>(structure->getInfo(), std::move(fields))));
         }
 
         if (auto *sum = dyn_cast<SumOverRange>(&expr)) {
             auto fromPoint = sum->getFromPoint();
             if (!fromPoint)
                 ERROR("SumOverRange must have a source point.");
-            return makeSumOverRangeHandle(
-                *this, sum->getRange(), sum->getIndexName(), fromPoint.value());
+            return preserveImportedType(makeSumOverRangeHandle(
+                *this, sum->getRange(), sum->getIndexName(), fromPoint.value()));
         }
 
         if (auto *quantifier = dyn_cast<QuantifierOverRange>(&expr)) {
-            return makeQuantifierOverRangeHandle(
+            return preserveImportedType(makeQuantifierOverRangeHandle(
                 *this, quantifier->getRange(), quantifier->getIndexName(),
-                quantifier->getQuantifier(), quantifier->getPredicate());
+                quantifier->getQuantifier(), quantifier->getPredicate()));
         }
 
         if (auto *maxMin = dyn_cast<MaxMinOverRange>(&expr)) {
             auto fromPoint = maxMin->getFromPoint();
             if (!fromPoint)
                 ERROR("MaxMinOverRange must have a source point.");
-            return makeMaxMinOverRangeHandle(
+            return preserveImportedType(makeMaxMinOverRangeHandle(
                 *this, maxMin->getRange(), maxMin->getIndexName(), maxMin->getExtremum(),
-                maxMin->getExpr(), fromPoint.value());
+                maxMin->getExpr(), fromPoint.value()));
         }
 
-        return intern(expr.clone());
+        ERROR("Unsupported SymbolicExpr type in ExprFactory::importExpr: " + expr.dump());
     }
 
     namespace {
