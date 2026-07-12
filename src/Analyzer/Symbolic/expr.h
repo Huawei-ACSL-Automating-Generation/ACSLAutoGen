@@ -1259,11 +1259,11 @@ namespace acslg::analyzer::symbolic {
 
         ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node);
 
-        AddrHandle internAddress(utils::not_null<std::unique_ptr<Address>> node);
-
         size_t size() const { return owned_.size(); }
 
       private:
+        AddrHandle internAddress(utils::not_null<std::unique_ptr<Address>> node);
+
         std::vector<std::unique_ptr<SymbolicExpr>> owned_;
         std::unordered_map<size_t, std::vector<const SymbolicExpr *>> interned_;
     };
