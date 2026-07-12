@@ -1119,10 +1119,9 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto from = symbolic::Addr::variable(var);
-        auto x = symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
-                     .handle()
-                     ->clone();
-        auto xHandle = factory.importExpr(*x);
+        auto xHandle =
+            symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
+                .handle();
         NonLinearBinaryProbe legacyProduct{
             xHandle, symbolic::BinaryOpExpr::Operator::Multiply, xHandle};
 
@@ -1184,38 +1183,33 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto from = symbolic::Addr::variable(var);
-        auto x = symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
-                     .handle()
-                     ->clone();
-        auto predicate = cloneBinaryForLegacyTest(
-            cloneWithFactory(factory, *x), symbolic::BinaryOpExpr::Operator::Equal,
-            cloneLiteralForLegacyTest(0));
-        auto wrapped = cloneBinaryForLegacyTest(
-            std::move(predicate), symbolic::BinaryOpExpr::Operator::Equal,
-            cloneLiteralForLegacyTest(1));
+        auto x = symbolic::Expr::symbolValue(
+                     symbolic::deriveType(var->getType()), from, point)
+                     .handle();
+        auto zero = factory.literal(int64_t{0});
+        auto predicate =
+            factory.binary(x, symbolic::BinaryOpExpr::Operator::Equal, zero);
+        auto wrapped = factory.binary(predicate, symbolic::BinaryOpExpr::Operator::Equal,
+                                      factory.literal(int64_t{1}));
 
         auto simplified = wrapped->simplifiedExpr();
         auto *returnedPredicate =
             symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
 
-        auto expectedX = factory.importExpr(*x);
-        auto zero = factory.literal(int64_t{0});
         EXPECT_EQ(returnedPredicate->getOperator(), symbolic::BinaryOpExpr::Operator::Equal);
-        EXPECT_EQ(returnedPredicate->getLeft().get(), expectedX.get().get());
+        EXPECT_EQ(returnedPredicate->getLeft().get(), x.get().get());
         EXPECT_EQ(returnedPredicate->getRight().get(), zero.get().get());
         EXPECT_EQ(factory.importExpr(*simplified),
-                  factory.binary(expectedX, symbolic::BinaryOpExpr::Operator::Equal, zero));
+                  factory.binary(x, symbolic::BinaryOpExpr::Operator::Equal, zero));
     }
 
     TEST(ExprFactoryTest, ConstantEvalReturnsInternedLiteral) {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        auto expr = factory
-                        .binary(factory.literal(int64_t{1}),
-                                symbolic::BinaryOpExpr::Operator::Add,
-                                factory.literal(int64_t{2}))
-                        ->clone();
+        auto expr = factory.binary(factory.literal(int64_t{1}),
+                                   symbolic::BinaryOpExpr::Operator::Add,
+                                   factory.literal(int64_t{2}));
 
         auto *literal = expr->evalToConstExpr();
 
@@ -1227,23 +1221,17 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(factory.importExpr(*simplified), factory.literal(int64_t{3}));
     }
 
-    TEST(ExprFactoryTest, ImportsLegacyOperationTreesIntoInternedDag) {
+    TEST(ExprFactoryTest, ImportsOperationTreesAcrossFactoriesIntoInternedDag) {
+        symbolic::ExprFactory source;
+        auto sourceUnary = source.unary(symbolic::UnaryOpExpr::Operator::Minus,
+                                        source.literal(int64_t{1}));
+        symbolic::detail::BinaryOpExprNode sourceTree{
+            sourceUnary, symbolic::BinaryOpExpr::Operator::Add,
+            source.literal(int64_t{2})};
+
         symbolic::ExprFactory factory;
-
-        auto legacy = [&]() {
-            symbolic::ExprFactoryScope scope(factory);
-            auto unary = factory
-                             .unary(symbolic::UnaryOpExpr::Operator::Minus,
-                                    factory.literal(int64_t{1}))
-                             ->clone();
-            return cloneBinaryForLegacyTest(
-                std::move(unary),
-                symbolic::BinaryOpExpr::Operator::Add,
-                cloneLiteralForLegacyTest(2));
-        }();
-
-        auto imported = factory.importExpr(*legacy);
-        auto repeated = factory.importExpr(*legacy->clone());
+        auto imported = factory.importExpr(sourceTree);
+        auto repeated = factory.importExpr(sourceTree);
 
         EXPECT_EQ(imported, repeated);
         auto one = factory.literal(int64_t{1});
@@ -1255,7 +1243,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(unary->getSub().get(), one.get().get());
 
         symbolic::ExprFactoryScope scope(factory);
-        symbolic::Expr facade{*legacy};
+        symbolic::Expr facade{sourceTree};
         EXPECT_EQ(facade.handle(), imported);
     }
 
