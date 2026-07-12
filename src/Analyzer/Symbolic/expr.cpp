@@ -374,7 +374,7 @@ namespace acslg::analyzer::symbolic {
                         *run(quantifier->getPredicate()));
                 }
                 if (auto *maxMin = dyn_cast<const MaxMinOverRange>(&expr)) {
-                    auto range = requireRange(run(maxMin->getRange()));
+                    const auto &range = requireRange(run(maxMin->getRange()));
                     auto body  = run(maxMin->getExpr());
                     if (maxMin->getFromPoint().value() == pointToSub)
                         TODO();
@@ -2088,17 +2088,6 @@ namespace acslg::analyzer::symbolic {
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
         return {{hash(), this}};
-    }
-
-    SymbolAddress::SymbolAddress(const SymbolAddress &other)
-        : Address(other), Symbol(other), offset_(other.offset_),
-          fromPoint_(other.fromPoint_), length_(std::nullopt) {
-        if (other.length_)
-            length_.emplace(other.length_.value());
-        if (other.fromAddr_ == std::nullopt)
-            fromAddr_ = std::nullopt;
-        else
-            fromAddr_.emplace(other.fromAddr_.value());
     }
 
     SymbolAddrBaseInfo::SymbolAddrBaseInfo(const SymbolAddrBaseInfo &other)

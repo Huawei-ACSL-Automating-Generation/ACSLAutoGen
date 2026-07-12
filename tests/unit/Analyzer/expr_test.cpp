@@ -26,6 +26,7 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_move_assignable_v<symbolic::detail::BinaryOpExprNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::FieldAddress>);
     static_assert(!std::is_copy_constructible_v<symbolic::VariableAddress>);
+    static_assert(!std::is_copy_constructible_v<symbolic::SymbolAddress>);
     static_assert(!std::is_copy_assignable_v<symbolic::SymbolAddress>);
     static_assert(!std::is_copy_assignable_v<symbolic::Structure>);
     static_assert(!std::is_move_assignable_v<symbolic::QuantifierOverRange>);

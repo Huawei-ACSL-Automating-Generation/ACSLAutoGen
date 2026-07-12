@@ -199,7 +199,7 @@ namespace acslg::analyzer {
         /// Symbolic range mapping
         std::unordered_map<
             symbolic::SymbolAddrBaseInfo,
-            std::unordered_map<symbolic::SymbolAddress, StoredValue>>
+            symbolic::AddressBoxMap<StoredValue>>
             memoryMap_symbolicRange_;
 
         symbolic::ExprFactory &factory() const { return *factory_; }
@@ -339,9 +339,7 @@ namespace acslg::analyzer {
                         return R{symbolic::AddressBox{addr}, c_inner_->second.get()};
                     }
                     case Phase::Symb: {
-                        const symbolic::Address &addr = s_inner_->first;
-                        return R{symbolic::AddressBox{owner_.factory().importAddress(addr)},
-                                 s_inner_->second.get()};
+                        return R{s_inner_->first, s_inner_->second.get()};
                     }
                     case Phase::Field: {
                         // Handle Structure fields

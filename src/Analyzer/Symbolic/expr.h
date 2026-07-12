@@ -1643,7 +1643,7 @@ namespace acslg::analyzer::symbolic {
         class RangeIndex; // todo: Separate `SymbolAddress` into `SymbolAddress` and `RangeExpr`,
                           // making `RangeIndex` a nested type within `RangeExpr`.
 
-        SymbolAddress(const SymbolAddress &other);
+        SymbolAddress(const SymbolAddress &) = delete;
         SymbolAddress(SymbolAddress &&) = default;
 
         SymbolAddress(FactoryNodeTag,

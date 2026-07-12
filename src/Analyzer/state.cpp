@@ -1762,7 +1762,9 @@ namespace acslg::analyzer {
         for (auto &[baseHash, addrValueMap] : other.memoryMap_symbolicRange_) {
             auto &mapToFill = memoryMap_symbolicRange_[baseHash];
             for (auto &[addr, value] : addrValueMap) {
-                mapToFill.emplace(addr, copyStoredValueFrom(other, value));
+                mapToFill.emplace(
+                    symbolic::AddressBox{factory().importAddress(addr.get())},
+                    copyStoredValueFrom(other, value));
             }
         }
     }
@@ -1788,7 +1790,9 @@ namespace acslg::analyzer {
         for (auto &[baseHash, addrValueMap] : other.memoryMap_symbolicRange_) {
             auto &mapToFill = memoryMap_symbolicRange_[baseHash];
             for (auto &[addr, value] : addrValueMap) {
-                mapToFill.emplace(addr, copyStoredValueFrom(other, value));
+                mapToFill.emplace(
+                    symbolic::AddressBox{factory().importAddress(addr.get())},
+                    copyStoredValueFrom(other, value));
             }
         }
 
@@ -1840,8 +1844,7 @@ namespace acslg::analyzer {
                 symbolAddr->getLength().value()->tryEvalAsConstant().value() == 1) {
                 auto fakeRangeHandle =
                     factory().withoutLength(factory().importAddress(*symbolAddr));
-                const auto &fakeRange = fakeRangeHandle.cast<symbolic::SymbolAddress>();
-                auto it = addrValueMap.find(fakeRange);
+                auto it = addrValueMap.find(*fakeRangeHandle);
                 if (it == addrValueMap.end())
                     return std::nullopt;
                 return it->second;
@@ -1937,11 +1940,11 @@ namespace acslg::analyzer {
                 symbolAddr->getLength().value()->tryEvalAsConstant() == 1) {
                 auto fakeRangeHandle =
                     factory().withoutLength(factory().importAddress(*symbolAddr));
-                const auto &fakeRange = fakeRangeHandle.cast<symbolic::SymbolAddress>();
-                addrValueMap.insert_or_assign(fakeRange, valueHandle);
+                addrValueMap.insert_or_assign(symbolic::AddressBox{fakeRangeHandle}, valueHandle);
                 return;
             }
-            addrValueMap.insert_or_assign(*symbolAddr, valueHandle);
+            addrValueMap.insert_or_assign(
+                symbolic::AddressBox{factory().importAddress(*symbolAddr)}, valueHandle);
             return;
         } else if (auto fieldAddr = symbolic::dyn_cast<const symbolic::FieldAddress>(&addr)) {
             auto &baseAddr = fieldAddr->getBaseAddr();
@@ -2079,7 +2082,7 @@ namespace acslg::analyzer {
                 continue;
 
             struct Item {
-                SA key;                             ///< Symbolic address (offset[/length])
+                symbolic::AddrHandle key;           ///< Symbolic address (offset[/length])
                 StoredValue val;                    ///< Stored value expression
                 std::optional<uint64_t> constOff{}; ///< If offset folds to constant
                 std::optional<uint64_t> constLen{}; ///< If length folds to constant
@@ -2089,6 +2092,8 @@ namespace acslg::analyzer {
                     0}; ///< hash((offset+length).simplified) or hash(offset+1) for non-range
                 size_t valHash{0}; ///< hash(val.simplified) for coarse grouping
                 bool used{false};  ///< Whether this edge is already merged into a chain
+
+                const SA &address() const { return key.cast<SA>(); }
             };
 
             std::vector<Item> items;
@@ -2096,10 +2101,11 @@ namespace acslg::analyzer {
 
             // (1) Move entries to items and precompute hashes/constants
             for (auto &[addr, expr] : umap) {
-                Item it{addr, std::move(expr)};
+                Item it{symbolic::AddrHandle{&addr.get()}, std::move(expr)};
+                const auto &key = it.address();
 
-                it.constOff = it.key.getOffset()->tryEvalAsConstant();
-                if (auto &len = it.key.getLength()) {
+                it.constOff = key.getOffset()->tryEvalAsConstant();
+                if (auto &len = key.getLength()) {
                     it.constLen = len.value()->tryEvalAsConstant();
                 }
 
@@ -2109,18 +2115,18 @@ namespace acslg::analyzer {
                           "memoryMap_constantRange_ instead.");
 
                 // Precompute endpoint/value hashes (using simplified forms)
-                it.offHash = symbolic::simplifiedExprHandle(*factory_, *it.key.getOffset()).hash();
+                it.offHash = symbolic::simplifiedExprHandle(*factory_, *key.getOffset()).hash();
                 it.valHash = symbolic::simplifiedExprHandle(*factory_, *it.val).hash();
-                if (auto &len = it.key.getLength())
+                if (auto &len = key.getLength())
                     it.lenHash = symbolic::simplifiedExprHandle(*factory_, *len.value()).hash();
 
                 // Right endpoint hash:
                 // - range: hash(offset + length)
                 // - non-range: hash(offset + 1) → single-address treated as [off, off+1)
-                if (auto &len = it.key.getLength()) {
-                    it.rightHash = addedHash(*it.key.getOffset(), *len.value());
+                if (auto &len = key.getLength()) {
+                    it.rightHash = addedHash(*key.getOffset(), *len.value());
                 } else {
-                    it.rightHash = addedHash(*it.key.getOffset(), symbolic::detail::LiteralExprNode{1});
+                    it.rightHash = addedHash(*key.getOffset(), symbolic::detail::LiteralExprNode{1});
                 }
 
                 items.emplace_back(std::move(it));
@@ -2135,7 +2141,7 @@ namespace acslg::analyzer {
             }
 
             // Result map being rebuilt for this BaseInfo
-            std::unordered_map<SA, StoredValue> newMap;
+            symbolic::AddressBoxMap<StoredValue> newMap;
             newMap.reserve(items.size());
 
             // (3) For each value group, build adjacency and emit chains
@@ -2156,7 +2162,7 @@ namespace acslg::analyzer {
                         return;
 
                     // Seed the merged key from the first segment
-                    auto mergedKey   = std::make_unique<SA>(items[startIdx].key);
+                    auto mergedKey   = items[startIdx].key;
                     size_t cur       = startIdx;
                     size_t rightHash = items[cur].rightHash;
                     items[cur].used  = true;
@@ -2190,16 +2196,13 @@ namespace acslg::analyzer {
                         // Append the successor's length:
                         // - If successor is range: add its length expression
                         // - If successor is non-range: add 1
-                        auto mergedHandle = factory().importAddress(*mergedKey);
-                        if (auto &len = itemToBeMerged.key.getLength()) {
-                            mergedHandle =
-                                factory().withAddedLength(mergedHandle,
-                                                          factory().importExpr(*len.value()));
+                        const auto &addressToBeMerged = itemToBeMerged.address();
+                        if (auto &len = addressToBeMerged.getLength()) {
+                            mergedKey = factory().withAddedLength(
+                                mergedKey, factory().importExpr(*len.value()));
                         } else {
-                            mergedHandle =
-                                factory().withAddedLength(mergedHandle, factory().literal(1));
+                            mergedKey = factory().withAddedLength(mergedKey, factory().literal(1));
                         }
-                        mergedKey = std::make_unique<SA>(mergedHandle.cast<SA>());
 
                         // Advance to successor
                         rightHash           = itemToBeMerged.rightHash;
@@ -2208,7 +2211,8 @@ namespace acslg::analyzer {
                     }
 
                     // Emit the merged interval with the value from the starting edge
-                    newMap.emplace(std::move(*mergedKey), std::move(items[startIdx].val));
+                    newMap.emplace(symbolic::AddressBox{mergedKey},
+                                   std::move(items[startIdx].val));
                 };
 
                 // Prefer starting at "obvious starts": Lh with zero in-degree
