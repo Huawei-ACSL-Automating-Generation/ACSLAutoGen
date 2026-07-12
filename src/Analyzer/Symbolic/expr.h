@@ -286,7 +286,7 @@ namespace acslg::analyzer::symbolic {
         };
 
         virtual ~SymbolicExpr()                       = default;
-        SymbolicExpr(const SymbolicExpr &)            = default;
+        SymbolicExpr(const SymbolicExpr &)            = delete;
         SymbolicExpr &operator=(const SymbolicExpr &) = delete;
         SymbolicExpr(SymbolicExpr &&)                 = default;
         SymbolicExpr &operator=(SymbolicExpr &&)      = delete;
@@ -871,7 +871,7 @@ namespace acslg::analyzer::symbolic {
     class Symbol {
       public:
         virtual ~Symbol()                 = default;
-        Symbol(const Symbol &)            = default;
+        Symbol(const Symbol &)            = delete;
         Symbol &operator=(const Symbol &) = delete;
         Symbol(Symbol &&)                 = default;
         Symbol &operator=(Symbol &&)      = delete;
@@ -1011,7 +1011,7 @@ namespace acslg::analyzer::symbolic {
     class Address : public SymbolicExpr {
       public:
         virtual ~Address()                  = default;
-        Address(const Address &)            = default;
+        Address(const Address &)            = delete;
         Address &operator=(const Address &) = delete;
         Address(Address &&)                 = default;
         Address &operator=(Address &&)      = delete;
