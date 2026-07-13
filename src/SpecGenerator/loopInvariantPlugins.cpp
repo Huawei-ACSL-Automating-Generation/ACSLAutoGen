@@ -697,10 +697,6 @@ namespace acslg::spec_generator {
                     symb::AddressBox rangeBox{*range};
                     if (pattern) {
                         auto [_, ok] = memoryMap.emplace(rangeBox, unknownHandle());
-                        // todo
-                        // std::make_unique<BinaryOpExpr>(pattern.value().initialValue_->clone(),
-                        // Add,
-                        //                           std::make_unique<detail::LiteralExprNode>(pattern.value().step_)));
 
                         // Deal with loops like
                         // {

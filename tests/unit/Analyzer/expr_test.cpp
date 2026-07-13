@@ -25,6 +25,15 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_copy_assignable_v<symbolic::detail::LiteralExprNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::LiteralExprNode>);
     static_assert(!std::is_move_assignable_v<symbolic::detail::BinaryOpExprNode>);
+    static_assert(!std::is_constructible_v<symbolic::detail::LiteralExprNode, int64_t>);
+    static_assert(!std::is_default_constructible_v<symbolic::UnknownExpr>);
+    static_assert(!std::is_constructible_v<symbolic::detail::UnaryOpExprNode,
+                                           symbolic::UnaryOpExpr::Operator,
+                                           symbolic::ExprHandle>);
+    static_assert(!std::is_constructible_v<symbolic::detail::BinaryOpExprNode,
+                                           symbolic::ExprHandle,
+                                           symbolic::BinaryOpExpr::Operator,
+                                           symbolic::ExprHandle>);
     static_assert(!std::is_copy_constructible_v<symbolic::FieldAddress>);
     static_assert(!std::is_copy_constructible_v<symbolic::VariableAddress>);
     static_assert(!std::is_copy_constructible_v<symbolic::SymbolAddress>);

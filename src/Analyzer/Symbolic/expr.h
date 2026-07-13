@@ -502,7 +502,7 @@ namespace acslg::analyzer::symbolic {
 
       private:
         void setValType(Type newType) { valueType_ = newType; }
-        friend class ExprFactory;
+        friend class ::acslg::analyzer::symbolic::ExprFactory;
         friend ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr);
 
         virtual utils::expected<std::string, GetACSLError> doGetACSL(
@@ -597,6 +597,9 @@ namespace acslg::analyzer::symbolic {
 
         LiteralExprNode(const LiteralExprNode &) = delete;
 
+      private:
+        friend class ::acslg::analyzer::symbolic::ExprFactory;
+
         LiteralExprNode(bool value)
             : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Bool, 1}),
               type_(LiteralType::Boolean) {
@@ -639,6 +642,7 @@ namespace acslg::analyzer::symbolic {
             data_.uint64Value = value;
         }
 
+      public:
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_LiteralExpr;
         }
@@ -716,10 +720,6 @@ namespace acslg::analyzer::symbolic {
             }
         }
 
-        BinaryOpExprNode(ExprHandle left, Operator op, ExprHandle right)
-            : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()), left_(left), op_(op),
-              right_(right) {}
-
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_BinaryOpExpr;
         }
@@ -754,6 +754,12 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
+        friend class ::acslg::analyzer::symbolic::ExprFactory;
+
+        BinaryOpExprNode(ExprHandle left, Operator op, ExprHandle right)
+            : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()), left_(left), op_(op),
+              right_(right) {}
+
         ExprChild left_;
         Operator op_;
         ExprChild right_;
@@ -790,9 +796,6 @@ namespace acslg::analyzer::symbolic {
             }
         }
 
-        UnaryOpExprNode(Operator op, ExprHandle expr)
-            : SymbolicExpr(ExprKind::K_UnaryOpExpr, expr->getValType()), op_(op), expr_(expr) {}
-
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_UnaryOpExpr;
         }
@@ -824,6 +827,11 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
+        friend class ::acslg::analyzer::symbolic::ExprFactory;
+
+        UnaryOpExprNode(Operator op, ExprHandle expr)
+            : SymbolicExpr(ExprKind::K_UnaryOpExpr, expr->getValType()), op_(op), expr_(expr) {}
+
         Operator op_;
         ExprChild expr_;
     };
@@ -835,7 +843,6 @@ namespace acslg::analyzer::symbolic {
     /// capabilities.
     class UnknownExpr : public SymbolicExpr {
       public:
-        UnknownExpr() : SymbolicExpr(ExprKind::K_UnknownExpr, {ScalarKind::Void, 0}) {}
         ~UnknownExpr() = default;
 
         static bool classof(const SymbolicExpr *expr) {
@@ -851,6 +858,10 @@ namespace acslg::analyzer::symbolic {
         int getMaxDegree() const override { return 0; }
 
       private:
+        friend class ExprFactory;
+
+        UnknownExpr() : SymbolicExpr(ExprKind::K_UnknownExpr, {ScalarKind::Void, 0}) {}
+
         utils::expected<std::string, GetACSLError> doGetACSL(
             const GetACSLConfig &config,
             std::unordered_set<SourcePoint> &usedPoints,
@@ -1176,28 +1187,28 @@ namespace acslg::analyzer::symbolic {
     class ExprFactory {
       public:
         ExprHandle literal(bool value) {
-            return intern(std::make_unique<detail::LiteralExprNode>(value));
+            return intern(makeNode<detail::LiteralExprNode>(value));
         }
         ExprHandle literal(int value) {
-            return intern(std::make_unique<detail::LiteralExprNode>(value));
+            return intern(makeNode<detail::LiteralExprNode>(value));
         }
         ExprHandle literal(unsigned int value) {
-            return intern(std::make_unique<detail::LiteralExprNode>(value));
+            return intern(makeNode<detail::LiteralExprNode>(value));
         }
         ExprHandle literal(short value) {
-            return intern(std::make_unique<detail::LiteralExprNode>(value));
+            return intern(makeNode<detail::LiteralExprNode>(value));
         }
         ExprHandle literal(unsigned short value) {
-            return intern(std::make_unique<detail::LiteralExprNode>(value));
+            return intern(makeNode<detail::LiteralExprNode>(value));
         }
         ExprHandle literal(int64_t value) {
-            return intern(std::make_unique<detail::LiteralExprNode>(value));
+            return intern(makeNode<detail::LiteralExprNode>(value));
         }
         ExprHandle literal(uint64_t value) {
-            return intern(std::make_unique<detail::LiteralExprNode>(value));
+            return intern(makeNode<detail::LiteralExprNode>(value));
         }
 
-        ExprHandle unknown() { return intern(std::make_unique<detail::UnknownExprNode>()); }
+        ExprHandle unknown() { return intern(makeNode<detail::UnknownExprNode>()); }
 
         ExprHandle rangeIndex(std::string_view name);
         ExprHandle symbolValue(SymbolicExpr::Type varType,
@@ -1205,11 +1216,11 @@ namespace acslg::analyzer::symbolic {
                                SourcePoint fromPoint);
 
         ExprHandle unary(UnaryOpExpr::Operator op, ExprHandle expr) {
-            return intern(std::make_unique<detail::UnaryOpExprNode>(op, expr));
+            return intern(makeNode<detail::UnaryOpExprNode>(op, expr));
         }
 
         ExprHandle binary(ExprHandle left, BinaryOpExpr::Operator op, ExprHandle right) {
-            return intern(std::make_unique<detail::BinaryOpExprNode>(left, op, right));
+            return intern(makeNode<detail::BinaryOpExprNode>(left, op, right));
         }
         ExprHandle simplifiedBinary(ExprHandle left, BinaryOpExpr::Operator op, ExprHandle right);
 
@@ -1244,6 +1255,11 @@ namespace acslg::analyzer::symbolic {
 
       private:
         friend struct detail::ExprFactoryInternals;
+
+        template <typename Node, typename... Args>
+        static std::unique_ptr<Node> makeNode(Args &&...args) {
+            return std::unique_ptr<Node>{new Node(std::forward<Args>(args)...)};
+        }
 
         ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node);
         AddrHandle internAddress(utils::not_null<std::unique_ptr<Address>> node);

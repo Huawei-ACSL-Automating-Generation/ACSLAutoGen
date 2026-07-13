@@ -78,7 +78,7 @@ namespace acslg::analyzer::symbolic {
             return internTyped(literal->rebuildNode());
 
         if (expr.isa<detail::UnknownExprNode>())
-            return internTyped(std::make_unique<detail::UnknownExprNode>());
+            return internTyped(makeNode<detail::UnknownExprNode>());
 
         if (auto *index = expr.dyn_cast<const SymbolAddress::RangeIndex>())
             return internTyped(
@@ -86,11 +86,11 @@ namespace acslg::analyzer::symbolic {
                     index->getName()));
 
         if (auto *unaryExpr = expr.dyn_cast<const detail::UnaryOpExprNode>())
-            return internTyped(std::make_unique<detail::UnaryOpExprNode>(
+            return internTyped(makeNode<detail::UnaryOpExprNode>(
                 unaryExpr->getOperator(), importExpr(*unaryExpr->getSub())));
 
         if (auto *binaryExpr = expr.dyn_cast<const detail::BinaryOpExprNode>())
-            return internTyped(std::make_unique<detail::BinaryOpExprNode>(
+            return internTyped(makeNode<detail::BinaryOpExprNode>(
                 importExpr(*binaryExpr->getLeft()), binaryExpr->getOperator(),
                 importExpr(*binaryExpr->getRight())));
 
@@ -1080,15 +1080,20 @@ namespace acslg::analyzer::symbolic {
 
     std::unique_ptr<detail::LiteralExprNode> detail::LiteralExprNode::rebuildNode() const {
         switch (getLiteralType()) {
-            case LiteralType::Boolean: return std::make_unique<LiteralExprNode>(data_.boolValue);
-            case LiteralType::Int: return std::make_unique<LiteralExprNode>(data_.intValue);
+            case LiteralType::Boolean:
+                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.boolValue)};
+            case LiteralType::Int:
+                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.intValue)};
             case LiteralType::UnsignedInt:
-                return std::make_unique<LiteralExprNode>(data_.uintValue);
-            case LiteralType::Short: return std::make_unique<LiteralExprNode>(data_.shortValue);
+                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.uintValue)};
+            case LiteralType::Short:
+                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.shortValue)};
             case LiteralType::UnsignedShort:
-                return std::make_unique<LiteralExprNode>(data_.ushortValue);
-            case LiteralType::Int64: return std::make_unique<LiteralExprNode>(data_.int64Value);
-            case LiteralType::UInt64: return std::make_unique<LiteralExprNode>(data_.uint64Value);
+                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.ushortValue)};
+            case LiteralType::Int64:
+                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.int64Value)};
+            case LiteralType::UInt64:
+                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.uint64Value)};
         }
 
         UNREACHABLE();
