@@ -28,6 +28,9 @@ namespace acslg::test::unit::analyzer {
     static_assert(std::is_copy_constructible_v<symbolic::LiteralExprView>);
     static_assert(std::is_copy_constructible_v<symbolic::UnaryExprView>);
     static_assert(std::is_copy_constructible_v<symbolic::BinaryExprView>);
+    static_assert(std::is_copy_constructible_v<symbolic::SumOverRangeView>);
+    static_assert(std::is_copy_constructible_v<symbolic::QuantifierOverRangeView>);
+    static_assert(std::is_copy_constructible_v<symbolic::MaxMinOverRangeView>);
     static_assert(!std::is_default_constructible_v<symbolic::detail::UnknownExprNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::StructureNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::SumOverRangeNode>);
@@ -956,19 +959,22 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedRangeView.length().value().get(), targetLength.get().get());
 
         auto targetRange = target.importAddress(*sourceRange);
-        EXPECT_EQ(typedSum.cast<symbolic::detail::SumOverRangeNode>()
-                      .getRange().handle().get().get(),
-                  targetRange.get().get());
-        EXPECT_EQ(typedQuantifier.cast<symbolic::detail::QuantifierOverRangeNode>()
-                      .getRange().handle().get().get(),
-                  targetRange.get().get());
-        EXPECT_EQ(&typedQuantifier.cast<symbolic::detail::QuantifierOverRangeNode>().getPredicate(),
-                  target.importExpr(*sourcePredicate).get().get());
-        EXPECT_EQ(typedMax.cast<symbolic::detail::MaxMinOverRangeNode>()
-                      .getRange().handle().get().get(),
-                  targetRange.get().get());
-        EXPECT_EQ(&typedMax.cast<symbolic::detail::MaxMinOverRangeNode>().getExpr(),
-                  target.importExpr(*sourceBody).get().get());
+        symbolic::SumOverRangeView typedSumView{typedSum};
+        symbolic::QuantifierOverRangeView typedQuantifierView{typedQuantifier};
+        symbolic::MaxMinOverRangeView typedMaxView{typedMax};
+        EXPECT_EQ(typedSumView.range().handle(), targetRange);
+        EXPECT_EQ(typedQuantifierView.range().handle(), targetRange);
+        EXPECT_EQ(typedQuantifierView.predicate(), target.importExpr(*sourcePredicate));
+        EXPECT_EQ(typedMaxView.range().handle(), targetRange);
+        EXPECT_EQ(typedMaxView.body(), target.importExpr(*sourceBody));
+        EXPECT_EQ(typedSumView.indexName(), "i");
+        EXPECT_EQ(typedQuantifierView.quantifier(), symbolic::RangeQuantifier::ForAll);
+        EXPECT_EQ(typedMaxView.extremum(), symbolic::RangeExtremum::Max);
+
+        EXPECT_FALSE(symbolic::SumOverRangeView::tryFrom(typedQuantifier).has_value());
+        EXPECT_FALSE(symbolic::QuantifierOverRangeView::tryFrom(typedMax).has_value());
+        EXPECT_FALSE(symbolic::MaxMinOverRangeView::tryFrom(typedSum).has_value());
+        EXPECT_DEATH((void)symbolic::SumOverRangeView{typedMax}, "");
     }
 
     TEST(ExprFactoryTest, ValueSubstitutionHandleMapImportsReplacement) {

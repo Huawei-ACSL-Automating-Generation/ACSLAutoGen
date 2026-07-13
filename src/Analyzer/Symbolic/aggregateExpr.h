@@ -21,6 +21,57 @@ namespace acslg::analyzer::symbolic {
         Min
     };
 
+    class SumOverRangeView {
+      public:
+        explicit SumOverRangeView(ExprHandle handle);
+
+        static std::optional<SumOverRangeView> tryFrom(ExprHandle handle);
+        static std::optional<SumOverRangeView> tryFrom(const SymbolicExpr &expr);
+
+        ExprHandle handle() const { return handle_; }
+        SymbolAddressView range() const;
+        std::string_view indexName() const;
+        SourcePoint fromPoint() const;
+
+      private:
+        ExprHandle handle_;
+    };
+
+    class QuantifierOverRangeView {
+      public:
+        explicit QuantifierOverRangeView(ExprHandle handle);
+
+        static std::optional<QuantifierOverRangeView> tryFrom(ExprHandle handle);
+        static std::optional<QuantifierOverRangeView> tryFrom(const SymbolicExpr &expr);
+
+        ExprHandle handle() const { return handle_; }
+        SymbolAddressView range() const;
+        std::string_view indexName() const;
+        RangeQuantifier quantifier() const;
+        ExprHandle predicate() const;
+
+      private:
+        ExprHandle handle_;
+    };
+
+    class MaxMinOverRangeView {
+      public:
+        explicit MaxMinOverRangeView(ExprHandle handle);
+
+        static std::optional<MaxMinOverRangeView> tryFrom(ExprHandle handle);
+        static std::optional<MaxMinOverRangeView> tryFrom(const SymbolicExpr &expr);
+
+        ExprHandle handle() const { return handle_; }
+        SymbolAddressView range() const;
+        std::string_view indexName() const;
+        RangeExtremum extremum() const;
+        ExprHandle body() const;
+        SourcePoint fromPoint() const;
+
+      private:
+        ExprHandle handle_;
+    };
+
     namespace detail {
 
     /**

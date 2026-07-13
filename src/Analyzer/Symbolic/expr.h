@@ -459,6 +459,9 @@ namespace acslg::analyzer::symbolic {
         bool isVariableAddress() const { return kind_ == ExprKind::K_VariableAddress; }
         bool isFieldAddress() const { return kind_ == ExprKind::K_FieldAddress; }
         bool isRangeIndex() const { return kind_ == ExprKind::K_RangeIndex; }
+        bool isSumOverRange() const { return kind_ == ExprKind::K_SumOverRange; }
+        bool isQuantifierOverRange() const { return kind_ == ExprKind::K_QuantifierOverRange; }
+        bool isMaxMinOverRange() const { return kind_ == ExprKind::K_MaxMinOverRange; }
 
         bool isOverRange() const {
             return kind_ > ExprKind::K_FirstOverRange && kind_ < ExprKind::K_LastOverRange;

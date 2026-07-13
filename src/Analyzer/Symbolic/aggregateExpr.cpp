@@ -33,6 +33,101 @@ namespace acslg::analyzer::symbolic {
         }
     } // namespace
 
+    SumOverRangeView::SumOverRangeView(ExprHandle handle) : handle_(handle) {
+        if (!handle_->isSumOverRange())
+            ERROR("SumOverRangeView requires a sum-over-range expression.");
+    }
+
+    std::optional<SumOverRangeView> SumOverRangeView::tryFrom(ExprHandle handle) {
+        if (!handle->isSumOverRange())
+            return std::nullopt;
+        return SumOverRangeView{handle};
+    }
+
+    std::optional<SumOverRangeView> SumOverRangeView::tryFrom(const SymbolicExpr &expr) {
+        return tryFrom(ExprHandle{&expr});
+    }
+
+    SymbolAddressView SumOverRangeView::range() const {
+        return cast<const SumOverRangeNode>(handle_.get().get())->getRange();
+    }
+
+    std::string_view SumOverRangeView::indexName() const {
+        return cast<const SumOverRangeNode>(handle_.get().get())->getIndexName();
+    }
+
+    SourcePoint SumOverRangeView::fromPoint() const {
+        return cast<const SumOverRangeNode>(handle_.get().get())->getFromPoint().value();
+    }
+
+    QuantifierOverRangeView::QuantifierOverRangeView(ExprHandle handle) : handle_(handle) {
+        if (!handle_->isQuantifierOverRange())
+            ERROR("QuantifierOverRangeView requires a quantified range expression.");
+    }
+
+    std::optional<QuantifierOverRangeView> QuantifierOverRangeView::tryFrom(ExprHandle handle) {
+        if (!handle->isQuantifierOverRange())
+            return std::nullopt;
+        return QuantifierOverRangeView{handle};
+    }
+
+    std::optional<QuantifierOverRangeView>
+    QuantifierOverRangeView::tryFrom(const SymbolicExpr &expr) {
+        return tryFrom(ExprHandle{&expr});
+    }
+
+    SymbolAddressView QuantifierOverRangeView::range() const {
+        return cast<const QuantifierOverRangeNode>(handle_.get().get())->getRange();
+    }
+
+    std::string_view QuantifierOverRangeView::indexName() const {
+        return cast<const QuantifierOverRangeNode>(handle_.get().get())->getIndexName();
+    }
+
+    RangeQuantifier QuantifierOverRangeView::quantifier() const {
+        return cast<const QuantifierOverRangeNode>(handle_.get().get())->getQuantifier();
+    }
+
+    ExprHandle QuantifierOverRangeView::predicate() const {
+        return ExprHandle{
+            &cast<const QuantifierOverRangeNode>(handle_.get().get())->getPredicate()};
+    }
+
+    MaxMinOverRangeView::MaxMinOverRangeView(ExprHandle handle) : handle_(handle) {
+        if (!handle_->isMaxMinOverRange())
+            ERROR("MaxMinOverRangeView requires a max/min-over-range expression.");
+    }
+
+    std::optional<MaxMinOverRangeView> MaxMinOverRangeView::tryFrom(ExprHandle handle) {
+        if (!handle->isMaxMinOverRange())
+            return std::nullopt;
+        return MaxMinOverRangeView{handle};
+    }
+
+    std::optional<MaxMinOverRangeView> MaxMinOverRangeView::tryFrom(const SymbolicExpr &expr) {
+        return tryFrom(ExprHandle{&expr});
+    }
+
+    SymbolAddressView MaxMinOverRangeView::range() const {
+        return cast<const MaxMinOverRangeNode>(handle_.get().get())->getRange();
+    }
+
+    std::string_view MaxMinOverRangeView::indexName() const {
+        return cast<const MaxMinOverRangeNode>(handle_.get().get())->getIndexName();
+    }
+
+    RangeExtremum MaxMinOverRangeView::extremum() const {
+        return cast<const MaxMinOverRangeNode>(handle_.get().get())->getExtremum();
+    }
+
+    ExprHandle MaxMinOverRangeView::body() const {
+        return ExprHandle{&cast<const MaxMinOverRangeNode>(handle_.get().get())->getExpr()};
+    }
+
+    SourcePoint MaxMinOverRangeView::fromPoint() const {
+        return cast<const MaxMinOverRangeNode>(handle_.get().get())->getFromPoint().value();
+    }
+
     ExprHandle makeSumOverRangeHandle(ExprFactory &factory,
                                       AddrHandle range,
                                       std::string_view indexName,
