@@ -23,32 +23,34 @@ namespace acslg::analyzer::symbolic {
 
     namespace {
         ExprHandle makeMaxMinDefaultBody(ExprFactory &factory,
-                                         const SymbolAddress &range,
+                                         SymbolAddressView range,
                                          std::string_view indexName,
                                          const SourcePoint &fromPoint) {
-            auto indexedRange = Addr{factory, factory.importAddress(range)}
+            auto indexedRange = Addr{factory, factory.importAddress(*range.handle())}
                                     .withOffset(Expr{factory, factory.rangeIndex(indexName)});
             indexedRange = indexedRange.withoutLength();
-            return getSymbol(range.getPointeeType(), indexedRange.handle(), fromPoint);
+            return getSymbol(range.pointeeType(), indexedRange.handle(), fromPoint);
         }
     } // namespace
 
     ExprHandle makeSumOverRangeHandle(ExprFactory &factory,
-                                      const SymbolAddress &range,
+                                      AddrHandle range,
                                       std::string_view indexName,
                                       SourcePoint fromPoint) {
+        SymbolAddressView rangeView{range};
         return detail::ExprFactoryInternals::intern(
             factory, detail::ExprFactoryInternals::makeNode<SumOverRangeNode>(
-                         factory.importAddress(range), indexName, std::move(fromPoint)));
+                         factory.importAddress(*rangeView.handle()), indexName,
+                         std::move(fromPoint)));
     }
 
     ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
-                                             const SymbolAddress &range,
+                                             AddrHandle range,
                                              std::string_view indexName,
                                              RangeQuantifier quantifier,
                                              const SymbolicExpr &predicate) {
-        return makeQuantifierOverRangeHandle(factory, factory.importAddress(range),
-                                             indexName, quantifier,
+        return makeQuantifierOverRangeHandle(factory, factory.importAddress(*range), indexName,
+                                             quantifier,
                                              factory.importExpr(predicate));
     }
 
@@ -64,33 +66,15 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
-                                         const SymbolAddress &range,
-                                         std::string_view indexName,
-                                         RangeExtremum extremum,
-                                         SourcePoint fromPoint) {
-        return makeMaxMinOverRangeHandle(factory, factory.importAddress(range), indexName,
-                                         extremum, std::move(fromPoint));
-    }
-
-    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          AddrHandle range,
                                          std::string_view indexName,
                                          RangeExtremum extremum,
                                          SourcePoint fromPoint) {
-        auto body = makeMaxMinDefaultBody(factory, range.cast<SymbolAddress>(), indexName,
+        auto importedRange = factory.importAddress(*range);
+        auto body = makeMaxMinDefaultBody(factory, SymbolAddressView{importedRange}, indexName,
                                           fromPoint);
-        return makeMaxMinOverRangeHandle(factory, range, indexName, extremum, body,
+        return makeMaxMinOverRangeHandle(factory, importedRange, indexName, extremum, body,
                                          std::move(fromPoint));
-    }
-
-    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
-                                         const SymbolAddress &range,
-                                         std::string_view indexName,
-                                         RangeExtremum extremum,
-                                         ExprHandle body,
-                                         SourcePoint fromPoint) {
-        return makeMaxMinOverRangeHandle(factory, factory.importAddress(range), indexName,
-                                         extremum, body, std::move(fromPoint));
     }
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
@@ -105,7 +89,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
-                                         const SymbolAddress &range,
+                                         AddrHandle range,
                                          std::string_view indexName,
                                          RangeExtremum extremum,
                                          const SymbolicExpr &body,
@@ -118,23 +102,23 @@ namespace acslg::analyzer::symbolic {
                                std::string_view indexName,
                                SourcePoint fromPoint)
         : OverRangeExprNode(ExprKind::K_SumOverRange,
-                        deriveType(range.cast<SymbolAddress>().getPointeeType()),
+                        deriveType(SymbolAddressView{range}.pointeeType()),
                         range,
                         indexName),
           Symbol(Kind::K_SumOverRange),
           fromPoint_(std::move(fromPoint)) {}
 
-    const SymbolAddress &OverRangeExprNode::range() const {
-        auto *symbolAddr = dyn_cast<const SymbolAddress>(range_.get().get());
-        if (symbolAddr == nullptr)
+    SymbolAddressView OverRangeExprNode::range() const {
+        auto range = SymbolAddressView::tryFrom(range_.handle());
+        if (!range)
             ERROR("Over-range expression range child must be a SymbolAddress.");
-        return *symbolAddr;
+        return range.value();
     }
 
     std::string OverRangeExprNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
-        oss << "{" + key("range: ") + range().dump() + "}, ";
+        oss << "{" + key("range: ") + range().handle().dump() + "}, ";
         oss << "{" + key("index name: ") + accent(indexName_) + "}";
         return oss.str();
     }
@@ -145,13 +129,15 @@ namespace acslg::analyzer::symbolic {
             return false;
         if (getValType() != other.getValType())
             return false;
-        if (range() != ORE->range())
+        if (!range().handle()->equal(*ORE->range().handle()))
             return false;
         // No indexName_.
         return true;
     }
 
-    std::size_t OverRangeExprNode::hash() const { return utils::hash_val(range().hash()); }
+    std::size_t OverRangeExprNode::hash() const {
+        return utils::hash_val(range().handle().hash());
+    }
 
     std::string RangeIndexNode::dump() const {
         using namespace utils::dump_fmt;
@@ -202,12 +188,12 @@ namespace acslg::analyzer::symbolic {
             "\\sum(integer ${i} = ${0}; ${i} < ${n}; ${i}++, ${prefix}${a}[${i}]${suffix})"};
 
         // Lower bound of a range is always zero for now.
-        auto zeroStr = callGetACSL(*range().getOffset(), config, usedPoints, currentPoint,
+        auto zeroStr = callGetACSL(*range().offset(), config, usedPoints, currentPoint,
                                    getPrecedence(Operator::Assign), true);
         if (!zeroStr)
             return zeroStr.error();
 
-        auto rightBound = range().getRightBound();
+        auto rightBound = range().rightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
         auto nStr = callGetACSL(*rightBound.value(), config, usedPoints, currentPoint,
@@ -215,7 +201,7 @@ namespace acslg::analyzer::symbolic {
         if (!nStr)
             return nStr.error();
 
-        auto rangeFrom = range().getFromAddrHandle();
+        auto rangeFrom = range().from();
         if (rangeFrom == std::nullopt)
             return GetACSLError::HeapAddress;
 
@@ -282,13 +268,13 @@ namespace acslg::analyzer::symbolic {
             default: UNREACHABLE();
         }
 
-        auto zero = simplifiedExprHandle(factory, *range().getOffset());
+        auto zero = simplifiedExprHandle(factory, *range().offset());
         auto zeroStr = callGetACSL(*zero, config, usedPoints, currentPoint,
                                    getPrecedence(Operator::LessThan), false);
         if (!zeroStr)
             return zeroStr.error();
 
-        auto rightBound = range().getRightBound();
+        auto rightBound = range().rightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
         auto upper = simplifiedExprHandle(factory, *rightBound.value());
@@ -358,7 +344,7 @@ namespace acslg::analyzer::symbolic {
             "(\\forall integer ${i}; ${l} <= ${i} < ${u} ==> \\result ${cmp} ${expr}) &&\n"
             "      (\\exists integer ${i}; ${l} <= ${i} < ${u} && \\result == ${expr})"};
 
-        auto rightBound = range().getRightBound();
+        auto rightBound = range().rightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
 
@@ -366,7 +352,7 @@ namespace acslg::analyzer::symbolic {
         auto [prefix, suffix] =
             details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
 
-        auto lower = simplifiedExprHandle(factory, *range().getOffset());
+        auto lower = simplifiedExprHandle(factory, *range().offset());
         auto lowerStr = callGetACSL(*lower, config, usedPoints, fromPoint_,
                                     getPrecedence(Operator::LessEqual), false);
         if (!lowerStr)

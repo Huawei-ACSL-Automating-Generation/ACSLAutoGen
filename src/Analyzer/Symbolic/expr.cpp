@@ -139,17 +139,17 @@ namespace acslg::analyzer::symbolic {
 
         if (auto *sum = expr.dyn_cast<const SumOverRangeNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<SumOverRangeNode>(
-                importAddress(sum->getRange()), sum->getIndexName(),
+                importAddress(*sum->getRange().handle()), sum->getIndexName(),
                 sum->getFromPoint().value()));
 
         if (auto *quantifier = expr.dyn_cast<const QuantifierOverRangeNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<QuantifierOverRangeNode>(
-                importAddress(quantifier->getRange()), quantifier->getIndexName(),
+                importAddress(*quantifier->getRange().handle()), quantifier->getIndexName(),
                 quantifier->getQuantifier(), importExpr(quantifier->getPredicate())));
 
         if (auto *maxMin = expr.dyn_cast<const MaxMinOverRangeNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<MaxMinOverRangeNode>(
-                importAddress(maxMin->getRange()), maxMin->getIndexName(),
+                importAddress(*maxMin->getRange().handle()), maxMin->getIndexName(),
                 maxMin->getExtremum(), importExpr(maxMin->getExpr()),
                 maxMin->getFromPoint().value()));
 
@@ -171,11 +171,11 @@ namespace acslg::analyzer::symbolic {
                 UNREACHABLE();
             }
 
-            const SymbolAddress &requireRange(ExprHandle handle) const {
-                if (auto *range = handle.dyn_cast<const SymbolAddress>()) {
-                    if (range->getLength() == std::nullopt)
+            AddrHandle requireRange(ExprHandle handle) const {
+                if (auto range = SymbolAddressView::tryFrom(handle)) {
+                    if (!range->length())
                         ERROR("Substituted expression should be a *range*");
-                    return *range;
+                    return factory.importAddress(*range->handle());
                 }
                 UNREACHABLE();
             }
@@ -234,19 +234,19 @@ namespace acslg::analyzer::symbolic {
                     return rebuilt;
                 }
                 if (auto *sum = dyn_cast<const SumOverRangeNode>(&expr)) {
-                    return makeSumOverRangeHandle(factory, requireRange(run(sum->getRange())),
-                                                  sum->getIndexName(),
-                                                  sum->getFromPoint().value());
+                    return makeSumOverRangeHandle(
+                        factory, requireRange(run(*sum->getRange().handle())),
+                        sum->getIndexName(), sum->getFromPoint().value());
                 }
                 if (auto *quantifier = dyn_cast<const QuantifierOverRangeNode>(&expr)) {
                     return makeQuantifierOverRangeHandle(
-                        factory, requireRange(run(quantifier->getRange())),
+                        factory, requireRange(run(*quantifier->getRange().handle())),
                         quantifier->getIndexName(), quantifier->getQuantifier(),
                         *run(quantifier->getPredicate()));
                 }
                 if (auto *maxMin = dyn_cast<const MaxMinOverRangeNode>(&expr)) {
                     return makeMaxMinOverRangeHandle(
-                        factory, requireRange(run(maxMin->getRange())),
+                        factory, requireRange(run(*maxMin->getRange().handle())),
                         maxMin->getIndexName(), maxMin->getExtremum(),
                         run(maxMin->getExpr()), maxMin->getFromPoint().value());
                 }
@@ -275,11 +275,11 @@ namespace acslg::analyzer::symbolic {
                 UNREACHABLE();
             }
 
-            const SymbolAddress &requireRange(ExprHandle handle) const {
-                if (auto *range = handle.dyn_cast<const SymbolAddress>()) {
-                    if (range->getLength() == std::nullopt)
+            AddrHandle requireRange(ExprHandle handle) const {
+                if (auto range = SymbolAddressView::tryFrom(handle)) {
+                    if (!range->length())
                         ERROR("Substituted expression should be a *range*");
-                    return *range;
+                    return factory.importAddress(*range->handle());
                 }
                 ERROR("Substituted expression should be a *range*");
             }
@@ -372,18 +372,18 @@ namespace acslg::analyzer::symbolic {
                 if (auto *sum = dyn_cast<const SumOverRangeNode>(&expr)) {
                     if (sum->getFromPoint().value() != pointToSub)
                         return factory.importExpr(expr);
-                    return makeSumOverRangeHandle(factory, requireRange(run(sum->getRange())),
-                                                  sum->getIndexName(),
-                                                  pathSubTo.getStartPoint());
+                    return makeSumOverRangeHandle(
+                        factory, requireRange(run(*sum->getRange().handle())),
+                        sum->getIndexName(), pathSubTo.getStartPoint());
                 }
                 if (auto *quantifier = dyn_cast<const QuantifierOverRangeNode>(&expr)) {
                     return makeQuantifierOverRangeHandle(
-                        factory, requireRange(run(quantifier->getRange())),
+                        factory, requireRange(run(*quantifier->getRange().handle())),
                         quantifier->getIndexName(), quantifier->getQuantifier(),
                         *run(quantifier->getPredicate()));
                 }
                 if (auto *maxMin = dyn_cast<const MaxMinOverRangeNode>(&expr)) {
-                    const auto &range = requireRange(run(maxMin->getRange()));
+                    auto range = requireRange(run(*maxMin->getRange().handle()));
                     auto body  = run(maxMin->getExpr());
                     if (maxMin->getFromPoint().value() == pointToSub)
                         TODO();
@@ -416,11 +416,11 @@ namespace acslg::analyzer::symbolic {
                 UNREACHABLE();
             }
 
-            const SymbolAddress &requireRange(ExprHandle handle) const {
-                if (auto *range = handle.dyn_cast<const SymbolAddress>()) {
-                    if (range->getLength() == std::nullopt)
+            AddrHandle requireRange(ExprHandle handle) const {
+                if (auto range = SymbolAddressView::tryFrom(handle)) {
+                    if (!range->length())
                         ERROR("Substituted expression should be a *range*");
-                    return *range;
+                    return factory.importAddress(*range->handle());
                 }
                 UNREACHABLE();
             }
@@ -477,19 +477,19 @@ namespace acslg::analyzer::symbolic {
                     return rebuilt;
                 }
                 if (auto *sum = dyn_cast<const SumOverRangeNode>(&expr)) {
-                    return makeSumOverRangeHandle(factory, requireRange(run(sum->getRange())),
-                                                  sum->getIndexName(),
-                                                  sum->getFromPoint().value());
+                    return makeSumOverRangeHandle(
+                        factory, requireRange(run(*sum->getRange().handle())),
+                        sum->getIndexName(), sum->getFromPoint().value());
                 }
                 if (auto *quantifier = dyn_cast<const QuantifierOverRangeNode>(&expr)) {
                     return makeQuantifierOverRangeHandle(
-                        factory, requireRange(run(quantifier->getRange())),
+                        factory, requireRange(run(*quantifier->getRange().handle())),
                         quantifier->getIndexName(), quantifier->getQuantifier(),
                         *run(quantifier->getPredicate()));
                 }
                 if (auto *maxMin = dyn_cast<const MaxMinOverRangeNode>(&expr)) {
                     return makeMaxMinOverRangeHandle(
-                        factory, requireRange(run(maxMin->getRange())),
+                        factory, requireRange(run(*maxMin->getRange().handle())),
                         maxMin->getIndexName(), maxMin->getExtremum(),
                         run(maxMin->getExpr()), maxMin->getFromPoint().value());
                 }
@@ -578,12 +578,12 @@ namespace acslg::analyzer::symbolic {
             if (!fromPoint)
                 ERROR("SumOverRange must have a source point.");
             return preserveImportedType(makeSumOverRangeHandle(
-                *this, sum->getRange(), sum->getIndexName(), fromPoint.value()));
+                *this, sum->getRange().handle(), sum->getIndexName(), fromPoint.value()));
         }
 
         if (auto *quantifier = dyn_cast<QuantifierOverRangeNode>(&expr)) {
             return preserveImportedType(makeQuantifierOverRangeHandle(
-                *this, quantifier->getRange(), quantifier->getIndexName(),
+                *this, quantifier->getRange().handle(), quantifier->getIndexName(),
                 quantifier->getQuantifier(), quantifier->getPredicate()));
         }
 
@@ -592,7 +592,8 @@ namespace acslg::analyzer::symbolic {
             if (!fromPoint)
                 ERROR("MaxMinOverRange must have a source point.");
             return preserveImportedType(makeMaxMinOverRangeHandle(
-                *this, maxMin->getRange(), maxMin->getIndexName(), maxMin->getExtremum(),
+                *this, maxMin->getRange().handle(), maxMin->getIndexName(),
+                maxMin->getExtremum(),
                 maxMin->getExpr(), fromPoint.value()));
         }
 

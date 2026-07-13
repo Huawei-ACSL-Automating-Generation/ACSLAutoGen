@@ -95,17 +95,17 @@ namespace acslg::analyzer::symbolic {
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override;
 
-        const SymbolAddress &getRange() const { return range(); }
+        SymbolAddressView getRange() const { return range(); }
         std::string_view getIndexName() const { return indexName_; }
 
       protected:
         OverRangeExprNode(ExprKind kind, Type type, AddrHandle range, std::string_view indexName)
             : SymbolicExpr(kind, type), range_(range.asExpr()), indexName_(indexName) {
-            if (!this->range().getLength())
+            if (!this->range().length())
                 ERROR("`range_` is not a memory *range*.");
-        }
+            }
 
-        const SymbolAddress &range() const;
+        SymbolAddressView range() const;
 
         ExprChild range_;
         std::string indexName_;
@@ -267,12 +267,12 @@ namespace acslg::analyzer::symbolic {
     } // namespace detail
 
     ExprHandle makeSumOverRangeHandle(ExprFactory &factory,
-                                      const SymbolAddress &range,
+                                      AddrHandle range,
                                       std::string_view indexName,
                                       SourcePoint fromPoint);
 
     ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
-                                             const SymbolAddress &range,
+                                             AddrHandle range,
                                              std::string_view indexName,
                                              RangeQuantifier quantifier,
                                              const SymbolicExpr &predicate);
@@ -283,22 +283,11 @@ namespace acslg::analyzer::symbolic {
                                              ExprHandle predicate);
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
-                                         const SymbolAddress &range,
-                                         std::string_view indexName,
-                                         RangeExtremum extremum,
-                                         SourcePoint fromPoint);
-    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          AddrHandle range,
                                          std::string_view indexName,
                                          RangeExtremum extremum,
                                          SourcePoint fromPoint);
 
-    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
-                                         const SymbolAddress &range,
-                                         std::string_view indexName,
-                                         RangeExtremum extremum,
-                                         ExprHandle body,
-                                         SourcePoint fromPoint);
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          AddrHandle range,
                                          std::string_view indexName,
@@ -307,7 +296,7 @@ namespace acslg::analyzer::symbolic {
                                          SourcePoint fromPoint);
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
-                                         const SymbolAddress &range,
+                                         AddrHandle range,
                                          std::string_view indexName,
                                          RangeExtremum extremum,
                                          const SymbolicExpr &body,
