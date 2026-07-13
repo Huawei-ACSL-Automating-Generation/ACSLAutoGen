@@ -14,6 +14,8 @@
 #include "Stingx/LinTS.h"
 
 namespace acslg::analyzer::symbolic {
+    using detail::SymbolAddressNode;
+    using detail::VariableAddressNode;
     using detail::SumOverRangeNode;
 
     /**
@@ -199,7 +201,7 @@ namespace acslg::analyzer::symbolic {
         using namespace Parma_Polyhedra_Library;
         Linear_Expression e(0);
 
-        auto varAddr = dyn_cast<const VariableAddress>(fromAddr_.get().get());
+        auto varAddr = dyn_cast<const VariableAddressNode>(fromAddr_.get().get());
         if (varAddr == nullptr)
             return std::nullopt;
 
@@ -286,7 +288,7 @@ namespace acslg::analyzer::symbolic {
         ERROR("non-affine or unsupported op");
     }
 
-    std::optional<Parma_Polyhedra_Library::Linear_Expression> SymbolAddress::toLinearExpr(
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> SymbolAddressNode::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
         if (length_ != std::nullopt)
             ERROR("Address range is solely for address representation and should not be "
@@ -333,7 +335,7 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    Parma_Polyhedra_Library::Linear_Expression SymbolAddress::toLinearExpr(
+    Parma_Polyhedra_Library::Linear_Expression SymbolAddressNode::toLinearExpr(
         const std::unordered_map<size_t, size_t> &hashIdMap) const {
         if (length_ != std::nullopt)
             ERROR("Address range is solely for address representation and should not be "

@@ -23,9 +23,12 @@
 namespace acslg::analyzer::symbolic {
     using detail::MaxMinOverRangeNode;
     using detail::QuantifierOverRangeNode;
+    using detail::FieldAddressNode;
     using detail::StructureNode;
     using detail::SumOverRangeNode;
     using detail::SymbolValueNode;
+    using detail::SymbolAddressNode;
+    using detail::VariableAddressNode;
 
     thread_local ExprFactory *ExprFactoryScope::current_ = nullptr;
 
@@ -100,16 +103,16 @@ namespace acslg::analyzer::symbolic {
                 importExpr(*binaryExpr->getLeft()), binaryExpr->getOperator(),
                 importExpr(*binaryExpr->getRight())));
 
-        if (auto *variableAddr = expr.dyn_cast<const VariableAddress>())
-            return internTyped(detail::ExprFactoryInternals::makeNode<VariableAddress>(
+        if (auto *variableAddr = expr.dyn_cast<const VariableAddressNode>())
+            return internTyped(detail::ExprFactoryInternals::makeNode<VariableAddressNode>(
                 variableAddr->getFrom()));
 
-        if (auto *fieldAddr = expr.dyn_cast<const FieldAddress>())
-            return internTyped(detail::ExprFactoryInternals::makeNode<FieldAddress>(
+        if (auto *fieldAddr = expr.dyn_cast<const FieldAddressNode>())
+            return internTyped(detail::ExprFactoryInternals::makeNode<FieldAddressNode>(
                 fieldAddr->getPointeeType(), fieldAddr->getDefinition(),
                 importAddress(*fieldAddr->getBaseAddr()), fieldAddr->getFieldIndex()));
 
-        if (auto *symbolAddr = expr.dyn_cast<const SymbolAddress>()) {
+        if (auto *symbolAddr = expr.dyn_cast<const SymbolAddressNode>()) {
             std::optional<AddrHandle> from;
             if (auto existingFrom = symbolAddr->getFromAddrHandle())
                 from = importAddress(**existingFrom);
@@ -118,7 +121,7 @@ namespace acslg::analyzer::symbolic {
             if (const auto &existingLength = symbolAddr->getLength(); existingLength)
                 length = importExpr(*existingLength.value());
 
-            return internTyped(detail::ExprFactoryInternals::makeNode<SymbolAddress>(
+            return internTyped(detail::ExprFactoryInternals::makeNode<SymbolAddressNode>(
                 symbolAddr->getPointeeType(), from,
                 symbolAddr->getFromPoint().value(), importExpr(*symbolAddr->getOffset()), length));
         }
@@ -190,9 +193,9 @@ namespace acslg::analyzer::symbolic {
                     return factory.unknown();
                 if (auto *rangeIndex = dyn_cast<const detail::RangeIndexNode>(&expr))
                     return factory.rangeIndex(rangeIndex->getName());
-                if (auto *varAddr = dyn_cast<const VariableAddress>(&expr))
+                if (auto *varAddr = dyn_cast<const VariableAddressNode>(&expr))
                     return factory.variableAddress(varAddr->getFrom()).asExpr();
-                if (auto *fieldAddr = dyn_cast<const FieldAddress>(&expr)) {
+                if (auto *fieldAddr = dyn_cast<const FieldAddressNode>(&expr)) {
                     auto base = requireAddress(run(*fieldAddr->getBaseAddr()));
                     return factory
                         .fieldAddress(fieldAddr->getPointeeType(),
@@ -205,7 +208,7 @@ namespace acslg::analyzer::symbolic {
                     return factory.symbolValue(symbolValue->getValType(), from,
                                                symbolValue->getFromPoint().value());
                 }
-                if (auto *symbolAddr = dyn_cast<const SymbolAddress>(&expr)) {
+                if (auto *symbolAddr = dyn_cast<const SymbolAddressNode>(&expr)) {
                     std::optional<AddrHandle> from;
                     if (auto fromAddr = symbolAddr->getFromAddrHandle())
                         from = requireAddress(run(**fromAddr));
@@ -295,9 +298,9 @@ namespace acslg::analyzer::symbolic {
                     return factory.unknown();
                 if (auto *rangeIndex = dyn_cast<const detail::RangeIndexNode>(&expr))
                     return factory.rangeIndex(rangeIndex->getName());
-                if (auto *varAddr = dyn_cast<const VariableAddress>(&expr))
+                if (auto *varAddr = dyn_cast<const VariableAddressNode>(&expr))
                     return factory.variableAddress(varAddr->getFrom()).asExpr();
-                if (auto *fieldAddr = dyn_cast<const FieldAddress>(&expr)) {
+                if (auto *fieldAddr = dyn_cast<const FieldAddressNode>(&expr)) {
                     auto base = requireAddress(run(*fieldAddr->getBaseAddr()));
                     return factory
                         .fieldAddress(fieldAddr->getPointeeType(),
@@ -317,7 +320,7 @@ namespace acslg::analyzer::symbolic {
                     return factory.symbolValue(symbolValue->getValType(), realFromAddr,
                                                pathSubTo.getStartPoint());
                 }
-                if (auto *symbolAddr = dyn_cast<const SymbolAddress>(&expr)) {
+                if (auto *symbolAddr = dyn_cast<const SymbolAddressNode>(&expr)) {
                     auto fromPoint = symbolAddr->getFromPoint();
                     if (fromPoint && fromPoint.value() != pointToSub)
                         return factory.importExpr(expr);
@@ -434,9 +437,9 @@ namespace acslg::analyzer::symbolic {
                     return factory.unknown();
                 if (expr.isRangeIndex())
                     return indexExpr;
-                if (auto *varAddr = dyn_cast<const VariableAddress>(&expr))
+                if (auto *varAddr = dyn_cast<const VariableAddressNode>(&expr))
                     return factory.variableAddress(varAddr->getFrom()).asExpr();
-                if (auto *fieldAddr = dyn_cast<const FieldAddress>(&expr)) {
+                if (auto *fieldAddr = dyn_cast<const FieldAddressNode>(&expr)) {
                     auto base = requireAddress(run(*fieldAddr->getBaseAddr()));
                     return factory
                         .fieldAddress(fieldAddr->getPointeeType(),
@@ -449,7 +452,7 @@ namespace acslg::analyzer::symbolic {
                     return factory.symbolValue(symbolValue->getValType(), from,
                                                symbolValue->getFromPoint().value());
                 }
-                if (auto *symbolAddr = dyn_cast<const SymbolAddress>(&expr)) {
+                if (auto *symbolAddr = dyn_cast<const SymbolAddressNode>(&expr)) {
                     std::optional<AddrHandle> from;
                     if (auto fromAddr = symbolAddr->getFromAddrHandle())
                         from = requireAddress(run(**fromAddr));
@@ -531,10 +534,10 @@ namespace acslg::analyzer::symbolic {
             return preserveImportedType(binary(left, binaryExpr->getOperator(), right));
         }
 
-        if (auto *variableAddr = dyn_cast<VariableAddress>(&expr))
+        if (auto *variableAddr = dyn_cast<VariableAddressNode>(&expr))
             return preserveImportedType(variableAddress(variableAddr->getFrom()).asExpr());
 
-        if (auto *fieldAddr = dyn_cast<FieldAddress>(&expr)) {
+        if (auto *fieldAddr = dyn_cast<FieldAddressNode>(&expr)) {
             auto base = importAddress(*fieldAddr->getBaseAddr());
             return preserveImportedType(
                 fieldAddress(fieldAddr->getPointeeType(), fieldAddr->getDefinition(), base,
@@ -542,7 +545,7 @@ namespace acslg::analyzer::symbolic {
                     .asExpr());
         }
 
-        if (auto *symbolAddr = dyn_cast<SymbolAddress>(&expr)) {
+        if (auto *symbolAddr = dyn_cast<SymbolAddressNode>(&expr)) {
             auto from = symbolAddr->getFromAddrHandle();
             if (from)
                 from = importAddress(**from);
@@ -737,7 +740,7 @@ namespace acslg::analyzer::symbolic {
 
     AddrHandle ExprFactory::variableAddress(utils::not_null<const clang::VarDecl *> from) {
         return internAddress(
-            detail::ExprFactoryInternals::makeNode<VariableAddress>(from));
+            detail::ExprFactoryInternals::makeNode<VariableAddressNode>(from));
     }
 
     AddrHandle ExprFactory::symbolAddress(
@@ -747,13 +750,13 @@ namespace acslg::analyzer::symbolic {
         std::optional<ExprHandle> offset,
         std::optional<ExprHandle> length) {
         auto resolvedOffset =
-            offset.value_or(literal(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)));
-        return internAddress(detail::ExprFactoryInternals::makeNode<SymbolAddress>(
+            offset.value_or(literal(static_cast<int64_t>(SymbolAddressView::ZERO_OFFSET)));
+        return internAddress(detail::ExprFactoryInternals::makeNode<SymbolAddressNode>(
             pointeeType, from, std::move(fromPoint), resolvedOffset, length));
     }
 
     AddrHandle ExprFactory::withOffset(AddrHandle address, ExprHandle offset) {
-        const auto &symbolAddr = address.cast<SymbolAddress>();
+        const auto &symbolAddr = address.cast<SymbolAddressNode>();
         auto from              = symbolAddr.getFromAddrHandle();
 
         std::optional<ExprHandle> length;
@@ -765,21 +768,21 @@ namespace acslg::analyzer::symbolic {
     }
 
     AddrHandle ExprFactory::withAddedOffset(AddrHandle address, ExprHandle extra) {
-        const auto &symbolAddr = address.cast<SymbolAddress>();
+        const auto &symbolAddr = address.cast<SymbolAddressNode>();
         auto newOffset = simplifiedBinary(importExpr(*symbolAddr.getOffset()),
                                           detail::BinaryOpExprNode::Operator::Add, extra);
         return withOffset(address, newOffset);
     }
 
     AddrHandle ExprFactory::withSubtractedOffset(AddrHandle address, ExprHandle extra) {
-        const auto &symbolAddr = address.cast<SymbolAddress>();
+        const auto &symbolAddr = address.cast<SymbolAddressNode>();
         auto newOffset = simplifiedBinary(importExpr(*symbolAddr.getOffset()),
                                           detail::BinaryOpExprNode::Operator::Subtract, extra);
         return withOffset(address, newOffset);
     }
 
     AddrHandle ExprFactory::withLength(AddrHandle address, ExprHandle length) {
-        const auto &symbolAddr = address.cast<SymbolAddress>();
+        const auto &symbolAddr = address.cast<SymbolAddressNode>();
         auto from              = symbolAddr.getFromAddrHandle();
 
         return symbolAddress(symbolAddr.getPointeeType(), from,
@@ -788,7 +791,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     AddrHandle ExprFactory::withAddedLength(AddrHandle address, ExprHandle extra) {
-        const auto &symbolAddr = address.cast<SymbolAddress>();
+        const auto &symbolAddr = address.cast<SymbolAddressNode>();
         auto currentLength =
             symbolAddr.getLength() ? importExpr(*symbolAddr.getLength().value()) : literal(1);
         auto newLength = simplifiedBinary(currentLength, detail::BinaryOpExprNode::Operator::Add,
@@ -797,7 +800,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     AddrHandle ExprFactory::withoutLength(AddrHandle address) {
-        const auto &symbolAddr = address.cast<SymbolAddress>();
+        const auto &symbolAddr = address.cast<SymbolAddressNode>();
         auto from              = symbolAddr.getFromAddrHandle();
 
         return symbolAddress(symbolAddr.getPointeeType(), from,
@@ -809,7 +812,7 @@ namespace acslg::analyzer::symbolic {
                                          const clang::RecordDecl *record,
                                          AddrHandle baseAddr,
                                          size_t fieldIndex) {
-        return internAddress(detail::ExprFactoryInternals::makeNode<FieldAddress>(
+        return internAddress(detail::ExprFactoryInternals::makeNode<FieldAddressNode>(
             pointeeType, record, baseAddr, fieldIndex));
     }
 
@@ -880,7 +883,7 @@ namespace acslg::analyzer::symbolic {
         if (expr.isUnknown())
             return factory.unknown();
 
-        if (auto *symbolAddr = dyn_cast<const SymbolAddress>(&expr)) {
+        if (auto *symbolAddr = dyn_cast<const SymbolAddressNode>(&expr)) {
             if (symbolAddr->getLength())
                 ERROR("Address range is solely for address representation and should not be "
                       "used as an expression.");
@@ -969,7 +972,7 @@ namespace acslg::analyzer::symbolic {
         ExprFactoryScope scope(factory);
         auto simplified = simplifiedExprHandle(factory, expr);
 
-        if (auto *symbolAddr = simplified.dyn_cast<const SymbolAddress>())
+        if (auto *symbolAddr = simplified.dyn_cast<const SymbolAddressNode>())
             return factory.importAddress(*symbolAddr);
 
         auto *binary = simplified.dyn_cast<const detail::BinaryOpExprNode>();
@@ -1151,7 +1154,7 @@ namespace acslg::analyzer::symbolic {
         return utils::hash_val(getKind(), static_cast<size_t>(op_), left_->hash(), right_->hash());
     }
 
-    size_t SymbolAddress::hash() const {
+    size_t SymbolAddressNode::hash() const {
         size_t seed = utils::hash_val(SymbolicExpr::getKind(), fromPoint_.hash(), offset_->hash(),
                                       length_ ? length_.value()->hash() : 0);
 
@@ -1159,9 +1162,9 @@ namespace acslg::analyzer::symbolic {
         return seed;
     }
 
-    size_t VariableAddress::hash() const { return utils::hash_val(getKind(), from_.get()); }
+    size_t VariableAddressNode::hash() const { return utils::hash_val(getKind(), from_.get()); }
 
-    size_t FieldAddress::hash() const {
+    size_t FieldAddressNode::hash() const {
         return utils::hash_val(getKind(), baseAddr_->hash(), fieldIndex_);
     }
 
@@ -1309,7 +1312,7 @@ namespace acslg::analyzer::symbolic {
         return cast<const SymbolValueNode>(handle_.get().get())->getFromRoot();
     }
 
-    std::string SymbolAddress::dump() const {
+    std::string SymbolAddressNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("SymbolAddress");
@@ -1330,7 +1333,7 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    std::string VariableAddress::dump() const {
+    std::string VariableAddressNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("VariableAddress") << " {" << key("from") << "=";
@@ -1343,7 +1346,7 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    std::string FieldAddress::dump() const {
+    std::string FieldAddressNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("FieldAddress") << " {" << key("from") << "=";
@@ -1355,7 +1358,7 @@ namespace acslg::analyzer::symbolic {
 
     VariableAddressView::VariableAddressView(AddrHandle handle) : handle_(handle) {
         if (!handle_->isVariableAddress())
-            ERROR("VariableAddressView requires a VariableAddress.");
+            ERROR("VariableAddressView requires a variable address.");
     }
 
     std::optional<VariableAddressView> VariableAddressView::tryFrom(AddrHandle handle) {
@@ -1381,12 +1384,12 @@ namespace acslg::analyzer::symbolic {
     }
 
     utils::not_null<const clang::VarDecl *> VariableAddressView::declaration() const {
-        return cast<const VariableAddress>(handle_.get().get())->getFrom();
+        return cast<const VariableAddressNode>(handle_.get().get())->getFrom();
     }
 
     FieldAddressView::FieldAddressView(AddrHandle handle) : handle_(handle) {
         if (!handle_->isFieldAddress())
-            ERROR("FieldAddressView requires a FieldAddress.");
+            ERROR("FieldAddressView requires a field address.");
     }
 
     std::optional<FieldAddressView> FieldAddressView::tryFrom(AddrHandle handle) {
@@ -1412,15 +1415,15 @@ namespace acslg::analyzer::symbolic {
     }
 
     utils::not_null<const clang::RecordDecl *> FieldAddressView::definition() const {
-        return cast<const FieldAddress>(handle_.get().get())->getDefinition();
+        return cast<const FieldAddressNode>(handle_.get().get())->getDefinition();
     }
 
     AddrHandle FieldAddressView::base() const {
-        return cast<const FieldAddress>(handle_.get().get())->getBaseAddr().handle();
+        return cast<const FieldAddressNode>(handle_.get().get())->getBaseAddr().handle();
     }
 
     size_t FieldAddressView::fieldIndex() const {
-        return cast<const FieldAddress>(handle_.get().get())->getFieldIndex();
+        return cast<const FieldAddressNode>(handle_.get().get())->getFieldIndex();
     }
 
     std::optional<utils::not_null<const clang::VarDecl *>> FieldAddressView::fromRoot() const {
@@ -1429,7 +1432,7 @@ namespace acslg::analyzer::symbolic {
 
     SymbolAddressView::SymbolAddressView(AddrHandle handle) : handle_(handle) {
         if (!handle_->isSymbolAddress())
-            ERROR("SymbolAddressView requires a SymbolAddress.");
+            ERROR("SymbolAddressView requires a symbol address.");
     }
 
     std::optional<SymbolAddressView> SymbolAddressView::tryFrom(AddrHandle handle) {
@@ -1459,30 +1462,30 @@ namespace acslg::analyzer::symbolic {
     }
 
     std::optional<AddrHandle> SymbolAddressView::from() const {
-        return cast<const SymbolAddress>(handle_.get().get())->getFromAddrHandle();
+        return cast<const SymbolAddressNode>(handle_.get().get())->getFromAddrHandle();
     }
 
     std::optional<SourcePoint> SymbolAddressView::fromPoint() const {
-        return cast<const SymbolAddress>(handle_.get().get())->getFromPoint();
+        return cast<const SymbolAddressNode>(handle_.get().get())->getFromPoint();
     }
 
     ExprHandle SymbolAddressView::offset() const {
-        return ExprHandle{cast<const SymbolAddress>(handle_.get().get())->getOffset()};
+        return ExprHandle{cast<const SymbolAddressNode>(handle_.get().get())->getOffset()};
     }
 
     std::optional<ExprHandle> SymbolAddressView::length() const {
-        const auto &length = cast<const SymbolAddress>(handle_.get().get())->getLength();
+        const auto &length = cast<const SymbolAddressNode>(handle_.get().get())->getLength();
         if (!length)
             return std::nullopt;
         return length->handle();
     }
 
     std::optional<ExprHandle> SymbolAddressView::rightBound() const {
-        return cast<const SymbolAddress>(handle_.get().get())->getRightBound();
+        return cast<const SymbolAddressNode>(handle_.get().get())->getRightBound();
     }
 
     SymbolAddrBaseInfo SymbolAddressView::baseInfo() const {
-        return cast<const SymbolAddress>(handle_.get().get())->getBaseInfo();
+        return cast<const SymbolAddressNode>(handle_.get().get())->getBaseInfo();
     }
 
     std::optional<utils::not_null<const clang::VarDecl *>> SymbolAddressView::fromRoot() const {
@@ -1710,7 +1713,7 @@ namespace acslg::analyzer::symbolic {
         return prefix + std::move(valueStr.value()) + suffix;
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> SymbolAddress::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> SymbolAddressNode::doGetACSL(
         const SymbolicExpr::GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
@@ -1761,7 +1764,7 @@ namespace acslg::analyzer::symbolic {
         return offsetedAddrStr;
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> VariableAddress::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> VariableAddressNode::doGetACSL(
         const SymbolicExpr::GetACSLConfig &,
         std::unordered_set<SourcePoint> &,
         std::optional<SourcePoint>,
@@ -1772,7 +1775,7 @@ namespace acslg::analyzer::symbolic {
                (needParens ? ")" : "");
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> FieldAddress::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> FieldAddressNode::doGetACSL(
         const SymbolicExpr::GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
@@ -1788,7 +1791,7 @@ namespace acslg::analyzer::symbolic {
                (needParens ? ")" : "");
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> SymbolAddress::doGetACSLOfValue(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> SymbolAddressNode::doGetACSLOfValue(
         const SymbolicExpr::GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
@@ -1864,7 +1867,7 @@ namespace acslg::analyzer::symbolic {
         return (needParens ? "(" : "") + std::move(subedAddrStr) + (needParens ? ")" : "");
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> VariableAddress::doGetACSLOfValue(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> VariableAddressNode::doGetACSLOfValue(
         const SymbolicExpr::GetACSLConfig &,
         std::unordered_set<SourcePoint> &,
         std::optional<SourcePoint>,
@@ -1873,7 +1876,7 @@ namespace acslg::analyzer::symbolic {
         return from_->getNameAsString();
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> FieldAddress::doGetACSLOfValue(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> FieldAddressNode::doGetACSLOfValue(
         const SymbolicExpr::GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
@@ -1916,7 +1919,7 @@ namespace acslg::analyzer::symbolic {
                 auto origin = getBorrowedSymbolOrigin(*symbol);
                 if (!origin)
                     return std::nullopt;
-                auto *fieldAddr = origin->address.dyn_cast<FieldAddress>();
+                auto *fieldAddr = origin->address.dyn_cast<FieldAddressNode>();
                 if (fieldAddr == nullptr || fieldAddr->getFieldIndex() != index)
                     return std::nullopt;
 
@@ -1936,7 +1939,7 @@ namespace acslg::analyzer::symbolic {
         std::optional<SymbolOrigin> getBorrowedSymbolOrigin(const Symbol &symbol) {
             if (auto *value = dyn_cast<const SymbolValueNode>(&symbol))
                 return SymbolOrigin{value->getFromAddrHandle(), value->getFromPoint().value()};
-            if (auto *address = dyn_cast<const SymbolAddress>(&symbol)) {
+            if (auto *address = dyn_cast<const SymbolAddressNode>(&symbol)) {
                 auto from = address->getFromAddrHandle();
                 if (from)
                     return SymbolOrigin{*from, address->getFromPoint().value()};
@@ -2204,8 +2207,8 @@ namespace acslg::analyzer::symbolic {
         return *fromAddr_ == *symbolValue->fromAddr_;
     }
 
-    bool SymbolAddress::equal(const SymbolicExpr &expr) const {
-        auto other = dyn_cast<const SymbolAddress>(&expr);
+    bool SymbolAddressNode::equal(const SymbolicExpr &expr) const {
+        auto other = dyn_cast<const SymbolAddressNode>(&expr);
         if (!other)
             return false;
         if (getValType() != expr.getValType())
@@ -2240,8 +2243,8 @@ namespace acslg::analyzer::symbolic {
         return true;
     }
 
-    bool VariableAddress::equal(const SymbolicExpr &expr) const {
-        auto other = dyn_cast<const VariableAddress>(&expr);
+    bool VariableAddressNode::equal(const SymbolicExpr &expr) const {
+        auto other = dyn_cast<const VariableAddressNode>(&expr);
         if (!other)
             return false;
         if (getValType() != expr.getValType())
@@ -2250,8 +2253,8 @@ namespace acslg::analyzer::symbolic {
         return from_ == other->from_;
     }
 
-    bool FieldAddress::equal(const SymbolicExpr &expr) const {
-        auto other = dyn_cast<const FieldAddress>(&expr);
+    bool FieldAddressNode::equal(const SymbolicExpr &expr) const {
+        auto other = dyn_cast<const FieldAddressNode>(&expr);
         if (!other)
             return false;
         if (getValType() != expr.getValType())
@@ -2260,7 +2263,7 @@ namespace acslg::analyzer::symbolic {
         return *baseAddr_ == *other->baseAddr_ && fieldIndex_ == other->fieldIndex_;
     }
 
-    std::optional<utils::not_null<const clang::VarDecl *>> SymbolAddress::getFromRoot() const {
+    std::optional<utils::not_null<const clang::VarDecl *>> SymbolAddressNode::getFromRoot() const {
         if (fromAddr_ == std::nullopt)
             return std::nullopt;
         return fromAddr_.value()->getFromRoot();
@@ -2272,11 +2275,11 @@ namespace acslg::analyzer::symbolic {
         return fromAddr_.value()->getFromRoot();
     }
 
-    std::optional<utils::not_null<const clang::VarDecl *>> VariableAddress::getFromRoot() const {
+    std::optional<utils::not_null<const clang::VarDecl *>> VariableAddressNode::getFromRoot() const {
         return from_;
     }
 
-    std::optional<utils::not_null<const clang::VarDecl *>> FieldAddress::getFromRoot() const {
+    std::optional<utils::not_null<const clang::VarDecl *>> FieldAddressNode::getFromRoot() const {
         return baseAddr_->getFromRoot();
     }
 
@@ -2317,7 +2320,7 @@ namespace acslg::analyzer::symbolic {
         return expr_->collectUsedSymbols();
     }
 
-    SymbolicExpr::UsedMap SymbolAddress::collectUsedSymbols() const {
+    SymbolicExpr::UsedMap SymbolAddressNode::collectUsedSymbols() const {
         if (length_)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
@@ -2332,7 +2335,7 @@ namespace acslg::analyzer::symbolic {
             fromAddr_.emplace(other.fromAddr_.value());
     }
 
-    SymbolAddress::SymbolAddress(const clang::QualType pointeeType,
+    SymbolAddressNode::SymbolAddressNode(const clang::QualType pointeeType,
                                  std::optional<AddrHandle> from,
                                  SourcePoint fromPoint,
                                  ExprHandle offset,
@@ -2352,7 +2355,7 @@ namespace acslg::analyzer::symbolic {
         return utils::hash_val(fromPoint_.hash(), fromAddr_ ? fromAddr_.value()->hash() : 0);
     }
 
-    std::optional<ExprHandle> SymbolAddress::getRightBound() const {
+    std::optional<ExprHandle> SymbolAddressNode::getRightBound() const {
         // Not sure return which one is better, offset_+1 or nullopt.
         if (length_ == std::nullopt)
             return std::nullopt;
@@ -2362,13 +2365,13 @@ namespace acslg::analyzer::symbolic {
                               factory.importExpr(*length_.value()));
     }
 
-    SymbolAddrBaseInfo SymbolAddress::getBaseInfo() const {
+    SymbolAddrBaseInfo SymbolAddressNode::getBaseInfo() const {
         if (fromAddr_ == std::nullopt)
             return SymbolAddrBaseInfo{std::nullopt, fromPoint_, pointeeType_};
         return SymbolAddrBaseInfo{getFromAddrHandle().value(), fromPoint_, pointeeType_};
     }
 
-    int SymbolAddress::getDimension() const {
+    int SymbolAddressNode::getDimension() const {
         if (fromAddr_ == std::nullopt)
             return -1;
         if (auto dim = fromAddr_.value()->getDimension(); dim >= 0)
@@ -2376,9 +2379,9 @@ namespace acslg::analyzer::symbolic {
         return -1;
     }
 
-    int VariableAddress::getDimension() const { return 0; }
+    int VariableAddressNode::getDimension() const { return 0; }
 
-    int FieldAddress::getDimension() const { return baseAddr_->getDimension(); }
+    int FieldAddressNode::getDimension() const { return baseAddr_->getDimension(); }
 
     StructureNode::StructureNode(StructureInfo info, std::vector<ExprHandle> fields)
         : SymbolicExpr(

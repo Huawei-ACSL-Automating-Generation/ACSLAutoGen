@@ -34,7 +34,6 @@ namespace acslg::analyzer {
 
 namespace acslg::analyzer::symbolic {
     class Address;
-    class SymbolAddress;
     class Symbol;
     class ExprFactory;
     class ExprFactoryScope;
@@ -59,6 +58,9 @@ namespace acslg::analyzer::symbolic {
         class SymbolValueNode;
         class UnaryOpExprNode;
         class BinaryOpExprNode;
+        class VariableAddressNode;
+        class FieldAddressNode;
+        class SymbolAddressNode;
         struct ExprFactoryInternals;
     }
 
@@ -1718,18 +1720,15 @@ namespace acslg::analyzer::symbolic {
         }
     };
 
-    /// @class SymbolAddress
+    namespace detail {
+
+    /// @class SymbolAddressNode
     /// @brief Symbolic address with fromAddr, fromPoint, offset and length. Maybe a symbol value
     /// of pointer variable or an address of heap.
-    class SymbolAddress : public Address, public Symbol {
+    class SymbolAddressNode : public Address, public Symbol {
       public:
-        inline static constexpr signed long ZERO_OFFSET =
-            0; ///< Unify the type of zero under zero offset. This type should be the same as the
-               ///< type of the zero value in SymbolicExpr::simplifiedExprIfLinear, or relax the
-               ///< type comparison in LiteralExprNode's equal method.
-        struct BaseInfo;
-        SymbolAddress(const SymbolAddress &) = delete;
-        SymbolAddress(SymbolAddress &&) = default;
+        SymbolAddressNode(const SymbolAddressNode &) = delete;
+        SymbolAddressNode(SymbolAddressNode &&) = default;
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_SymbolAddress;
@@ -1738,7 +1737,7 @@ namespace acslg::analyzer::symbolic {
             return e->getKind() == Symbol::Kind::K_SymbolAddress;
         }
 
-        bool operator==(const SymbolAddress &other) const { return equal(other); }
+        bool operator==(const SymbolAddressNode &other) const { return equal(other); }
 
         utils::not_null<const SymbolicExpr *> getOffset() const { return offset_.get(); }
 
@@ -1803,11 +1802,11 @@ namespace acslg::analyzer::symbolic {
       private:
         friend struct detail::ExprFactoryInternals;
 
-        SymbolAddress(clang::QualType pointeeType,
-                      std::optional<AddrHandle> from,
-                      SourcePoint fromPoint,
-                      ExprHandle offset,
-                      std::optional<ExprHandle> length);
+        SymbolAddressNode(clang::QualType pointeeType,
+                          std::optional<AddrHandle> from,
+                          SourcePoint fromPoint,
+                          ExprHandle offset,
+                          std::optional<ExprHandle> length);
 
         ExprChild offset_; ///< Offset relative to an address.
         std::optional<AddressChild>
@@ -1819,6 +1818,8 @@ namespace acslg::analyzer::symbolic {
         SourcePoint fromPoint_;
         std::optional<ExprChild> length_;
     };
+
+    } // namespace detail
 
     struct SymbolAddrBaseInfo {
         std::optional<AddressChild> fromAddr_;
@@ -1868,16 +1869,18 @@ namespace acslg::analyzer::symbolic {
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const;
     };
 
-    /// @class VariableAddress
-    /// @brief Represents the address of a C variable.
-    class VariableAddress : public Address {
-      public:
-        VariableAddress(const VariableAddress &) = delete;
-        VariableAddress &operator=(const VariableAddress &other) = delete;
-        VariableAddress(VariableAddress &&)            = default;
-        VariableAddress &operator=(VariableAddress &&) = delete;
+    namespace detail {
 
-        bool operator==(const VariableAddress &other) const { return equal(other); }
+    /// @class VariableAddressNode
+    /// @brief Represents the address of a C variable.
+    class VariableAddressNode : public Address {
+      public:
+        VariableAddressNode(const VariableAddressNode &) = delete;
+        VariableAddressNode &operator=(const VariableAddressNode &other) = delete;
+        VariableAddressNode(VariableAddressNode &&)            = default;
+        VariableAddressNode &operator=(VariableAddressNode &&) = delete;
+
+        bool operator==(const VariableAddressNode &other) const { return equal(other); }
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_VariableAddress;
@@ -1936,7 +1939,7 @@ namespace acslg::analyzer::symbolic {
       private:
         friend struct detail::ExprFactoryInternals;
 
-        explicit VariableAddress(utils::not_null<const clang::VarDecl *> from)
+        explicit VariableAddressNode(utils::not_null<const clang::VarDecl *> from)
             : Address(SymbolicExpr::ExprKind::K_VariableAddress,
                       SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                       from->getType()),
@@ -1945,13 +1948,13 @@ namespace acslg::analyzer::symbolic {
         utils::not_null<const clang::VarDecl *> from_;
     };
 
-    /// @class FieldAddress
+    /// @class FieldAddressNode
     /// @brief Represents the address of a C Structure's member.
-    class FieldAddress : public Address {
+    class FieldAddressNode : public Address {
       public:
-        FieldAddress(const FieldAddress &) = delete;
-        FieldAddress &operator=(const FieldAddress &other) = delete;
-        FieldAddress(FieldAddress &&) = default;
+        FieldAddressNode(const FieldAddressNode &) = delete;
+        FieldAddressNode &operator=(const FieldAddressNode &other) = delete;
+        FieldAddressNode(FieldAddressNode &&) = default;
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_FieldAddress;
@@ -2012,10 +2015,10 @@ namespace acslg::analyzer::symbolic {
       private:
         friend struct detail::ExprFactoryInternals;
 
-        FieldAddress(clang::QualType pointeeType,
-                     const clang::RecordDecl *RD,
-                     AddrHandle baseAddr,
-                     size_t fieldIndex)
+        FieldAddressNode(clang::QualType pointeeType,
+                         const clang::RecordDecl *RD,
+                         AddrHandle baseAddr,
+                         size_t fieldIndex)
             : Address(SymbolicExpr::ExprKind::K_FieldAddress,
                       SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
                       pointeeType),
@@ -2029,6 +2032,8 @@ namespace acslg::analyzer::symbolic {
         AddressChild baseAddr_;
         size_t fieldIndex_;
     };
+
+    } // namespace detail
 
     struct AddressHash {
         std::size_t operator()(const Address &addr) const noexcept { return addr.hash(); }
@@ -2143,16 +2148,6 @@ namespace acslg::analyzer::symbolic {
 } // namespace acslg::analyzer::symbolic
 
 namespace std {
-    template <> struct hash<acslg::analyzer::symbolic::VariableAddress> {
-        size_t operator()(const acslg::analyzer::symbolic::VariableAddress &va) const noexcept {
-            return va.hash();
-        }
-    };
-    template <> struct hash<acslg::analyzer::symbolic::SymbolAddress> {
-        size_t operator()(const acslg::analyzer::symbolic::SymbolAddress &sa) const noexcept {
-            return sa.hash();
-        }
-    };
     template <> struct hash<acslg::analyzer::symbolic::SymbolAddrBaseInfo> {
         size_t operator()(const acslg::analyzer::symbolic::SymbolAddrBaseInfo &bi) const noexcept {
             return bi.hash();
