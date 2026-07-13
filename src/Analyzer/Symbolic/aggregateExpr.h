@@ -71,17 +71,19 @@ namespace acslg::analyzer::symbolic {
         std::string name_;
     };
 
+    namespace detail {
+
     /**
-     * @class OverRangeExpr
+     * @class OverRangeExprNode
      * @brief Base class for expressions that quantify or aggregate over a symbolic address range.
      */
-    class OverRangeExpr : public SymbolicExpr {
+    class OverRangeExprNode : public SymbolicExpr {
       public:
-        OverRangeExpr(const OverRangeExpr &) = delete;
-        OverRangeExpr(OverRangeExpr &&) = default;
-        OverRangeExpr &operator=(const OverRangeExpr &) = delete;
-        OverRangeExpr &operator=(OverRangeExpr &&) = delete;
-        virtual ~OverRangeExpr()                   = default;
+        OverRangeExprNode(const OverRangeExprNode &) = delete;
+        OverRangeExprNode(OverRangeExprNode &&) = default;
+        OverRangeExprNode &operator=(const OverRangeExprNode &) = delete;
+        OverRangeExprNode &operator=(OverRangeExprNode &&) = delete;
+        virtual ~OverRangeExprNode()                   = default;
 
         static bool classof(const SymbolicExpr *e) {
             auto k = e->getKind();
@@ -97,7 +99,7 @@ namespace acslg::analyzer::symbolic {
         std::string_view getIndexName() const { return indexName_; }
 
       protected:
-        OverRangeExpr(ExprKind kind, Type type, AddrHandle range, std::string_view indexName)
+        OverRangeExprNode(ExprKind kind, Type type, AddrHandle range, std::string_view indexName)
             : SymbolicExpr(kind, type), range_(range.asExpr()), indexName_(indexName) {
             if (!this->range().getLength())
                 ERROR("`range_` is not a memory *range*.");
@@ -109,7 +111,7 @@ namespace acslg::analyzer::symbolic {
         std::string indexName_;
     };
 
-    class SumOverRange : public OverRangeExpr, public Symbol {
+    class SumOverRangeNode : public OverRangeExprNode, public Symbol {
       public:
         static bool classof(const SymbolicExpr *e) {
             return e->getKind() == ExprKind::K_SumOverRange;
@@ -118,10 +120,10 @@ namespace acslg::analyzer::symbolic {
             return e->getKind() == Symbol::Kind::K_SumOverRange;
         }
 
-        SumOverRange(const SumOverRange &)            = delete;
-        SumOverRange(SumOverRange &&)                 = default;
-        SumOverRange &operator=(const SumOverRange &) = delete;
-        SumOverRange &operator=(SumOverRange &&)      = delete;
+        SumOverRangeNode(const SumOverRangeNode &)            = delete;
+        SumOverRangeNode(SumOverRangeNode &&)                 = default;
+        SumOverRangeNode &operator=(const SumOverRangeNode &) = delete;
+        SumOverRangeNode &operator=(SumOverRangeNode &&)      = delete;
 
         // SymbolicExpr
         /// @brief Dump a readable description of the sum.
@@ -146,24 +148,24 @@ namespace acslg::analyzer::symbolic {
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; };
 
       private:
-        friend struct detail::ExprFactoryInternals;
+        friend struct ExprFactoryInternals;
 
-        SumOverRange(AddrHandle range, std::string_view indexName, SourcePoint fromPoint);
+        SumOverRangeNode(AddrHandle range, std::string_view indexName, SourcePoint fromPoint);
 
         SourcePoint fromPoint_;
 
     };
 
-    class QuantifierOverRange : public OverRangeExpr {
+    class QuantifierOverRangeNode : public OverRangeExprNode {
       public:
         static bool classof(const SymbolicExpr *e) {
             return e->getKind() == ExprKind::K_QuantifierOverRange;
         }
 
-        QuantifierOverRange(const QuantifierOverRange &) = delete;
-        QuantifierOverRange(QuantifierOverRange &&) = default;
-        QuantifierOverRange &operator=(const QuantifierOverRange &) = delete;
-        QuantifierOverRange &operator=(QuantifierOverRange &&) = delete;
+        QuantifierOverRangeNode(const QuantifierOverRangeNode &) = delete;
+        QuantifierOverRangeNode(QuantifierOverRangeNode &&) = default;
+        QuantifierOverRangeNode &operator=(const QuantifierOverRangeNode &) = delete;
+        QuantifierOverRangeNode &operator=(QuantifierOverRangeNode &&) = delete;
 
         RangeQuantifier getQuantifier() const { return quant_; }
         const SymbolicExpr &getPredicate() const { return *pred_; }
@@ -173,7 +175,7 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override {
-            return utils::hash_val(getKind(), OverRangeExpr::hash(), quant_, pred_->hash());
+            return utils::hash_val(getKind(), OverRangeExprNode::hash(), quant_, pred_->hash());
         };
         bool isLinear() const override { return false; }
         int getMaxDegree() const override { return -1; }
@@ -187,13 +189,13 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
-        friend struct detail::ExprFactoryInternals;
+        friend struct ExprFactoryInternals;
 
-        QuantifierOverRange(AddrHandle range,
+        QuantifierOverRangeNode(AddrHandle range,
                             std::string_view indexName,
                             RangeQuantifier quant,
                             ExprHandle pred)
-            : OverRangeExpr(ExprKind::K_QuantifierOverRange,
+            : OverRangeExprNode(ExprKind::K_QuantifierOverRange,
                             Type{ScalarKind::Bool, 8},
                             range,
                             indexName),
@@ -203,7 +205,7 @@ namespace acslg::analyzer::symbolic {
         ExprChild pred_;
     };
 
-    class MaxMinOverRange : public OverRangeExpr, public Symbol {
+    class MaxMinOverRangeNode : public OverRangeExprNode, public Symbol {
       public:
         static bool classof(const SymbolicExpr *e) {
             return e->getKind() == ExprKind::K_MaxMinOverRange;
@@ -212,10 +214,10 @@ namespace acslg::analyzer::symbolic {
             return e->getKind() == Symbol::Kind::K_MaxMinOverRange;
         }
 
-        MaxMinOverRange(const MaxMinOverRange &) = delete;
-        MaxMinOverRange(MaxMinOverRange &&) = default;
-        MaxMinOverRange &operator=(const MaxMinOverRange &) = delete;
-        MaxMinOverRange &operator=(MaxMinOverRange &&) = delete;
+        MaxMinOverRangeNode(const MaxMinOverRangeNode &) = delete;
+        MaxMinOverRangeNode(MaxMinOverRangeNode &&) = default;
+        MaxMinOverRangeNode &operator=(const MaxMinOverRangeNode &) = delete;
+        MaxMinOverRangeNode &operator=(MaxMinOverRangeNode &&) = delete;
 
         RangeExtremum getExtremum() const { return extremum_; }
         const SymbolicExpr &getExpr() const { return *expr_; }
@@ -224,7 +226,7 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override {
-            return utils::hash_val(SymbolicExpr::getKind(), OverRangeExpr::hash(), extremum_,
+            return utils::hash_val(SymbolicExpr::getKind(), OverRangeExprNode::hash(), extremum_,
                                    expr_->hash(), fromPoint_.hash());
         };
         bool isLinear() const override { return false; }
@@ -243,14 +245,14 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
-        friend struct detail::ExprFactoryInternals;
+        friend struct ExprFactoryInternals;
 
-        MaxMinOverRange(AddrHandle range,
+        MaxMinOverRangeNode(AddrHandle range,
                         std::string_view indexName,
                         RangeExtremum extremum,
                         ExprHandle expr,
                         SourcePoint fromPoint)
-            : OverRangeExpr(ExprKind::K_MaxMinOverRange,
+            : OverRangeExprNode(ExprKind::K_MaxMinOverRange,
                             expr.getValType(),
                             range,
                             indexName),
@@ -261,6 +263,8 @@ namespace acslg::analyzer::symbolic {
         ExprChild expr_;
         SourcePoint fromPoint_;
     };
+
+    } // namespace detail
 
     ExprHandle makeSumOverRangeHandle(ExprFactory &factory,
                                       const SymbolAddress &range,

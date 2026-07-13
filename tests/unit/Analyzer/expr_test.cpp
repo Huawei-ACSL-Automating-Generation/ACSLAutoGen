@@ -38,12 +38,12 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_copy_constructible_v<symbolic::VariableAddress>);
     static_assert(!std::is_copy_constructible_v<symbolic::SymbolAddress>);
     static_assert(!std::is_copy_constructible_v<symbolic::Structure>);
-    static_assert(!std::is_copy_constructible_v<symbolic::SumOverRange>);
-    static_assert(!std::is_copy_constructible_v<symbolic::QuantifierOverRange>);
-    static_assert(!std::is_copy_constructible_v<symbolic::MaxMinOverRange>);
+    static_assert(!std::is_copy_constructible_v<symbolic::detail::SumOverRangeNode>);
+    static_assert(!std::is_copy_constructible_v<symbolic::detail::QuantifierOverRangeNode>);
+    static_assert(!std::is_copy_constructible_v<symbolic::detail::MaxMinOverRangeNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::SymbolValue>);
     static_assert(!std::is_copy_constructible_v<symbolic::SymbolAddress::RangeIndex>);
-    static_assert(!std::is_copy_constructible_v<symbolic::OverRangeExpr>);
+    static_assert(!std::is_copy_constructible_v<symbolic::detail::OverRangeExprNode>);
     static_assert(!std::is_constructible_v<symbolic::VariableAddress,
                                            ::acslg::utils::not_null<const clang::VarDecl *>>);
     static_assert(!std::is_constructible_v<symbolic::FieldAddress,
@@ -66,16 +66,16 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_constructible_v<symbolic::Structure,
                                            symbolic::Structure::Info,
                                            std::vector<symbolic::ExprHandle>>);
-    static_assert(!std::is_constructible_v<symbolic::SumOverRange,
+    static_assert(!std::is_constructible_v<symbolic::detail::SumOverRangeNode,
                                            symbolic::AddrHandle,
                                            std::string_view,
                                            symbolic::SourcePoint>);
-    static_assert(!std::is_constructible_v<symbolic::QuantifierOverRange,
+    static_assert(!std::is_constructible_v<symbolic::detail::QuantifierOverRangeNode,
                                            symbolic::AddrHandle,
                                            std::string_view,
                                            symbolic::RangeQuantifier,
                                            symbolic::ExprHandle>);
-    static_assert(!std::is_constructible_v<symbolic::MaxMinOverRange,
+    static_assert(!std::is_constructible_v<symbolic::detail::MaxMinOverRangeNode,
                                            symbolic::AddrHandle,
                                            std::string_view,
                                            symbolic::RangeExtremum,
@@ -83,7 +83,7 @@ namespace acslg::test::unit::analyzer {
                                            symbolic::SourcePoint>);
     static_assert(!std::is_copy_assignable_v<symbolic::SymbolAddress>);
     static_assert(!std::is_copy_assignable_v<symbolic::Structure>);
-    static_assert(!std::is_move_assignable_v<symbolic::QuantifierOverRange>);
+    static_assert(!std::is_move_assignable_v<symbolic::detail::QuantifierOverRangeNode>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {
@@ -974,14 +974,14 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedRangeNode.getLength().value().get(), targetLength.get().get());
 
         auto targetRange = target.importAddress(*sourceRange);
-        EXPECT_EQ(&typedSum.cast<symbolic::SumOverRange>().getRange(), targetRange.get().get());
-        EXPECT_EQ(&typedQuantifier.cast<symbolic::QuantifierOverRange>().getRange(),
+        EXPECT_EQ(&typedSum.cast<symbolic::detail::SumOverRangeNode>().getRange(), targetRange.get().get());
+        EXPECT_EQ(&typedQuantifier.cast<symbolic::detail::QuantifierOverRangeNode>().getRange(),
                   targetRange.get().get());
-        EXPECT_EQ(&typedQuantifier.cast<symbolic::QuantifierOverRange>().getPredicate(),
+        EXPECT_EQ(&typedQuantifier.cast<symbolic::detail::QuantifierOverRangeNode>().getPredicate(),
                   target.importExpr(*sourcePredicate).get().get());
-        EXPECT_EQ(&typedMax.cast<symbolic::MaxMinOverRange>().getRange(),
+        EXPECT_EQ(&typedMax.cast<symbolic::detail::MaxMinOverRangeNode>().getRange(),
                   targetRange.get().get());
-        EXPECT_EQ(&typedMax.cast<symbolic::MaxMinOverRange>().getExpr(),
+        EXPECT_EQ(&typedMax.cast<symbolic::detail::MaxMinOverRangeNode>().getExpr(),
                   target.importExpr(*sourceBody).get().get());
     }
 
@@ -1424,23 +1424,23 @@ namespace acslg::test::unit::analyzer {
         auto sumRangeHandle = makeRange();
         auto sumHandle = symbolic::makeSumOverRangeHandle(
             factory, sumRangeHandle.cast<symbolic::SymbolAddress>(), "i", point);
-        const auto &sum = sumHandle.cast<symbolic::SumOverRange>();
+        const auto &sum = sumHandle.cast<symbolic::detail::SumOverRangeNode>();
         auto quantifierRangeHandle = makeRange();
         auto predicate = makePred();
         auto quantifierHandle = symbolic::makeQuantifierOverRangeHandle(
             factory, quantifierRangeHandle, "i",
             symbolic::RangeQuantifier::ForAll, predicate);
         const auto &quantifier =
-            quantifierHandle.cast<symbolic::QuantifierOverRange>();
+            quantifierHandle.cast<symbolic::detail::QuantifierOverRangeNode>();
         auto maxRangeHandle = makeRange();
         auto maxHandle = symbolic::makeMaxMinOverRangeHandle(
             factory, maxRangeHandle, "i",
             symbolic::RangeExtremum::Max, point);
-        const auto &max = maxHandle.cast<symbolic::MaxMinOverRange>();
+        const auto &max = maxHandle.cast<symbolic::detail::MaxMinOverRangeNode>();
 
         auto importedSum = factory.importExpr(sum);
         auto sumRange    = factory.importExpr(sum.getRange());
-        const auto &sumNode = importedSum.cast<symbolic::SumOverRange>();
+        const auto &sumNode = importedSum.cast<symbolic::detail::SumOverRangeNode>();
         EXPECT_EQ(&sumNode.getRange(), sumRange.get().get());
         EXPECT_EQ(importedSum, factory.importExpr(sum));
 
@@ -1448,7 +1448,7 @@ namespace acslg::test::unit::analyzer {
         auto quantifierRange    = factory.importExpr(quantifier.getRange());
         auto quantifierPred     = factory.importExpr(quantifier.getPredicate());
         const auto &quantifierNode =
-            importedQuantifier.cast<symbolic::QuantifierOverRange>();
+            importedQuantifier.cast<symbolic::detail::QuantifierOverRangeNode>();
         EXPECT_EQ(&quantifierNode.getRange(), quantifierRange.get().get());
         EXPECT_EQ(&quantifierNode.getPredicate(), quantifierPred.get().get());
         EXPECT_EQ(importedQuantifier, factory.importExpr(quantifier));
@@ -1456,7 +1456,7 @@ namespace acslg::test::unit::analyzer {
         auto importedMax = factory.importExpr(max);
         auto maxRange    = factory.importExpr(max.getRange());
         auto maxBody     = factory.importExpr(max.getExpr());
-        const auto &maxNode = importedMax.cast<symbolic::MaxMinOverRange>();
+        const auto &maxNode = importedMax.cast<symbolic::detail::MaxMinOverRangeNode>();
         EXPECT_EQ(&maxNode.getRange(), maxRange.get().get());
         EXPECT_EQ(&maxNode.getExpr(), maxBody.get().get());
         EXPECT_EQ(importedMax, factory.importExpr(max));
@@ -1487,11 +1487,11 @@ namespace acslg::test::unit::analyzer {
         auto rangeBase = rangeHandle.cast<symbolic::SymbolAddress>().getBaseInfo();
         auto sumHandle = symbolic::makeSumOverRangeHandle(
             factory, rangeHandle.cast<symbolic::SymbolAddress>(), "i", point);
-        const auto &sum = sumHandle.cast<symbolic::SumOverRange>();
+        const auto &sum = sumHandle.cast<symbolic::detail::SumOverRangeNode>();
 
         auto imported = factory.importExpr(sum);
         EXPECT_EQ(*imported, sum);
-        EXPECT_EQ(&imported.cast<symbolic::SumOverRange>().getRange(),
+        EXPECT_EQ(&imported.cast<symbolic::detail::SumOverRangeNode>().getRange(),
                   rangeHandle.get().get());
 
         auto index = factory.literal(int64_t{1});
@@ -1529,11 +1529,11 @@ namespace acslg::test::unit::analyzer {
             factory, rangeHandle, "i",
             symbolic::RangeQuantifier::ForAll, pred);
         const auto &quantifier =
-            quantifierHandle.cast<symbolic::QuantifierOverRange>();
+            quantifierHandle.cast<symbolic::detail::QuantifierOverRangeNode>();
 
         auto imported = factory.importExpr(quantifier);
         EXPECT_EQ(*imported, quantifier);
-        const auto &importedQuantifier = imported.cast<symbolic::QuantifierOverRange>();
+        const auto &importedQuantifier = imported.cast<symbolic::detail::QuantifierOverRangeNode>();
         EXPECT_EQ(&importedQuantifier.getRange(), rangeHandle.get().get());
         EXPECT_EQ(&importedQuantifier.getPredicate(),
                   factory.importExpr(quantifier.getPredicate()).get().get());
@@ -1568,7 +1568,7 @@ namespace acslg::test::unit::analyzer {
         auto rangeBase = rangeHandle.cast<symbolic::SymbolAddress>().getBaseInfo();
         auto maxHandle = symbolic::makeMaxMinOverRangeHandle(
             factory, rangeHandle, "i", symbolic::RangeExtremum::Max, point);
-        const auto &max = maxHandle.cast<symbolic::MaxMinOverRange>();
+        const auto &max = maxHandle.cast<symbolic::detail::MaxMinOverRangeNode>();
 
         auto indexedRange = factory.withOffset(rangeHandle, factory.rangeIndex("i"));
         indexedRange      = factory.withoutLength(indexedRange);
@@ -1578,7 +1578,7 @@ namespace acslg::test::unit::analyzer {
 
         auto imported = factory.importExpr(max);
         EXPECT_EQ(*imported, max);
-        const auto &importedMax = imported.cast<symbolic::MaxMinOverRange>();
+        const auto &importedMax = imported.cast<symbolic::detail::MaxMinOverRangeNode>();
         EXPECT_EQ(&importedMax.getRange(), rangeHandle.get().get());
         EXPECT_EQ(&importedMax.getExpr(), factory.importExpr(max.getExpr()).get().get());
 
@@ -1621,10 +1621,10 @@ namespace acslg::test::unit::analyzer {
         auto rangeBase = sumRange.cast<symbolic::SymbolAddress>().getBaseInfo();
         auto sumHandle = symbolic::makeSumOverRangeHandle(
             factory, sumRange.cast<symbolic::SymbolAddress>(), "i", point);
-        const auto &sum = sumHandle.cast<symbolic::SumOverRange>();
+        const auto &sum = sumHandle.cast<symbolic::detail::SumOverRangeNode>();
         auto substitutedSum =
             symbolic::getRangeIndexSubstitutedHandle(factory, sum, rangeBase, one);
-        const auto &sumNode = substitutedSum.cast<symbolic::SumOverRange>();
+        const auto &sumNode = substitutedSum.cast<symbolic::detail::SumOverRangeNode>();
         EXPECT_EQ(sumNode.getRange().getOffset().get(), one.get().get());
         ASSERT_TRUE(sumNode.getRange().getLength());
         EXPECT_EQ(sumNode.getRange().getLength().value().get().get(), three.get().get());
@@ -1635,21 +1635,21 @@ namespace acslg::test::unit::analyzer {
             symbolic::RangeQuantifier::ForAll,
             factory.rangeIndex("i"));
         const auto &quantifier =
-            quantifierHandle.cast<symbolic::QuantifierOverRange>();
+            quantifierHandle.cast<symbolic::detail::QuantifierOverRangeNode>();
         auto substitutedQuantifier =
             symbolic::getRangeIndexSubstitutedHandle(factory, quantifier, rangeBase, one);
         const auto &quantifierNode =
-            substitutedQuantifier.cast<symbolic::QuantifierOverRange>();
+            substitutedQuantifier.cast<symbolic::detail::QuantifierOverRangeNode>();
         EXPECT_EQ(&quantifierNode.getPredicate(), one.get().get());
 
         auto maxRange = makeRange();
         auto maxHandle = symbolic::makeMaxMinOverRangeHandle(
             factory, maxRange, "i", symbolic::RangeExtremum::Max,
             factory.rangeIndex("i"), point);
-        const auto &max = maxHandle.cast<symbolic::MaxMinOverRange>();
+        const auto &max = maxHandle.cast<symbolic::detail::MaxMinOverRangeNode>();
         auto substitutedMax =
             symbolic::getRangeIndexSubstitutedHandle(factory, max, rangeBase, one);
-        const auto &maxNode = substitutedMax.cast<symbolic::MaxMinOverRange>();
+        const auto &maxNode = substitutedMax.cast<symbolic::detail::MaxMinOverRangeNode>();
         EXPECT_EQ(&maxNode.getExpr(), one.get().get());
     }
 
@@ -1681,14 +1681,16 @@ namespace acslg::test::unit::analyzer {
         auto sumRange = makeRange();
         auto sum = symbolic::makeSumOverRangeHandle(
             factory, sumRange.cast<symbolic::SymbolAddress>(), "i", point);
-        const auto &sumNode = sum.cast<symbolic::SumOverRange>();
+        const auto &sumNode = sum.cast<symbolic::detail::SumOverRangeNode>();
+        EXPECT_TRUE(sum->isOverRange());
         EXPECT_EQ(factory.importAddress(sumNode.getRange()).get().get(), &sumNode.getRange());
 
         auto quantifier = symbolic::makeQuantifierOverRangeHandle(
             factory, makeRange(), "i",
             symbolic::RangeQuantifier::ForAll,
             factory.rangeIndex("i"));
-        const auto &quantifierNode = quantifier.cast<symbolic::QuantifierOverRange>();
+        const auto &quantifierNode = quantifier.cast<symbolic::detail::QuantifierOverRangeNode>();
+        EXPECT_TRUE(quantifier->isOverRange());
         EXPECT_EQ(factory.importAddress(quantifierNode.getRange()).get().get(),
                   &quantifierNode.getRange());
         EXPECT_EQ(factory.importExpr(quantifierNode.getPredicate()).get().get(),
@@ -1697,9 +1699,11 @@ namespace acslg::test::unit::analyzer {
         auto max = symbolic::makeMaxMinOverRangeHandle(
             factory, makeRange(), "i",
             symbolic::RangeExtremum::Max, point);
-        const auto &maxNode = max.cast<symbolic::MaxMinOverRange>();
+        const auto &maxNode = max.cast<symbolic::detail::MaxMinOverRangeNode>();
+        EXPECT_TRUE(max->isOverRange());
         EXPECT_EQ(factory.importAddress(maxNode.getRange()).get().get(), &maxNode.getRange());
         EXPECT_EQ(factory.importExpr(maxNode.getExpr()).get().get(), &maxNode.getExpr());
+        EXPECT_FALSE(factory.literal(0)->isOverRange());
     }
 
     TEST(ExprFacadeTest, LiteralAndOperatorsUseCurrentFactory) {

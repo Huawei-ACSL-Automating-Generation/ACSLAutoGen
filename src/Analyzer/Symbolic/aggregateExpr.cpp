@@ -15,6 +15,11 @@
 #include "Analyzer/state.h"
 
 namespace acslg::analyzer::symbolic {
+    using detail::MaxMinOverRangeNode;
+    using detail::OverRangeExprNode;
+    using detail::QuantifierOverRangeNode;
+    using detail::SumOverRangeNode;
+
     namespace {
         ExprHandle makeMaxMinDefaultBody(ExprFactory &factory,
                                          const SymbolAddress &range,
@@ -32,7 +37,7 @@ namespace acslg::analyzer::symbolic {
                                       std::string_view indexName,
                                       SourcePoint fromPoint) {
         return detail::ExprFactoryInternals::intern(
-            factory, detail::ExprFactoryInternals::makeNode<SumOverRange>(
+            factory, detail::ExprFactoryInternals::makeNode<SumOverRangeNode>(
                          factory.importAddress(range), indexName, std::move(fromPoint)));
     }
 
@@ -53,7 +58,7 @@ namespace acslg::analyzer::symbolic {
                                              ExprHandle predicate) {
         return detail::ExprFactoryInternals::intern(
             factory,
-            detail::ExprFactoryInternals::makeNode<QuantifierOverRange>(
+            detail::ExprFactoryInternals::makeNode<QuantifierOverRangeNode>(
                 range, indexName, quantifier, predicate));
     }
 
@@ -94,7 +99,7 @@ namespace acslg::analyzer::symbolic {
                                          ExprHandle body,
                                          SourcePoint fromPoint) {
         return detail::ExprFactoryInternals::intern(
-            factory, detail::ExprFactoryInternals::makeNode<MaxMinOverRange>(
+            factory, detail::ExprFactoryInternals::makeNode<MaxMinOverRangeNode>(
                          range, indexName, extremum, body, std::move(fromPoint)));
     }
 
@@ -108,24 +113,24 @@ namespace acslg::analyzer::symbolic {
                                          factory.importExpr(body), std::move(fromPoint));
     }
 
-    SumOverRange::SumOverRange(AddrHandle range,
+    SumOverRangeNode::SumOverRangeNode(AddrHandle range,
                                std::string_view indexName,
                                SourcePoint fromPoint)
-        : OverRangeExpr(ExprKind::K_SumOverRange,
+        : OverRangeExprNode(ExprKind::K_SumOverRange,
                         deriveType(range.cast<SymbolAddress>().getPointeeType()),
                         range,
                         indexName),
           Symbol(Kind::K_SumOverRange),
           fromPoint_(std::move(fromPoint)) {}
 
-    const SymbolAddress &OverRangeExpr::range() const {
+    const SymbolAddress &OverRangeExprNode::range() const {
         auto *symbolAddr = dyn_cast<const SymbolAddress>(range_.get().get());
         if (symbolAddr == nullptr)
             ERROR("Over-range expression range child must be a SymbolAddress.");
         return *symbolAddr;
     }
 
-    std::string OverRangeExpr::dump() const {
+    std::string OverRangeExprNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << "{" + key("range: ") + range().dump() + "}, ";
@@ -133,8 +138,8 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    bool OverRangeExpr::equal(const SymbolicExpr &other) const {
-        auto ORE = dyn_cast<const OverRangeExpr>(&other);
+    bool OverRangeExprNode::equal(const SymbolicExpr &other) const {
+        auto ORE = dyn_cast<const OverRangeExprNode>(&other);
         if (ORE == nullptr)
             return false;
         if (getValType() != other.getValType())
@@ -145,7 +150,7 @@ namespace acslg::analyzer::symbolic {
         return true;
     }
 
-    std::size_t OverRangeExpr::hash() const { return utils::hash_val(range().hash()); }
+    std::size_t OverRangeExprNode::hash() const { return utils::hash_val(range().hash()); }
 
     std::string SymbolAddress::RangeIndex::dump() const {
         using namespace utils::dump_fmt;
@@ -167,26 +172,26 @@ namespace acslg::analyzer::symbolic {
 
     std::size_t SymbolAddress::RangeIndex::hash() const { return utils::hash_val(getKind()); }
 
-    std::string SumOverRange::dump() const {
+    std::string SumOverRangeNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("SumOverRange ");
-        oss << OverRangeExpr::dump();
+        oss << OverRangeExprNode::dump();
         return oss.str();
     }
 
-    bool SumOverRange::equal(const SymbolicExpr &other) const {
-        auto SOR = dyn_cast<const SumOverRange>(&other);
+    bool SumOverRangeNode::equal(const SymbolicExpr &other) const {
+        auto SOR = dyn_cast<const SumOverRangeNode>(&other);
         if (SOR == nullptr)
             return false;
-        return OverRangeExpr::equal(*SOR) && fromPoint_ == SOR->fromPoint_;
+        return OverRangeExprNode::equal(*SOR) && fromPoint_ == SOR->fromPoint_;
     }
 
-    std::size_t SumOverRange::hash() const {
-        return utils::hash_val(SymbolicExpr::getKind(), OverRangeExpr::hash(), fromPoint_.hash());
+    std::size_t SumOverRangeNode::hash() const {
+        return utils::hash_val(SymbolicExpr::getKind(), OverRangeExprNode::hash(), fromPoint_.hash());
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> SumOverRange::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> SumOverRangeNode::doGetACSL(
         const GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
@@ -231,7 +236,7 @@ namespace acslg::analyzer::symbolic {
                              {"suffix", suffix}});
     }
 
-    std::string QuantifierOverRange::dump() const {
+    std::string QuantifierOverRangeNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("QuantifierOverRange ");
@@ -240,19 +245,19 @@ namespace acslg::analyzer::symbolic {
             case RangeQuantifier::ForAll: oss << accent("ForAll"); break;
             default: UNREACHABLE();
         }
-        oss << OverRangeExpr::dump() << ", ";
+        oss << OverRangeExprNode::dump() << ", ";
         oss << "{" << key("predicate: ") << pred_->dump() << "}";
         return oss.str();
     }
 
-    bool QuantifierOverRange::equal(const SymbolicExpr &other) const {
-        auto QOV = dyn_cast<const QuantifierOverRange>(&other);
+    bool QuantifierOverRangeNode::equal(const SymbolicExpr &other) const {
+        auto QOV = dyn_cast<const QuantifierOverRangeNode>(&other);
         if (QOV == nullptr)
             return false;
-        return OverRangeExpr::equal(*QOV) && quant_ == QOV->quant_ && *pred_ == *QOV->pred_;
+        return OverRangeExprNode::equal(*QOV) && quant_ == QOV->quant_ && *pred_ == *QOV->pred_;
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> QuantifierOverRange::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> QuantifierOverRangeNode::doGetACSL(
         const GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
@@ -307,7 +312,7 @@ namespace acslg::analyzer::symbolic {
                              {"pred", predStr.value()}});
     }
 
-    std::string MaxMinOverRange::dump() const {
+    std::string MaxMinOverRangeNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("MaxMinOverRange ");
@@ -316,20 +321,20 @@ namespace acslg::analyzer::symbolic {
             case RangeExtremum::Min: oss << accent("Min"); break;
             default: UNREACHABLE();
         }
-        oss << OverRangeExpr::dump() << ", ";
+        oss << OverRangeExprNode::dump() << ", ";
         oss << "{" << key("expr: ") << expr_->dump() << "}";
         return oss.str();
     }
 
-    bool MaxMinOverRange::equal(const SymbolicExpr &other) const {
-        auto MMOR = dyn_cast<const MaxMinOverRange>(&other);
+    bool MaxMinOverRangeNode::equal(const SymbolicExpr &other) const {
+        auto MMOR = dyn_cast<const MaxMinOverRangeNode>(&other);
         if (MMOR == nullptr)
             return false;
-        return OverRangeExpr::equal(*MMOR) && extremum_ == MMOR->extremum_ &&
+        return OverRangeExprNode::equal(*MMOR) && extremum_ == MMOR->extremum_ &&
                *expr_ == *MMOR->expr_ && fromPoint_ == MMOR->fromPoint_;
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> MaxMinOverRange::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> MaxMinOverRangeNode::doGetACSL(
         const GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,

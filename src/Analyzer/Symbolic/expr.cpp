@@ -21,6 +21,10 @@
 #include "Analyzer/state.h"
 
 namespace acslg::analyzer::symbolic {
+    using detail::MaxMinOverRangeNode;
+    using detail::QuantifierOverRangeNode;
+    using detail::SumOverRangeNode;
+
     thread_local ExprFactory *ExprFactoryScope::current_ = nullptr;
 
     ExprFactoryScope::ExprFactoryScope(ExprFactory &factory)
@@ -131,18 +135,18 @@ namespace acslg::analyzer::symbolic {
                 structure->getInfo(), std::move(fields)));
         }
 
-        if (auto *sum = expr.dyn_cast<const SumOverRange>())
-            return internTyped(detail::ExprFactoryInternals::makeNode<SumOverRange>(
+        if (auto *sum = expr.dyn_cast<const SumOverRangeNode>())
+            return internTyped(detail::ExprFactoryInternals::makeNode<SumOverRangeNode>(
                 importAddress(sum->getRange()), sum->getIndexName(),
                 sum->getFromPoint().value()));
 
-        if (auto *quantifier = expr.dyn_cast<const QuantifierOverRange>())
-            return internTyped(detail::ExprFactoryInternals::makeNode<QuantifierOverRange>(
+        if (auto *quantifier = expr.dyn_cast<const QuantifierOverRangeNode>())
+            return internTyped(detail::ExprFactoryInternals::makeNode<QuantifierOverRangeNode>(
                 importAddress(quantifier->getRange()), quantifier->getIndexName(),
                 quantifier->getQuantifier(), importExpr(quantifier->getPredicate())));
 
-        if (auto *maxMin = expr.dyn_cast<const MaxMinOverRange>())
-            return internTyped(detail::ExprFactoryInternals::makeNode<MaxMinOverRange>(
+        if (auto *maxMin = expr.dyn_cast<const MaxMinOverRangeNode>())
+            return internTyped(detail::ExprFactoryInternals::makeNode<MaxMinOverRangeNode>(
                 importAddress(maxMin->getRange()), maxMin->getIndexName(),
                 maxMin->getExtremum(), importExpr(maxMin->getExpr()),
                 maxMin->getFromPoint().value()));
@@ -227,18 +231,18 @@ namespace acslg::analyzer::symbolic {
                                                     run(*structure->getFieldValue(i)));
                     return rebuilt;
                 }
-                if (auto *sum = dyn_cast<const SumOverRange>(&expr)) {
+                if (auto *sum = dyn_cast<const SumOverRangeNode>(&expr)) {
                     return makeSumOverRangeHandle(factory, requireRange(run(sum->getRange())),
                                                   sum->getIndexName(),
                                                   sum->getFromPoint().value());
                 }
-                if (auto *quantifier = dyn_cast<const QuantifierOverRange>(&expr)) {
+                if (auto *quantifier = dyn_cast<const QuantifierOverRangeNode>(&expr)) {
                     return makeQuantifierOverRangeHandle(
                         factory, requireRange(run(quantifier->getRange())),
                         quantifier->getIndexName(), quantifier->getQuantifier(),
                         *run(quantifier->getPredicate()));
                 }
-                if (auto *maxMin = dyn_cast<const MaxMinOverRange>(&expr)) {
+                if (auto *maxMin = dyn_cast<const MaxMinOverRangeNode>(&expr)) {
                     return makeMaxMinOverRangeHandle(
                         factory, requireRange(run(maxMin->getRange())),
                         maxMin->getIndexName(), maxMin->getExtremum(),
@@ -363,20 +367,20 @@ namespace acslg::analyzer::symbolic {
                                                     run(*structure->getFieldValue(i)));
                     return rebuilt;
                 }
-                if (auto *sum = dyn_cast<const SumOverRange>(&expr)) {
+                if (auto *sum = dyn_cast<const SumOverRangeNode>(&expr)) {
                     if (sum->getFromPoint().value() != pointToSub)
                         return factory.importExpr(expr);
                     return makeSumOverRangeHandle(factory, requireRange(run(sum->getRange())),
                                                   sum->getIndexName(),
                                                   pathSubTo.getStartPoint());
                 }
-                if (auto *quantifier = dyn_cast<const QuantifierOverRange>(&expr)) {
+                if (auto *quantifier = dyn_cast<const QuantifierOverRangeNode>(&expr)) {
                     return makeQuantifierOverRangeHandle(
                         factory, requireRange(run(quantifier->getRange())),
                         quantifier->getIndexName(), quantifier->getQuantifier(),
                         *run(quantifier->getPredicate()));
                 }
-                if (auto *maxMin = dyn_cast<const MaxMinOverRange>(&expr)) {
+                if (auto *maxMin = dyn_cast<const MaxMinOverRangeNode>(&expr)) {
                     const auto &range = requireRange(run(maxMin->getRange()));
                     auto body  = run(maxMin->getExpr());
                     if (maxMin->getFromPoint().value() == pointToSub)
@@ -470,18 +474,18 @@ namespace acslg::analyzer::symbolic {
                                                     run(*structure->getFieldValue(i)));
                     return rebuilt;
                 }
-                if (auto *sum = dyn_cast<const SumOverRange>(&expr)) {
+                if (auto *sum = dyn_cast<const SumOverRangeNode>(&expr)) {
                     return makeSumOverRangeHandle(factory, requireRange(run(sum->getRange())),
                                                   sum->getIndexName(),
                                                   sum->getFromPoint().value());
                 }
-                if (auto *quantifier = dyn_cast<const QuantifierOverRange>(&expr)) {
+                if (auto *quantifier = dyn_cast<const QuantifierOverRangeNode>(&expr)) {
                     return makeQuantifierOverRangeHandle(
                         factory, requireRange(run(quantifier->getRange())),
                         quantifier->getIndexName(), quantifier->getQuantifier(),
                         *run(quantifier->getPredicate()));
                 }
-                if (auto *maxMin = dyn_cast<const MaxMinOverRange>(&expr)) {
+                if (auto *maxMin = dyn_cast<const MaxMinOverRangeNode>(&expr)) {
                     return makeMaxMinOverRangeHandle(
                         factory, requireRange(run(maxMin->getRange())),
                         maxMin->getIndexName(), maxMin->getExtremum(),
@@ -567,7 +571,7 @@ namespace acslg::analyzer::symbolic {
                     structure->getInfo(), std::move(fields))));
         }
 
-        if (auto *sum = dyn_cast<SumOverRange>(&expr)) {
+        if (auto *sum = dyn_cast<SumOverRangeNode>(&expr)) {
             auto fromPoint = sum->getFromPoint();
             if (!fromPoint)
                 ERROR("SumOverRange must have a source point.");
@@ -575,13 +579,13 @@ namespace acslg::analyzer::symbolic {
                 *this, sum->getRange(), sum->getIndexName(), fromPoint.value()));
         }
 
-        if (auto *quantifier = dyn_cast<QuantifierOverRange>(&expr)) {
+        if (auto *quantifier = dyn_cast<QuantifierOverRangeNode>(&expr)) {
             return preserveImportedType(makeQuantifierOverRangeHandle(
                 *this, quantifier->getRange(), quantifier->getIndexName(),
                 quantifier->getQuantifier(), quantifier->getPredicate()));
         }
 
-        if (auto *maxMin = dyn_cast<MaxMinOverRange>(&expr)) {
+        if (auto *maxMin = dyn_cast<MaxMinOverRangeNode>(&expr)) {
             auto fromPoint = maxMin->getFromPoint();
             if (!fromPoint)
                 ERROR("MaxMinOverRange must have a source point.");

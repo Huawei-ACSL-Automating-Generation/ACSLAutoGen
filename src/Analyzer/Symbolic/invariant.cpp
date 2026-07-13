@@ -14,6 +14,8 @@
 #include "Stingx/LinTS.h"
 
 namespace acslg::analyzer::symbolic {
+    using detail::SumOverRangeNode;
+
     /**
      * @brief Determine whether the unary operation preserves linearity.
      * @return True for + or - over a linear operand; false otherwise.
@@ -346,7 +348,7 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    Parma_Polyhedra_Library::Linear_Expression SumOverRange::toLinearExpr(
+    Parma_Polyhedra_Library::Linear_Expression SumOverRangeNode::toLinearExpr(
         const std::unordered_map<size_t, size_t> &hashIdMap) const {
         Parma_Polyhedra_Library::Linear_Expression e(0);
         if (auto it = hashIdMap.find(hash()); it != hashIdMap.end()) {

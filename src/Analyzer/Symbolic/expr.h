@@ -446,6 +446,10 @@ namespace acslg::analyzer::symbolic {
          */
         virtual bool isUnknown() const { return false; };
 
+        bool isOverRange() const {
+            return kind_ > ExprKind::K_FirstOverRange && kind_ < ExprKind::K_LastOverRange;
+        }
+
         //===----------------------------------------------------------------------===//
         // StInG Interface Utilities - Symbolic Expression Adapter
         //

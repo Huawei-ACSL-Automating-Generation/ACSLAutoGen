@@ -356,7 +356,7 @@ namespace acslg::spec_generator {
                              .predefinedLabels = {{oldPoint, "Old"}}})) {
                         auto &[spec, usedPoints] = expected.value();
                         if (usedPoints.empty())
-                            if (!symb::isa<symb::OverRangeExpr>(*ret.value()))
+                            if (!ret.value()->isOverRange())
                                 ensures.push_back("\\result == (" + spec + ")");
                             else
                                 ensures.push_back(spec);
@@ -366,7 +366,7 @@ namespace acslg::spec_generator {
                             auto wrongExpected =
                                 simplifiedRet->getACSL({.noStateLabelFunctionAt = true});
                             assert(wrongExpected);
-                            if (!symb::isa<symb::OverRangeExpr>(*ret.value()))
+                            if (!ret.value()->isOverRange())
                                 ensures.push_back("\\result == (" + wrongExpected.value().first +
                                                   ")");
                             else
@@ -547,7 +547,7 @@ namespace acslg::spec_generator {
                 // labels; we currently drop them because we cannot express usedPoints in requires.
                 if (!rf.value().second.empty())
                     continue;
-                auto &target = simplified.isa<symb::OverRangeExpr>() ? assumeStr : requireStr;
+                auto &target = simplified->isOverRange() ? assumeStr : requireStr;
                 if (!target.empty())
                     target += " && ";
                 target += rf.value().first;
