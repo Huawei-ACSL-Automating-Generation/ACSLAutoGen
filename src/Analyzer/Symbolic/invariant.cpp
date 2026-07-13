@@ -576,7 +576,7 @@ namespace acslg::analyzer {
                 bool expanded = false;
 
                 for (size_t i = startIdx; i < current.size(); ++i) {
-                    auto *bin = symbolic::dyn_cast<symbolic::BinaryOpExpr>(current[i].get().get());
+                    auto *bin = symbolic::dyn_cast<symbolic::detail::BinaryOpExprNode>(current[i].get().get());
                     if (!bin) {
                         ERROR("negateFormulas: input[" + to_string(i) + "] is not a BinaryOpExpr");
                     }
@@ -647,7 +647,7 @@ namespace acslg::analyzer {
         }
 
         void appendPreprocessedConjCond(const symbolic::SymbolicExpr &cond, Formulas &result) {
-            if (auto bin = symbolic::dyn_cast<symbolic::BinaryOpExpr>(&cond)) {
+            if (auto bin = symbolic::dyn_cast<symbolic::detail::BinaryOpExprNode>(&cond)) {
                 using enum symbolic::detail::BinaryOpExprNode::Operator;
                 const auto &lhs = bin->getLeft();
                 const auto &rhs = bin->getRight();
@@ -682,7 +682,7 @@ namespace acslg::analyzer {
                 }
             }
 
-            auto unary = symbolic::dyn_cast<symbolic::UnaryOpExpr>(&cond);
+            auto unary = symbolic::dyn_cast<symbolic::detail::UnaryOpExprNode>(&cond);
             if (!unary ||
                 unary->getOperator() !=
                     symbolic::detail::UnaryOpExprNode::Operator::LogicalNot)
@@ -694,7 +694,7 @@ namespace acslg::analyzer {
                 return;
 
             auto uneqExpr =
-                symbolic::dyn_cast<const symbolic::BinaryOpExpr>(preprocessedSub.front().get().get());
+                symbolic::dyn_cast<const symbolic::detail::BinaryOpExprNode>(preprocessedSub.front().get().get());
             assert(uneqExpr);
             switch (uneqExpr->getOperator()) {
                 using enum symbolic::detail::BinaryOpExprNode::Operator;
@@ -810,7 +810,7 @@ namespace acslg::analyzer {
         std::optional<Parma_Polyhedra_Library::Constraint> toConstraint(
             const symbolic::SymbolicExpr *expr,
             const VarManager &vm) {
-            auto bin = symbolic::dyn_cast_if_present<const symbolic::BinaryOpExpr>(expr);
+            auto bin = symbolic::dyn_cast_if_present<const symbolic::detail::BinaryOpExprNode>(expr);
             if (bin == nullptr) {
                 WARN("toConstraint: expression must be a BinaryOpExpr.");
                 return std::nullopt;

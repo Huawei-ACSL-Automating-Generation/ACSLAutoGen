@@ -79,7 +79,7 @@ namespace acslg::analyzer {
             symbolic::ExprFactory &factory,
             const symbolic::SymbolicExpr &expr,
             const std::unordered_set<const clang::VarDecl *> &locals) {
-            if (const auto *bin = symbolic::dyn_cast<symbolic::BinaryOpExpr>(&expr);
+            if (const auto *bin = symbolic::dyn_cast<symbolic::detail::BinaryOpExprNode>(&expr);
                 bin && bin->getOperator() == symbolic::BinaryOp::LogicalAnd) {
                 auto lhs = dropLocalConjuncts(factory, *bin->getLeft(), locals);
                 auto rhs = dropLocalConjuncts(factory, *bin->getRight(), locals);

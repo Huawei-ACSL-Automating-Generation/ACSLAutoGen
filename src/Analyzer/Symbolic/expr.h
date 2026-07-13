@@ -60,9 +60,6 @@ namespace acslg::analyzer::symbolic {
         struct ExprFactoryInternals;
     }
 
-    using UnaryOpExpr = detail::UnaryOpExprNode;
-    using BinaryOpExpr = detail::BinaryOpExprNode;
-
     /**
      * @class SourcePoint
      * @brief Represents a concrete source location together with a label prefix for ACSL emission.
@@ -2082,7 +2079,7 @@ namespace acslg::analyzer::symbolic {
             return value == sizeofBytes ? factory.literal(std::uint64_t{1}) : in;
         }
 
-        if (auto *bin = in.dyn_cast<BinaryOpExpr>();
+        if (auto *bin = in.dyn_cast<detail::BinaryOpExprNode>();
             bin && bin->getOperator() == BinaryOp::Multiply) {
             auto left  = bin->getLeft();
             auto right = bin->getRight();

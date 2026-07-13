@@ -670,7 +670,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(addrRangeNode.getRightBound(), rightBound);
 
         auto *rightBoundNode =
-            symbolic::cast<symbolic::BinaryOpExpr>(rightBound.value().get().get());
+            symbolic::cast<symbolic::detail::BinaryOpExprNode>(rightBound.value().get().get());
         EXPECT_EQ(rightBoundNode->getLeft().get(),
                   factory.importExpr(*addrRangeNode.getOffset()).get().get());
         EXPECT_EQ(rightBoundNode->getRight().get(),
@@ -827,19 +827,19 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_EQ(sumA, sumB);
         EXPECT_NE(sumA, diff);
-        ASSERT_NE(sumA.dyn_cast<symbolic::BinaryOpExpr>(), nullptr);
         ASSERT_NE(sumA.dyn_cast<symbolic::detail::BinaryOpExprNode>(), nullptr);
-        EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getOperator(),
+        ASSERT_NE(sumA.dyn_cast<symbolic::detail::BinaryOpExprNode>(), nullptr);
+        EXPECT_EQ(sumA.cast<symbolic::detail::BinaryOpExprNode>().getOperator(),
                   symbolic::BinaryOp::Add);
-        EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getLeft().get(), oneA.get().get());
-        EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getRight().get(), two.get().get());
+        EXPECT_EQ(sumA.cast<symbolic::detail::BinaryOpExprNode>().getLeft().get(), oneA.get().get());
+        EXPECT_EQ(sumA.cast<symbolic::detail::BinaryOpExprNode>().getRight().get(), two.get().get());
 
         auto negA = factory.unary(symbolic::UnaryOp::Minus, oneA);
         auto negB = factory.unary(symbolic::UnaryOp::Minus, oneB);
         EXPECT_EQ(negA, negB);
-        EXPECT_TRUE(negA.isa<symbolic::UnaryOpExpr>());
         EXPECT_TRUE(negA.isa<symbolic::detail::UnaryOpExprNode>());
-        EXPECT_EQ(negA.cast<symbolic::UnaryOpExpr>().getSub().get(), oneA.get().get());
+        EXPECT_TRUE(negA.isa<symbolic::detail::UnaryOpExprNode>());
+        EXPECT_EQ(negA.cast<symbolic::detail::UnaryOpExprNode>().getSub().get(), oneA.get().get());
     }
 
     TEST(ExprFactoryTest, WithValTypeDoesNotMutateFactorySharedOperation) {
@@ -859,7 +859,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedSum->getValType().bitWidth, 64);
 
         const auto *typedSumNode =
-            symbolic::cast<symbolic::BinaryOpExpr>(typedSum.get().get());
+            symbolic::cast<symbolic::detail::BinaryOpExprNode>(typedSum.get().get());
         EXPECT_EQ(typedSumNode->getLeft().get(), one.get().get());
         EXPECT_EQ(typedSumNode->getRight().get(), two.get().get());
 
@@ -904,7 +904,7 @@ namespace acslg::test::unit::analyzer {
         auto targetType = symbolic::SymbolicExpr::Type{
             symbolic::SymbolicExpr::ScalarKind::UInt, 64};
         auto typedSum = target.withValType(sourceSum, targetType);
-        const auto &typedNode = typedSum.cast<symbolic::BinaryOpExpr>();
+        const auto &typedNode = typedSum.cast<symbolic::detail::BinaryOpExprNode>();
         auto targetOne = target.literal(1);
         auto targetTwo = target.literal(2);
 
@@ -1104,7 +1104,7 @@ namespace acslg::test::unit::analyzer {
         auto sum     = factory.binary(x, symbolic::BinaryOp::Add, two);
 
         auto simplified = sum->simplifiedExpr();
-        auto *rebuilt = symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
+        auto *rebuilt = symbolic::cast<symbolic::detail::BinaryOpExprNode>(simplified.get().get());
 
         EXPECT_EQ(rebuilt->getLeft().get(),
                   factory.importExpr(*rebuilt->getLeft().get()).get().get());
@@ -1139,7 +1139,7 @@ namespace acslg::test::unit::analyzer {
             xHandle, symbolic::BinaryOp::Multiply, xHandle);
 
         auto simplified = legacyProduct->simplifiedExpr();
-        const auto &product = simplified.cast<symbolic::BinaryOpExpr>();
+        const auto &product = simplified.cast<symbolic::detail::BinaryOpExprNode>();
 
         EXPECT_EQ(product.getLeft().get(),
                   factory.importExpr(*product.getLeft().get()).get().get());
@@ -1172,7 +1172,7 @@ namespace acslg::test::unit::analyzer {
             i, symbolic::BinaryOp::Multiply, j);
 
         EXPECT_EQ(simplified, product);
-        const auto &node = simplified.cast<symbolic::BinaryOpExpr>();
+        const auto &node = simplified.cast<symbolic::detail::BinaryOpExprNode>();
         EXPECT_EQ(node.getLeft().get(), i.get().get());
         EXPECT_EQ(node.getRight().get(), j.get().get());
     }
@@ -1207,7 +1207,7 @@ namespace acslg::test::unit::analyzer {
 
         auto simplified = wrapped->simplifiedExpr();
         auto *returnedPredicate =
-            symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
+            symbolic::cast<symbolic::detail::BinaryOpExprNode>(simplified.get().get());
 
         EXPECT_EQ(returnedPredicate->getOperator(), symbolic::BinaryOp::Equal);
         EXPECT_EQ(returnedPredicate->getLeft().get(), x.get().get());
@@ -1249,9 +1249,9 @@ namespace acslg::test::unit::analyzer {
         auto one = factory.literal(int64_t{1});
         auto two = factory.literal(int64_t{2});
 
-        const auto &bin = imported.cast<symbolic::BinaryOpExpr>();
+        const auto &bin = imported.cast<symbolic::detail::BinaryOpExprNode>();
         EXPECT_EQ(bin.getRight().get(), two.get().get());
-        const auto *unary = symbolic::cast<symbolic::UnaryOpExpr>(bin.getLeft().get());
+        const auto *unary = symbolic::cast<symbolic::detail::UnaryOpExprNode>(bin.getLeft().get());
         EXPECT_EQ(unary->getSub().get(), one.get().get());
 
         symbolic::ExprFactoryScope scope(factory);
@@ -1328,7 +1328,7 @@ namespace acslg::test::unit::analyzer {
         auto substituted =
             symbolic::getRangeIndexSubstitutedHandle(factory, *rangeIndexHandle, rangeBase,
                                                       replacement);
-        const auto &node = substituted.cast<symbolic::BinaryOpExpr>();
+        const auto &node = substituted.cast<symbolic::detail::BinaryOpExprNode>();
 
         EXPECT_EQ(node.getLeft().get(), one.get().get());
         EXPECT_EQ(node.getRight().get(), two.get().get());
@@ -1716,9 +1716,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(sum, sameSum);
         EXPECT_EQ(sum.handle().get().get(), sameSum.handle().get().get());
         EXPECT_NE(sum, product);
-        EXPECT_EQ(sum.cast<symbolic::BinaryOpExpr>().getOperator(),
+        EXPECT_EQ(sum.cast<symbolic::detail::BinaryOpExprNode>().getOperator(),
                   symbolic::BinaryOp::Add);
-        EXPECT_EQ(product.cast<symbolic::BinaryOpExpr>().getOperator(),
+        EXPECT_EQ(product.cast<symbolic::detail::BinaryOpExprNode>().getOperator(),
                   symbolic::BinaryOp::Multiply);
         EXPECT_EQ(x.cast<symbolic::detail::LiteralExprNode>().getLiteralValue(), 10);
     }
@@ -1758,17 +1758,17 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(equalA, equalB);
         EXPECT_EQ(negated, negatedAgain);
 
-        EXPECT_EQ(equalA.cast<symbolic::BinaryOpExpr>().getOperator(),
+        EXPECT_EQ(equalA.cast<symbolic::detail::BinaryOpExprNode>().getOperator(),
                   symbolic::BinaryOp::Equal);
-        EXPECT_EQ(less.cast<symbolic::BinaryOpExpr>().getOperator(),
+        EXPECT_EQ(less.cast<symbolic::detail::BinaryOpExprNode>().getOperator(),
                   symbolic::BinaryOp::LessThan);
-        EXPECT_EQ(greaterEqual.cast<symbolic::BinaryOpExpr>().getOperator(),
+        EXPECT_EQ(greaterEqual.cast<symbolic::detail::BinaryOpExprNode>().getOperator(),
                   symbolic::BinaryOp::GreaterEqual);
-        EXPECT_EQ(conjunction.cast<symbolic::BinaryOpExpr>().getOperator(),
+        EXPECT_EQ(conjunction.cast<symbolic::detail::BinaryOpExprNode>().getOperator(),
                   symbolic::BinaryOp::LogicalAnd);
-        EXPECT_EQ(disjunction.cast<symbolic::BinaryOpExpr>().getOperator(),
+        EXPECT_EQ(disjunction.cast<symbolic::detail::BinaryOpExprNode>().getOperator(),
                   symbolic::BinaryOp::LogicalOr);
-        EXPECT_EQ(negated.cast<symbolic::UnaryOpExpr>().getOperator(),
+        EXPECT_EQ(negated.cast<symbolic::detail::UnaryOpExprNode>().getOperator(),
                   symbolic::UnaryOp::LogicalNot);
     }
 
@@ -1793,9 +1793,9 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_EQ(negated, -symbolic::LiteralExpr{1});
         EXPECT_EQ(notOne, !symbolic::LiteralExpr{1});
-        EXPECT_EQ(negated.cast<symbolic::UnaryOpExpr>().getOperator(),
+        EXPECT_EQ(negated.cast<symbolic::detail::UnaryOpExprNode>().getOperator(),
                   symbolic::UnaryOp::Minus);
-        EXPECT_EQ(notOne.cast<symbolic::UnaryOpExpr>().getOperator(),
+        EXPECT_EQ(notOne.cast<symbolic::detail::UnaryOpExprNode>().getOperator(),
                   symbolic::UnaryOp::LogicalNot);
     }
 

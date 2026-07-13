@@ -214,11 +214,11 @@ namespace acslg::analyzer::symbolic {
                                        run(*symbolAddr->getOffset()), length)
                         .asExpr();
                 }
-                if (auto *binary = dyn_cast<const BinaryOpExpr>(&expr)) {
+                if (auto *binary = dyn_cast<const detail::BinaryOpExprNode>(&expr)) {
                     return factory.binary(run(*binary->getLeft()), binary->getOperator(),
                                           run(*binary->getRight()));
                 }
-                if (auto *unary = dyn_cast<const UnaryOpExpr>(&expr))
+                if (auto *unary = dyn_cast<const detail::UnaryOpExprNode>(&expr))
                     return factory.unary(unary->getOperator(), run(*unary->getSub()));
                 if (auto *structure = dyn_cast<const Structure>(&expr)) {
                     auto rebuilt = factory.importExpr(*structure);
@@ -350,11 +350,11 @@ namespace acslg::analyzer::symbolic {
                                        pathSubTo.getStartPoint(), offset, length)
                         .asExpr();
                 }
-                if (auto *binary = dyn_cast<const BinaryOpExpr>(&expr)) {
+                if (auto *binary = dyn_cast<const detail::BinaryOpExprNode>(&expr)) {
                     return factory.binary(run(*binary->getLeft()), binary->getOperator(),
                                           run(*binary->getRight()));
                 }
-                if (auto *unary = dyn_cast<const UnaryOpExpr>(&expr))
+                if (auto *unary = dyn_cast<const detail::UnaryOpExprNode>(&expr))
                     return factory.unary(unary->getOperator(), run(*unary->getSub()));
                 if (auto *structure = dyn_cast<const Structure>(&expr)) {
                     auto rebuilt = factory.importExpr(*structure);
@@ -458,10 +458,10 @@ namespace acslg::analyzer::symbolic {
                                        run(*symbolAddr->getOffset()), length)
                         .asExpr();
                 }
-                if (auto *binary = dyn_cast<const BinaryOpExpr>(&expr))
+                if (auto *binary = dyn_cast<const detail::BinaryOpExprNode>(&expr))
                     return factory.binary(run(*binary->getLeft()), binary->getOperator(),
                                           run(*binary->getRight()));
-                if (auto *unary = dyn_cast<const UnaryOpExpr>(&expr))
+                if (auto *unary = dyn_cast<const detail::UnaryOpExprNode>(&expr))
                     return factory.unary(unary->getOperator(), run(*unary->getSub()));
                 if (auto *structure = dyn_cast<const Structure>(&expr)) {
                     auto rebuilt = factory.importExpr(*structure);
@@ -670,7 +670,7 @@ namespace acslg::analyzer::symbolic {
                 return lit->getLiteralValue() == 0 || lit->getLiteralValue() == 1 ||
                        e.getValType().kind == ScalarKind::Bool;
 
-            if (auto *bo = dyn_cast<BinaryOpExpr>(&e)) {
+            if (auto *bo = dyn_cast<detail::BinaryOpExprNode>(&e)) {
                 using BO = detail::BinaryOpExprNode::Operator;
                 switch (bo->getOperator()) {
                     case BO::LogicalAnd:
@@ -685,7 +685,7 @@ namespace acslg::analyzer::symbolic {
                 }
             }
 
-            if (auto *uo = dyn_cast<UnaryOpExpr>(&e)) {
+            if (auto *uo = dyn_cast<detail::UnaryOpExprNode>(&e)) {
                 using UO = detail::UnaryOpExprNode::Operator;
                 if (uo->getOperator() == UO::LogicalNot)
                     return true;
@@ -1962,7 +1962,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     bool detail::BinaryOpExprNode::equal(const SymbolicExpr &expr) const {
-        const auto binary = dyn_cast<const BinaryOpExpr>(&expr);
+        const auto binary = dyn_cast<const detail::BinaryOpExprNode>(&expr);
         if (!binary)
             return false;
         if (getValType() != expr.getValType())
@@ -1972,7 +1972,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     bool detail::UnaryOpExprNode::equal(const SymbolicExpr &expr) const {
-        const auto unary = dyn_cast<const UnaryOpExpr>(&expr);
+        const auto unary = dyn_cast<const detail::UnaryOpExprNode>(&expr);
         if (!unary)
             return false;
         if (getValType() != expr.getValType())
