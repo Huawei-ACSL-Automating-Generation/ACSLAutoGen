@@ -607,7 +607,7 @@ namespace acslg::test::unit::analyzer {
 
         auto val = pathA->getMemoryState().read(*addr0A);
         ASSERT_TRUE(val);
-        EXPECT_NE(symbolic::dyn_cast<symbolic::UnknownExpr>(val->get().get()), nullptr);
+        EXPECT_TRUE((*val)->isUnknown());
     }
 
     TEST_F(MergeWithTest, PathConditionsIntersect) {
@@ -649,9 +649,7 @@ namespace acslg::test::unit::analyzer {
         pathA->mergeWith(*pathB);
 
         ASSERT_TRUE(pathA->getReturnExpr());
-        EXPECT_NE(
-            symbolic::dyn_cast<const symbolic::UnknownExpr>(pathA->getReturnExpr().value().get().get()),
-            nullptr);
+        EXPECT_TRUE(pathA->getReturnExpr().value()->isUnknown());
     }
 
     TEST_F(MergeWithTest, ReturnExprUsesInternedHandlesAcrossCloneAndMerge) {

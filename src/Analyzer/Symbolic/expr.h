@@ -839,12 +839,14 @@ namespace acslg::analyzer::symbolic {
 
     } // namespace detail
 
-    /// @class UnknownExpr
+    namespace detail {
+
+    /// @class UnknownExprNode
     /// @brief Represents a unknown symbolic expression, primarily used to denote cases beyond
     /// capabilities.
-    class UnknownExpr : public SymbolicExpr {
+    class UnknownExprNode : public SymbolicExpr {
       public:
-        ~UnknownExpr() = default;
+        ~UnknownExprNode() = default;
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_UnknownExpr;
@@ -859,9 +861,9 @@ namespace acslg::analyzer::symbolic {
         int getMaxDegree() const override { return 0; }
 
       private:
-        friend class ExprFactory;
+        friend class ::acslg::analyzer::symbolic::ExprFactory;
 
-        UnknownExpr() : SymbolicExpr(ExprKind::K_UnknownExpr, {ScalarKind::Void, 0}) {}
+        UnknownExprNode() : SymbolicExpr(ExprKind::K_UnknownExpr, {ScalarKind::Void, 0}) {}
 
         utils::expected<std::string, GetACSLError> doGetACSL(
             const GetACSLConfig &config,
@@ -871,9 +873,7 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
     };
 
-    namespace detail {
         using SymbolicExprNode = SymbolicExpr;
-        using UnknownExprNode  = UnknownExpr;
     } // namespace detail
 
     /**

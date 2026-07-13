@@ -26,7 +26,7 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_copy_constructible_v<symbolic::detail::LiteralExprNode>);
     static_assert(!std::is_move_assignable_v<symbolic::detail::BinaryOpExprNode>);
     static_assert(!std::is_constructible_v<symbolic::detail::LiteralExprNode, int64_t>);
-    static_assert(!std::is_default_constructible_v<symbolic::UnknownExpr>);
+    static_assert(!std::is_default_constructible_v<symbolic::detail::UnknownExprNode>);
     static_assert(!std::is_constructible_v<symbolic::detail::UnaryOpExprNode,
                                            symbolic::UnaryOp,
                                            symbolic::ExprHandle>);
@@ -1281,7 +1281,7 @@ namespace acslg::test::unit::analyzer {
         auto b = factory.unknown();
 
         EXPECT_EQ(a, b);
-        EXPECT_TRUE(a.isa<symbolic::UnknownExpr>());
+        EXPECT_TRUE(a->isUnknown());
     }
 
     TEST(ExprFactoryTest, RangeIndexBuilderAndImportReuseNode) {
@@ -1831,7 +1831,7 @@ namespace acslg::test::unit::analyzer {
             varAddr, point);
 
         EXPECT_EQ(unknown.handle(), factory.unknown());
-        EXPECT_TRUE(unknown.isa<symbolic::UnknownExpr>());
+        EXPECT_TRUE(unknown->isUnknown());
         EXPECT_EQ(index.handle(), factory.rangeIndex("i"));
         EXPECT_TRUE(index.isa<symbolic::SymbolAddress::RangeIndex>());
         EXPECT_EQ(varAddr.handle(), factory.variableAddress(var));

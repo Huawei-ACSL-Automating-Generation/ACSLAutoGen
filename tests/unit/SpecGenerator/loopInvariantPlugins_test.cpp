@@ -40,7 +40,7 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("mx"));
         ASSERT_EQ(normalPostInfo.memoryMap.size(), 1);
-        EXPECT_TRUE(isa<UnknownExpr>(*normalPostInfo.memoryMap.begin()->second));
+        EXPECT_TRUE(normalPostInfo.memoryMap.begin()->second->isUnknown());
         ASSERT_TRUE(interruptPostInfos.empty());
     }
 
@@ -266,7 +266,7 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_THAT(*spec, HasSubstr("mx"));
         ASSERT_EQ(normalPostInfo.memoryMap.size(), 1);
         ASSERT_TRUE(interruptPostInfos.empty());
-        EXPECT_TRUE(isa<UnknownExpr>(*normalPostInfo.memoryMap.begin()->second));
+        EXPECT_TRUE(normalPostInfo.memoryMap.begin()->second->isUnknown());
     }
 
     // TEST(ComplexLoopAssignsPluginTest, ArrayAndScalar) {

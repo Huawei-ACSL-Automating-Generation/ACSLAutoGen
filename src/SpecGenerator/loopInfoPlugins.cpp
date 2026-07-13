@@ -270,7 +270,7 @@ namespace acslg::spec_generator {
 
             PostMemoryMap sharedMemory;
             for (auto &&[addr, value] : merged->getMemoryState().flat()) {
-                if (analyzer::symbolic::isa<analyzer::symbolic::UnknownExpr>(value.get()))
+                if (value->isUnknown())
                     continue;
                 sharedMemory.emplace(addr, detail::importPostExprThroughCurrentFactory(*value));
             }

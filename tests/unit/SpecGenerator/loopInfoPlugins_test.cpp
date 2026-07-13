@@ -253,7 +253,7 @@ namespace acslg::test::unit::spec_generator {
 
         for (const auto &[addr, value] : *loopInfo.sharedMemoryMap) {
             (void)addr;
-            EXPECT_FALSE(value.isa<UnknownExpr>());
+            EXPECT_FALSE(value->isUnknown());
             EXPECT_EQ(value, factory.importExpr(*value));
         }
     }

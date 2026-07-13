@@ -180,7 +180,7 @@ namespace acslg::analyzer::symbolic {
 
                 if (auto *literal = dyn_cast<const detail::LiteralExprNode>(&expr))
                     return literal->importInto(factory);
-                if (isa<UnknownExpr>(&expr))
+                if (expr.isUnknown())
                     return factory.unknown();
                 if (auto *rangeIndex = dyn_cast<const SymbolAddress::RangeIndex>(&expr))
                     return factory.rangeIndex(rangeIndex->getName());
@@ -285,7 +285,7 @@ namespace acslg::analyzer::symbolic {
             ExprHandle run(const SymbolicExpr &expr) const {
                 if (auto *literal = dyn_cast<const detail::LiteralExprNode>(&expr))
                     return literal->importInto(factory);
-                if (isa<UnknownExpr>(&expr))
+                if (expr.isUnknown())
                     return factory.unknown();
                 if (auto *rangeIndex = dyn_cast<const SymbolAddress::RangeIndex>(&expr))
                     return factory.rangeIndex(rangeIndex->getName());
@@ -424,7 +424,7 @@ namespace acslg::analyzer::symbolic {
 
                 if (auto *literal = dyn_cast<const detail::LiteralExprNode>(&expr))
                     return literal->importInto(factory);
-                if (isa<UnknownExpr>(&expr))
+                if (expr.isUnknown())
                     return factory.unknown();
                 if (isa<SymbolAddress::RangeIndex>(&expr))
                     return indexExpr;
@@ -1165,7 +1165,7 @@ namespace acslg::analyzer::symbolic {
         return seed;
     }
 
-    size_t UnknownExpr::hash() const { return utils::hash_val(getKind()); }
+    size_t detail::UnknownExprNode::hash() const { return utils::hash_val(getKind()); }
 
     std::string detail::LiteralExprNode::dump() const {
         using namespace utils::dump_fmt;
@@ -1248,7 +1248,9 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    std::string UnknownExpr::dump() const { return utils::dump_fmt::hint("{unknown}"); }
+    std::string detail::UnknownExprNode::dump() const {
+        return utils::dump_fmt::hint("{unknown}");
+    }
 
     std::string SymbolValue::dump() const {
         using namespace utils::dump_fmt;
@@ -1473,7 +1475,8 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> UnknownExpr::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError>
+    detail::UnknownExprNode::doGetACSL(
         const SymbolicExpr::GetACSLConfig &config,
         std::unordered_set<SourcePoint> &,
         std::optional<SourcePoint>,
@@ -1981,7 +1984,7 @@ namespace acslg::analyzer::symbolic {
         return op_ == unary->op_ && *expr_ == *(unary->expr_);
     }
 
-    bool UnknownExpr::equal(const SymbolicExpr &expr) const {
+    bool detail::UnknownExprNode::equal(const SymbolicExpr &expr) const {
         return expr.isUnknown() && getValType() == expr.getValType();
     }
 
