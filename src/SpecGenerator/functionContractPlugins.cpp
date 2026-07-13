@@ -388,13 +388,12 @@ namespace acslg::spec_generator {
                     }
                     if (is_symbol_addr(addr) && value->isStructure()) {
                         if (isRetBaseAddr(addr)) {
-                            auto *st = symb::dyn_cast<symb::Structure>(value.get());
-                            auto &info = st->getInfo();
+                            symb::StructureView st{symb::ExprHandle{value}};
+                            auto &info = st.info();
                             size_t idxField = 0;
                             for (auto field : info.definition_->fields()) {
                                 std::string fieldName = field->getNameAsString();
-                                auto simplifiedField =
-                                    simplifyExpr(*st->getFieldValue(idxField));
+                                auto simplifiedField = simplifyExpr(*st.field(idxField));
                                 ++idxField;
                                 if (fieldName.empty())
                                     continue;
@@ -458,8 +457,8 @@ namespace acslg::spec_generator {
                 }
 
                 if (auto &ret = path.getReturnExpr()) {
-                    if (auto *retSt = symb::dyn_cast<symb::Structure>(ret.value().get().get())) {
-                        auto &info = retSt->getInfo();
+                    if (auto retSt = symb::StructureView::tryFrom(ret.value())) {
+                        auto &info = retSt->info();
                         size_t idxField = 0;
                         for (auto field : info.definition_->fields()) {
                             std::string fieldName = field->getNameAsString();
@@ -467,8 +466,7 @@ namespace acslg::spec_generator {
                                 ++idxField;
                                 continue;
                             }
-                            auto simplifiedField =
-                                simplifyExpr(*retSt->getFieldValue(idxField));
+                            auto simplifiedField = simplifyExpr(*retSt->field(idxField));
                             if (referencesNonContractVisibleLocals(*simplifiedField, FD)) {
                                 ++idxField;
                                 continue;

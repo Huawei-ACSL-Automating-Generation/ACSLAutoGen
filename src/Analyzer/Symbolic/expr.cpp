@@ -1334,6 +1334,37 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
+    StructureView::StructureView(ExprHandle handle) : handle_(handle) {
+        if (!handle_->isStructure())
+            ERROR("StructureView requires a Structure expression.");
+    }
+
+    std::optional<StructureView> StructureView::tryFrom(ExprHandle handle) {
+        if (!handle->isStructure())
+            return std::nullopt;
+        return StructureView{handle};
+    }
+
+    std::optional<StructureView> StructureView::tryFrom(const SymbolicExpr &expr) {
+        return tryFrom(ExprHandle{&expr});
+    }
+
+    size_t StructureView::size() const {
+        return cast<const Structure>(handle_.get().get())->getNumFields();
+    }
+
+    ExprHandle StructureView::field(size_t index) const {
+        return ExprHandle{cast<const Structure>(handle_.get().get())->getFieldValue(index)};
+    }
+
+    const StructureInfo &StructureView::info() const {
+        return cast<const Structure>(handle_.get().get())->getInfo();
+    }
+
+    std::optional<SourcePoint> StructureView::fromPoint() const {
+        return cast<const Structure>(handle_.get().get())->getFromPoint();
+    }
+
     std::string Structure::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
@@ -2469,6 +2500,13 @@ namespace acslg::analyzer::symbolic {
         if (!origin)
             return std::nullopt;
         return factory.importAddress(*origin->address);
+    }
+
+    std::optional<AddrHandle> getFromAddrHandle(ExprFactory &factory, ExprHandle symbol) {
+        auto *symbolNode = dyn_cast<const Symbol>(symbol.get().get());
+        if (symbolNode == nullptr)
+            return std::nullopt;
+        return getFromAddrHandle(factory, *symbolNode);
     }
 
     bool isFrom(const SymbolicExpr &expr, const Address &fromAddr, SourcePoint fromPoint) {

@@ -2169,27 +2169,31 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactoryScope scope(factory);
         auto varAddr = factory.variableAddress(var);
         auto structure = factory.structure(record, layout, varAddr, point);
-        const auto &structureNode = structure.cast<symbolic::Structure>();
+        symbolic::StructureView structureView{structure};
         EXPECT_TRUE(structure->isStructure());
+        EXPECT_TRUE(symbolic::StructureView::tryFrom(structure).has_value());
+        EXPECT_FALSE(symbolic::StructureView::tryFrom(factory.literal(0)).has_value());
+        EXPECT_EQ(structureView.info().definition_.get(), record);
+        EXPECT_EQ(structureView.fromPoint(), point);
 
-        auto structureFrom = symbolic::getFromAddrHandle(factory, structureNode);
+        auto structureFrom = symbolic::getFromAddrHandle(factory, structureView.handle());
         ASSERT_TRUE(structureFrom);
         EXPECT_EQ(*structureFrom, varAddr);
 
-        ASSERT_EQ(structureNode.getNumFields(), 3u);
-        auto field0 = structureNode.getFieldValue(0);
-        auto field1 = structureNode.getFieldValue(1);
-        auto field2 = structureNode.getFieldValue(2);
+        ASSERT_EQ(structureView.size(), 3u);
+        auto field0 = structureView.field(0);
+        auto field1 = structureView.field(1);
+        auto field2 = structureView.field(2);
 
-        EXPECT_NE(symbolic::dyn_cast<const symbolic::SymbolValue>(field0.get()), nullptr);
-        EXPECT_NE(symbolic::dyn_cast<const symbolic::SymbolAddress>(field1.get()), nullptr);
-        auto *arrayAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(field2.get());
+        EXPECT_TRUE(field0->isSymbolValue());
+        EXPECT_TRUE(field1->isSymbolAddress());
+        auto *arrayAddr = field2.dyn_cast<const symbolic::SymbolAddress>();
         ASSERT_NE(arrayAddr, nullptr);
         ASSERT_TRUE(arrayAddr->getLength());
 
-        EXPECT_EQ(field0.get(), factory.importExpr(*field0.get()).get().get());
-        EXPECT_EQ(field1.get(), factory.importExpr(*field1.get()).get().get());
-        EXPECT_EQ(field2.get(), factory.importExpr(*field2.get()).get().get());
+        EXPECT_EQ(field0, factory.importExpr(*field0));
+        EXPECT_EQ(field1, factory.importExpr(*field1));
+        EXPECT_EQ(field2, factory.importExpr(*field2));
         EXPECT_EQ(arrayAddr->getLength().value().get().get(),
                   factory.literal(uint64_t{2}).get().get());
 
@@ -2299,7 +2303,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactoryScope scope(factory);
         auto structureHandle =
             factory.structure(record, layout, factory.variableAddress(st), point);
-        const auto &structure = structureHandle.cast<symbolic::Structure>();
+        symbolic::StructureView structure{structureHandle};
 
         std::vector<const FieldDecl *> fields;
         for (const auto *field : record->fields())
@@ -2310,14 +2314,14 @@ namespace acslg::test::unit::analyzer {
         auto field0Addr = factory.fieldAddress(fields[0]->getType(), record, fromHandle, 0);
         auto expectedField0 =
             factory.symbolValue(symbolic::deriveType(fields[0]->getType()), field0Addr, point);
-        EXPECT_EQ(structure.getFieldValue(0).get(), expectedField0.get().get());
+        EXPECT_EQ(structure.field(0), expectedField0);
 
         auto field1Addr = factory.fieldAddress(fields[1]->getType(), record, fromHandle, 1);
         auto arrayType = llvm::cast<ArrayType>(fields[1]->getType());
         auto expectedField1 = factory.symbolAddress(
             arrayType->getElementType(), field1Addr, point, std::nullopt,
             factory.literal(uint64_t{3}));
-        EXPECT_EQ(structure.getFieldValue(1).get(), expectedField1.get().get());
+        EXPECT_EQ(structure.field(1), expectedField1.asExpr());
 
         auto field2Addr = factory.fieldAddress(fields[2]->getType(), record, fromHandle, 2);
         auto *nestedRecord = fields[2]->getType()->getAsRecordDecl();
@@ -2328,7 +2332,7 @@ namespace acslg::test::unit::analyzer {
             nestedRecord->getASTContext().getASTRecordLayout(nestedRecord);
         auto expectedField2 =
             factory.structure(nestedRecord, nestedLayout, field2Addr, point);
-        EXPECT_EQ(structure.getFieldValue(2).get(), expectedField2.get().get());
+        EXPECT_EQ(structure.field(2), expectedField2);
     }
 
     TEST(ExprFactoryTest, StructureBuilderInitializesUnknownFieldHandles) {
@@ -2370,11 +2374,10 @@ namespace acslg::test::unit::analyzer {
 
         auto expected = factory.structure(record, layout, factory.variableAddress(var), point);
         EXPECT_EQ(structureExpr, expected);
-        const auto &structure = structureExpr.cast<symbolic::Structure>();
-        const auto &expectedStructure = expected.cast<symbolic::Structure>();
-        for (size_t i = 0; i < expectedStructure.getNumFields(); ++i)
-            EXPECT_EQ(structure.getFieldValue(i).get(),
-                      expectedStructure.getFieldValue(i).get());
+        symbolic::StructureView structure{structureExpr};
+        symbolic::StructureView expectedStructure{expected};
+        for (size_t i = 0; i < expectedStructure.size(); ++i)
+            EXPECT_EQ(structure.field(i), expectedStructure.field(i));
     }
 
     TEST(ExprFactoryTest, ScopedAddressSubstitutionRebuildsThroughFactory) {
@@ -2662,19 +2665,19 @@ namespace acslg::test::unit::analyzer {
             symbolic::ExprFactoryScope setupScope(setupFactory);
             return makeStructureWithFacade(setupFactory, var->getType(), var, point);
         }();
-        const auto &legacyStructure = legacyExpr.cast<symbolic::Structure>();
+        symbolic::StructureView legacyStructure{legacyExpr};
 
         symbolic::ExprFactory factory;
-        auto importedA = factory.importExpr(legacyStructure);
-        auto importedB = factory.importExpr(legacyStructure);
+        auto importedA = factory.importExpr(*legacyStructure.handle());
+        auto importedB = factory.importExpr(*legacyStructure.handle());
         EXPECT_EQ(importedA, importedB);
 
-        const auto &importedStructure = importedA.cast<symbolic::Structure>();
-        auto importedField0 = factory.importExpr(*legacyStructure.getFieldValue(0));
-        auto importedField1 = factory.importExpr(*legacyStructure.getFieldValue(1));
+        symbolic::StructureView importedStructure{importedA};
+        auto importedField0 = factory.importExpr(*legacyStructure.field(0));
+        auto importedField1 = factory.importExpr(*legacyStructure.field(1));
 
-        EXPECT_EQ(importedStructure.getFieldValue(0).get(), importedField0.get().get());
-        EXPECT_EQ(importedStructure.getFieldValue(1).get(), importedField1.get().get());
+        EXPECT_EQ(importedStructure.field(0), importedField0);
+        EXPECT_EQ(importedStructure.field(1), importedField1);
     }
 
     TEST(StructureRebuildTest, FieldUpdateDoesNotMutateOriginalStructure) {
@@ -2703,19 +2706,19 @@ namespace acslg::test::unit::analyzer {
         auto *record = var->getType()->getAsRecordDecl()->getDefinition();
         auto &layout = record->getASTContext().getASTRecordLayout(record);
         auto structure = factory.structure(record, layout, factory.variableAddress(var), point);
-        const auto &original = structure.cast<symbolic::Structure>();
-        auto originalField0 = factory.importExpr(*original.getFieldValue(0));
-        auto originalField1 = factory.importExpr(*original.getFieldValue(1));
+        symbolic::StructureView original{structure};
+        auto originalField0 = factory.importExpr(*original.field(0));
+        auto originalField1 = factory.importExpr(*original.field(1));
         auto replacement = factory.literal(42);
 
         auto updated = factory.withField(structure, 0, replacement);
         EXPECT_EQ(updated, factory.withField(structure, 0, replacement));
 
-        const auto &updatedNode = updated.cast<symbolic::Structure>();
-        EXPECT_EQ(original.getFieldValue(0).get(), originalField0.get().get());
-        EXPECT_EQ(original.getFieldValue(1).get(), originalField1.get().get());
-        EXPECT_EQ(updatedNode.getFieldValue(0).get(), replacement.get().get());
-        EXPECT_EQ(updatedNode.getFieldValue(1).get(), originalField1.get().get());
+        symbolic::StructureView updatedView{updated};
+        EXPECT_EQ(original.field(0), originalField0);
+        EXPECT_EQ(original.field(1), originalField1);
+        EXPECT_EQ(updatedView.field(0), replacement);
+        EXPECT_EQ(updatedView.field(1), originalField1);
     }
 
     TEST(StructureRebuildTest, ScopedValueSubstitutionRebuildsFieldsThroughFactory) {
@@ -2743,20 +2746,17 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactoryScope scope(factory);
 
         auto structureExpr = makeStructureWithFacade(factory, var->getType(), var, point);
-        const auto &structure = structureExpr.cast<symbolic::Structure>();
+        symbolic::StructureView structure{structureExpr};
         auto replacement = factory.literal(42);
 
         symbolic::HashExprHandleMap substitutions;
-        substitutions.emplace(structure.getFieldValue(0)->hash(),
-                              replacement);
+        substitutions.emplace(structure.field(0)->hash(), replacement);
 
         auto substituted =
-            symbolic::getSubstitutedValueHandle(factory, structure, substitutions);
-        const auto &substitutedStructure =
-            substituted.cast<symbolic::Structure>();
+            symbolic::getSubstitutedValueHandle(factory, *structure.handle(), substitutions);
+        symbolic::StructureView substitutedStructure{substituted};
 
-        EXPECT_EQ(substitutedStructure.getFieldValue(0).get(), replacement.get().get());
-        EXPECT_EQ(substitutedStructure.getFieldValue(1).get(),
-                  factory.importExpr(*structure.getFieldValue(1)).get().get());
+        EXPECT_EQ(substitutedStructure.field(0), replacement);
+        EXPECT_EQ(substitutedStructure.field(1), factory.importExpr(*structure.field(1)));
     }
 } // namespace acslg::test::unit::analyzer

@@ -1481,9 +1481,8 @@ namespace acslg::analyzer {
                         if (val == std::nullopt) {
                             st = makeStructureForRecord(factory, RD, baseAddr.value(), startPoint_);
                             memoryState_.write(baseAddr.value(), st.value());
-                        } else if (auto stVal = symbolic::dyn_cast<const symbolic::Structure>(
-                                       val.value().get().get())) {
-                            st = factory.importExpr(*stVal);
+                        } else if (auto stVal = symbolic::StructureView::tryFrom(val.value())) {
+                            st = factory.importExpr(*stVal->handle());
                         } else {
                             ERROR("Dereferenced value is not a structure");
                         }
@@ -1495,11 +1494,10 @@ namespace acslg::analyzer {
                     }
 
                     size_t idx = FD->getFieldIndex();
-                    const auto &structure = st.value().cast<symbolic::Structure>();
-                    if (idx >= structure.getNumFields())
+                    const symbolic::StructureView structure{st.value()};
+                    if (idx >= structure.size())
                         UNREACHABLE();
-                    auto fieldValue = context_.getExprFactory().importExpr(
-                        *structure.getFieldValue(idx));
+                    auto fieldValue = context_.getExprFactory().importExpr(*structure.field(idx));
                     DEBUG("MemberExpr field " << FD->getNameAsString() << " idx=" << idx
                                               << " value: " << fieldValue->dump());
                     EvalResult result{};
@@ -1858,10 +1856,10 @@ namespace acslg::analyzer {
             auto baseValue = read(*baseAddr);
             if (baseValue == std::nullopt)
                 return std::nullopt;
-            auto baseSt = symbolic::dyn_cast<const symbolic::Structure>(baseValue.value().get().get());
-            if (baseSt == nullptr)
+            auto baseSt = symbolic::StructureView::tryFrom(baseValue.value());
+            if (!baseSt)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
-            return factory().importExpr(*baseSt->getFieldValue(index));
+            return factory().importExpr(*baseSt->field(index));
         }
         UNREACHABLE();
     }
@@ -1955,10 +1953,10 @@ namespace acslg::analyzer {
             auto baseValue = read(*baseAddr);
             if (baseValue == std::nullopt)
                 ERROR("Structure isn't existed in MemoryModel, insert it first.");
-            auto baseSt = symbolic::dyn_cast<const symbolic::Structure>(baseValue.value().get().get());
-            if (baseSt == nullptr)
+            auto baseSt = symbolic::StructureView::tryFrom(baseValue.value());
+            if (!baseSt)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
-            auto updated = factory().withField(factory().importExpr(*baseSt), index,
+            auto updated = factory().withField(factory().importExpr(*baseSt->handle()), index,
                                                factory().importExpr(*valueHandle));
             write(*baseAddr, updated);
             return;
@@ -2783,7 +2781,7 @@ namespace acslg::analyzer {
 
                         auto &factory = context_.getExprFactory();
                         auto st = makeStructureForRecord(factory, RD, varAddrHandle, startPoint_);
-                        const auto fieldCount = st.cast<symbolic::Structure>().getNumFields();
+                        const auto fieldCount = symbolic::StructureView{st}.size();
                         if (initListExpr->getNumInits() != fieldCount)
                             ERROR("Initializer std::list size mismatches the struct's field "
                                   "count.");

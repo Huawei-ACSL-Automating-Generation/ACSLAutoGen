@@ -345,18 +345,17 @@ namespace acslg::analyzer {
                         // Handle Structure fields
                         assert(!state_saver_.empty());
                         auto &current_state = state_saver_.top();
-                        assert(current_state.st_ != nullptr);
                         auto &baseAddr = current_state.base_addr_;
-                        auto &st       = *current_state.st_;
+                        auto &st       = current_state.st_;
                         auto &index    = current_state.index_;
                         auto fieldType =
-                            std::ranges::next(st.getInfo().definition_->field_begin(), index)
+                            std::ranges::next(st.info().definition_->field_begin(), index)
                                 ->getType();
                         auto &factory = owner_.factory();
-                        auto addr = factory.fieldAddress(fieldType, st.getInfo().definition_,
+                        auto addr = factory.fieldAddress(fieldType, st.info().definition_,
                                                          factory.importAddress(baseAddr.get()),
                                                          index);
-                        return R{symbolic::AddressBox{addr}, st.getFieldValue(index).get()};
+                        return R{symbolic::AddressBox{addr}, st.field(index).get()};
                     }
                     default: break;
                 }
@@ -428,7 +427,7 @@ namespace acslg::analyzer {
             /// State for traversing fields inside a Structure
             struct FieldState {
                 const symbolic::AddressBox base_addr_; ///< Base address of the structure
-                const symbolic::Structure *st_;        ///< Pointer to Structure
+                symbolic::StructureView st_;           ///< Read-only Structure view
                 size_t index_;                         ///< Current field index
                 Phase pre_phase_;                      ///< Previous phase before entering fields
             };
@@ -520,8 +519,7 @@ namespace acslg::analyzer {
                         assert(!state_saver_.empty());
                         auto &current_state = state_saver_.top();
                         ++current_state.index_;
-                        assert(current_state.st_ != nullptr);
-                        if (current_state.index_ < current_state.st_->getNumFields())
+                        if (current_state.index_ < current_state.st_.size())
                             return;
                         // End of fields -> return to previous phase
                         phase_ = current_state.pre_phase_;
@@ -536,14 +534,14 @@ namespace acslg::analyzer {
             /// Advance iterator, diving into Structure fields if needed
             void advance() {
                 auto &&[addr, value] = (*this).operator*();
-                auto st              = symbolic::dyn_cast<const symbolic::Structure>(value.get());
-                if (st == nullptr) {
+                auto st = symbolic::StructureView::tryFrom(*value);
+                if (!st) {
                     advance_without_check();
                     return;
                 }
 
                 // Dive into Structure's fields
-                auto state = FieldState{std::move(addr), st, 0, phase_};
+                auto state = FieldState{std::move(addr), *st, 0, phase_};
                 state_saver_.push(std::move(state));
                 phase_ = Phase::Field;
             }

@@ -979,6 +979,27 @@ namespace acslg::analyzer::symbolic {
         size_t getNumFields() const { return layout_.getFieldCount(); }
     };
 
+    class StructureView {
+      public:
+        explicit StructureView(ExprHandle handle);
+
+        static std::optional<StructureView> tryFrom(ExprHandle handle);
+        static std::optional<StructureView> tryFrom(const SymbolicExpr &expr);
+
+        ExprHandle handle() const { return handle_; }
+        size_t size() const;
+        ExprHandle field(size_t index) const;
+        const StructureInfo &info() const;
+        std::optional<SourcePoint> fromPoint() const;
+
+        friend bool operator==(StructureView lhs, StructureView rhs) {
+            return lhs.handle_ == rhs.handle_;
+        }
+
+      private:
+        ExprHandle handle_;
+    };
+
     class Structure : public SymbolicExpr, public Symbol {
       public:
         Structure(const Structure &) = delete;
@@ -2024,6 +2045,7 @@ namespace acslg::analyzer::symbolic {
 
     bool isFrom(const SymbolicExpr &expr, const Address &fromAddr, SourcePoint fromPoint);
     std::optional<AddrHandle> getFromAddrHandle(ExprFactory &factory, const Symbol &symbol);
+    std::optional<AddrHandle> getFromAddrHandle(ExprFactory &factory, ExprHandle symbol);
 
     ExprHandle getSymbol(clang::QualType type,
                          std::optional<AddrHandle> from,
