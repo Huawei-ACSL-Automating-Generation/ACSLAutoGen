@@ -95,10 +95,11 @@ namespace acslg::analyzer::symbolic {
                 importExpr(*binaryExpr->getRight())));
 
         if (auto *variableAddr = expr.dyn_cast<const VariableAddress>())
-            return internTyped(std::make_unique<VariableAddress>(variableAddr->getFrom()));
+            return internTyped(detail::ExprFactoryInternals::makeNode<VariableAddress>(
+                variableAddr->getFrom()));
 
         if (auto *fieldAddr = expr.dyn_cast<const FieldAddress>())
-            return internTyped(std::make_unique<FieldAddress>(
+            return internTyped(detail::ExprFactoryInternals::makeNode<FieldAddress>(
                 fieldAddr->getPointeeType(), fieldAddr->getDefinition(),
                 importAddress(*fieldAddr->getBaseAddr()), fieldAddr->getFieldIndex()));
 
@@ -111,13 +112,13 @@ namespace acslg::analyzer::symbolic {
             if (const auto &existingLength = symbolAddr->getLength(); existingLength)
                 length = importExpr(*existingLength.value());
 
-            return internTyped(std::make_unique<SymbolAddress>(
-                SymbolAddress::FactoryNodeTag{}, symbolAddr->getPointeeType(), from,
+            return internTyped(detail::ExprFactoryInternals::makeNode<SymbolAddress>(
+                symbolAddr->getPointeeType(), from,
                 symbolAddr->getFromPoint().value(), importExpr(*symbolAddr->getOffset()), length));
         }
 
         if (auto *symbolVal = expr.dyn_cast<const SymbolValue>())
-            return internTyped(std::make_unique<SymbolValue>(
+            return internTyped(detail::ExprFactoryInternals::makeNode<SymbolValue>(
                 symbolVal->getValType(), importAddress(*symbolVal->getFromAddrHandle()),
                 symbolVal->getFromPoint().value()));
 
@@ -717,7 +718,8 @@ namespace acslg::analyzer::symbolic {
     ExprHandle ExprFactory::symbolValue(SymbolicExpr::Type varType,
                                         AddrHandle from,
                                         SourcePoint fromPoint) {
-        return intern(std::make_unique<SymbolValue>(varType, from, std::move(fromPoint)));
+        return intern(detail::ExprFactoryInternals::makeNode<SymbolValue>(
+            varType, from, std::move(fromPoint)));
     }
 
     ExprHandle ExprFactory::simplifiedBinary(ExprHandle left,
@@ -727,7 +729,8 @@ namespace acslg::analyzer::symbolic {
     }
 
     AddrHandle ExprFactory::variableAddress(utils::not_null<const clang::VarDecl *> from) {
-        return internAddress(std::make_unique<VariableAddress>(from));
+        return internAddress(
+            detail::ExprFactoryInternals::makeNode<VariableAddress>(from));
     }
 
     AddrHandle ExprFactory::symbolAddress(
@@ -738,9 +741,8 @@ namespace acslg::analyzer::symbolic {
         std::optional<ExprHandle> length) {
         auto resolvedOffset =
             offset.value_or(literal(static_cast<int64_t>(SymbolAddress::ZERO_OFFSET)));
-        return internAddress(std::make_unique<SymbolAddress>(
-            SymbolAddress::FactoryNodeTag{}, pointeeType, from, std::move(fromPoint),
-            resolvedOffset, length));
+        return internAddress(detail::ExprFactoryInternals::makeNode<SymbolAddress>(
+            pointeeType, from, std::move(fromPoint), resolvedOffset, length));
     }
 
     AddrHandle ExprFactory::withOffset(AddrHandle address, ExprHandle offset) {
@@ -800,8 +802,8 @@ namespace acslg::analyzer::symbolic {
                                          const clang::RecordDecl *record,
                                          AddrHandle baseAddr,
                                          size_t fieldIndex) {
-        return internAddress(
-            std::make_unique<FieldAddress>(pointeeType, record, baseAddr, fieldIndex));
+        return internAddress(detail::ExprFactoryInternals::makeNode<FieldAddress>(
+            pointeeType, record, baseAddr, fieldIndex));
     }
 
     ExprHandle ExprFactory::structure(const clang::RecordDecl *record,
@@ -2119,8 +2121,7 @@ namespace acslg::analyzer::symbolic {
             fromAddr_.emplace(other.fromAddr_.value());
     }
 
-    SymbolAddress::SymbolAddress(FactoryNodeTag,
-                                 const clang::QualType pointeeType,
+    SymbolAddress::SymbolAddress(const clang::QualType pointeeType,
                                  std::optional<AddrHandle> from,
                                  SourcePoint fromPoint,
                                  ExprHandle offset,

@@ -1621,7 +1621,6 @@ namespace acslg::analyzer::symbolic {
     /// of pointer variable or an address of heap.
     class SymbolAddress : public Address, public Symbol {
       public:
-        struct FactoryNodeTag {};
         inline static constexpr signed long ZERO_OFFSET =
             0; ///< Unify the type of zero under zero offset. This type should be the same as the
                ///< type of the zero value in SymbolicExpr::simplifiedExprIfLinear, or relax the
@@ -1632,13 +1631,6 @@ namespace acslg::analyzer::symbolic {
 
         SymbolAddress(const SymbolAddress &) = delete;
         SymbolAddress(SymbolAddress &&) = default;
-
-        SymbolAddress(FactoryNodeTag,
-                      clang::QualType pointeeType,
-                      std::optional<AddrHandle> from,
-                      SourcePoint fromPoint,
-                      ExprHandle offset,
-                      std::optional<ExprHandle> length);
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_SymbolAddress;
@@ -1710,6 +1702,14 @@ namespace acslg::analyzer::symbolic {
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
 
       private:
+        friend struct detail::ExprFactoryInternals;
+
+        SymbolAddress(clang::QualType pointeeType,
+                      std::optional<AddrHandle> from,
+                      SourcePoint fromPoint,
+                      ExprHandle offset,
+                      std::optional<ExprHandle> length);
+
         ExprChild offset_; ///< Offset relative to an address.
         std::optional<AddressChild>
             fromAddr_; ///< From another Address p means this is a value(may with offset) of a
@@ -1780,12 +1780,6 @@ namespace acslg::analyzer::symbolic {
 
         bool operator==(const VariableAddress &other) const { return equal(other); }
 
-        VariableAddress(utils::not_null<const clang::VarDecl *> from)
-            : Address(SymbolicExpr::ExprKind::K_VariableAddress,
-                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
-                      from->getType()),
-              from_(std::move(from)) {};
-
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_VariableAddress;
         }
@@ -1841,6 +1835,14 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
+        friend struct detail::ExprFactoryInternals;
+
+        explicit VariableAddress(utils::not_null<const clang::VarDecl *> from)
+            : Address(SymbolicExpr::ExprKind::K_VariableAddress,
+                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
+                      from->getType()),
+              from_(std::move(from)) {};
+
         utils::not_null<const clang::VarDecl *> from_;
     };
 
@@ -1851,19 +1853,6 @@ namespace acslg::analyzer::symbolic {
         FieldAddress(const FieldAddress &) = delete;
         FieldAddress &operator=(const FieldAddress &other) = delete;
         FieldAddress(FieldAddress &&) = default;
-
-        FieldAddress(const clang::QualType pointeeType,
-                     const clang::RecordDecl *RD,
-                     AddrHandle baseAddr,
-                     size_t fieldIndex)
-            : Address(SymbolicExpr::ExprKind::K_FieldAddress,
-                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
-                      pointeeType),
-              definition_(RD), baseAddr_(baseAddr), fieldIndex_(fieldIndex) {
-            if (!RD->isCompleteDefinition())
-                ERROR("Incomplete struct definition");
-            definition_ = RD->getDefinition();
-        };
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_FieldAddress;
@@ -1922,6 +1911,21 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
+        friend struct detail::ExprFactoryInternals;
+
+        FieldAddress(clang::QualType pointeeType,
+                     const clang::RecordDecl *RD,
+                     AddrHandle baseAddr,
+                     size_t fieldIndex)
+            : Address(SymbolicExpr::ExprKind::K_FieldAddress,
+                      SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
+                      pointeeType),
+              definition_(RD), baseAddr_(baseAddr), fieldIndex_(fieldIndex) {
+            if (!RD->isCompleteDefinition())
+                ERROR("Incomplete struct definition");
+            definition_ = RD->getDefinition();
+        };
+
         utils::not_null<const clang::RecordDecl *> definition_;
         AddressChild baseAddr_;
         size_t fieldIndex_;
@@ -1936,10 +1940,6 @@ namespace acslg::analyzer::symbolic {
     /// Origin can't be nullptr, use nullopt.
     class SymbolValue : public SymbolicExpr, public Symbol {
       public:
-        SymbolValue(Type varType, AddrHandle from, SourcePoint fromPoint)
-            : SymbolicExpr(ExprKind::K_SymbolValue, varType), Symbol(Kind::K_SymbolValue),
-              fromAddr_(from), fromPoint_(std::move(fromPoint)) {}
-
         SymbolValue(const SymbolValue &) = delete;
         SymbolValue(SymbolValue &&) = default;
 
@@ -1974,6 +1974,12 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
+        friend struct detail::ExprFactoryInternals;
+
+        SymbolValue(Type varType, AddrHandle from, SourcePoint fromPoint)
+            : SymbolicExpr(ExprKind::K_SymbolValue, varType), Symbol(Kind::K_SymbolValue),
+              fromAddr_(from), fromPoint_(std::move(fromPoint)) {}
+
         AddressChild
             fromAddr_; ///< The original Address of the value or the Structure it belongs.
 

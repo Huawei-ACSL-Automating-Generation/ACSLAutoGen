@@ -35,6 +35,23 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_copy_constructible_v<symbolic::SymbolValue>);
     static_assert(!std::is_copy_constructible_v<symbolic::SymbolAddress::RangeIndex>);
     static_assert(!std::is_copy_constructible_v<symbolic::OverRangeExpr>);
+    static_assert(!std::is_constructible_v<symbolic::VariableAddress,
+                                           ::acslg::utils::not_null<const clang::VarDecl *>>);
+    static_assert(!std::is_constructible_v<symbolic::FieldAddress,
+                                           clang::QualType,
+                                           const clang::RecordDecl *,
+                                           symbolic::AddrHandle,
+                                           size_t>);
+    static_assert(!std::is_constructible_v<symbolic::SymbolAddress,
+                                           clang::QualType,
+                                           std::optional<symbolic::AddrHandle>,
+                                           symbolic::SourcePoint,
+                                           symbolic::ExprHandle,
+                                           std::optional<symbolic::ExprHandle>>);
+    static_assert(!std::is_constructible_v<symbolic::SymbolValue,
+                                           symbolic::SymbolicExpr::Type,
+                                           symbolic::AddrHandle,
+                                           symbolic::SourcePoint>);
     static_assert(!std::is_constructible_v<symbolic::SymbolAddress::RangeIndex,
                                            std::string_view>);
     static_assert(!std::is_constructible_v<symbolic::Structure,
