@@ -84,9 +84,9 @@ namespace acslg::analyzer::symbolic {
         if (expr.isa<detail::UnknownExprNode>())
             return internTyped(makeNode<detail::UnknownExprNode>());
 
-        if (auto *index = expr.dyn_cast<const SymbolAddress::RangeIndex>())
+        if (auto *index = expr.dyn_cast<const detail::RangeIndexNode>())
             return internTyped(
-                detail::ExprFactoryInternals::makeNode<SymbolAddress::RangeIndex>(
+                detail::ExprFactoryInternals::makeNode<detail::RangeIndexNode>(
                     index->getName()));
 
         if (auto *unaryExpr = expr.dyn_cast<const detail::UnaryOpExprNode>())
@@ -186,7 +186,7 @@ namespace acslg::analyzer::symbolic {
                     return literal->importInto(factory);
                 if (expr.isUnknown())
                     return factory.unknown();
-                if (auto *rangeIndex = dyn_cast<const SymbolAddress::RangeIndex>(&expr))
+                if (auto *rangeIndex = dyn_cast<const detail::RangeIndexNode>(&expr))
                     return factory.rangeIndex(rangeIndex->getName());
                 if (auto *varAddr = dyn_cast<const VariableAddress>(&expr))
                     return factory.variableAddress(varAddr->getFrom()).asExpr();
@@ -291,7 +291,7 @@ namespace acslg::analyzer::symbolic {
                     return literal->importInto(factory);
                 if (expr.isUnknown())
                     return factory.unknown();
-                if (auto *rangeIndex = dyn_cast<const SymbolAddress::RangeIndex>(&expr))
+                if (auto *rangeIndex = dyn_cast<const detail::RangeIndexNode>(&expr))
                     return factory.rangeIndex(rangeIndex->getName());
                 if (auto *varAddr = dyn_cast<const VariableAddress>(&expr))
                     return factory.variableAddress(varAddr->getFrom()).asExpr();
@@ -430,7 +430,7 @@ namespace acslg::analyzer::symbolic {
                     return literal->importInto(factory);
                 if (expr.isUnknown())
                     return factory.unknown();
-                if (isa<SymbolAddress::RangeIndex>(&expr))
+                if (expr.isRangeIndex())
                     return indexExpr;
                 if (auto *varAddr = dyn_cast<const VariableAddress>(&expr))
                     return factory.variableAddress(varAddr->getFrom()).asExpr();
@@ -516,7 +516,7 @@ namespace acslg::analyzer::symbolic {
         if (isa<detail::UnknownExprNode>(&expr))
             return preserveImportedType(unknown());
 
-        if (auto *index = dyn_cast<SymbolAddress::RangeIndex>(&expr))
+        if (auto *index = dyn_cast<detail::RangeIndexNode>(&expr))
             return preserveImportedType(rangeIndex(index->getName()));
 
         if (auto *unaryExpr = dyn_cast<detail::UnaryOpExprNode>(&expr))
@@ -716,7 +716,7 @@ namespace acslg::analyzer::symbolic {
 
     ExprHandle ExprFactory::rangeIndex(std::string_view name) {
         return intern(
-            detail::ExprFactoryInternals::makeNode<SymbolAddress::RangeIndex>(name));
+            detail::ExprFactoryInternals::makeNode<detail::RangeIndexNode>(name));
     }
 
     ExprHandle ExprFactory::symbolValue(SymbolicExpr::Type varType,

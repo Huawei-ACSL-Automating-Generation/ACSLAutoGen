@@ -42,7 +42,7 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_copy_constructible_v<symbolic::detail::QuantifierOverRangeNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::MaxMinOverRangeNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::SymbolValue>);
-    static_assert(!std::is_copy_constructible_v<symbolic::SymbolAddress::RangeIndex>);
+    static_assert(!std::is_copy_constructible_v<symbolic::detail::RangeIndexNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::OverRangeExprNode>);
     static_assert(!std::is_constructible_v<symbolic::VariableAddress,
                                            ::acslg::utils::not_null<const clang::VarDecl *>>);
@@ -61,7 +61,7 @@ namespace acslg::test::unit::analyzer {
                                            symbolic::SymbolicExpr::Type,
                                            symbolic::AddrHandle,
                                            symbolic::SourcePoint>);
-    static_assert(!std::is_constructible_v<symbolic::SymbolAddress::RangeIndex,
+    static_assert(!std::is_constructible_v<symbolic::detail::RangeIndexNode,
                                            std::string_view>);
     static_assert(!std::is_constructible_v<symbolic::Structure,
                                            symbolic::Structure::Info,
@@ -1291,7 +1291,9 @@ namespace acslg::test::unit::analyzer {
         auto i = factory.rangeIndex("i");
 
         EXPECT_EQ(k, i);
-        EXPECT_TRUE(k.isa<symbolic::SymbolAddress::RangeIndex>());
+        EXPECT_TRUE(k->isRangeIndex());
+        EXPECT_TRUE(k.isa<symbolic::detail::RangeIndexNode>());
+        EXPECT_FALSE(factory.literal(0)->isRangeIndex());
 
         symbolic::ExprFactory sourceFactory;
         auto source = sourceFactory.rangeIndex("j");
@@ -1837,7 +1839,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(unknown.handle(), factory.unknown());
         EXPECT_TRUE(unknown->isUnknown());
         EXPECT_EQ(index.handle(), factory.rangeIndex("i"));
-        EXPECT_TRUE(index.isa<symbolic::SymbolAddress::RangeIndex>());
+        EXPECT_TRUE(index->isRangeIndex());
         EXPECT_EQ(varAddr.handle(), factory.variableAddress(var));
         EXPECT_TRUE(varAddr.isa<symbolic::VariableAddress>());
         EXPECT_EQ(symbolAddr.handle(), factory.symbolAddress(var->getType(), varAddr.handle(), point));

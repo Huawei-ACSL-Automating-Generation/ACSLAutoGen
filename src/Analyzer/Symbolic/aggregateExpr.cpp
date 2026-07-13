@@ -18,6 +18,7 @@ namespace acslg::analyzer::symbolic {
     using detail::MaxMinOverRangeNode;
     using detail::OverRangeExprNode;
     using detail::QuantifierOverRangeNode;
+    using detail::RangeIndexNode;
     using detail::SumOverRangeNode;
 
     namespace {
@@ -152,15 +153,15 @@ namespace acslg::analyzer::symbolic {
 
     std::size_t OverRangeExprNode::hash() const { return utils::hash_val(range().hash()); }
 
-    std::string SymbolAddress::RangeIndex::dump() const {
+    std::string RangeIndexNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("RangeIndex") << " {" << lit(name_) << "}";
         return oss.str();
     }
 
-    bool SymbolAddress::RangeIndex::equal(const SymbolicExpr &other) const {
-        auto index = dyn_cast<const SymbolAddress::RangeIndex>(&other);
+    bool RangeIndexNode::equal(const SymbolicExpr &other) const {
+        auto index = dyn_cast<const RangeIndexNode>(&other);
         if (!index)
             return false;
         if (getValType() != other.getValType())
@@ -170,7 +171,7 @@ namespace acslg::analyzer::symbolic {
         return true;
     }
 
-    std::size_t SymbolAddress::RangeIndex::hash() const { return utils::hash_val(getKind()); }
+    std::size_t RangeIndexNode::hash() const { return utils::hash_val(getKind()); }
 
     std::string SumOverRangeNode::dump() const {
         using namespace utils::dump_fmt;

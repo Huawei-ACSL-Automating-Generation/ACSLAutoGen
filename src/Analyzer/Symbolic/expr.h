@@ -55,6 +55,7 @@ namespace acslg::analyzer::symbolic {
 
     namespace detail {
         class LiteralExprNode;
+        class RangeIndexNode;
         class UnaryOpExprNode;
         class BinaryOpExprNode;
         struct ExprFactoryInternals;
@@ -445,6 +446,8 @@ namespace acslg::analyzer::symbolic {
          * @return True if the expression is UnknownExpr-derived.
          */
         virtual bool isUnknown() const { return false; };
+
+        bool isRangeIndex() const { return kind_ == ExprKind::K_RangeIndex; }
 
         bool isOverRange() const {
             return kind_ > ExprKind::K_FirstOverRange && kind_ < ExprKind::K_LastOverRange;
@@ -1647,9 +1650,6 @@ namespace acslg::analyzer::symbolic {
                ///< type of the zero value in SymbolicExpr::simplifiedExprIfLinear, or relax the
                ///< type comparison in LiteralExprNode's equal method.
         struct BaseInfo;
-        class RangeIndex; // todo: Separate `SymbolAddress` into `SymbolAddress` and `RangeExpr`,
-                          // making `RangeIndex` a nested type within `RangeExpr`.
-
         SymbolAddress(const SymbolAddress &) = delete;
         SymbolAddress(SymbolAddress &&) = default;
 

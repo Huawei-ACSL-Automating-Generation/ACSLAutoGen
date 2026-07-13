@@ -21,16 +21,18 @@ namespace acslg::analyzer::symbolic {
         Min
     };
 
+    namespace detail {
+
     /**
-     * @class SymbolAddress::RangeIndex
+     * @class RangeIndexNode
      * @brief Placeholder representing the induction variable when reasoning over address ranges.
      */
-    class SymbolAddress::RangeIndex : public SymbolicExpr {
+    class RangeIndexNode : public SymbolicExpr {
       public:
-        RangeIndex(const RangeIndex &)            = delete;
-        RangeIndex(RangeIndex &&)                 = default;
-        RangeIndex &operator=(const RangeIndex &) = delete;
-        RangeIndex &operator=(RangeIndex &&)      = delete;
+        RangeIndexNode(const RangeIndexNode &)            = delete;
+        RangeIndexNode(RangeIndexNode &&)                 = default;
+        RangeIndexNode &operator=(const RangeIndexNode &) = delete;
+        RangeIndexNode &operator=(RangeIndexNode &&)      = delete;
 
         static bool classof(const SymbolicExpr *e) {
             return e->getKind() == ExprKind::K_RangeIndex;
@@ -65,13 +67,11 @@ namespace acslg::analyzer::symbolic {
       private:
         friend struct detail::ExprFactoryInternals;
 
-        explicit RangeIndex(std::string_view name)
+        explicit RangeIndexNode(std::string_view name)
             : SymbolicExpr(ExprKind::K_RangeIndex, Type{ScalarKind::UInt, 64}), name_(name) {}
 
         std::string name_;
     };
-
-    namespace detail {
 
     /**
      * @class OverRangeExprNode
