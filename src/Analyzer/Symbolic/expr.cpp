@@ -129,17 +129,17 @@ namespace acslg::analyzer::symbolic {
         }
 
         if (auto *sum = expr.dyn_cast<const SumOverRange>())
-            return internTyped(std::make_unique<SumOverRange>(
+            return internTyped(detail::ExprFactoryInternals::makeNode<SumOverRange>(
                 importAddress(sum->getRange()), sum->getIndexName(),
                 sum->getFromPoint().value()));
 
         if (auto *quantifier = expr.dyn_cast<const QuantifierOverRange>())
-            return internTyped(std::make_unique<QuantifierOverRange>(
+            return internTyped(detail::ExprFactoryInternals::makeNode<QuantifierOverRange>(
                 importAddress(quantifier->getRange()), quantifier->getIndexName(),
                 quantifier->getQuantifier(), importExpr(quantifier->getPredicate())));
 
         if (auto *maxMin = expr.dyn_cast<const MaxMinOverRange>())
-            return internTyped(std::make_unique<MaxMinOverRange>(
+            return internTyped(detail::ExprFactoryInternals::makeNode<MaxMinOverRange>(
                 importAddress(maxMin->getRange()), maxMin->getIndexName(),
                 maxMin->getExtremum(), importExpr(maxMin->getExpr()),
                 maxMin->getFromPoint().value()));

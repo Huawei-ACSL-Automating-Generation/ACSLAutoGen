@@ -35,6 +35,21 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_copy_constructible_v<symbolic::SymbolValue>);
     static_assert(!std::is_copy_constructible_v<symbolic::SymbolAddress::RangeIndex>);
     static_assert(!std::is_copy_constructible_v<symbolic::OverRangeExpr>);
+    static_assert(!std::is_constructible_v<symbolic::SumOverRange,
+                                           symbolic::AddrHandle,
+                                           std::string_view,
+                                           symbolic::SourcePoint>);
+    static_assert(!std::is_constructible_v<symbolic::QuantifierOverRange,
+                                           symbolic::AddrHandle,
+                                           std::string_view,
+                                           symbolic::QuantifierOverRange::Quantifier,
+                                           symbolic::ExprHandle>);
+    static_assert(!std::is_constructible_v<symbolic::MaxMinOverRange,
+                                           symbolic::AddrHandle,
+                                           std::string_view,
+                                           symbolic::MaxMinOverRange::Extremum,
+                                           symbolic::ExprHandle,
+                                           symbolic::SourcePoint>);
     static_assert(!std::is_copy_assignable_v<symbolic::SymbolAddress>);
     static_assert(!std::is_copy_assignable_v<symbolic::Structure>);
     static_assert(!std::is_move_assignable_v<symbolic::QuantifierOverRange>);

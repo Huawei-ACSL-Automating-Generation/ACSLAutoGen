@@ -1252,6 +1252,11 @@ namespace acslg::analyzer::symbolic {
 
     namespace detail {
         struct ExprFactoryInternals {
+            template <typename Node, typename... Args>
+            static std::unique_ptr<Node> makeNode(Args &&...args) {
+                return std::unique_ptr<Node>{new Node(std::forward<Args>(args)...)};
+            }
+
             static ExprHandle intern(
                 ExprFactory &factory,
                 utils::not_null<std::unique_ptr<SymbolicExpr>> node) {

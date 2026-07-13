@@ -111,8 +111,6 @@ namespace acslg::analyzer::symbolic {
         SumOverRange &operator=(const SumOverRange &) = delete;
         SumOverRange &operator=(SumOverRange &&)      = delete;
 
-        SumOverRange(AddrHandle range, std::string_view indexName, SourcePoint fromPoint);
-
         // SymbolicExpr
         /// @brief Dump a readable description of the sum.
         std::string dump() const override;
@@ -136,6 +134,10 @@ namespace acslg::analyzer::symbolic {
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; };
 
       private:
+        friend struct detail::ExprFactoryInternals;
+
+        SumOverRange(AddrHandle range, std::string_view indexName, SourcePoint fromPoint);
+
         SourcePoint fromPoint_;
 
     };
@@ -155,16 +157,6 @@ namespace acslg::analyzer::symbolic {
         QuantifierOverRange(QuantifierOverRange &&) = default;
         QuantifierOverRange &operator=(const QuantifierOverRange &) = delete;
         QuantifierOverRange &operator=(QuantifierOverRange &&) = delete;
-
-        QuantifierOverRange(AddrHandle range,
-                            std::string_view indexName,
-                            Quantifier quant,
-                            ExprHandle pred)
-            : OverRangeExpr(ExprKind::K_QuantifierOverRange,
-                            Type{ScalarKind::Bool, 8},
-                            range,
-                            indexName),
-              quant_(quant), pred_(pred) {}
 
         Quantifier getQuantifier() const { return quant_; }
         const SymbolicExpr &getPredicate() const { return *pred_; }
@@ -188,6 +180,18 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
+        friend struct detail::ExprFactoryInternals;
+
+        QuantifierOverRange(AddrHandle range,
+                            std::string_view indexName,
+                            Quantifier quant,
+                            ExprHandle pred)
+            : OverRangeExpr(ExprKind::K_QuantifierOverRange,
+                            Type{ScalarKind::Bool, 8},
+                            range,
+                            indexName),
+              quant_(quant), pred_(pred) {}
+
         Quantifier quant_;
         ExprChild pred_;
     };
@@ -210,18 +214,6 @@ namespace acslg::analyzer::symbolic {
         MaxMinOverRange(MaxMinOverRange &&) = default;
         MaxMinOverRange &operator=(const MaxMinOverRange &) = delete;
         MaxMinOverRange &operator=(MaxMinOverRange &&) = delete;
-
-        MaxMinOverRange(AddrHandle range,
-                        std::string_view indexName,
-                        Extremum extremum,
-                        ExprHandle expr,
-                        SourcePoint fromPoint)
-            : OverRangeExpr(ExprKind::K_MaxMinOverRange,
-                            expr.getValType(),
-                            range,
-                            indexName),
-              Symbol(Kind::K_MaxMinOverRange), extremum_(extremum), expr_(expr),
-              fromPoint_(std::move(fromPoint)) {}
 
         Extremum getExtremum() const { return extremum_; }
         const SymbolicExpr &getExpr() const { return *expr_; }
@@ -249,6 +241,20 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
+        friend struct detail::ExprFactoryInternals;
+
+        MaxMinOverRange(AddrHandle range,
+                        std::string_view indexName,
+                        Extremum extremum,
+                        ExprHandle expr,
+                        SourcePoint fromPoint)
+            : OverRangeExpr(ExprKind::K_MaxMinOverRange,
+                            expr.getValType(),
+                            range,
+                            indexName),
+              Symbol(Kind::K_MaxMinOverRange), extremum_(extremum), expr_(expr),
+              fromPoint_(std::move(fromPoint)) {}
+
         Extremum extremum_;
         ExprChild expr_;
         SourcePoint fromPoint_;
