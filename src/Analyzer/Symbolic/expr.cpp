@@ -1352,6 +1352,104 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
+    VariableAddressView::VariableAddressView(AddrHandle handle) : handle_(handle) {
+        if (!handle_->isVariableAddress())
+            ERROR("VariableAddressView requires a VariableAddress.");
+    }
+
+    std::optional<VariableAddressView> VariableAddressView::tryFrom(AddrHandle handle) {
+        if (!handle->isVariableAddress())
+            return std::nullopt;
+        return VariableAddressView{handle};
+    }
+
+    std::optional<VariableAddressView> VariableAddressView::tryFrom(const Address &address) {
+        return tryFrom(AddrHandle{&address});
+    }
+
+    utils::not_null<const clang::VarDecl *> VariableAddressView::declaration() const {
+        return cast<const VariableAddress>(handle_.get().get())->getFrom();
+    }
+
+    FieldAddressView::FieldAddressView(AddrHandle handle) : handle_(handle) {
+        if (!handle_->isFieldAddress())
+            ERROR("FieldAddressView requires a FieldAddress.");
+    }
+
+    std::optional<FieldAddressView> FieldAddressView::tryFrom(AddrHandle handle) {
+        if (!handle->isFieldAddress())
+            return std::nullopt;
+        return FieldAddressView{handle};
+    }
+
+    std::optional<FieldAddressView> FieldAddressView::tryFrom(const Address &address) {
+        return tryFrom(AddrHandle{&address});
+    }
+
+    utils::not_null<const clang::RecordDecl *> FieldAddressView::definition() const {
+        return cast<const FieldAddress>(handle_.get().get())->getDefinition();
+    }
+
+    AddrHandle FieldAddressView::base() const {
+        return cast<const FieldAddress>(handle_.get().get())->getBaseAddr().handle();
+    }
+
+    size_t FieldAddressView::fieldIndex() const {
+        return cast<const FieldAddress>(handle_.get().get())->getFieldIndex();
+    }
+
+    SymbolAddressView::SymbolAddressView(AddrHandle handle) : handle_(handle) {
+        if (!handle_->isSymbolAddress())
+            ERROR("SymbolAddressView requires a SymbolAddress.");
+    }
+
+    std::optional<SymbolAddressView> SymbolAddressView::tryFrom(AddrHandle handle) {
+        if (!handle->isSymbolAddress())
+            return std::nullopt;
+        return SymbolAddressView{handle};
+    }
+
+    std::optional<SymbolAddressView> SymbolAddressView::tryFrom(const Address &address) {
+        return tryFrom(AddrHandle{&address});
+    }
+
+    clang::QualType SymbolAddressView::pointeeType() const {
+        return handle_->getPointeeType();
+    }
+
+    std::optional<AddrHandle> SymbolAddressView::from() const {
+        return cast<const SymbolAddress>(handle_.get().get())->getFromAddrHandle();
+    }
+
+    std::optional<SourcePoint> SymbolAddressView::fromPoint() const {
+        return cast<const SymbolAddress>(handle_.get().get())->getFromPoint();
+    }
+
+    ExprHandle SymbolAddressView::offset() const {
+        return ExprHandle{cast<const SymbolAddress>(handle_.get().get())->getOffset()};
+    }
+
+    std::optional<ExprHandle> SymbolAddressView::length() const {
+        const auto &length = cast<const SymbolAddress>(handle_.get().get())->getLength();
+        if (!length)
+            return std::nullopt;
+        return length->handle();
+    }
+
+    std::optional<ExprHandle> SymbolAddressView::rightBound() const {
+        return cast<const SymbolAddress>(handle_.get().get())->getRightBound();
+    }
+
+    SymbolAddrBaseInfo SymbolAddressView::baseInfo() const {
+        return cast<const SymbolAddress>(handle_.get().get())->getBaseInfo();
+    }
+
+    std::optional<utils::not_null<const clang::VarDecl *>> SymbolAddressView::fromRoot() const {
+        return handle_->getFromRoot();
+    }
+
+    int SymbolAddressView::dimension() const { return handle_->getDimension(); }
+
     std::string StructureInfo::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;

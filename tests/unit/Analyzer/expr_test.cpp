@@ -2046,6 +2046,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(varAddrA, varAddrB);
         EXPECT_TRUE(varAddrA.isa<symbolic::VariableAddress>());
         EXPECT_TRUE(varAddrA->isVariableAddress());
+        symbolic::VariableAddressView variableView{varAddrA};
+        EXPECT_EQ(variableView.declaration().get(), var);
+        EXPECT_EQ(variableView.handle(), varAddrA);
 
         symbolic::AddressBox handleBox{varAddrA};
         symbolic::AddressBox copiedHandleBox{handleBox};
@@ -2085,14 +2088,30 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(symAddrA, symAddrB);
         EXPECT_TRUE(symAddrA.isa<symbolic::SymbolAddress>());
         EXPECT_TRUE(symAddrA->isSymbolAddress());
+        symbolic::SymbolAddressView symbolView{symAddrA};
+        EXPECT_EQ(symbolView.from(), varAddrA);
+        EXPECT_EQ(symbolView.fromPoint(), point);
+        EXPECT_EQ(symbolView.offset(), offset);
+        EXPECT_EQ(symbolView.length(), length);
+        EXPECT_EQ(symbolView.pointeeType(), firstField->getType());
+        EXPECT_EQ(symbolView.fromRoot().value().get(), var);
+        EXPECT_EQ(symbolView.dimension(), 1);
 
         auto fieldAddrA = factory.fieldAddress(firstField->getType(), record, varAddrA, 0);
         auto fieldAddrB = factory.fieldAddress(firstField->getType(), record, varAddrB, 0);
         EXPECT_EQ(fieldAddrA, fieldAddrB);
         EXPECT_TRUE(fieldAddrA.isa<symbolic::FieldAddress>());
         EXPECT_TRUE(fieldAddrA->isFieldAddress());
+        symbolic::FieldAddressView fieldView{fieldAddrA};
+        EXPECT_EQ(fieldView.definition().get(), record);
+        EXPECT_EQ(fieldView.base(), varAddrA);
+        EXPECT_EQ(fieldView.fieldIndex(), 0u);
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle(), varAddrA);
+
+        EXPECT_FALSE(symbolic::VariableAddressView::tryFrom(fieldAddrA).has_value());
+        EXPECT_FALSE(symbolic::FieldAddressView::tryFrom(symAddrA).has_value());
+        EXPECT_FALSE(symbolic::SymbolAddressView::tryFrom(varAddrA).has_value());
     }
 
     TEST(ExprFactoryTest, ImportsAddressAndSymbolValueGraphsIntoTargetFactory) {

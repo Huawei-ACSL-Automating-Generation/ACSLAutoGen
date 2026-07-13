@@ -1629,6 +1629,60 @@ namespace acslg::analyzer::symbolic {
             ERROR("Cannot rebuild address with expression from a different factory.");
     }
 
+    class VariableAddressView {
+      public:
+        explicit VariableAddressView(AddrHandle handle);
+
+        static std::optional<VariableAddressView> tryFrom(AddrHandle handle);
+        static std::optional<VariableAddressView> tryFrom(const Address &address);
+
+        AddrHandle handle() const { return handle_; }
+        utils::not_null<const clang::VarDecl *> declaration() const;
+
+      private:
+        AddrHandle handle_;
+    };
+
+    class FieldAddressView {
+      public:
+        explicit FieldAddressView(AddrHandle handle);
+
+        static std::optional<FieldAddressView> tryFrom(AddrHandle handle);
+        static std::optional<FieldAddressView> tryFrom(const Address &address);
+
+        AddrHandle handle() const { return handle_; }
+        utils::not_null<const clang::RecordDecl *> definition() const;
+        AddrHandle base() const;
+        size_t fieldIndex() const;
+
+      private:
+        AddrHandle handle_;
+    };
+
+    class SymbolAddressView {
+      public:
+        inline static constexpr signed long ZERO_OFFSET = 0;
+
+        explicit SymbolAddressView(AddrHandle handle);
+
+        static std::optional<SymbolAddressView> tryFrom(AddrHandle handle);
+        static std::optional<SymbolAddressView> tryFrom(const Address &address);
+
+        AddrHandle handle() const { return handle_; }
+        clang::QualType pointeeType() const;
+        std::optional<AddrHandle> from() const;
+        std::optional<SourcePoint> fromPoint() const;
+        ExprHandle offset() const;
+        std::optional<ExprHandle> length() const;
+        std::optional<ExprHandle> rightBound() const;
+        SymbolAddrBaseInfo baseInfo() const;
+        std::optional<utils::not_null<const clang::VarDecl *>> fromRoot() const;
+        int dimension() const;
+
+      private:
+        AddrHandle handle_;
+    };
+
     class LiteralExpr : public Expr {
       public:
         explicit LiteralExpr(bool value) : Expr(make(value)) {}
