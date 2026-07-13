@@ -1386,12 +1386,16 @@ namespace acslg::test::unit::analyzer {
         };
 
         auto sumRangeHandle = makeRange();
-        symbolic::SumOverRange sum{sumRangeHandle, "i", point};
+        auto sumHandle = symbolic::makeSumOverRangeHandle(
+            factory, sumRangeHandle.cast<symbolic::SymbolAddress>(), "i", point);
+        const auto &sum = sumHandle.cast<symbolic::SumOverRange>();
         auto quantifierRangeHandle = makeRange();
         auto predicate = makePred();
-        symbolic::QuantifierOverRange quantifier{
-            quantifierRangeHandle, "i",
-            symbolic::QuantifierOverRange::Quantifier::ForAll, predicate};
+        auto quantifierHandle = symbolic::makeQuantifierOverRangeHandle(
+            factory, quantifierRangeHandle, "i",
+            symbolic::QuantifierOverRange::Quantifier::ForAll, predicate);
+        const auto &quantifier =
+            quantifierHandle.cast<symbolic::QuantifierOverRange>();
         auto maxRangeHandle = makeRange();
         auto maxHandle = symbolic::makeMaxMinOverRangeHandle(
             factory, maxRangeHandle, "i",
@@ -1445,7 +1449,9 @@ namespace acslg::test::unit::analyzer {
         rangeHandle = factory.withOffset(rangeHandle, factory.rangeIndex("i"));
         rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
         auto rangeBase = rangeHandle.cast<symbolic::SymbolAddress>().getBaseInfo();
-        symbolic::SumOverRange sum{rangeHandle, "i", point};
+        auto sumHandle = symbolic::makeSumOverRangeHandle(
+            factory, rangeHandle.cast<symbolic::SymbolAddress>(), "i", point);
+        const auto &sum = sumHandle.cast<symbolic::SumOverRange>();
 
         auto imported = factory.importExpr(sum);
         EXPECT_EQ(*imported, sum);
@@ -1483,8 +1489,11 @@ namespace acslg::test::unit::analyzer {
         auto pred = factory.binary(factory.rangeIndex("i"),
                                    symbolic::BinaryOpExpr::Operator::LessThan,
                                    factory.literal(int64_t{3}));
-        symbolic::QuantifierOverRange quantifier{
-            rangeHandle, "i", symbolic::QuantifierOverRange::Quantifier::ForAll, pred};
+        auto quantifierHandle = symbolic::makeQuantifierOverRangeHandle(
+            factory, rangeHandle, "i",
+            symbolic::QuantifierOverRange::Quantifier::ForAll, pred);
+        const auto &quantifier =
+            quantifierHandle.cast<symbolic::QuantifierOverRange>();
 
         auto imported = factory.importExpr(quantifier);
         EXPECT_EQ(*imported, quantifier);
@@ -1574,7 +1583,9 @@ namespace acslg::test::unit::analyzer {
 
         auto sumRange = makeRange();
         auto rangeBase = sumRange.cast<symbolic::SymbolAddress>().getBaseInfo();
-        symbolic::SumOverRange sum{sumRange, "i", point};
+        auto sumHandle = symbolic::makeSumOverRangeHandle(
+            factory, sumRange.cast<symbolic::SymbolAddress>(), "i", point);
+        const auto &sum = sumHandle.cast<symbolic::SumOverRange>();
         auto substitutedSum =
             symbolic::getRangeIndexSubstitutedHandle(factory, sum, rangeBase, one);
         const auto &sumNode = substitutedSum.cast<symbolic::SumOverRange>();
@@ -1583,10 +1594,12 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(sumNode.getRange().getLength().value().get().get(), three.get().get());
 
         auto quantRange = makeRange();
-        symbolic::QuantifierOverRange quantifier{
-            quantRange, "i",
+        auto quantifierHandle = symbolic::makeQuantifierOverRangeHandle(
+            factory, quantRange, "i",
             symbolic::QuantifierOverRange::Quantifier::ForAll,
-            factory.rangeIndex("i")};
+            factory.rangeIndex("i"));
+        const auto &quantifier =
+            quantifierHandle.cast<symbolic::QuantifierOverRange>();
         auto substitutedQuantifier =
             symbolic::getRangeIndexSubstitutedHandle(factory, quantifier, rangeBase, one);
         const auto &quantifierNode =
@@ -1594,9 +1607,10 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(&quantifierNode.getPredicate(), one.get().get());
 
         auto maxRange = makeRange();
-        symbolic::MaxMinOverRange max{
-            maxRange, "i", symbolic::MaxMinOverRange::Extremum::Max,
-            factory.rangeIndex("i"), point};
+        auto maxHandle = symbolic::makeMaxMinOverRangeHandle(
+            factory, maxRange, "i", symbolic::MaxMinOverRange::Extremum::Max,
+            factory.rangeIndex("i"), point);
+        const auto &max = maxHandle.cast<symbolic::MaxMinOverRange>();
         auto substitutedMax =
             symbolic::getRangeIndexSubstitutedHandle(factory, max, rangeBase, one);
         const auto &maxNode = substitutedMax.cast<symbolic::MaxMinOverRange>();
