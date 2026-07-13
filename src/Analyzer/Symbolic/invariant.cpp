@@ -193,7 +193,8 @@ namespace acslg::analyzer::symbolic {
     /**
      * @brief Convert variable-backed symbol to a linear expression using a variable index map.
      */
-    std::optional<Parma_Polyhedra_Library::Linear_Expression> symbolic::SymbolValue::toLinearExpr(
+    std::optional<Parma_Polyhedra_Library::Linear_Expression>
+    detail::SymbolValueNode::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
         using namespace Parma_Polyhedra_Library;
         Linear_Expression e(0);
@@ -319,7 +320,7 @@ namespace acslg::analyzer::symbolic {
         ERROR("non-affine or unsupported op");
     }
 
-    Parma_Polyhedra_Library::Linear_Expression symbolic::SymbolValue::toLinearExpr(
+    Parma_Polyhedra_Library::Linear_Expression detail::SymbolValueNode::toLinearExpr(
         const std::unordered_map<size_t, size_t> &hashIdMap) const {
         Parma_Polyhedra_Library::Linear_Expression e(0);
         if (auto it = hashIdMap.find(hash()); it != hashIdMap.end()) {

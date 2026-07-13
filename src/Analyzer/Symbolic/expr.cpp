@@ -25,6 +25,7 @@ namespace acslg::analyzer::symbolic {
     using detail::QuantifierOverRangeNode;
     using detail::StructureNode;
     using detail::SumOverRangeNode;
+    using detail::SymbolValueNode;
 
     thread_local ExprFactory *ExprFactoryScope::current_ = nullptr;
 
@@ -122,8 +123,8 @@ namespace acslg::analyzer::symbolic {
                 symbolAddr->getFromPoint().value(), importExpr(*symbolAddr->getOffset()), length));
         }
 
-        if (auto *symbolVal = expr.dyn_cast<const SymbolValue>())
-            return internTyped(detail::ExprFactoryInternals::makeNode<SymbolValue>(
+        if (auto *symbolVal = expr.dyn_cast<const SymbolValueNode>())
+            return internTyped(detail::ExprFactoryInternals::makeNode<SymbolValueNode>(
                 symbolVal->getValType(), importAddress(*symbolVal->getFromAddrHandle()),
                 symbolVal->getFromPoint().value()));
 
@@ -199,7 +200,7 @@ namespace acslg::analyzer::symbolic {
                                       fieldAddr->getFieldIndex())
                         .asExpr();
                 }
-                if (auto *symbolValue = dyn_cast<const SymbolValue>(&expr)) {
+                if (auto *symbolValue = dyn_cast<const SymbolValueNode>(&expr)) {
                     auto from = requireAddress(run(*symbolValue->getFromAddrHandle()));
                     return factory.symbolValue(symbolValue->getValType(), from,
                                                symbolValue->getFromPoint().value());
@@ -304,7 +305,7 @@ namespace acslg::analyzer::symbolic {
                                       fieldAddr->getFieldIndex())
                         .asExpr();
                 }
-                if (auto *symbolValue = dyn_cast<const SymbolValue>(&expr)) {
+                if (auto *symbolValue = dyn_cast<const SymbolValueNode>(&expr)) {
                     auto fromPoint = symbolValue->getFromPoint();
                     if (fromPoint && fromPoint.value() != pointToSub)
                         return factory.importExpr(expr);
@@ -443,7 +444,7 @@ namespace acslg::analyzer::symbolic {
                                       fieldAddr->getFieldIndex())
                         .asExpr();
                 }
-                if (auto *symbolValue = dyn_cast<const SymbolValue>(&expr)) {
+                if (auto *symbolValue = dyn_cast<const SymbolValueNode>(&expr)) {
                     auto from = requireAddress(run(*symbolValue->getFromAddrHandle()));
                     return factory.symbolValue(symbolValue->getValType(), from,
                                                symbolValue->getFromPoint().value());
@@ -557,7 +558,7 @@ namespace acslg::analyzer::symbolic {
                     .asExpr());
         }
 
-        if (auto *symbolVal = dyn_cast<SymbolValue>(&expr))
+        if (auto *symbolVal = dyn_cast<SymbolValueNode>(&expr))
             return preserveImportedType(
                 symbolValue(symbolVal->getValType(), importAddress(*symbolVal->getFromAddrHandle()),
                             symbolVal->getFromPoint().value()));
@@ -723,7 +724,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle ExprFactory::symbolValue(SymbolicExpr::Type varType,
                                         AddrHandle from,
                                         SourcePoint fromPoint) {
-        return intern(detail::ExprFactoryInternals::makeNode<SymbolValue>(
+        return intern(detail::ExprFactoryInternals::makeNode<SymbolValueNode>(
             varType, from, std::move(fromPoint)));
     }
 
@@ -1135,7 +1136,7 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
-    size_t SymbolValue::hash() const {
+    size_t SymbolValueNode::hash() const {
         size_t seed =
             utils::hash_val(SymbolicExpr::getKind(), fromAddr_->hash(), fromPoint_.hash());
         return seed;
@@ -1257,7 +1258,7 @@ namespace acslg::analyzer::symbolic {
         return utils::dump_fmt::hint("{unknown}");
     }
 
-    std::string SymbolValue::dump() const {
+    std::string SymbolValueNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         const auto &t = getValType();
@@ -1296,15 +1297,15 @@ namespace acslg::analyzer::symbolic {
     }
 
     AddrHandle SymbolValueView::from() const {
-        return cast<const SymbolValue>(handle_.get().get())->getFromAddrHandle();
+        return cast<const SymbolValueNode>(handle_.get().get())->getFromAddrHandle();
     }
 
     std::optional<SourcePoint> SymbolValueView::fromPoint() const {
-        return cast<const SymbolValue>(handle_.get().get())->getFromPoint();
+        return cast<const SymbolValueNode>(handle_.get().get())->getFromPoint();
     }
 
     std::optional<utils::not_null<const clang::VarDecl *>> SymbolValueView::fromRoot() const {
-        return cast<const SymbolValue>(handle_.get().get())->getFromRoot();
+        return cast<const SymbolValueNode>(handle_.get().get())->getFromRoot();
     }
 
     std::string SymbolAddress::dump() const {
@@ -1552,7 +1553,7 @@ namespace acslg::analyzer::symbolic {
         return SymbolicExpr::GetACSLError::UnknownExpr;
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> SymbolValue::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> SymbolValueNode::doGetACSL(
         const SymbolicExpr::GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
@@ -1794,7 +1795,7 @@ namespace acslg::analyzer::symbolic {
         }
 
         std::optional<SymbolOrigin> getBorrowedSymbolOrigin(const Symbol &symbol) {
-            if (auto *value = dyn_cast<const SymbolValue>(&symbol))
+            if (auto *value = dyn_cast<const SymbolValueNode>(&symbol))
                 return SymbolOrigin{value->getFromAddrHandle(), value->getFromPoint().value()};
             if (auto *address = dyn_cast<const SymbolAddress>(&symbol)) {
                 auto from = address->getFromAddrHandle();
@@ -2051,8 +2052,8 @@ namespace acslg::analyzer::symbolic {
         return expr.isUnknown() && getValType() == expr.getValType();
     }
 
-    bool SymbolValue::equal(const SymbolicExpr &expr) const {
-        const auto symbolValue = dyn_cast<const SymbolValue>(&expr);
+    bool SymbolValueNode::equal(const SymbolicExpr &expr) const {
+        const auto symbolValue = dyn_cast<const SymbolValueNode>(&expr);
         if (!symbolValue)
             return false;
         if (getValType() != expr.getValType())
@@ -2140,7 +2141,7 @@ namespace acslg::analyzer::symbolic {
         return baseAddr_->getFromRoot();
     }
 
-    std::optional<utils::not_null<const clang::VarDecl *>> SymbolValue::getFromRoot() const {
+    std::optional<utils::not_null<const clang::VarDecl *>> SymbolValueNode::getFromRoot() const {
         return fromAddr_->getFromRoot();
     }
 
@@ -2164,7 +2165,7 @@ namespace acslg::analyzer::symbolic {
                                   [](auto &lhs, auto &rhs) { return *lhs == *rhs; });
     }
 
-    SymbolicExpr::UsedMap SymbolValue::collectUsedSymbols() const { return {{hash(), this}}; }
+    SymbolicExpr::UsedMap SymbolValueNode::collectUsedSymbols() const { return {{hash(), this}}; }
 
     SymbolicExpr::UsedMap detail::BinaryOpExprNode::collectUsedSymbols() const {
         auto lmap = left_->collectUsedSymbols();

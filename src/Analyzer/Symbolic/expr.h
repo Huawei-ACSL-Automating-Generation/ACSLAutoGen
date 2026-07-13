@@ -35,7 +35,6 @@ namespace acslg::analyzer {
 namespace acslg::analyzer::symbolic {
     class Address;
     class SymbolAddress;
-    class SymbolValue;
     class Symbol;
     class ExprFactory;
     class ExprFactoryScope;
@@ -57,6 +56,7 @@ namespace acslg::analyzer::symbolic {
         class LiteralExprNode;
         class RangeIndexNode;
         class StructureNode;
+        class SymbolValueNode;
         class UnaryOpExprNode;
         class BinaryOpExprNode;
         struct ExprFactoryInternals;
@@ -1989,13 +1989,13 @@ namespace acslg::analyzer::symbolic {
         ExprHandle handle_;
     };
 
-    /// @class Symbol value
-    /// @brief Symbolic value with unique ID and optional origin.
-    /// Origin can't be nullptr, use nullopt.
-    class SymbolValue : public SymbolicExpr, public Symbol {
+    namespace detail {
+
+    /// Immutable interned symbolic value with a required address origin.
+    class SymbolValueNode : public SymbolicExpr, public Symbol {
       public:
-        SymbolValue(const SymbolValue &) = delete;
-        SymbolValue(SymbolValue &&) = default;
+        SymbolValueNode(const SymbolValueNode &) = delete;
+        SymbolValueNode(SymbolValueNode &&) = default;
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_SymbolValue;
@@ -2028,9 +2028,9 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
-        friend struct detail::ExprFactoryInternals;
+        friend struct ExprFactoryInternals;
 
-        SymbolValue(Type varType, AddrHandle from, SourcePoint fromPoint)
+        SymbolValueNode(Type varType, AddrHandle from, SourcePoint fromPoint)
             : SymbolicExpr(ExprKind::K_SymbolValue, varType), Symbol(Kind::K_SymbolValue),
               fromAddr_(from), fromPoint_(std::move(fromPoint)) {}
 
@@ -2039,6 +2039,8 @@ namespace acslg::analyzer::symbolic {
 
         SourcePoint fromPoint_;
     };
+
+    } // namespace detail
 
     BinaryOp getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
     BinaryOp getBinaryOp(clang::BinaryOperatorKind op);
