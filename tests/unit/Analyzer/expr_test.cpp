@@ -64,7 +64,7 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_constructible_v<symbolic::detail::RangeIndexNode,
                                            std::string_view>);
     static_assert(!std::is_constructible_v<symbolic::Structure,
-                                           symbolic::Structure::Info,
+                                           symbolic::StructureInfo,
                                            std::vector<symbolic::ExprHandle>>);
     static_assert(!std::is_constructible_v<symbolic::detail::SumOverRangeNode,
                                            symbolic::AddrHandle,

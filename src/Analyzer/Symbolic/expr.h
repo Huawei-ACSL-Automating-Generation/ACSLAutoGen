@@ -958,26 +958,29 @@ namespace acslg::analyzer::symbolic {
      *   all field values.
      */
 
+    struct StructureInfo {
+        utils::not_null<const clang::RecordDecl *> definition_;
+        const clang::ASTRecordLayout &layout_;
+
+        StructureInfo(const clang::RecordDecl *record, const clang::ASTRecordLayout &layout)
+            : definition_(record), layout_(layout) {
+            if (!record->isCompleteDefinition())
+                ERROR("Incomplete struct definition");
+            definition_ = record->getDefinition();
+        }
+
+        StructureInfo(const StructureInfo &other)
+            : definition_(other.definition_), layout_(other.layout_) {}
+        StructureInfo(StructureInfo &&) = default;
+
+        bool equal(const StructureInfo &other) const;
+        bool operator==(const StructureInfo &other) const;
+        std::string dump() const;
+        size_t getNumFields() const { return layout_.getFieldCount(); }
+    };
+
     class Structure : public SymbolicExpr, public Symbol {
       public:
-        struct Info {
-            utils::not_null<const clang::RecordDecl *> definition_;
-            const clang::ASTRecordLayout &layout_;
-            Info(const clang::RecordDecl *RD, const clang::ASTRecordLayout &layout)
-                : definition_(RD) /*utils::not_null has no default constructor*/, layout_(layout) {
-                if (!RD->isCompleteDefinition())
-                    ERROR("Incomplete struct definition");
-                definition_ = RD->getDefinition();
-            }
-            Info(const Info &other) : definition_(other.definition_), layout_(other.layout_) {};
-            Info(Info &&) = default;
-
-            bool equal(const Structure::Info &other) const;
-            bool operator==(const Info &other) const;
-            std::string dump() const;
-            size_t getNumFields() const { return layout_.getFieldCount(); }
-        };
-
         Structure(const Structure &) = delete;
 
         static bool classof(const SymbolicExpr *expr) {
@@ -1024,9 +1027,9 @@ namespace acslg::analyzer::symbolic {
       private:
         friend struct detail::ExprFactoryInternals;
 
-        Structure(Info info, std::vector<ExprHandle> fields);
+        Structure(StructureInfo info, std::vector<ExprHandle> fields);
 
-        Info info_;
+        StructureInfo info_;
         std::vector<ExprChild> fields_;
     };
 

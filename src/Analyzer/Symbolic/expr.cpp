@@ -852,7 +852,7 @@ namespace acslg::analyzer::symbolic {
         if (fields.size() != layout.getFieldCount())
             UNREACHABLE();
         return intern(detail::ExprFactoryInternals::makeNode<Structure>(
-            Structure::Info{record, layout}, std::move(fields)));
+            StructureInfo{record, layout}, std::move(fields)));
     }
 
     ExprHandle ExprFactory::withField(ExprHandle structure, size_t index, ExprHandle value) {
@@ -1323,7 +1323,7 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
-    std::string Structure::Info::dump() const {
+    std::string StructureInfo::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         std::string structName = definition_->getNameAsString();
@@ -2085,13 +2085,13 @@ namespace acslg::analyzer::symbolic {
         return fromAddr_->getFromRoot();
     }
 
-    bool Structure::Info::equal(const Structure::Info &other) const {
+    bool StructureInfo::equal(const StructureInfo &other) const {
         if (definition_ != other.definition_)
             return false;
         return true;
     }
 
-    bool Structure::Info::operator==(const Info &other) const { return equal(other); }
+    bool StructureInfo::operator==(const StructureInfo &other) const { return equal(other); }
 
     bool Structure::equal(const SymbolicExpr &expr) const {
         const auto st = dyn_cast<const Structure>(&expr);
@@ -2181,7 +2181,7 @@ namespace acslg::analyzer::symbolic {
 
     int FieldAddress::getDimension() const { return baseAddr_->getDimension(); }
 
-    Structure::Structure(Info info, std::vector<ExprHandle> fields)
+    Structure::Structure(StructureInfo info, std::vector<ExprHandle> fields)
         : SymbolicExpr(
               ExprKind::K_Structure,
               Type{ScalarKind::Structure, static_cast<unsigned>(info.layout_.getSize().getQuantity()) *
