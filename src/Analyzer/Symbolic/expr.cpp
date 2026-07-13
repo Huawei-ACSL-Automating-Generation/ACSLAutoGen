@@ -23,6 +23,7 @@
 namespace acslg::analyzer::symbolic {
     using detail::MaxMinOverRangeNode;
     using detail::QuantifierOverRangeNode;
+    using detail::StructureNode;
     using detail::SumOverRangeNode;
 
     thread_local ExprFactory *ExprFactoryScope::current_ = nullptr;
@@ -126,12 +127,12 @@ namespace acslg::analyzer::symbolic {
                 symbolVal->getValType(), importAddress(*symbolVal->getFromAddrHandle()),
                 symbolVal->getFromPoint().value()));
 
-        if (auto *structure = expr.dyn_cast<const Structure>()) {
+        if (auto *structure = expr.dyn_cast<const StructureNode>()) {
             std::vector<ExprHandle> fields;
             fields.reserve(structure->getNumFields());
             for (auto field : structure->fieldsValues())
                 fields.push_back(importExpr(*field));
-            return internTyped(detail::ExprFactoryInternals::makeNode<Structure>(
+            return internTyped(detail::ExprFactoryInternals::makeNode<StructureNode>(
                 structure->getInfo(), std::move(fields)));
         }
 
@@ -224,7 +225,7 @@ namespace acslg::analyzer::symbolic {
                 }
                 if (auto *unary = dyn_cast<const detail::UnaryOpExprNode>(&expr))
                     return factory.unary(unary->getOperator(), run(*unary->getSub()));
-                if (auto *structure = dyn_cast<const Structure>(&expr)) {
+                if (auto *structure = dyn_cast<const StructureNode>(&expr)) {
                     auto rebuilt = factory.importExpr(*structure);
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
                         rebuilt = factory.withField(rebuilt, i,
@@ -360,7 +361,7 @@ namespace acslg::analyzer::symbolic {
                 }
                 if (auto *unary = dyn_cast<const detail::UnaryOpExprNode>(&expr))
                     return factory.unary(unary->getOperator(), run(*unary->getSub()));
-                if (auto *structure = dyn_cast<const Structure>(&expr)) {
+                if (auto *structure = dyn_cast<const StructureNode>(&expr)) {
                     auto rebuilt = factory.importExpr(*structure);
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
                         rebuilt = factory.withField(rebuilt, i,
@@ -467,7 +468,7 @@ namespace acslg::analyzer::symbolic {
                                           run(*binary->getRight()));
                 if (auto *unary = dyn_cast<const detail::UnaryOpExprNode>(&expr))
                     return factory.unary(unary->getOperator(), run(*unary->getSub()));
-                if (auto *structure = dyn_cast<const Structure>(&expr)) {
+                if (auto *structure = dyn_cast<const StructureNode>(&expr)) {
                     auto rebuilt = factory.importExpr(*structure);
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
                         rebuilt = factory.withField(rebuilt, i,
@@ -561,13 +562,13 @@ namespace acslg::analyzer::symbolic {
                 symbolValue(symbolVal->getValType(), importAddress(*symbolVal->getFromAddrHandle()),
                             symbolVal->getFromPoint().value()));
 
-        if (auto *structure = dyn_cast<Structure>(&expr)) {
+        if (auto *structure = dyn_cast<StructureNode>(&expr)) {
             std::vector<ExprHandle> fields;
             fields.reserve(structure->getNumFields());
             for (auto field : structure->fieldsValues())
                 fields.push_back(importExpr(*field));
             return preserveImportedType(intern(
-                detail::ExprFactoryInternals::makeNode<Structure>(
+                detail::ExprFactoryInternals::makeNode<StructureNode>(
                     structure->getInfo(), std::move(fields))));
         }
 
@@ -851,12 +852,12 @@ namespace acslg::analyzer::symbolic {
 
         if (fields.size() != layout.getFieldCount())
             UNREACHABLE();
-        return intern(detail::ExprFactoryInternals::makeNode<Structure>(
+        return intern(detail::ExprFactoryInternals::makeNode<StructureNode>(
             StructureInfo{record, layout}, std::move(fields)));
     }
 
     ExprHandle ExprFactory::withField(ExprHandle structure, size_t index, ExprHandle value) {
-        const auto &structureNode = structure.cast<Structure>();
+        const auto &structureNode = structure.cast<StructureNode>();
         if (index >= structureNode.getNumFields())
             ERROR("Out-of-bounds access");
 
@@ -868,7 +869,7 @@ namespace acslg::analyzer::symbolic {
             ++currentIndex;
         }
 
-        return intern(detail::ExprFactoryInternals::makeNode<Structure>(
+        return intern(detail::ExprFactoryInternals::makeNode<StructureNode>(
             structureNode.getInfo(), std::move(fields)));
     }
 
@@ -1162,7 +1163,7 @@ namespace acslg::analyzer::symbolic {
         return utils::hash_val(getKind(), baseAddr_->hash(), fieldIndex_);
     }
 
-    size_t Structure::hash() const {
+    size_t StructureNode::hash() const {
         auto seed = utils::hash_val(SymbolicExpr::getKind(), info_.definition_.get());
         for (auto &field : fields_)
             seed = utils::hash_val(seed, field->hash());
@@ -1350,22 +1351,22 @@ namespace acslg::analyzer::symbolic {
     }
 
     size_t StructureView::size() const {
-        return cast<const Structure>(handle_.get().get())->getNumFields();
+        return cast<const StructureNode>(handle_.get().get())->getNumFields();
     }
 
     ExprHandle StructureView::field(size_t index) const {
-        return ExprHandle{cast<const Structure>(handle_.get().get())->getFieldValue(index)};
+        return ExprHandle{cast<const StructureNode>(handle_.get().get())->getFieldValue(index)};
     }
 
     const StructureInfo &StructureView::info() const {
-        return cast<const Structure>(handle_.get().get())->getInfo();
+        return cast<const StructureNode>(handle_.get().get())->getInfo();
     }
 
     std::optional<SourcePoint> StructureView::fromPoint() const {
-        return cast<const Structure>(handle_.get().get())->getFromPoint();
+        return cast<const StructureNode>(handle_.get().get())->getFromPoint();
     }
 
-    std::string Structure::dump() const {
+    std::string StructureNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
 
@@ -1738,7 +1739,7 @@ namespace acslg::analyzer::symbolic {
 
         std::optional<SymbolOrigin> getBorrowedSymbolOrigin(const Symbol &symbol);
 
-        std::optional<SymbolOrigin> getStructureOrigin(const Structure &structure) {
+        std::optional<SymbolOrigin> getStructureOrigin(const StructureNode &structure) {
             std::optional<SymbolOrigin> common;
             for (size_t index = 0; index < structure.getNumFields(); ++index) {
                 auto *symbol = dyn_cast<const Symbol>(structure.getFieldValue(index).get());
@@ -1774,13 +1775,13 @@ namespace acslg::analyzer::symbolic {
                     return SymbolOrigin{*from, address->getFromPoint().value()};
                 return std::nullopt;
             }
-            if (auto *structure = dyn_cast<const Structure>(&symbol))
+            if (auto *structure = dyn_cast<const StructureNode>(&symbol))
                 return getStructureOrigin(*structure);
             return std::nullopt;
         }
     } // namespace
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> Structure::doGetACSL(
+    utils::expected<std::string, SymbolicExpr::GetACSLError> StructureNode::doGetACSL(
         const SymbolicExpr::GetACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
@@ -2124,8 +2125,8 @@ namespace acslg::analyzer::symbolic {
 
     bool StructureInfo::operator==(const StructureInfo &other) const { return equal(other); }
 
-    bool Structure::equal(const SymbolicExpr &expr) const {
-        const auto st = dyn_cast<const Structure>(&expr);
+    bool StructureNode::equal(const SymbolicExpr &expr) const {
+        const auto st = dyn_cast<const StructureNode>(&expr);
         if (!st)
             return false;
         if (getValType() != expr.getValType())
@@ -2212,7 +2213,7 @@ namespace acslg::analyzer::symbolic {
 
     int FieldAddress::getDimension() const { return baseAddr_->getDimension(); }
 
-    Structure::Structure(StructureInfo info, std::vector<ExprHandle> fields)
+    StructureNode::StructureNode(StructureInfo info, std::vector<ExprHandle> fields)
         : SymbolicExpr(
               ExprKind::K_Structure,
               Type{ScalarKind::Structure, static_cast<unsigned>(info.layout_.getSize().getQuantity()) *
@@ -2488,7 +2489,7 @@ namespace acslg::analyzer::symbolic {
 
     bool is_symbol_addr(const Address &a) noexcept { return a.isSymbolAddress(); }
 
-    std::optional<SourcePoint> Structure::getFromPoint() const {
+    std::optional<SourcePoint> StructureNode::getFromPoint() const {
         auto origin = getStructureOrigin(*this);
         if (!origin)
             return std::nullopt;

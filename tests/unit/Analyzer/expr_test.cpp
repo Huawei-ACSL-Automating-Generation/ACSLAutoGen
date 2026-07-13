@@ -37,7 +37,7 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_copy_constructible_v<symbolic::FieldAddress>);
     static_assert(!std::is_copy_constructible_v<symbolic::VariableAddress>);
     static_assert(!std::is_copy_constructible_v<symbolic::SymbolAddress>);
-    static_assert(!std::is_copy_constructible_v<symbolic::Structure>);
+    static_assert(!std::is_copy_constructible_v<symbolic::detail::StructureNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::SumOverRangeNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::QuantifierOverRangeNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::MaxMinOverRangeNode>);
@@ -63,7 +63,7 @@ namespace acslg::test::unit::analyzer {
                                            symbolic::SourcePoint>);
     static_assert(!std::is_constructible_v<symbolic::detail::RangeIndexNode,
                                            std::string_view>);
-    static_assert(!std::is_constructible_v<symbolic::Structure,
+    static_assert(!std::is_constructible_v<symbolic::detail::StructureNode,
                                            symbolic::StructureInfo,
                                            std::vector<symbolic::ExprHandle>>);
     static_assert(!std::is_constructible_v<symbolic::detail::SumOverRangeNode,
@@ -82,7 +82,7 @@ namespace acslg::test::unit::analyzer {
                                            symbolic::ExprHandle,
                                            symbolic::SourcePoint>);
     static_assert(!std::is_copy_assignable_v<symbolic::SymbolAddress>);
-    static_assert(!std::is_copy_assignable_v<symbolic::Structure>);
+    static_assert(!std::is_copy_assignable_v<symbolic::detail::StructureNode>);
     static_assert(!std::is_move_assignable_v<symbolic::detail::QuantifierOverRangeNode>);
 
     namespace {

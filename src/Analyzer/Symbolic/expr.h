@@ -56,6 +56,7 @@ namespace acslg::analyzer::symbolic {
     namespace detail {
         class LiteralExprNode;
         class RangeIndexNode;
+        class StructureNode;
         class UnaryOpExprNode;
         class BinaryOpExprNode;
         struct ExprFactoryInternals;
@@ -937,26 +938,7 @@ namespace acslg::analyzer::symbolic {
         Kind kind_;
     };
 
-    /**
-     * @brief Aggregate container for field values.
-     *
-     * @details
-     * The Structure class represents a structured collection of field values. It is not intended to
-     * be used in arithmetic expressions, but rather serves as a container and query interface for
-     * structured data.
-     *
-     * - **Construction**:
-     *   Since id_ and name_ have been removed, a Structure can be constructed directly from the
-     *   symbolic values of all its fields.
-     *
-     * - **Provenance**:
-     *   A structure has a common origin only when every field originates from the corresponding
-     *   FieldAddress with the same base address and source point.
-     *
-     * - **Equality and Hashing**:
-     *   Both equality comparison and hash computation are defined as aggregation operations over
-     *   all field values.
-     */
+    /// Record metadata shared by factory-built structure nodes and read-only views.
 
     struct StructureInfo {
         utils::not_null<const clang::RecordDecl *> definition_;
@@ -979,6 +961,7 @@ namespace acslg::analyzer::symbolic {
         size_t getNumFields() const { return layout_.getFieldCount(); }
     };
 
+    /// Public read-only access to a factory-owned structure expression.
     class StructureView {
       public:
         explicit StructureView(ExprHandle handle);
@@ -1000,9 +983,12 @@ namespace acslg::analyzer::symbolic {
         ExprHandle handle_;
     };
 
-    class Structure : public SymbolicExpr, public Symbol {
+    namespace detail {
+
+    /// Immutable interned node containing the field handles of a structure value.
+    class StructureNode : public SymbolicExpr, public Symbol {
       public:
-        Structure(const Structure &) = delete;
+        StructureNode(const StructureNode &) = delete;
 
         static bool classof(const SymbolicExpr *expr) {
             return expr->getKind() == ExprKind::K_Structure;
@@ -1046,13 +1032,15 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
-        friend struct detail::ExprFactoryInternals;
+        friend struct ExprFactoryInternals;
 
-        Structure(StructureInfo info, std::vector<ExprHandle> fields);
+        StructureNode(StructureInfo info, std::vector<ExprHandle> fields);
 
         StructureInfo info_;
         std::vector<ExprChild> fields_;
     };
+
+    } // namespace detail
 
     /**
      * @class Address
