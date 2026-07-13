@@ -39,7 +39,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
                                              const SymbolAddress &range,
                                              std::string_view indexName,
-                                             QuantifierOverRange::Quantifier quantifier,
+                                             RangeQuantifier quantifier,
                                              const SymbolicExpr &predicate) {
         return makeQuantifierOverRangeHandle(factory, factory.importAddress(range),
                                              indexName, quantifier,
@@ -49,7 +49,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
                                              AddrHandle range,
                                              std::string_view indexName,
-                                             QuantifierOverRange::Quantifier quantifier,
+                                             RangeQuantifier quantifier,
                                              ExprHandle predicate) {
         return detail::ExprFactoryInternals::intern(
             factory,
@@ -60,7 +60,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          const SymbolAddress &range,
                                          std::string_view indexName,
-                                         MaxMinOverRange::Extremum extremum,
+                                         RangeExtremum extremum,
                                          SourcePoint fromPoint) {
         return makeMaxMinOverRangeHandle(factory, factory.importAddress(range), indexName,
                                          extremum, std::move(fromPoint));
@@ -69,7 +69,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          AddrHandle range,
                                          std::string_view indexName,
-                                         MaxMinOverRange::Extremum extremum,
+                                         RangeExtremum extremum,
                                          SourcePoint fromPoint) {
         auto body = makeMaxMinDefaultBody(factory, range.cast<SymbolAddress>(), indexName,
                                           fromPoint);
@@ -80,7 +80,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          const SymbolAddress &range,
                                          std::string_view indexName,
-                                         MaxMinOverRange::Extremum extremum,
+                                         RangeExtremum extremum,
                                          ExprHandle body,
                                          SourcePoint fromPoint) {
         return makeMaxMinOverRangeHandle(factory, factory.importAddress(range), indexName,
@@ -90,7 +90,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          AddrHandle range,
                                          std::string_view indexName,
-                                         MaxMinOverRange::Extremum extremum,
+                                         RangeExtremum extremum,
                                          ExprHandle body,
                                          SourcePoint fromPoint) {
         return detail::ExprFactoryInternals::intern(
@@ -101,7 +101,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          const SymbolAddress &range,
                                          std::string_view indexName,
-                                         MaxMinOverRange::Extremum extremum,
+                                         RangeExtremum extremum,
                                          const SymbolicExpr &body,
                                          SourcePoint fromPoint) {
         return makeMaxMinOverRangeHandle(factory, range, indexName, extremum,
@@ -236,8 +236,8 @@ namespace acslg::analyzer::symbolic {
         std::ostringstream oss;
         oss << type("QuantifierOverRange ");
         switch (quant_) {
-            case Quantifier::Exist: oss << accent("Exists"); break;
-            case Quantifier::ForAll: oss << accent("ForAll"); break;
+            case RangeQuantifier::Exist: oss << accent("Exists"); break;
+            case RangeQuantifier::ForAll: oss << accent("ForAll"); break;
             default: UNREACHABLE();
         }
         oss << OverRangeExpr::dump() << ", ";
@@ -264,7 +264,7 @@ namespace acslg::analyzer::symbolic {
         auto &factory = ExprFactoryScope::current();
         std::string quantStr, entailOrAnd;
         switch (quant_) {
-            using enum Quantifier;
+            using enum RangeQuantifier;
             case ForAll:
                 quantStr    = "forall";
                 entailOrAnd = "==>";
@@ -312,8 +312,8 @@ namespace acslg::analyzer::symbolic {
         std::ostringstream oss;
         oss << type("MaxMinOverRange ");
         switch (extremum_) {
-            case Extremum::Max: oss << accent("Max"); break;
-            case Extremum::Min: oss << accent("Min"); break;
+            case RangeExtremum::Max: oss << accent("Max"); break;
+            case RangeExtremum::Min: oss << accent("Min"); break;
             default: UNREACHABLE();
         }
         oss << OverRangeExpr::dump() << ", ";
@@ -372,7 +372,7 @@ namespace acslg::analyzer::symbolic {
         if (!upperStr)
             return upperStr.error();
 
-        auto cmpOp   = extremum_ == Extremum::Max ? Operator::GreaterEqual : Operator::LessEqual;
+        auto cmpOp   = extremum_ == RangeExtremum::Max ? Operator::GreaterEqual : Operator::LessEqual;
         auto expr    = simplifiedExprHandle(factory, *expr_);
         auto exprStr = callGetACSL(*expr, config, usedPoints, fromPoint_,
                                    getPrecedence(cmpOp), true);
@@ -382,7 +382,7 @@ namespace acslg::analyzer::symbolic {
         auto exprVal = (!prefix.empty() || !suffix.empty()) ? prefix + exprStr.value() + suffix
                                                             : exprStr.value();
 
-        std::string cmpStr = extremum_ == Extremum::Max ? ">=" : "<=";
+        std::string cmpStr = extremum_ == RangeExtremum::Max ? ">=" : "<=";
 
         return tmpl.to_string({{"i", indexName_},
                                {"l", lowerStr.value()},

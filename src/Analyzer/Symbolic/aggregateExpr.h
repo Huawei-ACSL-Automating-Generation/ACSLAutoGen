@@ -11,6 +11,16 @@
 #include "Utils/utils.h"
 
 namespace acslg::analyzer::symbolic {
+    enum class RangeQuantifier {
+        ForAll,
+        Exist
+    };
+
+    enum class RangeExtremum {
+        Max,
+        Min
+    };
+
     /**
      * @class SymbolAddress::RangeIndex
      * @brief Placeholder representing the induction variable when reasoning over address ranges.
@@ -150,17 +160,12 @@ namespace acslg::analyzer::symbolic {
             return e->getKind() == ExprKind::K_QuantifierOverRange;
         }
 
-        enum class Quantifier {
-            ForAll,
-            Exist
-        };
-
         QuantifierOverRange(const QuantifierOverRange &) = delete;
         QuantifierOverRange(QuantifierOverRange &&) = default;
         QuantifierOverRange &operator=(const QuantifierOverRange &) = delete;
         QuantifierOverRange &operator=(QuantifierOverRange &&) = delete;
 
-        Quantifier getQuantifier() const { return quant_; }
+        RangeQuantifier getQuantifier() const { return quant_; }
         const SymbolicExpr &getPredicate() const { return *pred_; }
 
         // SymbolicExpr
@@ -186,7 +191,7 @@ namespace acslg::analyzer::symbolic {
 
         QuantifierOverRange(AddrHandle range,
                             std::string_view indexName,
-                            Quantifier quant,
+                            RangeQuantifier quant,
                             ExprHandle pred)
             : OverRangeExpr(ExprKind::K_QuantifierOverRange,
                             Type{ScalarKind::Bool, 8},
@@ -194,7 +199,7 @@ namespace acslg::analyzer::symbolic {
                             indexName),
               quant_(quant), pred_(pred) {}
 
-        Quantifier quant_;
+        RangeQuantifier quant_;
         ExprChild pred_;
     };
 
@@ -207,17 +212,12 @@ namespace acslg::analyzer::symbolic {
             return e->getKind() == Symbol::Kind::K_MaxMinOverRange;
         }
 
-        enum class Extremum {
-            Max,
-            Min
-        };
-
         MaxMinOverRange(const MaxMinOverRange &) = delete;
         MaxMinOverRange(MaxMinOverRange &&) = default;
         MaxMinOverRange &operator=(const MaxMinOverRange &) = delete;
         MaxMinOverRange &operator=(MaxMinOverRange &&) = delete;
 
-        Extremum getExtremum() const { return extremum_; }
+        RangeExtremum getExtremum() const { return extremum_; }
         const SymbolicExpr &getExpr() const { return *expr_; }
 
         // SymbolicExpr
@@ -247,7 +247,7 @@ namespace acslg::analyzer::symbolic {
 
         MaxMinOverRange(AddrHandle range,
                         std::string_view indexName,
-                        Extremum extremum,
+                        RangeExtremum extremum,
                         ExprHandle expr,
                         SourcePoint fromPoint)
             : OverRangeExpr(ExprKind::K_MaxMinOverRange,
@@ -257,7 +257,7 @@ namespace acslg::analyzer::symbolic {
               Symbol(Kind::K_MaxMinOverRange), extremum_(extremum), expr_(expr),
               fromPoint_(std::move(fromPoint)) {}
 
-        Extremum extremum_;
+        RangeExtremum extremum_;
         ExprChild expr_;
         SourcePoint fromPoint_;
     };
@@ -270,42 +270,42 @@ namespace acslg::analyzer::symbolic {
     ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
                                              const SymbolAddress &range,
                                              std::string_view indexName,
-                                             QuantifierOverRange::Quantifier quantifier,
+                                             RangeQuantifier quantifier,
                                              const SymbolicExpr &predicate);
     ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
                                              AddrHandle range,
                                              std::string_view indexName,
-                                             QuantifierOverRange::Quantifier quantifier,
+                                             RangeQuantifier quantifier,
                                              ExprHandle predicate);
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          const SymbolAddress &range,
                                          std::string_view indexName,
-                                         MaxMinOverRange::Extremum extremum,
+                                         RangeExtremum extremum,
                                          SourcePoint fromPoint);
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          AddrHandle range,
                                          std::string_view indexName,
-                                         MaxMinOverRange::Extremum extremum,
+                                         RangeExtremum extremum,
                                          SourcePoint fromPoint);
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          const SymbolAddress &range,
                                          std::string_view indexName,
-                                         MaxMinOverRange::Extremum extremum,
+                                         RangeExtremum extremum,
                                          ExprHandle body,
                                          SourcePoint fromPoint);
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          AddrHandle range,
                                          std::string_view indexName,
-                                         MaxMinOverRange::Extremum extremum,
+                                         RangeExtremum extremum,
                                          ExprHandle body,
                                          SourcePoint fromPoint);
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
                                          const SymbolAddress &range,
                                          std::string_view indexName,
-                                         MaxMinOverRange::Extremum extremum,
+                                         RangeExtremum extremum,
                                          const SymbolicExpr &body,
                                          SourcePoint fromPoint);
 } // namespace acslg::analyzer::symbolic

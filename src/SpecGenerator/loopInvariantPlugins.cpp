@@ -1110,7 +1110,7 @@ namespace acslg::spec_generator {
                     return;
 
                 std::optional<StringTemplate> specTemplate{std::nullopt};
-                std::optional<symb::MaxMinOverRange::Extremum> extremum{};
+                std::optional<symb::RangeExtremum> extremum{};
                 // Parameters for template filling, see StringTemplate for more information.
                 std::optional<std::string> param_n{std::nullopt}, param_array{std::nullopt},
                     param_index{std::nullopt}, param_m{std::nullopt};
@@ -1267,8 +1267,8 @@ namespace acslg::spec_generator {
                             else
                                 specTemplate = maxOnLeft ? FIND_MAX_LOOP_WITH_OTHER_BOUND
                                                          : FIND_MIN_LOOP_WITH_OTHER_BOUND;
-                            extremum = maxOnLeft ? symb::MaxMinOverRange::Extremum::Max
-                                                 : symb::MaxMinOverRange::Extremum::Min;
+                            extremum = maxOnLeft ? symb::RangeExtremum::Max
+                                                 : symb::RangeExtremum::Min;
                             break;
                         case BO_GE:
                         case BO_GT:
@@ -1278,8 +1278,8 @@ namespace acslg::spec_generator {
                             else
                                 specTemplate = maxOnLeft ? FIND_MIN_LOOP_WITH_OTHER_BOUND
                                                          : FIND_MAX_LOOP_WITH_OTHER_BOUND;
-                            extremum = maxOnLeft ? symb::MaxMinOverRange::Extremum::Min
-                                                 : symb::MaxMinOverRange::Extremum::Max;
+                            extremum = maxOnLeft ? symb::RangeExtremum::Min
+                                                 : symb::RangeExtremum::Max;
                             break;
                         default: return;
                     }
@@ -1661,7 +1661,7 @@ namespace acslg::spec_generator {
                             *interruptedPath->getReturnExpr().value());
                 }
             }
-            using enum symb::QuantifierOverRange::Quantifier;
+            using enum symb::RangeQuantifier;
 
             assert(arrayInCond);
             // arrayRange denotes the array/pointer access range to quantify over:
