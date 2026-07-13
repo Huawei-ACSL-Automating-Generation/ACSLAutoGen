@@ -2477,8 +2477,8 @@ namespace acslg::analyzer {
                 for (size_t j = 0; j < m; ++j) {
                     auto newPath = (j == 0) ? std::move(path) : std::move(eval.first[j - 1]);
                     auto cond    = eval.second[j];
-                    if (auto lit = cond->evalToConstExpr()) {
-                        const bool isTrue = (lit->getLiteralValue() != 0);
+                    if (auto value = cond->tryEvalToConstant()) {
+                        const bool isTrue = (value.value() != 0);
 
                         if (!isTrue) {
                             continue;
@@ -2523,8 +2523,8 @@ namespace acslg::analyzer {
                 auto newPath = (j == 0) ? std::move(path) : std::move(eval.first[j - 1]);
                 auto cond    = eval.second[j];
 
-                if (auto lit = cond->evalToConstExpr()) {
-                    const bool isTrue = (lit->getLiteralValue() != 0);
+                if (auto value = cond->tryEvalToConstant()) {
+                    const bool isTrue = (value.value() != 0);
                     if (isTrue) {
                         continue;
                     } else {

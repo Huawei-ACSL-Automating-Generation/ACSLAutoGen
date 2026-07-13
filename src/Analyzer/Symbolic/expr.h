@@ -439,6 +439,11 @@ namespace acslg::analyzer::symbolic {
             return std::nullopt;
         };
         /**
+         * @brief Evaluate any fully constant expression using symbolic operator semantics.
+         * @return The resulting integer value, or nullopt when evaluation is not possible.
+         */
+        std::optional<int64_t> tryEvalToConstant() const;
+        /**
          * @brief Evaluate to a factory-owned literal node when the expression is fully constant.
          * @return Interned literal or nullptr if not constant.
          */

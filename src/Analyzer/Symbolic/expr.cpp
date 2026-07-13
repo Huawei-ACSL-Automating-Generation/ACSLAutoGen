@@ -2232,6 +2232,13 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
+    std::optional<int64_t> SymbolicExpr::tryEvalToConstant() const {
+        auto *literal = evalToConstExpr();
+        if (literal == nullptr)
+            return std::nullopt;
+        return literal->getLiteralValue();
+    }
+
     bool detail::LiteralExprNode::equal(const SymbolicExpr &expr) const {
         const auto liter = dyn_cast<const detail::LiteralExprNode>(&expr);
         if (!liter)

@@ -1179,11 +1179,11 @@ namespace acslg::test::unit::analyzer {
                                    symbolic::BinaryOp::Add,
                                    factory.literal(int64_t{2}));
 
-        auto *literal = expr->evalToConstExpr();
+        auto value = expr->tryEvalToConstant();
 
-        ASSERT_NE(literal, nullptr);
-        EXPECT_EQ(literal, factory.literal(int64_t{3}).get().get());
-        EXPECT_EQ(factory.importExpr(*literal), factory.literal(int64_t{3}));
+        ASSERT_TRUE(value.has_value());
+        EXPECT_EQ(value.value(), 3);
+        EXPECT_FALSE(factory.rangeIndex("i")->tryEvalToConstant().has_value());
 
         auto simplified = expr->simplifiedExpr();
         EXPECT_EQ(factory.importExpr(*simplified), factory.literal(int64_t{3}));
