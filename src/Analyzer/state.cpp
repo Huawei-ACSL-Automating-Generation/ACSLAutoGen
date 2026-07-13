@@ -33,8 +33,8 @@ namespace acslg::analyzer {
         std::optional<const clang::VarDecl *> getRootFromSymbol(const symbolic::Symbol &symbol) {
             if (auto sv = symbolic::SymbolValueView::tryFrom(*symbol.toSymbolicExpr()))
                 return sv->fromRoot();
-            if (auto *sa = symbolic::dyn_cast<const symbolic::SymbolAddress>(&symbol))
-                return sa->getFromRoot();
+            if (auto sa = symbolic::SymbolAddressView::tryFrom(*symbol.toSymbolicExpr()))
+                return sa->fromRoot();
             return std::nullopt;
         }
 
@@ -166,10 +166,9 @@ namespace acslg::analyzer {
             auto lhsVal = memoryState_.read(addrBox);
             auto rhsVal = other.memoryState_.read(addrBox);
 
-            if (auto *fieldAddr = symbolic::dyn_cast<symbolic::FieldAddress>(&addrBox.get())) {
-                if (fieldAddr->getDefinition() &&
-                    fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
-                    fieldAddr->getFieldIndex() == 4) {
+            if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addrBox.get())) {
+                if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
+                    fieldAddr->fieldIndex() == 4) {
                     DEBUG(
                         "mergeWith BigNum->data: lhs="
                         << (lhsVal ? lhsVal.value()->dump() : "<none>")
@@ -201,10 +200,9 @@ namespace acslg::analyzer {
             } else {
                 UNREACHABLE();
             }
-            if (auto *fieldAddr = symbolic::dyn_cast<symbolic::FieldAddress>(&addrBox.get())) {
-                if (fieldAddr->getDefinition() &&
-                    fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
-                    fieldAddr->getFieldIndex() == 4) {
+            if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addrBox.get())) {
+                if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
+                    fieldAddr->fieldIndex() == 4) {
                     DEBUG("mergeWith BigNum->data: writing Unknown due to mismatch");
                 }
             }
@@ -275,9 +273,8 @@ namespace acslg::analyzer {
         if (auto *arr = dyn_cast<clang::ArraySubscriptExpr>(lexpr)) {
             auto baseAddr = extractLValueHandle(arr->getBase());
             if (const auto symbol = memoryState_.read(baseAddr)) {
-                auto symbolAddr =
-                    symbolic::dyn_cast<const symbolic::SymbolAddress>(symbol.value().get().get());
-                if (symbolAddr == nullptr)
+                auto symbolAddr = symbolic::SymbolAddressView::tryFrom(symbol.value());
+                if (!symbolAddr)
                     ERROR("Value of ArraySubscriptExpr's base is not 'symbolic::SymbolAddress', "
                           "base is "
                           "neither pointer nor std::array?");
@@ -285,7 +282,8 @@ namespace acslg::analyzer {
                 if (idxEval.second.size() != 1)
                     ERROR("This location does not support control flow branches.");
                 auto &factory = context_.getExprFactory();
-                symbolic::Addr baseAddrFacade{factory, factory.importAddress(*symbolAddr)};
+                symbolic::Addr baseAddrFacade{
+                    factory, factory.importAddress(*symbolAddr->handle())};
                 symbolic::Expr idxExpr{factory, idxEval.second[0]};
                 auto resultAddr = baseAddrFacade.withAddedOffset(idxExpr);
                 if (!memoryState_.contains(resultAddr.handle())) {
@@ -420,10 +418,9 @@ namespace acslg::analyzer {
     void Path::updateMemory(const symbolic::Address &addr, symbolic::ExprHandle expr) {
         auto imported = context_.getExprFactory().importExpr(*expr);
         if (imported->isUnknown()) {
-            if (auto *fieldAddr = symbolic::dyn_cast<symbolic::FieldAddress>(&addr)) {
-                if (fieldAddr->getDefinition() &&
-                    fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
-                    fieldAddr->getFieldIndex() == 4) {
+            if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addr)) {
+                if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
+                    fieldAddr->fieldIndex() == 4) {
                     if (stmtCtx_) {
                         auto loc      = stmtCtx_->getBeginLoc();
                         auto &SM      = context_.getSourceManager();
@@ -749,16 +746,15 @@ namespace acslg::analyzer {
                         auto &factory     = context_.getExprFactory();
                         std::optional<symbolic::AddrHandle> addr;
                         if (const auto symbol = memoryState_.read(variableAddr)) {
-                            auto ptr = symbolic::dyn_cast<const symbolic::SymbolAddress>(
-                                symbol.value().get().get());
-                            if (ptr == nullptr)
+                            auto ptr = symbolic::SymbolAddressView::tryFrom(symbol.value());
+                            if (!ptr)
                                 ERROR("Value of ArraySubscriptExpr's base is not "
                                       "'symbolic::SymbolAddress', base "
                                       "is "
                                       "neither "
                                       "pointer nor "
                                       "array?");
-                            addr = factory.importAddress(*ptr);
+                            addr = factory.importAddress(*ptr->handle());
                         } else {
                             ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither "
                                   "pointer "
@@ -1041,7 +1037,7 @@ namespace acslg::analyzer {
                             normalizedFreedAddr
                                 .withOffset(symbolic::LiteralExpr{
                                     factory, static_cast<int64_t>(
-                                                 symbolic::SymbolAddress::ZERO_OFFSET)})
+                                                 symbolic::SymbolAddressView::ZERO_OFFSET)})
                                 .handle();
 
                         // Overwrite freed memory with an UnknownExpr (symbolic tombstone).
@@ -1699,8 +1695,8 @@ namespace acslg::analyzer {
     }
 
     bool Path::isUnchanged(const symbolic::Address &addr, const Path &since) const {
-        if (auto symbolAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
-            if (symbolAddr->getLength())
+        if (auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr)) {
+            if (symbolAddr->length())
                 return false;
         }
         auto value = memoryState_.read(addr);
@@ -1714,8 +1710,8 @@ namespace acslg::analyzer {
     }
 
     bool Path::is_point_to_structure(const symbolic::Address &addr) const {
-        if (auto symbolAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
-            if (symbolAddr->getLength())
+        if (auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr)) {
+            if (symbolAddr->length())
                 return false;
         }
         auto opt = memoryState_.read(addr);
@@ -1797,21 +1793,21 @@ namespace acslg::analyzer {
     }
 
     std::optional<symbolic::ExprHandle> MemoryModel::read(const symbolic::Address &addr) const {
-        if (auto varAddr = symbolic::dyn_cast<const symbolic::VariableAddress>(&addr)) {
-            if (auto it = memoryMap_variableAddr_.find(*varAddr);
+        if (auto varAddr = symbolic::VariableAddressView::tryFrom(addr)) {
+            if (auto it = memoryMap_variableAddr_.find(*varAddr->handle());
                 it != memoryMap_variableAddr_.end())
                 return it->second;
             return std::nullopt;
-        } else if (auto symbolAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
-            auto baseInfo = symbolAddr->getBaseInfo();
+        } else if (auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr)) {
+            auto baseInfo = symbolAddr->baseInfo();
+            auto offset   = symbolAddr->offset();
+            auto length   = symbolAddr->length();
 
             if (memoryMap_constantRange_.contains(baseInfo)) {
-                auto offset = symbolAddr->getOffset();
                 if (auto constOffset = offset->tryEvalAsConstant();
                     constOffset &&
-                    (!symbolAddr->getLength() ||
-                     (symbolAddr->getLength().value()->tryEvalAsConstant() &&
-                      symbolAddr->getLength().value()->tryEvalAsConstant().value() == 1))) {
+                    (!length || (length.value()->tryEvalAsConstant() &&
+                                 length.value()->tryEvalAsConstant().value() == 1))) {
                     if (constOffset.value() < 0)
                         ERROR("Negetive offset.");
                     auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
@@ -1826,8 +1822,7 @@ namespace acslg::analyzer {
                         return std::nullopt;
                     return symbolic::getRangeIndexSubstitutedHandle(
                         factory(), *firstLEIt->second, baseInfo, factory().importExpr(*offset));
-                } else if (auto &len = symbolAddr->getLength();
-                           constOffset && len && len.value()->tryEvalAsConstant()) {
+                } else if (constOffset && length && length.value()->tryEvalAsConstant()) {
                     UNIMPLEMENT(
                         "There doesn't appear to be a need for constant-range range queries at "
                         "this time.");
@@ -1837,23 +1832,23 @@ namespace acslg::analyzer {
             if (!memoryMap_symbolicRange_.contains(baseInfo))
                 return std::nullopt;
             auto &addrValueMap = memoryMap_symbolicRange_.at(baseInfo);
-            if (symbolAddr->getLength() && symbolAddr->getLength().value()->tryEvalAsConstant() &&
-                symbolAddr->getLength().value()->tryEvalAsConstant().value() == 1) {
+            if (length && length.value()->tryEvalAsConstant() &&
+                length.value()->tryEvalAsConstant().value() == 1) {
                 auto fakeRangeHandle =
-                    factory().withoutLength(factory().importAddress(*symbolAddr));
+                    factory().withoutLength(factory().importAddress(*symbolAddr->handle()));
                 auto it = addrValueMap.find(*fakeRangeHandle);
                 if (it == addrValueMap.end())
                     return std::nullopt;
                 return it->second;
             }
-            auto it = addrValueMap.find(*symbolAddr);
+            auto it = addrValueMap.find(*symbolAddr->handle());
             if (it == addrValueMap.end())
                 return std::nullopt;
             return it->second;
-        } else if (auto fieldAddr = symbolic::dyn_cast<const symbolic::FieldAddress>(&addr)) {
-            auto &baseAddr = fieldAddr->getBaseAddr();
-            auto &index    = fieldAddr->getFieldIndex();
-            auto baseValue = read(*baseAddr);
+        } else if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addr)) {
+            auto baseAddr  = fieldAddr->base();
+            auto index     = fieldAddr->fieldIndex();
+            auto baseValue = read(baseAddr);
             if (baseValue == std::nullopt)
                 return std::nullopt;
             auto baseSt = symbolic::StructureView::tryFrom(baseValue.value());
@@ -1877,18 +1872,19 @@ namespace acslg::analyzer {
     }
 
     void MemoryModel::writeImported(const symbolic::Address &addr, StoredValue valueHandle) {
-        if (auto varAddr = symbolic::dyn_cast<const symbolic::VariableAddress>(&addr)) {
+        if (auto varAddr = symbolic::VariableAddressView::tryFrom(addr)) {
             memoryMap_variableAddr_.insert_or_assign(
-                symbolic::AddressBox{factory().importAddress(*varAddr)}, valueHandle);
+                symbolic::AddressBox{factory().importAddress(*varAddr->handle())}, valueHandle);
             return;
-        } else if (auto symbolAddr = symbolic::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
-            auto baseInfo = symbolAddr->getBaseInfo();
+        } else if (auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr)) {
+            auto baseInfo = symbolAddr->baseInfo();
+            auto offset   = symbolAddr->offset();
+            auto length   = symbolAddr->length();
 
-            auto constOffset = symbolAddr->getOffset()->tryEvalAsConstant();
-            auto &len        = symbolAddr->getLength();
-            auto constLen    = len ? len.value()->tryEvalAsConstant() : std::nullopt;
+            auto constOffset = offset->tryEvalAsConstant();
+            auto constLen = length ? length.value()->tryEvalAsConstant() : std::nullopt;
 
-            if (constOffset && (!len || constLen)) {
+            if (constOffset && (!length || constLen)) {
                 if (constOffset.value() < 0 || (constLen && constLen.value() <= 0))
                     ERROR("Constant offset must be greater or equal to zero and length must be "
                           "greater than zero.");
@@ -1933,24 +1929,23 @@ namespace acslg::analyzer {
             }
             // symbolic range
             auto &addrValueMap = memoryMap_symbolicRange_[baseInfo];
-            if (symbolAddr->getLength() && symbolAddr->getLength().value()->tryEvalAsConstant() &&
-                symbolAddr->getLength().value()->tryEvalAsConstant() == 1) {
+            if (length && length.value()->tryEvalAsConstant() &&
+                length.value()->tryEvalAsConstant() == 1) {
                 auto fakeRangeHandle =
-                    factory().withoutLength(factory().importAddress(*symbolAddr));
+                    factory().withoutLength(factory().importAddress(*symbolAddr->handle()));
                 addrValueMap.insert_or_assign(symbolic::AddressBox{fakeRangeHandle}, valueHandle);
                 return;
             }
             addrValueMap.insert_or_assign(
-                symbolic::AddressBox{factory().importAddress(*symbolAddr)}, valueHandle);
+                symbolic::AddressBox{factory().importAddress(*symbolAddr->handle())}, valueHandle);
             return;
-        } else if (auto fieldAddr = symbolic::dyn_cast<const symbolic::FieldAddress>(&addr)) {
-            auto &baseAddr = fieldAddr->getBaseAddr();
-            auto &index    = fieldAddr->getFieldIndex();
-            if (fieldAddr->getDefinition() &&
-                fieldAddr->getDefinition()->getNameAsString() == "BigNum" && index == 4) {
+        } else if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addr)) {
+            auto baseAddr = fieldAddr->base();
+            auto index    = fieldAddr->fieldIndex();
+            if (fieldAddr->definition()->getNameAsString() == "BigNum" && index == 4) {
                 DEBUG("write BigNum->data with: " << valueHandle->dump());
             }
-            auto baseValue = read(*baseAddr);
+            auto baseValue = read(baseAddr);
             if (baseValue == std::nullopt)
                 ERROR("Structure isn't existed in MemoryModel, insert it first.");
             auto baseSt = symbolic::StructureView::tryFrom(baseValue.value());
@@ -1958,7 +1953,7 @@ namespace acslg::analyzer {
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
             auto updated = factory().withField(factory().importExpr(*baseSt->handle()), index,
                                                factory().importExpr(*valueHandle));
-            write(*baseAddr, updated);
+            write(baseAddr, updated);
             return;
         }
         UNREACHABLE();
@@ -2057,8 +2052,7 @@ namespace acslg::analyzer {
     }
 
     void MemoryModel::mergeSymbolicRanges() {
-        using SA     = symbolic::SymbolAddress;
-        using Expr   = symbolic::SymbolicExpr;
+        using Expr = symbolic::SymbolicExpr;
 
         auto valueEquivalent = [this](StoredValue a, StoredValue b) -> bool {
             return *symbolic::simplifiedExprHandle(*factory_, *a) ==
@@ -2090,7 +2084,9 @@ namespace acslg::analyzer {
                 size_t valHash{0}; ///< hash(val.simplified) for coarse grouping
                 bool used{false};  ///< Whether this edge is already merged into a chain
 
-                const SA &address() const { return key.cast<SA>(); }
+                symbolic::SymbolAddressView address() const {
+                    return symbolic::SymbolAddressView{key};
+                }
             };
 
             std::vector<Item> items;
@@ -2099,10 +2095,10 @@ namespace acslg::analyzer {
             // (1) Move entries to items and precompute hashes/constants
             for (auto &[addr, expr] : umap) {
                 Item it{symbolic::AddrHandle{&addr.get()}, std::move(expr)};
-                const auto &key = it.address();
+                auto key = it.address();
 
-                it.constOff = key.getOffset()->tryEvalAsConstant();
-                if (auto &len = key.getLength()) {
+                it.constOff = key.offset()->tryEvalAsConstant();
+                if (auto len = key.length()) {
                     it.constLen = len.value()->tryEvalAsConstant();
                 }
 
@@ -2112,18 +2108,18 @@ namespace acslg::analyzer {
                           "memoryMap_constantRange_ instead.");
 
                 // Precompute endpoint/value hashes (using simplified forms)
-                it.offHash = symbolic::simplifiedExprHandle(*factory_, *key.getOffset()).hash();
+                it.offHash = symbolic::simplifiedExprHandle(*factory_, *key.offset()).hash();
                 it.valHash = symbolic::simplifiedExprHandle(*factory_, *it.val).hash();
-                if (auto &len = key.getLength())
+                if (auto len = key.length())
                     it.lenHash = symbolic::simplifiedExprHandle(*factory_, *len.value()).hash();
 
                 // Right endpoint hash:
                 // - range: hash(offset + length)
                 // - non-range: hash(offset + 1) → single-address treated as [off, off+1)
-                if (auto &len = key.getLength()) {
-                    it.rightHash = addedHash(*key.getOffset(), *len.value());
+                if (auto len = key.length()) {
+                    it.rightHash = addedHash(*key.offset(), *len.value());
                 } else {
-                    it.rightHash = addedHash(*key.getOffset(), *factory_->literal(int64_t{1}));
+                    it.rightHash = addedHash(*key.offset(), *factory_->literal(int64_t{1}));
                 }
 
                 items.emplace_back(std::move(it));
@@ -2193,8 +2189,8 @@ namespace acslg::analyzer {
                         // Append the successor's length:
                         // - If successor is range: add its length expression
                         // - If successor is non-range: add 1
-                        const auto &addressToBeMerged = itemToBeMerged.address();
-                        if (auto &len = addressToBeMerged.getLength()) {
+                        auto addressToBeMerged = itemToBeMerged.address();
+                        if (auto len = addressToBeMerged.length()) {
                             mergedKey = factory().withAddedLength(
                                 mergedKey, factory().importExpr(*len.value()));
                         } else {
@@ -2705,10 +2701,9 @@ namespace acslg::analyzer {
                     }
                 }
                 if (newValue->isUnknown()) {
-                    if (auto *fieldAddr = dstAddr.dyn_cast<symbolic::FieldAddress>()) {
-                        if (fieldAddr->getDefinition() &&
-                            fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
-                            fieldAddr->getFieldIndex() == 4) {
+                    if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(dstAddr)) {
+                        if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
+                            fieldAddr->fieldIndex() == 4) {
                             auto loc      = binOp->getExprLoc();
                             auto &SM      = context_.getSourceManager();
                             auto presumed = SM.getPresumedLoc(loc);
