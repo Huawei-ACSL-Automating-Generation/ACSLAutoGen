@@ -132,7 +132,7 @@ namespace acslg::test::unit::spec_generator {
                 EXPECT_EQ(pattern.value().step, 1);
             } else {
                 DEBUG("too complex");
-                if (!isa<SymbolAddress>(addr.get()))
+                if (!addr.get().isSymbolAddress())
                     FAIL();
             }
         }
@@ -161,7 +161,7 @@ namespace acslg::test::unit::spec_generator {
             ASSERT_NE(pattern, nullopt);
             DEBUG(pattern.value().initialValue->dump() +
                   ", step: " + to_string(pattern.value().step));
-            if (isa<SymbolAddress>(addr.get()))
+            if (addr.get().isSymbolAddress())
                 EXPECT_EQ(pattern.value().step, -1);
             else
                 EXPECT_EQ(pattern.value().step, 1);

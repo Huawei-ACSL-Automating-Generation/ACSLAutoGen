@@ -910,13 +910,11 @@ namespace acslg::test::unit::analyzer {
         for (auto &&[addr, value] : mm.flat()) {
             if (*value != *svA && *value != *svB)
                 continue;
-            auto symbolAddr = symbolic::dyn_cast<symbolic::SymbolAddress>(&addr.get());
-            ASSERT_NE(symbolAddr, nullptr);
-            if (symbolAddr->getBaseInfo() ==
-                a0A.cast<symbolic::SymbolAddress>().getBaseInfo())
+            auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr.get());
+            ASSERT_TRUE(symbolAddr);
+            if (symbolAddr->baseInfo() == symbolic::SymbolAddressView{a0A}.baseInfo())
                 ++cntA;
-            if (symbolAddr->getBaseInfo() ==
-                a0B.cast<symbolic::SymbolAddress>().getBaseInfo())
+            if (symbolAddr->baseInfo() == symbolic::SymbolAddressView{a0B}.baseInfo())
                 ++cntB;
         }
         EXPECT_EQ(cntA, 1u);
@@ -947,13 +945,12 @@ namespace acslg::test::unit::analyzer {
         // Approximate check: there should be exactly one entry (start at X, total length = 1 + 3 = 4)
         EXPECT_EQ(mm.sizeWithoutFields(), 1);
         for (auto &&[addr, value] : mm.flat()) {
-            auto symbolAddr = symbolic::dyn_cast<symbolic::SymbolAddress>(&addr.get());
-            ASSERT_NE(symbolAddr, nullptr);
-            if (symbolAddr->getBaseInfo() ==
-                    a0.cast<symbolic::SymbolAddress>().getBaseInfo() &&
+            auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr.get());
+            ASSERT_TRUE(symbolAddr);
+            if (symbolAddr->baseInfo() == symbolic::SymbolAddressView{a0}.baseInfo() &&
                 *value == *sv) {
                 // If length is accessible and constant, also assert == 4
-                if (auto &len = symbolAddr->getLength()) {
+                if (auto len = symbolAddr->length()) {
                     if (auto c = len.value()->tryEvalAsConstant()) {
                         EXPECT_EQ(c.value(), 4);
                         return;
@@ -961,7 +958,7 @@ namespace acslg::test::unit::analyzer {
                     FAIL() << len.value()->dump();
                 }
             }
-            FAIL() << symbolAddr->dump();
+            FAIL() << symbolAddr->handle().dump();
         }
     }
     TEST_F(MemoryModelTest, ConstRange_RangeIndexSubedCorrectly) {

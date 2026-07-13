@@ -34,9 +34,6 @@ namespace acslg::test::unit::analyzer {
                                            symbolic::ExprHandle,
                                            symbolic::BinaryOp,
                                            symbolic::ExprHandle>);
-    static_assert(!std::is_copy_constructible_v<symbolic::FieldAddress>);
-    static_assert(!std::is_copy_constructible_v<symbolic::VariableAddress>);
-    static_assert(!std::is_copy_constructible_v<symbolic::SymbolAddress>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::StructureNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::SumOverRangeNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::QuantifierOverRangeNode>);
@@ -44,19 +41,6 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_copy_constructible_v<symbolic::detail::SymbolValueNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::RangeIndexNode>);
     static_assert(!std::is_copy_constructible_v<symbolic::detail::OverRangeExprNode>);
-    static_assert(!std::is_constructible_v<symbolic::VariableAddress,
-                                           ::acslg::utils::not_null<const clang::VarDecl *>>);
-    static_assert(!std::is_constructible_v<symbolic::FieldAddress,
-                                           clang::QualType,
-                                           const clang::RecordDecl *,
-                                           symbolic::AddrHandle,
-                                           size_t>);
-    static_assert(!std::is_constructible_v<symbolic::SymbolAddress,
-                                           clang::QualType,
-                                           std::optional<symbolic::AddrHandle>,
-                                           symbolic::SourcePoint,
-                                           symbolic::ExprHandle,
-                                           std::optional<symbolic::ExprHandle>>);
     static_assert(!std::is_constructible_v<symbolic::detail::SymbolValueNode,
                                            symbolic::SymbolicExpr::Type,
                                            symbolic::AddrHandle,
@@ -81,7 +65,6 @@ namespace acslg::test::unit::analyzer {
                                            symbolic::RangeExtremum,
                                            symbolic::ExprHandle,
                                            symbolic::SourcePoint>);
-    static_assert(!std::is_copy_assignable_v<symbolic::SymbolAddress>);
     static_assert(!std::is_copy_assignable_v<symbolic::detail::StructureNode>);
     static_assert(!std::is_move_assignable_v<symbolic::detail::QuantifierOverRangeNode>);
 
@@ -472,9 +455,8 @@ namespace acslg::test::unit::analyzer {
         auto var = getVarDecl(0);
         auto point = getSourcePoint(0);
         auto symHandle = factory.symbolAddress(var->getType(), std::nullopt, point);
-        const auto &sym = symHandle.cast<symbolic::SymbolAddress>();
 
-        auto result = symbolic::getSubstitutedExprHandle(factory, sym, *path, point);
+        auto result = symbolic::getSubstitutedExprHandle(factory, *symHandle, *path, point);
         auto *resultAddr = symbolic::cast<symbolic::Address>(result.get().get());
 
         EXPECT_EQ(factory.importAddress(*resultAddr), symHandle);
@@ -659,22 +641,22 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        const auto &addrRangeNode = addrRange.cast<symbolic::SymbolAddress>();
-        auto rightBound = addrRangeNode.getRightBound();
+        symbolic::SymbolAddressView addrRangeView{addrRange};
+        auto rightBound = addrRangeView.rightBound();
         ASSERT_TRUE(rightBound);
 
-        auto expected = factory.binary(factory.importExpr(*addrRangeNode.getOffset()),
+        auto expected = factory.binary(factory.importExpr(*addrRangeView.offset()),
                                        BinaryOp::Add,
-                                       factory.importExpr(*addrRangeNode.getLength().value()));
+                                       factory.importExpr(*addrRangeView.length().value()));
         EXPECT_EQ(rightBound.value(), expected);
-        EXPECT_EQ(addrRangeNode.getRightBound(), rightBound);
+        EXPECT_EQ(addrRangeView.rightBound(), rightBound);
 
         auto *rightBoundNode =
             symbolic::cast<symbolic::detail::BinaryOpExprNode>(rightBound.value().get().get());
         EXPECT_EQ(rightBoundNode->getLeft().get(),
-                  factory.importExpr(*addrRangeNode.getOffset()).get().get());
+                  factory.importExpr(*addrRangeView.offset()).get().get());
         EXPECT_EQ(rightBoundNode->getRight().get(),
-                  factory.importExpr(*addrRangeNode.getLength().value()).get().get());
+                  factory.importExpr(*addrRangeView.length().value()).get().get());
     }
 
     // Test usage of \\at(...) when predefinedLabels is set.
@@ -966,12 +948,12 @@ namespace acslg::test::unit::analyzer {
         auto targetOffset = target.binary(
             target.literal(1), symbolic::BinaryOp::Add, target.literal(2));
         auto targetLength = target.literal(4);
-        const auto &typedRangeNode = typedRange.cast<symbolic::SymbolAddress>();
-        ASSERT_TRUE(typedRangeNode.getFromAddrHandle());
-        ASSERT_TRUE(typedRangeNode.getLength());
-        EXPECT_EQ(*typedRangeNode.getFromAddrHandle(), targetBase);
-        EXPECT_EQ(typedRangeNode.getOffset().get(), targetOffset.get().get());
-        EXPECT_EQ(typedRangeNode.getLength().value().get(), targetLength.get().get());
+        auto typedRangeView = symbolic::SymbolAddressView::tryFrom(typedRange).value();
+        ASSERT_TRUE(typedRangeView.from());
+        ASSERT_TRUE(typedRangeView.length());
+        EXPECT_EQ(*typedRangeView.from(), targetBase);
+        EXPECT_EQ(typedRangeView.offset().get(), targetOffset.get().get());
+        EXPECT_EQ(typedRangeView.length().value().get(), targetLength.get().get());
 
         auto targetRange = target.importAddress(*sourceRange);
         EXPECT_EQ(typedSum.cast<symbolic::detail::SumOverRangeNode>()
@@ -1350,8 +1332,7 @@ namespace acslg::test::unit::analyzer {
             factory.symbolAddress(var->getType(), varAddr, point, rangeIndex, rangeIndex);
         auto indexedValue = factory.symbolValue(
             symbolic::deriveType(var->getType()), indexedFrom, point);
-        auto indexedRangeBase =
-            indexedFrom.cast<symbolic::SymbolAddress>().getBaseInfo();
+        auto indexedRangeBase = symbolic::SymbolAddressView{indexedFrom}.baseInfo();
         auto substitutedValue = symbolic::getRangeIndexSubstitutedHandle(
             factory, *indexedValue, indexedRangeBase, replacement);
         auto expectedFrom =
@@ -1878,7 +1859,6 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(index.handle(), factory.rangeIndex("i"));
         EXPECT_TRUE(index->isRangeIndex());
         EXPECT_EQ(varAddr.handle(), factory.variableAddress(var));
-        EXPECT_TRUE(varAddr.isa<symbolic::VariableAddress>());
         EXPECT_TRUE(varAddr->isVariableAddress());
         EXPECT_EQ(symbolAddr.handle(), factory.symbolAddress(var->getType(), varAddr.handle(), point));
         EXPECT_TRUE(symbolAddr->isSymbolAddress());
@@ -1925,7 +1905,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(addr.handle(), handle);
         EXPECT_EQ(imported.handle(), handle);
         EXPECT_EQ(addr, imported);
-        EXPECT_TRUE(addr.isa<symbolic::VariableAddress>());
+        EXPECT_TRUE(addr->isVariableAddress());
         EXPECT_EQ(addr.asExpr().handle(), handle.asExpr());
     }
 
@@ -2076,7 +2056,6 @@ namespace acslg::test::unit::analyzer {
         auto varAddrA = factory.variableAddress(var);
         auto varAddrB = factory.variableAddress(var);
         EXPECT_EQ(varAddrA, varAddrB);
-        EXPECT_TRUE(varAddrA.isa<symbolic::VariableAddress>());
         EXPECT_TRUE(varAddrA->isVariableAddress());
         symbolic::VariableAddressView variableView{varAddrA};
         EXPECT_EQ(variableView.declaration().get(), var);
@@ -2094,16 +2073,16 @@ namespace acslg::test::unit::analyzer {
 
         auto defaultSymAddr = factory.symbolAddress(
             firstField->getType(), std::optional<symbolic::AddrHandle>{varAddrA}, point);
-        const auto &defaultSymAddrNode = defaultSymAddr.cast<symbolic::SymbolAddress>();
-        ASSERT_TRUE(defaultSymAddrNode.getFromAddrHandle());
-        EXPECT_EQ(*defaultSymAddrNode.getFromAddrHandle(), varAddrA);
-        auto defaultBase = defaultSymAddrNode.getBaseInfo();
+        symbolic::SymbolAddressView defaultSymAddrView{defaultSymAddr};
+        ASSERT_TRUE(defaultSymAddrView.from());
+        EXPECT_EQ(*defaultSymAddrView.from(), varAddrA);
+        auto defaultBase = defaultSymAddrView.baseInfo();
         ASSERT_TRUE(defaultBase.fromAddr_);
         EXPECT_EQ(defaultBase.fromAddr_->handle(), varAddrA);
         auto copiedBase = defaultBase;
         EXPECT_EQ(copiedBase.fromAddr_->handle(), varAddrA);
-        EXPECT_EQ(defaultSymAddrNode.getOffset().get(),
-                  factory.literal(static_cast<int64_t>(symbolic::SymbolAddress::ZERO_OFFSET))
+        EXPECT_EQ(defaultSymAddrView.offset().get(),
+                  factory.literal(static_cast<int64_t>(symbolic::SymbolAddressView::ZERO_OFFSET))
                       .get()
                       .get());
 
@@ -2118,7 +2097,6 @@ namespace acslg::test::unit::analyzer {
             std::optional<symbolic::ExprHandle>{factory.literal(4)},
             std::optional<symbolic::ExprHandle>{factory.literal(2)});
         EXPECT_EQ(symAddrA, symAddrB);
-        EXPECT_TRUE(symAddrA.isa<symbolic::SymbolAddress>());
         EXPECT_TRUE(symAddrA->isSymbolAddress());
         symbolic::SymbolAddressView symbolView{symAddrA};
         EXPECT_EQ(symbolView.from(), varAddrA);
@@ -2132,14 +2110,11 @@ namespace acslg::test::unit::analyzer {
         auto fieldAddrA = factory.fieldAddress(firstField->getType(), record, varAddrA, 0);
         auto fieldAddrB = factory.fieldAddress(firstField->getType(), record, varAddrB, 0);
         EXPECT_EQ(fieldAddrA, fieldAddrB);
-        EXPECT_TRUE(fieldAddrA.isa<symbolic::FieldAddress>());
         EXPECT_TRUE(fieldAddrA->isFieldAddress());
         symbolic::FieldAddressView fieldView{fieldAddrA};
         EXPECT_EQ(fieldView.definition().get(), record);
         EXPECT_EQ(fieldView.base(), varAddrA);
         EXPECT_EQ(fieldView.fieldIndex(), 0u);
-        EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
-        EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle(), varAddrA);
 
         EXPECT_FALSE(symbolic::VariableAddressView::tryFrom(fieldAddrA).has_value());
         EXPECT_FALSE(symbolic::FieldAddressView::tryFrom(symAddrA).has_value());
@@ -2186,8 +2161,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(importedVariable, expectedVariable);
         EXPECT_EQ(importedField, expectedField);
         EXPECT_EQ(importedValue, expectedValue);
-        EXPECT_EQ(importedField.cast<symbolic::FieldAddress>().getBaseAddr().handle(),
-                  expectedVariable);
+        EXPECT_EQ(symbolic::FieldAddressView{importedField}.base(), expectedVariable);
         EXPECT_EQ(symbolic::SymbolValueView{importedValue}.from(), expectedField);
         EXPECT_NE(importedVariable.get().get(), sourceVariable.get().get());
         EXPECT_NE(importedField.get().get(), sourceField.get().get());
@@ -2242,14 +2216,14 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_TRUE(field0->isSymbolValue());
         EXPECT_TRUE(field1->isSymbolAddress());
-        auto *arrayAddr = field2.dyn_cast<const symbolic::SymbolAddress>();
-        ASSERT_NE(arrayAddr, nullptr);
-        ASSERT_TRUE(arrayAddr->getLength());
+        auto arrayAddr = symbolic::SymbolAddressView::tryFrom(field2);
+        ASSERT_TRUE(arrayAddr);
+        ASSERT_TRUE(arrayAddr->length());
 
         EXPECT_EQ(field0, factory.importExpr(*field0));
         EXPECT_EQ(field1, factory.importExpr(*field1));
         EXPECT_EQ(field2, factory.importExpr(*field2));
-        EXPECT_EQ(arrayAddr->getLength().value().get().get(),
+        EXPECT_EQ(arrayAddr->length().value().get().get(),
                   factory.literal(uint64_t{2}).get().get());
 
     }
@@ -2470,7 +2444,7 @@ namespace acslg::test::unit::analyzer {
         auto indexedAddr = factory.symbolAddress(
             x->getType(), varAddr, point, rangeIndex, rangeIndex);
         auto index = factory.literal(int64_t{4});
-        auto rangeBase = indexedAddr.cast<symbolic::SymbolAddress>().getBaseInfo();
+        auto rangeBase = symbolic::SymbolAddressView{indexedAddr}.baseInfo();
 
         auto substitutedAddr =
             symbolic::getRangeIndexSubstitutedHandle(factory, *indexedAddr, rangeBase, index);
@@ -2490,8 +2464,7 @@ namespace acslg::test::unit::analyzer {
             s->getType(), factory.variableAddress(s), point, rangeIndex, rangeIndex);
         auto indexedFieldAddr =
             factory.fieldAddress(firstField->getType(), record, indexedStructAddr, 0);
-        auto indexedRangeBase =
-            indexedStructAddr.cast<symbolic::SymbolAddress>().getBaseInfo();
+        auto indexedRangeBase = symbolic::SymbolAddressView{indexedStructAddr}.baseInfo();
         auto substitutedIndexedField = symbolic::getRangeIndexSubstitutedHandle(
             factory, *indexedFieldAddr, indexedRangeBase, index);
         auto expectedStructAddr = factory.symbolAddress(
@@ -2523,12 +2496,11 @@ namespace acslg::test::unit::analyzer {
         auto source = symbolic::Addr::symbol(setupFactory, var->getType(), point)
                           .withOffset(symbolic::LiteralExpr{setupFactory, int64_t{4}})
                           .handle();
-        const auto &legacy = source.cast<symbolic::SymbolAddress>();
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto sizeBefore = factory.size();
-        auto evaluated = symbolic::tryEvalAsSymbolAddrHandle(factory, legacy);
+        auto evaluated = symbolic::tryEvalAsSymbolAddrHandle(factory, *source);
         ASSERT_TRUE(evaluated);
         EXPECT_GT(factory.size(), sizeBefore);
         EXPECT_EQ(evaluated.value(),
@@ -2566,7 +2538,7 @@ namespace acslg::test::unit::analyzer {
         auto evaluatedHandle = symbolic::tryEvalAsSymbolAddrHandle(factory, *legacyAdd);
         ASSERT_TRUE(evaluatedHandle);
         EXPECT_EQ(*evaluatedHandle, expected);
-        EXPECT_EQ(evaluatedHandle->cast<symbolic::SymbolAddress>().getOffset().get(),
+        EXPECT_EQ(symbolic::SymbolAddressView{evaluatedHandle.value()}.offset().get(),
                   factory.literal(int64_t{4}).get().get());
 
     }
@@ -2601,36 +2573,36 @@ namespace acslg::test::unit::analyzer {
 
         auto ranged = factory.withLength(base, length);
         EXPECT_EQ(ranged, factory.withLength(base, length));
-        const auto &rangedNode = ranged.cast<symbolic::SymbolAddress>();
-        EXPECT_EQ(rangedNode.getOffset().get(), zero.get().get());
-        ASSERT_TRUE(rangedNode.getLength());
-        EXPECT_EQ(rangedNode.getLength().value().get().get(), length.get().get());
+        symbolic::SymbolAddressView rangedView{ranged};
+        EXPECT_EQ(rangedView.offset().get(), zero.get().get());
+        ASSERT_TRUE(rangedView.length());
+        EXPECT_EQ(rangedView.length().value().get().get(), length.get().get());
 
         auto shifted = factory.withOffset(ranged, offset);
         EXPECT_EQ(shifted, factory.withOffset(ranged, offset));
-        const auto &shiftedNode = shifted.cast<symbolic::SymbolAddress>();
-        EXPECT_EQ(shiftedNode.getOffset().get(), offset.get().get());
-        ASSERT_TRUE(shiftedNode.getLength());
-        EXPECT_EQ(shiftedNode.getLength().value().get().get(), length.get().get());
+        symbolic::SymbolAddressView shiftedView{shifted};
+        EXPECT_EQ(shiftedView.offset().get(), offset.get().get());
+        ASSERT_TRUE(shiftedView.length());
+        EXPECT_EQ(shiftedView.length().value().get().get(), length.get().get());
 
         auto scalarAddr = factory.withoutLength(shifted);
         EXPECT_EQ(scalarAddr, factory.withoutLength(shifted));
-        const auto &scalarNode = scalarAddr.cast<symbolic::SymbolAddress>();
-        EXPECT_EQ(scalarNode.getOffset().get(), offset.get().get());
-        EXPECT_FALSE(scalarNode.getLength());
+        symbolic::SymbolAddressView scalarView{scalarAddr};
+        EXPECT_EQ(scalarView.offset().get(), offset.get().get());
+        EXPECT_FALSE(scalarView.length());
 
         auto addedOffset = factory.withAddedOffset(base, extra);
         EXPECT_EQ(addedOffset, factory.withAddedOffset(base, extra));
-        const auto &addedOffsetNode = addedOffset.cast<symbolic::SymbolAddress>();
-        EXPECT_EQ(addedOffsetNode.getOffset().get(),
+        symbolic::SymbolAddressView addedOffsetView{addedOffset};
+        EXPECT_EQ(addedOffsetView.offset().get(),
                   factory.simplifiedBinary(zero, symbolic::BinaryOp::Add, extra)
                       .get()
                       .get());
 
         auto subtractedOffset = factory.withSubtractedOffset(base, extra);
         EXPECT_EQ(subtractedOffset, factory.withSubtractedOffset(base, extra));
-        const auto &subtractedOffsetNode = subtractedOffset.cast<symbolic::SymbolAddress>();
-        EXPECT_EQ(subtractedOffsetNode.getOffset().get(),
+        symbolic::SymbolAddressView subtractedOffsetView{subtractedOffset};
+        EXPECT_EQ(subtractedOffsetView.offset().get(),
                   factory.simplifiedBinary(zero, symbolic::BinaryOp::Subtract, extra)
                       .get()
                       .get());
@@ -2639,18 +2611,18 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(addedLength, factory.withAddedLength(base, extra));
         auto expectedAddedLength = factory.simplifiedBinary(
             factory.literal(1), symbolic::BinaryOp::Add, extra);
-        const auto &addedLengthNode = addedLength.cast<symbolic::SymbolAddress>();
-        ASSERT_TRUE(addedLengthNode.getLength());
-        EXPECT_EQ(addedLengthNode.getLength().value().get().get(),
+        symbolic::SymbolAddressView addedLengthView{addedLength};
+        ASSERT_TRUE(addedLengthView.length());
+        EXPECT_EQ(addedLengthView.length().value().get().get(),
                   expectedAddedLength.get().get());
 
         auto extendedLength = factory.withAddedLength(ranged, extra);
         EXPECT_EQ(extendedLength, factory.withAddedLength(ranged, extra));
         auto expectedExtendedLength =
             factory.simplifiedBinary(length, symbolic::BinaryOp::Add, extra);
-        const auto &extendedLengthNode = extendedLength.cast<symbolic::SymbolAddress>();
-        ASSERT_TRUE(extendedLengthNode.getLength());
-        EXPECT_EQ(extendedLengthNode.getLength().value().get().get(),
+        symbolic::SymbolAddressView extendedLengthView{extendedLength};
+        ASSERT_TRUE(extendedLengthView.length());
+        EXPECT_EQ(extendedLengthView.length().value().get().get(),
                   expectedExtendedLength.get().get());
     }
 
@@ -2674,25 +2646,25 @@ namespace acslg::test::unit::analyzer {
         auto source = setupFactory.symbolAddress(
             var->getType(), setupFactory.variableAddress(var), point,
             setupFactory.literal(int64_t{4}), setupFactory.literal(int64_t{2}));
-        const auto &legacy = source.cast<symbolic::SymbolAddress>();
+        symbolic::SymbolAddressView sourceView{source};
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        auto importedA = factory.importExpr(legacy);
-        auto importedB = factory.importExpr(legacy);
-        auto importedAddress = factory.importAddress(legacy);
+        auto importedA = factory.importExpr(*source);
+        auto importedB = factory.importExpr(*source);
+        auto importedAddress = factory.importAddress(*source);
         EXPECT_EQ(importedA, importedB);
         EXPECT_EQ(importedAddress.asExpr(), importedA);
 
-        const auto &importedAddr = importedA.cast<symbolic::SymbolAddress>();
-        auto importedOffset = factory.importExpr(*legacy.getOffset());
-        ASSERT_TRUE(importedAddr.getLength());
-        ASSERT_TRUE(legacy.getLength());
-        auto importedLength = factory.importExpr(*legacy.getLength().value());
+        auto importedView = symbolic::SymbolAddressView::tryFrom(importedA).value();
+        auto importedOffset = factory.importExpr(*sourceView.offset());
+        ASSERT_TRUE(importedView.length());
+        ASSERT_TRUE(sourceView.length());
+        auto importedLength = factory.importExpr(*sourceView.length().value());
 
-        EXPECT_EQ(importedAddr.getOffset().get(), importedOffset.get().get());
-        EXPECT_EQ(importedAddr.getLength().value().get().get(), importedLength.get().get());
+        EXPECT_EQ(importedView.offset().get(), importedOffset.get().get());
+        EXPECT_EQ(importedView.length().value().get().get(), importedLength.get().get());
     }
 
     TEST(ExprFactoryTest, ImportsLegacyStructureFieldsAsHandles) {
