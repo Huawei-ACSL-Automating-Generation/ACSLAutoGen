@@ -133,7 +133,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactoryScope scope(factory);
         auto lhs = factory.literal(int64_t{10});
         auto rhs = factory.literal(int64_t{20});
-        auto equality = factory.binary(lhs, symbolic::BinaryOpExpr::Operator::Equal, rhs);
+        auto equality = factory.binary(lhs, symbolic::BinaryOp::Equal, rhs);
 
         Formulas formulas{equality};
         auto branches = ::acslg::analyzer::details::negateFormulas(formulas);
@@ -142,12 +142,12 @@ namespace acslg::test::unit::analyzer {
         ASSERT_EQ(branches[0].size(), 1u);
         ASSERT_EQ(branches[1].size(), 1u);
         auto expectedGreater = factory.binary(
-            lhs, symbolic::BinaryOpExpr::Operator::GreaterEqual,
-            factory.binary(rhs, symbolic::BinaryOpExpr::Operator::Add,
+            lhs, symbolic::BinaryOp::GreaterEqual,
+            factory.binary(rhs, symbolic::BinaryOp::Add,
                            factory.literal(int64_t{1})));
         auto expectedLess = factory.binary(
-            lhs, symbolic::BinaryOpExpr::Operator::LessEqual,
-            factory.binary(rhs, symbolic::BinaryOpExpr::Operator::Subtract,
+            lhs, symbolic::BinaryOp::LessEqual,
+            factory.binary(rhs, symbolic::BinaryOp::Subtract,
                            factory.literal(int64_t{1})));
         EXPECT_EQ(branches[0][0].get().get(), expectedGreater.get().get());
         EXPECT_EQ(branches[1][0].get().get(), expectedLess.get().get());
@@ -175,7 +175,7 @@ namespace acslg::test::unit::analyzer {
         auto x = state.getPaths().front()->getVarStateHandle(func->getParamDecl(0));
         auto y = state.getPaths().front()->getVarStateHandle(func->getParamDecl(1));
         auto expected = symbolic::Expr{context.getExprFactory(), x}
-                            .binary(symbolic::BinaryOpExpr::Operator::Add,
+                            .binary(symbolic::BinaryOp::Add,
                                     symbolic::Expr{context.getExprFactory(), y})
                             .handle();
 
@@ -383,7 +383,7 @@ namespace acslg::test::unit::analyzer {
 
         auto oldValue = path.getVarStateHandle(var);
         auto expectedNew = symbolic::Expr{context.getExprFactory(), oldValue}
-                               .binary(symbolic::BinaryOpExpr::Operator::Add,
+                               .binary(symbolic::BinaryOp::Add,
                                        symbolic::LiteralExpr{context.getExprFactory(), 1})
                                .handle();
         auto result = path.evalExpr(inc);
@@ -794,7 +794,7 @@ namespace acslg::test::unit::analyzer {
     namespace {
         auto makeAdd(symbolic::ExprHandle a, symbolic::ExprHandle b) {
             auto &factory = symbolic::ExprFactoryScope::current();
-            return factory.binary(a, symbolic::BinaryOpExpr::Operator::Add, b);
+            return factory.binary(a, symbolic::BinaryOp::Add, b);
         }
     } // namespace
 

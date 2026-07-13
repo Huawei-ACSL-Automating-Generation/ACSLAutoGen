@@ -373,14 +373,14 @@ namespace acslg::analyzer {
             return factory.importExpr(expr);
         }
 
-        symbolic::ExprHandle buildUnary(symbolic::UnaryOpExpr::Operator op,
+        symbolic::ExprHandle buildUnary(symbolic::UnaryOp op,
                                         symbolic::ExprHandle expr) {
             auto &factory = symbolic::ExprFactoryScope::current();
             return factory.unary(op, expr);
         }
 
         symbolic::ExprHandle buildBinary(symbolic::ExprHandle lhs,
-                                         symbolic::BinaryOpExpr::Operator op,
+                                         symbolic::BinaryOp op,
                                          symbolic::ExprHandle rhs) {
             auto &factory = symbolic::ExprFactoryScope::current();
             return factory.binary(lhs, op, rhs);

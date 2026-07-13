@@ -43,6 +43,16 @@ namespace acslg::analyzer::symbolic {
     class AddrHandle;
     struct SymbolAddrBaseInfo;
 
+    enum class BinaryOp : unsigned {
+#define BIN_OP(name, tok, prec, isRightAssoc) name,
+#include "operators.def"
+    };
+
+    enum class UnaryOp : unsigned {
+#define UN_OP(name, tok, prec, isRightAssoc) name,
+#include "operators.def"
+    };
+
     namespace detail {
         class LiteralExprNode;
         class UnaryOpExprNode;
@@ -697,10 +707,7 @@ namespace acslg::analyzer::symbolic {
     /// @brief Represents a binary operation expression.
     class BinaryOpExprNode : public SymbolicExpr {
       public:
-        enum class Operator : unsigned {
-#define BIN_OP(name, tok, prec, isRightAssoc) name,
-#include "operators.def"
-        };
+        using Operator = BinaryOp;
 
         inline static unsigned getPrecedence(BinaryOpExprNode::Operator op) {
             switch (op) {
@@ -773,10 +780,7 @@ namespace acslg::analyzer::symbolic {
     /// @brief Represents a unary operation expression.
     class UnaryOpExprNode : public SymbolicExpr {
       public:
-        enum class Operator : unsigned {
-#define UN_OP(name, tok, prec, isRightAssoc) name,
-#include "operators.def"
-        };
+        using Operator = UnaryOp;
 
         inline static unsigned getPrecedence(UnaryOpExprNode::Operator op) {
             switch (op) {
@@ -1215,14 +1219,14 @@ namespace acslg::analyzer::symbolic {
                                AddrHandle from,
                                SourcePoint fromPoint);
 
-        ExprHandle unary(UnaryOpExpr::Operator op, ExprHandle expr) {
+        ExprHandle unary(UnaryOp op, ExprHandle expr) {
             return intern(makeNode<detail::UnaryOpExprNode>(op, expr));
         }
 
-        ExprHandle binary(ExprHandle left, BinaryOpExpr::Operator op, ExprHandle right) {
+        ExprHandle binary(ExprHandle left, BinaryOp op, ExprHandle right) {
             return intern(makeNode<detail::BinaryOpExprNode>(left, op, right));
         }
-        ExprHandle simplifiedBinary(ExprHandle left, BinaryOpExpr::Operator op, ExprHandle right);
+        ExprHandle simplifiedBinary(ExprHandle left, BinaryOp op, ExprHandle right);
 
         ExprHandle withValType(ExprHandle expr, SymbolicExpr::Type newType);
 
@@ -1426,41 +1430,41 @@ namespace acslg::analyzer::symbolic {
         template <typename T> const T *dyn_cast() const { return handle_.dyn_cast<T>(); }
         template <typename T> const T &cast() const { return handle_.cast<T>(); }
 
-        Expr binary(BinaryOpExpr::Operator op, const Expr &rhs) const {
+        Expr binary(BinaryOp op, const Expr &rhs) const {
             ensureSameFactory(rhs);
             return Expr{factory(), factory().binary(handle_, op, rhs.handle_)};
         }
 
-        Expr unary(UnaryOpExpr::Operator op) const {
+        Expr unary(UnaryOp op) const {
             return Expr{factory(), factory().unary(op, handle_)};
         }
 
         Expr equalTo(const Expr &rhs) const {
-            return binary(BinaryOpExpr::Operator::Equal, rhs);
+            return binary(BinaryOp::Equal, rhs);
         }
         Expr notEqualTo(const Expr &rhs) const {
-            return binary(BinaryOpExpr::Operator::NotEqual, rhs);
+            return binary(BinaryOp::NotEqual, rhs);
         }
         Expr lessThan(const Expr &rhs) const {
-            return binary(BinaryOpExpr::Operator::LessThan, rhs);
+            return binary(BinaryOp::LessThan, rhs);
         }
         Expr lessEqual(const Expr &rhs) const {
-            return binary(BinaryOpExpr::Operator::LessEqual, rhs);
+            return binary(BinaryOp::LessEqual, rhs);
         }
         Expr greaterThan(const Expr &rhs) const {
-            return binary(BinaryOpExpr::Operator::GreaterThan, rhs);
+            return binary(BinaryOp::GreaterThan, rhs);
         }
         Expr greaterEqual(const Expr &rhs) const {
-            return binary(BinaryOpExpr::Operator::GreaterEqual, rhs);
+            return binary(BinaryOp::GreaterEqual, rhs);
         }
         Expr logicalAnd(const Expr &rhs) const {
-            return binary(BinaryOpExpr::Operator::LogicalAnd, rhs);
+            return binary(BinaryOp::LogicalAnd, rhs);
         }
         Expr logicalOr(const Expr &rhs) const {
-            return binary(BinaryOpExpr::Operator::LogicalOr, rhs);
+            return binary(BinaryOp::LogicalOr, rhs);
         }
         Expr logicalNot() const {
-            return unary(UnaryOpExpr::Operator::LogicalNot);
+            return unary(UnaryOp::LogicalNot);
         }
 
         friend bool operator==(const Expr &lhs, const Expr &rhs) {
@@ -1468,19 +1472,19 @@ namespace acslg::analyzer::symbolic {
         }
 
         friend Expr operator+(const Expr &lhs, const Expr &rhs) {
-            return lhs.binary(BinaryOpExpr::Operator::Add, rhs);
+            return lhs.binary(BinaryOp::Add, rhs);
         }
         friend Expr operator-(const Expr &lhs, const Expr &rhs) {
-            return lhs.binary(BinaryOpExpr::Operator::Subtract, rhs);
+            return lhs.binary(BinaryOp::Subtract, rhs);
         }
         friend Expr operator*(const Expr &lhs, const Expr &rhs) {
-            return lhs.binary(BinaryOpExpr::Operator::Multiply, rhs);
+            return lhs.binary(BinaryOp::Multiply, rhs);
         }
         friend Expr operator/(const Expr &lhs, const Expr &rhs) {
-            return lhs.binary(BinaryOpExpr::Operator::Divide, rhs);
+            return lhs.binary(BinaryOp::Divide, rhs);
         }
         friend Expr operator-(const Expr &expr) {
-            return expr.unary(UnaryOpExpr::Operator::Minus);
+            return expr.unary(UnaryOp::Minus);
         }
         friend Expr operator!(const Expr &expr) {
             return expr.logicalNot();
@@ -2002,8 +2006,8 @@ namespace acslg::analyzer::symbolic {
         SourcePoint fromPoint_;
     };
 
-    BinaryOpExpr::Operator getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
-    BinaryOpExpr::Operator getBinaryOp(clang::BinaryOperatorKind op);
+    BinaryOp getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
+    BinaryOp getBinaryOp(clang::BinaryOperatorKind op);
     SymbolicExpr::Type deriveType(clang::QualType type);
     bool isValidOffsetOrLength(const SymbolicExpr &expr);
 
@@ -2079,7 +2083,7 @@ namespace acslg::analyzer::symbolic {
         }
 
         if (auto *bin = in.dyn_cast<BinaryOpExpr>();
-            bin && bin->getOperator() == BinaryOpExpr::Operator::Multiply) {
+            bin && bin->getOperator() == BinaryOp::Multiply) {
             auto left  = bin->getLeft();
             auto right = bin->getRight();
             if (auto *literal = dyn_cast<LiteralExprNode>(left.get());

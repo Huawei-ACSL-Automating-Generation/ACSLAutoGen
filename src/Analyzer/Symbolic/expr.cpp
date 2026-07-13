@@ -723,7 +723,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle ExprFactory::simplifiedBinary(ExprHandle left,
-                                             BinaryOpExpr::Operator op,
+                                             BinaryOp op,
                                              ExprHandle right) {
         return simplifiedExprHandle(*this, *binary(left, op, right));
     }

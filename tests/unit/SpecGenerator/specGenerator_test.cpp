@@ -23,7 +23,7 @@ namespace acslg::test::unit::spec_generator {
         ExprFactory factory;
         ExprFactoryScope scope(factory);
 
-        using enum BinaryOpExpr::Operator;
+        using enum BinaryOp;
         auto condHandle = factory.binary(factory.literal(int64_t{1}), LessThan,
                                          factory.literal(int64_t{2}));
         auto retHandle = factory.binary(factory.literal(int64_t{3}), Add,

@@ -80,7 +80,7 @@ namespace acslg::analyzer {
             const symbolic::SymbolicExpr &expr,
             const std::unordered_set<const clang::VarDecl *> &locals) {
             if (const auto *bin = symbolic::dyn_cast<symbolic::BinaryOpExpr>(&expr);
-                bin && bin->getOperator() == symbolic::BinaryOpExpr::Operator::LogicalAnd) {
+                bin && bin->getOperator() == symbolic::BinaryOp::LogicalAnd) {
                 auto lhs = dropLocalConjuncts(factory, *bin->getLeft(), locals);
                 auto rhs = dropLocalConjuncts(factory, *bin->getRight(), locals);
                 if (!lhs && !rhs)
@@ -89,7 +89,7 @@ namespace acslg::analyzer {
                     return rhs;
                 if (!rhs)
                     return lhs;
-                return factory.binary(lhs.value(), symbolic::BinaryOpExpr::Operator::LogicalAnd,
+                return factory.binary(lhs.value(), symbolic::BinaryOp::LogicalAnd,
                                       rhs.value());
             }
 
@@ -649,7 +649,7 @@ namespace acslg::analyzer {
                     DEBUG("evaluating BinaryOperator...");
                     // TODO: maybe pack the logic in BO, ArraySub into a function?
                     EvalResult lhs                      = evalExpr(binOp->getLHS());
-                    symbolic::BinaryOpExpr::Operator op = symbolic::getBinaryOp(binOp->getOpcode());
+                    symbolic::BinaryOp op = symbolic::getBinaryOp(binOp->getOpcode());
                     auto &factory                       = context_.getExprFactory();
 
                     std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
@@ -944,7 +944,7 @@ namespace acslg::analyzer {
                             DEBUG("BSL_SAL_Calloc: arg1=" << a1->dump());
 
                             // Form the total-size expression by multiplying the two arguments.
-                            using Op = symbolic::BinaryOpExpr::Operator;
+                            using Op = symbolic::BinaryOp;
                             auto &factory = context_.getExprFactory();
                             symbolic::Expr arg0Expr{factory, a0};
                             symbolic::Expr arg1Expr{factory, a1};
@@ -1350,10 +1350,10 @@ namespace acslg::analyzer {
                     std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                     std::vector<symbolic::ExprHandle> outExprs;
 
-                    symbolic::UnaryOpExpr::Operator op;
+                    symbolic::UnaryOp op;
                     switch (uop->getOpcode()) {
                         using enum clang::UnaryOperatorKind;
-                        using enum symbolic::UnaryOpExpr::Operator;
+                        using enum symbolic::UnaryOp;
                         case UO_Plus: op = Plus; break;
                         case UO_Minus: op = Minus; break;
                         case UO_LNot: op = LogicalNot; break;
@@ -1375,7 +1375,7 @@ namespace acslg::analyzer {
 
                         // Prevent misuse by not capturing this and operand.
                         [this, &path, &unExpr, &op, &outExprs, &uop]() {
-                            using enum symbolic::UnaryOpExpr::Operator;
+                            using enum symbolic::UnaryOp;
                             if (op == PreInc || op == PostInc || op == PreDec || op == PostDec) {
                                 // ++x / x++ / --x / x--
                                 auto addr = path->extractLValueHandle(uop->getSubExpr());
@@ -1387,8 +1387,8 @@ namespace acslg::analyzer {
                                 auto &factory = context_.getExprFactory();
                                 symbolic::LiteralExpr one{factory, 1};
                                 auto binOp  = (op == PreInc || op == PostInc)
-                                                  ? symbolic::BinaryOpExpr::Operator::Add
-                                                  : symbolic::BinaryOpExpr::Operator::Subtract;
+                                                  ? symbolic::BinaryOp::Add
+                                                  : symbolic::BinaryOp::Subtract;
                                 symbolic::Expr oldValExpr{factory, oldVal.value()};
                                 auto newValExpr = oldValExpr.binary(binOp, one);
                                 // return pre vs post
@@ -2071,7 +2071,7 @@ namespace acslg::analyzer {
         // then hashing.
         auto addedHash = [this](const Expr &a, const Expr &b) {
             auto added = factory_->binary(factory_->importExpr(a),
-                                          symbolic::BinaryOpExpr::Operator::Add,
+                                          symbolic::BinaryOp::Add,
                                           factory_->importExpr(b));
             return symbolic::simplifiedExprHandle(*factory_, *added).hash();
         };
@@ -2658,7 +2658,7 @@ namespace acslg::analyzer {
             Path::EvalResult eval;
 
             if (binOp->isCompoundAssignmentOp()) {
-                symbolic::BinaryOpExpr::Operator op =
+                symbolic::BinaryOp op =
                     symbolic::getCompoundAssignOp(binOp->getOpcode());
                 auto &factory = context_.getExprFactory();
 

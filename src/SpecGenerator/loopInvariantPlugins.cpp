@@ -1364,7 +1364,7 @@ namespace acslg::spec_generator {
                                                {"m", *param_m}}) +
                         "\n";
 
-                using enum symb::BinaryOpExpr::Operator;
+                using enum symb::BinaryOp;
                 auto arrayRange = rebuildSymbolAddressHandle(
                     *arrayAddr,
                     [](symb::ExprFactory &factory, symb::AddrHandle address) {

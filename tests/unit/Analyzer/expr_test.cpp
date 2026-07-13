@@ -28,11 +28,11 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_constructible_v<symbolic::detail::LiteralExprNode, int64_t>);
     static_assert(!std::is_default_constructible_v<symbolic::UnknownExpr>);
     static_assert(!std::is_constructible_v<symbolic::detail::UnaryOpExprNode,
-                                           symbolic::UnaryOpExpr::Operator,
+                                           symbolic::UnaryOp,
                                            symbolic::ExprHandle>);
     static_assert(!std::is_constructible_v<symbolic::detail::BinaryOpExprNode,
                                            symbolic::ExprHandle,
-                                           symbolic::BinaryOpExpr::Operator,
+                                           symbolic::BinaryOp,
                                            symbolic::ExprHandle>);
     static_assert(!std::is_copy_constructible_v<symbolic::FieldAddress>);
     static_assert(!std::is_copy_constructible_v<symbolic::VariableAddress>);
@@ -260,7 +260,7 @@ namespace acslg::test::unit::analyzer {
 
         ExprHandle makeAdd(ExprHandle a, ExprHandle b) {
             auto &factory = ExprFactoryScope::current();
-            return factory.binary(factory.importExpr(*a), BinaryOpExpr::Operator::Add,
+            return factory.binary(factory.importExpr(*a), BinaryOp::Add,
                                   factory.importExpr(*b));
         }
 
@@ -381,7 +381,7 @@ namespace acslg::test::unit::analyzer {
 
         auto result = symbolic::getSubstitutedExprHandle(factory, *expr, *path, point);
         auto expected = factory.binary(factory.literal(uint64_t{1}),
-                                       symbolic::BinaryOpExpr::Operator::Add,
+                                       symbolic::BinaryOp::Add,
                                        factory.literal(uint64_t{2}));
 
         EXPECT_EQ(result.get().get(), expected.get().get());
@@ -525,26 +525,26 @@ namespace acslg::test::unit::analyzer {
         auto &factory = symbolic::ExprFactoryScope::current();
 
         // Simple addition: 5 + 3
-        auto exprSimple = factory.binary(factory.literal(5), BinaryOpExpr::Operator::Add,
+        auto exprSimple = factory.binary(factory.literal(5), BinaryOp::Add,
                                          factory.literal(3));
         auto resSimple  = exprSimple->getACSL(config);
         ASSERT_TRUE(resSimple);
         EXPECT_EQ(resSimple.value().first, "5 + 3");
 
         // Nested addition (left-child nested): (1 + 2) + 3 -> "1 + 2 + 3"
-        auto innerLeft = factory.binary(factory.literal(1), BinaryOpExpr::Operator::Add,
+        auto innerLeft = factory.binary(factory.literal(1), BinaryOp::Add,
                                         factory.literal(2));
         auto exprLeft =
-            factory.binary(innerLeft, BinaryOpExpr::Operator::Add, factory.literal(3));
+            factory.binary(innerLeft, BinaryOp::Add, factory.literal(3));
         auto resLeft = exprLeft->getACSL(config);
         ASSERT_TRUE(resLeft);
         EXPECT_EQ(resLeft.value().first, "1 + 2 + 3");
 
         // Nested addition (right-child nested): 1 + (2 + 3) -> "1 + (2 + 3)"
-        auto innerRight = factory.binary(factory.literal(2), BinaryOpExpr::Operator::Add,
+        auto innerRight = factory.binary(factory.literal(2), BinaryOp::Add,
                                          factory.literal(3));
         auto exprRight =
-            factory.binary(factory.literal(1), BinaryOpExpr::Operator::Add, innerRight);
+            factory.binary(factory.literal(1), BinaryOp::Add, innerRight);
         auto resRight = exprRight->getACSL(config);
         ASSERT_TRUE(resRight);
         EXPECT_EQ(resRight.value().first, "1 + (2 + 3)");
@@ -563,7 +563,7 @@ namespace acslg::test::unit::analyzer {
         auto &factory     = symbolic::ExprFactoryScope::current();
 
         // Prefix increment (e.g., ++x)
-        auto preInc = factory.unary(UnaryOpExpr::Operator::PreInc,
+        auto preInc = factory.unary(UnaryOp::PreInc,
                                     factory.importExpr(*symVal0));
         auto resPre = preInc->getACSL(config);
         ASSERT_TRUE(resPre);
@@ -575,7 +575,7 @@ namespace acslg::test::unit::analyzer {
         auto symVal1      = makeSymbolValue(1);
 
         // Postfix increment (e.g., x++)
-        auto postInc = factory.unary(UnaryOpExpr::Operator::PostInc,
+        auto postInc = factory.unary(UnaryOp::PostInc,
                                      factory.importExpr(*symVal1));
         auto resPost = postInc->getACSL(config);
         ASSERT_TRUE(resPost);
@@ -664,7 +664,7 @@ namespace acslg::test::unit::analyzer {
         ASSERT_TRUE(rightBound);
 
         auto expected = factory.binary(factory.importExpr(*addrRangeNode.getOffset()),
-                                       BinaryOpExpr::Operator::Add,
+                                       BinaryOp::Add,
                                        factory.importExpr(*addrRangeNode.getLength().value()));
         EXPECT_EQ(rightBound.value(), expected);
         EXPECT_EQ(addrRangeNode.getRightBound(), rightBound);
@@ -773,7 +773,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactoryScope scope(factory);
         auto value = factory.rangeIndex("count");
         auto product = factory.binary(factory.literal(std::uint64_t{8}),
-                                      symbolic::BinaryOpExpr::Operator::Multiply, value);
+                                      symbolic::BinaryOp::Multiply, value);
 
         auto stripped = symbolic::strip_sizeof_factor(factory, product, 8);
         auto literal = symbolic::strip_sizeof_factor(
@@ -820,22 +820,22 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(oneA.cast<symbolic::detail::LiteralExprNode>().getLiteralValue(), 1);
 
         auto sumA =
-            factory.binary(oneA, symbolic::BinaryOpExpr::Operator::Add, two);
+            factory.binary(oneA, symbolic::BinaryOp::Add, two);
         auto sumB =
-            factory.binary(oneB, symbolic::BinaryOpExpr::Operator::Add, factory.literal(2));
-        auto diff = factory.binary(oneA, symbolic::BinaryOpExpr::Operator::Subtract, two);
+            factory.binary(oneB, symbolic::BinaryOp::Add, factory.literal(2));
+        auto diff = factory.binary(oneA, symbolic::BinaryOp::Subtract, two);
 
         EXPECT_EQ(sumA, sumB);
         EXPECT_NE(sumA, diff);
         ASSERT_NE(sumA.dyn_cast<symbolic::BinaryOpExpr>(), nullptr);
         ASSERT_NE(sumA.dyn_cast<symbolic::detail::BinaryOpExprNode>(), nullptr);
         EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getOperator(),
-                  symbolic::BinaryOpExpr::Operator::Add);
+                  symbolic::BinaryOp::Add);
         EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getLeft().get(), oneA.get().get());
         EXPECT_EQ(sumA.cast<symbolic::BinaryOpExpr>().getRight().get(), two.get().get());
 
-        auto negA = factory.unary(symbolic::UnaryOpExpr::Operator::Minus, oneA);
-        auto negB = factory.unary(symbolic::UnaryOpExpr::Operator::Minus, oneB);
+        auto negA = factory.unary(symbolic::UnaryOp::Minus, oneA);
+        auto negB = factory.unary(symbolic::UnaryOp::Minus, oneB);
         EXPECT_EQ(negA, negB);
         EXPECT_TRUE(negA.isa<symbolic::UnaryOpExpr>());
         EXPECT_TRUE(negA.isa<symbolic::detail::UnaryOpExprNode>());
@@ -847,7 +847,7 @@ namespace acslg::test::unit::analyzer {
 
         auto one = factory.literal(1);
         auto two = factory.literal(2);
-        auto sum = factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
+        auto sum = factory.binary(one, symbolic::BinaryOp::Add, two);
 
         auto targetType = symbolic::SymbolicExpr::Type{
             symbolic::SymbolicExpr::ScalarKind::UInt, 64};
@@ -898,7 +898,7 @@ namespace acslg::test::unit::analyzer {
         auto sourceOne = source.literal(1);
         auto sourceTwo = source.literal(2);
         auto sourceSum = source.binary(
-            sourceOne, symbolic::BinaryOpExpr::Operator::Add, sourceTwo);
+            sourceOne, symbolic::BinaryOp::Add, sourceTwo);
 
         symbolic::ExprFactory target;
         auto targetType = symbolic::SymbolicExpr::Type{
@@ -935,12 +935,12 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory source;
         auto sourceBase = source.variableAddress(var);
         auto sourceOffset = source.binary(
-            source.literal(1), symbolic::BinaryOpExpr::Operator::Add, source.literal(2));
+            source.literal(1), symbolic::BinaryOp::Add, source.literal(2));
         auto sourceLength = source.literal(4);
         auto sourceRange = source.symbolAddress(
             var->getType(), sourceBase, point, sourceOffset, sourceLength);
         auto sourcePredicate = source.binary(
-            source.rangeIndex("i"), symbolic::BinaryOpExpr::Operator::LessThan,
+            source.rangeIndex("i"), symbolic::BinaryOp::LessThan,
             source.literal(4));
         auto sourceBody = source.literal(7);
         auto sourceSum = symbolic::makeSumOverRangeHandle(
@@ -964,7 +964,7 @@ namespace acslg::test::unit::analyzer {
 
         auto targetBase = target.variableAddress(var);
         auto targetOffset = target.binary(
-            target.literal(1), symbolic::BinaryOpExpr::Operator::Add, target.literal(2));
+            target.literal(1), symbolic::BinaryOp::Add, target.literal(2));
         auto targetLength = target.literal(4);
         const auto &typedRangeNode = typedRange.cast<symbolic::SymbolAddress>();
         ASSERT_TRUE(typedRangeNode.getFromAddrHandle());
@@ -990,9 +990,9 @@ namespace acslg::test::unit::analyzer {
 
         auto one = factory.literal(int64_t{1});
         auto two = factory.literal(int64_t{2});
-        auto original = factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
+        auto original = factory.binary(one, symbolic::BinaryOp::Add, two);
         auto replacement =
-            factory.binary(two, symbolic::BinaryOpExpr::Operator::Subtract, one);
+            factory.binary(two, symbolic::BinaryOp::Subtract, one);
 
         symbolic::HashExprHandleMap substitutions;
         substitutions.emplace(original.hash(), replacement);
@@ -1007,9 +1007,9 @@ namespace acslg::test::unit::analyzer {
 
         auto one = factory.literal(int64_t{1});
         auto two = factory.literal(int64_t{2});
-        auto original = factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
+        auto original = factory.binary(one, symbolic::BinaryOp::Add, two);
         auto replacement =
-            factory.binary(two, symbolic::BinaryOpExpr::Operator::Subtract, one);
+            factory.binary(two, symbolic::BinaryOp::Subtract, one);
 
         symbolic::HashExprHandleMap substitutions;
         substitutions.emplace(original.hash(), replacement);
@@ -1025,8 +1025,8 @@ namespace acslg::test::unit::analyzer {
         auto one = factory.literal(int64_t{1});
         auto two = factory.literal(int64_t{2});
         auto three = factory.literal(int64_t{3});
-        auto original = factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
-        auto expected = factory.binary(three, symbolic::BinaryOpExpr::Operator::Add, two);
+        auto original = factory.binary(one, symbolic::BinaryOp::Add, two);
+        auto expected = factory.binary(three, symbolic::BinaryOp::Add, two);
 
         symbolic::HashExprHandleMap substitutions;
         substitutions.emplace(one.hash(), three);
@@ -1061,9 +1061,9 @@ namespace acslg::test::unit::analyzer {
         auto one = factory.literal(int64_t{1});
         auto two = factory.literal(int64_t{2});
         auto three = factory.literal(int64_t{3});
-        auto pred = factory.binary(one, symbolic::BinaryOpExpr::Operator::LessThan, two);
+        auto pred = factory.binary(one, symbolic::BinaryOp::LessThan, two);
         auto expectedPred =
-            factory.binary(three, symbolic::BinaryOpExpr::Operator::LessThan, two);
+            factory.binary(three, symbolic::BinaryOp::LessThan, two);
         auto original = symbolic::makeQuantifierOverRangeHandle(
             factory, range.cast<symbolic::SymbolAddress>(), "i",
             symbolic::QuantifierOverRange::Quantifier::ForAll, *pred);
@@ -1101,7 +1101,7 @@ namespace acslg::test::unit::analyzer {
         auto x       = factory.symbolValue(symbolic::deriveType(var->getType()),
                                            varAddr, point);
         auto two     = factory.literal(2);
-        auto sum     = factory.binary(x, symbolic::BinaryOpExpr::Operator::Add, two);
+        auto sum     = factory.binary(x, symbolic::BinaryOp::Add, two);
 
         auto simplified = sum->simplifiedExpr();
         auto *rebuilt = symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
@@ -1136,7 +1136,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
                 .handle();
         auto legacyProduct = factory.binary(
-            xHandle, symbolic::BinaryOpExpr::Operator::Multiply, xHandle);
+            xHandle, symbolic::BinaryOp::Multiply, xHandle);
 
         auto simplified = legacyProduct->simplifiedExpr();
         const auto &product = simplified.cast<symbolic::BinaryOpExpr>();
@@ -1152,7 +1152,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto expr = factory.binary(factory.literal(int64_t{1}),
-                                   symbolic::BinaryOpExpr::Operator::Add,
+                                   symbolic::BinaryOp::Add,
                                    factory.literal(int64_t{2}));
 
         auto simplified = symbolic::simplifiedExprHandle(factory, *expr);
@@ -1166,10 +1166,10 @@ namespace acslg::test::unit::analyzer {
         auto i = factory.rangeIndex("i");
         auto j = factory.rangeIndex("j");
         auto product = factory.binary(
-            i, symbolic::BinaryOpExpr::Operator::Multiply, j);
+            i, symbolic::BinaryOp::Multiply, j);
 
         auto simplified = factory.simplifiedBinary(
-            i, symbolic::BinaryOpExpr::Operator::Multiply, j);
+            i, symbolic::BinaryOp::Multiply, j);
 
         EXPECT_EQ(simplified, product);
         const auto &node = simplified.cast<symbolic::BinaryOpExpr>();
@@ -1201,19 +1201,19 @@ namespace acslg::test::unit::analyzer {
                      .handle();
         auto zero = factory.literal(int64_t{0});
         auto predicate =
-            factory.binary(x, symbolic::BinaryOpExpr::Operator::Equal, zero);
-        auto wrapped = factory.binary(predicate, symbolic::BinaryOpExpr::Operator::Equal,
+            factory.binary(x, symbolic::BinaryOp::Equal, zero);
+        auto wrapped = factory.binary(predicate, symbolic::BinaryOp::Equal,
                                       factory.literal(int64_t{1}));
 
         auto simplified = wrapped->simplifiedExpr();
         auto *returnedPredicate =
             symbolic::cast<symbolic::BinaryOpExpr>(simplified.get().get());
 
-        EXPECT_EQ(returnedPredicate->getOperator(), symbolic::BinaryOpExpr::Operator::Equal);
+        EXPECT_EQ(returnedPredicate->getOperator(), symbolic::BinaryOp::Equal);
         EXPECT_EQ(returnedPredicate->getLeft().get(), x.get().get());
         EXPECT_EQ(returnedPredicate->getRight().get(), zero.get().get());
         EXPECT_EQ(factory.importExpr(*simplified),
-                  factory.binary(x, symbolic::BinaryOpExpr::Operator::Equal, zero));
+                  factory.binary(x, symbolic::BinaryOp::Equal, zero));
     }
 
     TEST(ExprFactoryTest, ConstantEvalReturnsInternedLiteral) {
@@ -1221,7 +1221,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactoryScope scope(factory);
 
         auto expr = factory.binary(factory.literal(int64_t{1}),
-                                   symbolic::BinaryOpExpr::Operator::Add,
+                                   symbolic::BinaryOp::Add,
                                    factory.literal(int64_t{2}));
 
         auto *literal = expr->evalToConstExpr();
@@ -1236,9 +1236,9 @@ namespace acslg::test::unit::analyzer {
 
     TEST(ExprFactoryTest, ImportsOperationTreesAcrossFactoriesIntoInternedDag) {
         symbolic::ExprFactory source;
-        auto sourceUnary = source.unary(symbolic::UnaryOpExpr::Operator::Minus,
+        auto sourceUnary = source.unary(symbolic::UnaryOp::Minus,
                                         source.literal(int64_t{1}));
-        auto sourceTree = source.binary(sourceUnary, symbolic::BinaryOpExpr::Operator::Add,
+        auto sourceTree = source.binary(sourceUnary, symbolic::BinaryOp::Add,
                                         source.literal(int64_t{2}));
 
         symbolic::ExprFactory factory;
@@ -1322,7 +1322,7 @@ namespace acslg::test::unit::analyzer {
         auto one = factory.literal(int64_t{1});
         auto two = factory.literal(int64_t{2});
         auto replacement =
-            factory.binary(one, symbolic::BinaryOpExpr::Operator::Add, two);
+            factory.binary(one, symbolic::BinaryOp::Add, two);
 
         auto rangeIndexHandle = factory.rangeIndex("i");
         auto substituted =
@@ -1417,7 +1417,7 @@ namespace acslg::test::unit::analyzer {
 
         auto makePred = [&]() {
             return factory.binary(factory.rangeIndex("i"),
-                                  symbolic::BinaryOpExpr::Operator::LessThan,
+                                  symbolic::BinaryOp::LessThan,
                                   factory.literal(3));
         };
 
@@ -1523,7 +1523,7 @@ namespace acslg::test::unit::analyzer {
         rangeHandle = factory.withLength(rangeHandle, factory.literal(int64_t{3}));
         auto rangeBase = rangeHandle.cast<symbolic::SymbolAddress>().getBaseInfo();
         auto pred = factory.binary(factory.rangeIndex("i"),
-                                   symbolic::BinaryOpExpr::Operator::LessThan,
+                                   symbolic::BinaryOp::LessThan,
                                    factory.literal(int64_t{3}));
         auto quantifierHandle = symbolic::makeQuantifierOverRangeHandle(
             factory, rangeHandle, "i",
@@ -1717,9 +1717,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(sum.handle().get().get(), sameSum.handle().get().get());
         EXPECT_NE(sum, product);
         EXPECT_EQ(sum.cast<symbolic::BinaryOpExpr>().getOperator(),
-                  symbolic::BinaryOpExpr::Operator::Add);
+                  symbolic::BinaryOp::Add);
         EXPECT_EQ(product.cast<symbolic::BinaryOpExpr>().getOperator(),
-                  symbolic::BinaryOpExpr::Operator::Multiply);
+                  symbolic::BinaryOp::Multiply);
         EXPECT_EQ(x.cast<symbolic::detail::LiteralExprNode>().getLiteralValue(), 10);
     }
 
@@ -1759,17 +1759,17 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(negated, negatedAgain);
 
         EXPECT_EQ(equalA.cast<symbolic::BinaryOpExpr>().getOperator(),
-                  symbolic::BinaryOpExpr::Operator::Equal);
+                  symbolic::BinaryOp::Equal);
         EXPECT_EQ(less.cast<symbolic::BinaryOpExpr>().getOperator(),
-                  symbolic::BinaryOpExpr::Operator::LessThan);
+                  symbolic::BinaryOp::LessThan);
         EXPECT_EQ(greaterEqual.cast<symbolic::BinaryOpExpr>().getOperator(),
-                  symbolic::BinaryOpExpr::Operator::GreaterEqual);
+                  symbolic::BinaryOp::GreaterEqual);
         EXPECT_EQ(conjunction.cast<symbolic::BinaryOpExpr>().getOperator(),
-                  symbolic::BinaryOpExpr::Operator::LogicalAnd);
+                  symbolic::BinaryOp::LogicalAnd);
         EXPECT_EQ(disjunction.cast<symbolic::BinaryOpExpr>().getOperator(),
-                  symbolic::BinaryOpExpr::Operator::LogicalOr);
+                  symbolic::BinaryOp::LogicalOr);
         EXPECT_EQ(negated.cast<symbolic::UnaryOpExpr>().getOperator(),
-                  symbolic::UnaryOpExpr::Operator::LogicalNot);
+                  symbolic::UnaryOp::LogicalNot);
     }
 
     TEST(ExprFacadeTest, SimplifiedReturnsFactoryBackedFacade) {
@@ -1794,9 +1794,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(negated, -symbolic::LiteralExpr{1});
         EXPECT_EQ(notOne, !symbolic::LiteralExpr{1});
         EXPECT_EQ(negated.cast<symbolic::UnaryOpExpr>().getOperator(),
-                  symbolic::UnaryOpExpr::Operator::Minus);
+                  symbolic::UnaryOp::Minus);
         EXPECT_EQ(notOne.cast<symbolic::UnaryOpExpr>().getOperator(),
-                  symbolic::UnaryOpExpr::Operator::LogicalNot);
+                  symbolic::UnaryOp::LogicalNot);
     }
 
     TEST(ExprFacadeTest, LeafHelpersUseFactoryBackedFacades) {
@@ -2479,7 +2479,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory setupFactory;
         auto legacyAddr = symbolic::Addr::symbol(setupFactory, var->getType(), point).handle();
         auto legacyAdd = setupFactory.binary(
-            legacyAddr.asExpr(), symbolic::BinaryOpExpr::Operator::Add,
+            legacyAddr.asExpr(), symbolic::BinaryOp::Add,
             setupFactory.literal(int64_t{4}));
 
         symbolic::ExprFactory factory;
@@ -2547,7 +2547,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(addedOffset, factory.withAddedOffset(base, extra));
         const auto &addedOffsetNode = addedOffset.cast<symbolic::SymbolAddress>();
         EXPECT_EQ(addedOffsetNode.getOffset().get(),
-                  factory.simplifiedBinary(zero, symbolic::BinaryOpExpr::Operator::Add, extra)
+                  factory.simplifiedBinary(zero, symbolic::BinaryOp::Add, extra)
                       .get()
                       .get());
 
@@ -2555,14 +2555,14 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(subtractedOffset, factory.withSubtractedOffset(base, extra));
         const auto &subtractedOffsetNode = subtractedOffset.cast<symbolic::SymbolAddress>();
         EXPECT_EQ(subtractedOffsetNode.getOffset().get(),
-                  factory.simplifiedBinary(zero, symbolic::BinaryOpExpr::Operator::Subtract, extra)
+                  factory.simplifiedBinary(zero, symbolic::BinaryOp::Subtract, extra)
                       .get()
                       .get());
 
         auto addedLength = factory.withAddedLength(base, extra);
         EXPECT_EQ(addedLength, factory.withAddedLength(base, extra));
         auto expectedAddedLength = factory.simplifiedBinary(
-            factory.literal(1), symbolic::BinaryOpExpr::Operator::Add, extra);
+            factory.literal(1), symbolic::BinaryOp::Add, extra);
         const auto &addedLengthNode = addedLength.cast<symbolic::SymbolAddress>();
         ASSERT_TRUE(addedLengthNode.getLength());
         EXPECT_EQ(addedLengthNode.getLength().value().get().get(),
@@ -2571,7 +2571,7 @@ namespace acslg::test::unit::analyzer {
         auto extendedLength = factory.withAddedLength(ranged, extra);
         EXPECT_EQ(extendedLength, factory.withAddedLength(ranged, extra));
         auto expectedExtendedLength =
-            factory.simplifiedBinary(length, symbolic::BinaryOpExpr::Operator::Add, extra);
+            factory.simplifiedBinary(length, symbolic::BinaryOp::Add, extra);
         const auto &extendedLengthNode = extendedLength.cast<symbolic::SymbolAddress>();
         ASSERT_TRUE(extendedLengthNode.getLength());
         EXPECT_EQ(extendedLengthNode.getLength().value().get().get(),
