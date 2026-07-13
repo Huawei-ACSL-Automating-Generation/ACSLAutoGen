@@ -43,11 +43,8 @@ namespace acslg::spec_generator {
         void collectReferencedVarDecls(const symb::SymbolicExpr &expr,
                                        std::unordered_set<const clang::VarDecl *> &out) {
             using symb::detail::BinaryOpExprNode;
-            using symb::FieldAddress;
             using symb::detail::LiteralExprNode;
-            using symb::SymbolAddress;
             using symb::detail::UnaryOpExprNode;
-            using symb::VariableAddress;
 
             if (auto *lit = symb::dyn_cast<LiteralExprNode>(&expr)) {
                 (void)lit;
@@ -58,20 +55,20 @@ namespace acslg::spec_generator {
                     out.insert(from.value().get());
                 return;
             }
-            if (auto *va = symb::dyn_cast<VariableAddress>(&expr)) {
-                out.insert(va->getFrom().get());
+            if (auto va = symb::VariableAddressView::tryFrom(expr)) {
+                out.insert(va->declaration().get());
                 return;
             }
-            if (auto *sa = symb::dyn_cast<SymbolAddress>(&expr)) {
-                if (auto from = sa->getFromRoot())
+            if (auto sa = symb::SymbolAddressView::tryFrom(expr)) {
+                if (auto from = sa->fromRoot())
                     out.insert(from.value().get());
-                collectReferencedVarDecls(*sa->getOffset(), out);
-                if (sa->getLength())
-                    collectReferencedVarDecls(*sa->getLength().value(), out);
+                collectReferencedVarDecls(*sa->offset(), out);
+                if (auto length = sa->length())
+                    collectReferencedVarDecls(**length, out);
                 return;
             }
-            if (auto *fa = symb::dyn_cast<FieldAddress>(&expr)) {
-                if (auto from = fa->getFromRoot())
+            if (auto fa = symb::FieldAddressView::tryFrom(expr)) {
+                if (auto from = fa->fromRoot())
                     out.insert(from.value().get());
                 return;
             }
@@ -225,19 +222,17 @@ namespace acslg::spec_generator {
 
                 std::optional<symb::SymbolAddrBaseInfo> retBase;
                 if (auto &ret = path.getReturnExpr()) {
-                    if (auto *retAddr =
-                            symb::dyn_cast<symb::SymbolAddress>(ret.value().get().get())) {
-                        retBase = retAddr->getBaseInfo();
-                    }
+                    if (auto retAddr = symb::SymbolAddressView::tryFrom(ret.value()))
+                        retBase = retAddr->baseInfo();
                 }
 
                 auto isRetBaseAddr = [&](const symb::AddressBox &addr) -> bool {
                     if (!retBase)
                         return false;
-                    auto *sa = dynamic_cast<const symb::SymbolAddress *>(&addr.get());
+                    auto sa = symb::SymbolAddressView::tryFrom(addr.get());
                     if (!sa)
                         return false;
-                    return sa->getBaseInfo() == retBase.value();
+                    return sa->baseInfo() == retBase.value();
                 };
 
                 auto getResultBaseACSL =
@@ -247,19 +242,20 @@ namespace acslg::spec_generator {
                     -> std::optional<std::pair<std::string, std::unordered_set<symb::SourcePoint>>> {
                     if (!isRetBaseAddr(addr))
                         return std::nullopt;
-                    auto *sa = dynamic_cast<const symb::SymbolAddress *>(&addr.get());
+                    auto sa = symb::SymbolAddressView::tryFrom(addr.get());
                     if (!sa)
                         return std::nullopt;
 
                     std::unordered_set<symb::SourcePoint> usedPoints;
-                    auto offsetExpected = sa->getOffset()->getACSL(config, currentPoint);
+                    auto offsetExpected = sa->offset()->getACSL(config, currentPoint);
                     if (!offsetExpected)
                         return std::nullopt;
                     auto [offsetStr, offsetPts] = offsetExpected.value();
                     usedPoints.insert(std::make_move_iterator(offsetPts.begin()),
                                       std::make_move_iterator(offsetPts.end()));
 
-                    if (sa->getLength() == std::nullopt) {
+                    auto length = sa->length();
+                    if (!length) {
                         std::string addrStr;
                         if (offsetStr == "0" && config.useDerefWithZeroOffset)
                             addrStr = "*\\result";
@@ -268,8 +264,7 @@ namespace acslg::spec_generator {
                         return std::pair{std::move(addrStr), std::move(usedPoints)};
                     }
 
-                    auto lenExpected =
-                        sa->getLength().value()->getACSL(config, currentPoint);
+                    auto lenExpected = (*length)->getACSL(config, currentPoint);
                     if (!lenExpected)
                         return std::nullopt;
                     auto [lenStr, lenPts] = lenExpected.value();

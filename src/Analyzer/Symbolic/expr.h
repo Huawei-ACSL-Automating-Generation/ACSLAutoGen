@@ -1634,7 +1634,9 @@ namespace acslg::analyzer::symbolic {
         explicit VariableAddressView(AddrHandle handle);
 
         static std::optional<VariableAddressView> tryFrom(AddrHandle handle);
+        static std::optional<VariableAddressView> tryFrom(ExprHandle handle);
         static std::optional<VariableAddressView> tryFrom(const Address &address);
+        static std::optional<VariableAddressView> tryFrom(const SymbolicExpr &expr);
 
         AddrHandle handle() const { return handle_; }
         utils::not_null<const clang::VarDecl *> declaration() const;
@@ -1648,12 +1650,15 @@ namespace acslg::analyzer::symbolic {
         explicit FieldAddressView(AddrHandle handle);
 
         static std::optional<FieldAddressView> tryFrom(AddrHandle handle);
+        static std::optional<FieldAddressView> tryFrom(ExprHandle handle);
         static std::optional<FieldAddressView> tryFrom(const Address &address);
+        static std::optional<FieldAddressView> tryFrom(const SymbolicExpr &expr);
 
         AddrHandle handle() const { return handle_; }
         utils::not_null<const clang::RecordDecl *> definition() const;
         AddrHandle base() const;
         size_t fieldIndex() const;
+        std::optional<utils::not_null<const clang::VarDecl *>> fromRoot() const;
 
       private:
         AddrHandle handle_;
@@ -1666,7 +1671,9 @@ namespace acslg::analyzer::symbolic {
         explicit SymbolAddressView(AddrHandle handle);
 
         static std::optional<SymbolAddressView> tryFrom(AddrHandle handle);
+        static std::optional<SymbolAddressView> tryFrom(ExprHandle handle);
         static std::optional<SymbolAddressView> tryFrom(const Address &address);
+        static std::optional<SymbolAddressView> tryFrom(const SymbolicExpr &expr);
 
         AddrHandle handle() const { return handle_; }
         clang::QualType pointeeType() const;

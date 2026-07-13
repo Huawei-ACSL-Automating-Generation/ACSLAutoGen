@@ -98,14 +98,6 @@ namespace acslg::spec_generator {
             return std::forward<FactoryRebuild>(factoryRebuild)(factory, address);
         }
 
-        template <typename FactoryRebuild>
-        symb::AddrHandle rebuildSymbolAddressHandle(const symb::SymbolAddress &address,
-                                                    FactoryRebuild &&factoryRebuild) {
-            auto &factory = symb::ExprFactoryScope::current();
-            return rebuildSymbolAddressHandle(factory.importAddress(address),
-                                              std::forward<FactoryRebuild>(factoryRebuild));
-        }
-
         symb::ExprHandle unknownHandle() {
             return symb::Expr::unknown().handle();
         }
@@ -612,11 +604,11 @@ namespace acslg::spec_generator {
                 [&](const symb::Address &addr) -> std::optional<symb::AddrHandle> {
                 // If `addr` is not a SymbolAddress (e.g. a plain variable address), we cannot lift
                 // it to a range form.
-                auto symbolAddr = symb::dyn_cast<const symb::SymbolAddress>(&addr);
-                if (symbolAddr == nullptr)
+                auto symbolAddr = symb::SymbolAddressView::tryFrom(addr);
+                if (!symbolAddr)
                     return std::nullopt;
 
-                auto from = symbolAddr->getFromAddrHandle();
+                auto from = symbolAddr->from();
                 // If the base address itself is x-step, then there is no need to check the
                 // offset (or to check it for reliability).
                 if (from == std::nullopt)
@@ -629,12 +621,12 @@ namespace acslg::spec_generator {
                     // Case A: the base address itself moves linearly (x-step). Reset the offset to
                     // zero and set length to loopCount to represent a contiguous writable range.
                     auto result = rebuildSymbolAddressHandle(
-                        *symbolAddr,
+                        symbolAddr->handle(),
                         [](symb::ExprFactory &factory, symb::AddrHandle address) {
                             return factory.withOffset(
                                 address,
                                 factory.literal(
-                                    static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)));
+                                    static_cast<int64_t>(symb::SymbolAddressView::ZERO_OFFSET)));
                         });
                     auto loopCount =
                         !indexInfo.preciseLoopCount->isUnknown() ? indexInfo.preciseLoopCount
@@ -648,7 +640,7 @@ namespace acslg::spec_generator {
                     return resultWithLength;
                 }
 
-                auto offset = symbolAddr->getOffset();
+                auto offset = symbolAddr->offset();
                 // Is offset x-step?
                 if (auto symbolValue = symb::SymbolValueView::tryFrom(*offset)) {
                     auto symbolValueFrom = symbolValue->from();
@@ -660,7 +652,7 @@ namespace acslg::spec_generator {
                         // Case B: the base is stable but the offset changes linearly (typical for
                         // p[i] where i changes). Use the initial offset and set length = loopCount.
                         auto result = rebuildSymbolAddressHandle(
-                            *symbolAddr,
+                            symbolAddr->handle(),
                             [&pattern](symb::ExprFactory &factory, symb::AddrHandle address) {
                                 return factory.withOffset(
                                     address,
@@ -1371,7 +1363,7 @@ namespace acslg::spec_generator {
                         return factory.withOffset(
                             address,
                             factory.literal(
-                                static_cast<int64_t>(symb::SymbolAddress::ZERO_OFFSET)));
+                                static_cast<int64_t>(symb::SymbolAddressView::ZERO_OFFSET)));
                     });
                 if (indexStep > 0) {
                     // For now we take [0, bound) for max/min over range (reset offset to zero).
@@ -1396,13 +1388,13 @@ namespace acslg::spec_generator {
                 }
 
                 // Safety guard: avoid constructing MaxMinOverRange with an invalid range.
-                auto *arrayRangeSymbol = arrayRange.dyn_cast<const symb::SymbolAddress>();
-                if (arrayRangeSymbol == nullptr || !arrayRangeSymbol->getLength()) {
+                auto arrayRangeSymbol = symb::SymbolAddressView::tryFrom(arrayRange);
+                if (!arrayRangeSymbol || !arrayRangeSymbol->length()) {
                     WARN("ParadigmMaxMinPlugin: array range missing length, skip post-state.");
                     return;
                 }
                 DEBUG("ParadigmMaxMinPlugin: range length dump -> " +
-                      arrayRangeSymbol->getLength().value()->dump());
+                      arrayRangeSymbol->length().value()->dump());
 
                 auto &entryPath = entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0);
                 auto maxAddrIt  = entryPath->getVarAddr().find(maxDecl);
@@ -1618,10 +1610,10 @@ namespace acslg::spec_generator {
                 // If the symbol's source address is a SymbolAddress (typical for array/pointer
                 // deref), we also need to substitute symbols used in its offset; meanwhile we keep
                 // the base SymbolAddress handle to build the quantified range later.
-                if (auto fromSymbolAddr = fromAddr->dyn_cast<symb::SymbolAddress>()) {
+                if (auto fromSymbolAddr = symb::SymbolAddressView::tryFrom(*fromAddr)) {
                     if (!arrayInCond)
                         arrayInCond = *fromAddr;
-                    auto offset = fromSymbolAddr->getOffset();
+                    auto offset = fromSymbolAddr->offset();
                     for (auto &[hashInOff, symbolInOff] : offset->collectUsedSymbols()) {
                         auto subedExpr = getSubExpr(*symbolInOff);
                         if (subedExpr == std::nullopt)

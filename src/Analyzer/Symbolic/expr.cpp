@@ -1363,8 +1363,20 @@ namespace acslg::analyzer::symbolic {
         return VariableAddressView{handle};
     }
 
+    std::optional<VariableAddressView> VariableAddressView::tryFrom(ExprHandle handle) {
+        if (!handle->isVariableAddress())
+            return std::nullopt;
+        return tryFrom(AddrHandle{cast<const Address>(handle.get().get())});
+    }
+
     std::optional<VariableAddressView> VariableAddressView::tryFrom(const Address &address) {
         return tryFrom(AddrHandle{&address});
+    }
+
+    std::optional<VariableAddressView> VariableAddressView::tryFrom(const SymbolicExpr &expr) {
+        if (!expr.isVariableAddress())
+            return std::nullopt;
+        return tryFrom(AddrHandle{cast<const Address>(&expr)});
     }
 
     utils::not_null<const clang::VarDecl *> VariableAddressView::declaration() const {
@@ -1382,8 +1394,20 @@ namespace acslg::analyzer::symbolic {
         return FieldAddressView{handle};
     }
 
+    std::optional<FieldAddressView> FieldAddressView::tryFrom(ExprHandle handle) {
+        if (!handle->isFieldAddress())
+            return std::nullopt;
+        return tryFrom(AddrHandle{cast<const Address>(handle.get().get())});
+    }
+
     std::optional<FieldAddressView> FieldAddressView::tryFrom(const Address &address) {
         return tryFrom(AddrHandle{&address});
+    }
+
+    std::optional<FieldAddressView> FieldAddressView::tryFrom(const SymbolicExpr &expr) {
+        if (!expr.isFieldAddress())
+            return std::nullopt;
+        return tryFrom(AddrHandle{cast<const Address>(&expr)});
     }
 
     utils::not_null<const clang::RecordDecl *> FieldAddressView::definition() const {
@@ -1398,6 +1422,10 @@ namespace acslg::analyzer::symbolic {
         return cast<const FieldAddress>(handle_.get().get())->getFieldIndex();
     }
 
+    std::optional<utils::not_null<const clang::VarDecl *>> FieldAddressView::fromRoot() const {
+        return handle_->getFromRoot();
+    }
+
     SymbolAddressView::SymbolAddressView(AddrHandle handle) : handle_(handle) {
         if (!handle_->isSymbolAddress())
             ERROR("SymbolAddressView requires a SymbolAddress.");
@@ -1409,8 +1437,20 @@ namespace acslg::analyzer::symbolic {
         return SymbolAddressView{handle};
     }
 
+    std::optional<SymbolAddressView> SymbolAddressView::tryFrom(ExprHandle handle) {
+        if (!handle->isSymbolAddress())
+            return std::nullopt;
+        return tryFrom(AddrHandle{cast<const Address>(handle.get().get())});
+    }
+
     std::optional<SymbolAddressView> SymbolAddressView::tryFrom(const Address &address) {
         return tryFrom(AddrHandle{&address});
+    }
+
+    std::optional<SymbolAddressView> SymbolAddressView::tryFrom(const SymbolicExpr &expr) {
+        if (!expr.isSymbolAddress())
+            return std::nullopt;
+        return tryFrom(AddrHandle{cast<const Address>(&expr)});
     }
 
     clang::QualType SymbolAddressView::pointeeType() const {
