@@ -66,8 +66,7 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactoryScope scope(postState->getExprFactory());
         auto result = getReturnExprOfFirstPath(*postState)->simplifiedExpr();
-        auto *lit   = symbolic::cast<symbolic::detail::LiteralExprNode>(result.get().get());
-        EXPECT_EQ(lit->getLiteralValue(), 12);
+        EXPECT_EQ(symbolic::LiteralExprView{result}.value(), 12);
 
         size_t flatCount = 0;
         for (auto &&[addr, value] : postState->getPaths().front()->getMemoryState().flat()) {
@@ -628,9 +627,9 @@ namespace acslg::test::unit::analyzer {
         ASSERT_EQ(pathA->getPathConditions().size(), 1u);
         const auto &onlyCond = *pathA->getPathConditions().begin();
         EXPECT_EQ(sharedHandle, onlyCond);
-        auto lit             = symbolic::dyn_cast<symbolic::detail::LiteralExprNode>(onlyCond.get().get());
-        ASSERT_NE(lit, nullptr);
-        EXPECT_EQ(*lit, *condShared);
+        auto literal = symbolic::LiteralExprView::tryFrom(onlyCond);
+        ASSERT_TRUE(literal.has_value());
+        EXPECT_EQ(literal->handle(), condShared);
     }
 
     TEST_F(MergeWithTest, ReturnExprDiffersBecomesUnknown) {
