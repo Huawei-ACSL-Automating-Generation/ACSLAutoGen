@@ -386,7 +386,7 @@ namespace acslg::spec_generator {
                     } else if (!isRetBaseAddr(addr)) {
                         continue;
                     }
-                    if (is_symbol_addr(addr) && symb::isa<symb::Structure>(value.get())) {
+                    if (is_symbol_addr(addr) && value->isStructure()) {
                         if (isRetBaseAddr(addr)) {
                             auto *st = symb::dyn_cast<symb::Structure>(value.get());
                             auto &info = st->getInfo();

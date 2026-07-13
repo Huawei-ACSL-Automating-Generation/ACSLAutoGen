@@ -447,6 +447,11 @@ namespace acslg::analyzer::symbolic {
          */
         virtual bool isUnknown() const { return false; };
 
+        bool isStructure() const { return kind_ == ExprKind::K_Structure; }
+        bool isSymbolValue() const { return kind_ == ExprKind::K_SymbolValue; }
+        bool isSymbolAddress() const { return kind_ == ExprKind::K_SymbolAddress; }
+        bool isVariableAddress() const { return kind_ == ExprKind::K_VariableAddress; }
+        bool isFieldAddress() const { return kind_ == ExprKind::K_FieldAddress; }
         bool isRangeIndex() const { return kind_ == ExprKind::K_RangeIndex; }
 
         bool isOverRange() const {

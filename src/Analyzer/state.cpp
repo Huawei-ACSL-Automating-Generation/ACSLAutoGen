@@ -184,9 +184,9 @@ namespace acslg::analyzer {
                 }
             }
 
-            if (lhsVal && symbolic::isa<symbolic::Structure>(lhsVal.value().get().get()))
+            if (lhsVal && lhsVal.value()->isStructure())
                 continue;
-            if (rhsVal && symbolic::isa<symbolic::Structure>(rhsVal.value().get().get()))
+            if (rhsVal && rhsVal.value()->isStructure())
                 continue;
 
             if (lhsVal && rhsVal) {
@@ -1488,7 +1488,7 @@ namespace acslg::analyzer {
                             ERROR("Dereferenced value is not a structure");
                         }
                     } else {
-                        if (baseExpr.isa<symbolic::Structure>())
+                        if (baseExpr->isStructure())
                             st = baseExpr;
                         else
                             ERROR("LHS of '.' is not a structure");
@@ -1725,7 +1725,7 @@ namespace acslg::analyzer {
             return false;
 
         const symbolic::SymbolicExpr *expr = opt.value().get().get();
-        return symbolic::isa<symbolic::Structure>(expr);
+        return expr->isStructure();
     }
 
     MemoryModel::MemoryModel() {

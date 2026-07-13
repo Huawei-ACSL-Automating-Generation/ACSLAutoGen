@@ -1294,6 +1294,11 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(k->isRangeIndex());
         EXPECT_TRUE(k.isa<symbolic::detail::RangeIndexNode>());
         EXPECT_FALSE(factory.literal(0)->isRangeIndex());
+        EXPECT_FALSE(k->isStructure());
+        EXPECT_FALSE(k->isSymbolValue());
+        EXPECT_FALSE(k->isSymbolAddress());
+        EXPECT_FALSE(k->isVariableAddress());
+        EXPECT_FALSE(k->isFieldAddress());
 
         symbolic::ExprFactory sourceFactory;
         auto source = sourceFactory.rangeIndex("j");
@@ -1842,7 +1847,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(index->isRangeIndex());
         EXPECT_EQ(varAddr.handle(), factory.variableAddress(var));
         EXPECT_TRUE(varAddr.isa<symbolic::VariableAddress>());
+        EXPECT_TRUE(varAddr->isVariableAddress());
         EXPECT_EQ(symbolAddr.handle(), factory.symbolAddress(var->getType(), varAddr.handle(), point));
+        EXPECT_TRUE(symbolAddr->isSymbolAddress());
         EXPECT_EQ(indexedSymbolAddr.handle(),
                   factory.symbolAddress(var->getType(), varAddr.handle(), point,
                                         index.handle(), length.handle()));
@@ -1854,6 +1861,7 @@ namespace acslg::test::unit::analyzer {
                                           symbolic::SymbolicExpr::ScalarKind::Int, 32},
                                       varAddr.handle(), point));
         EXPECT_TRUE(symbolValue.isa<symbolic::SymbolValue>());
+        EXPECT_TRUE(symbolValue->isSymbolValue());
     }
 
     TEST(AddrFacadeTest, ImportsCrossFactoryAddressThroughCurrentFactory) {
@@ -2033,6 +2041,7 @@ namespace acslg::test::unit::analyzer {
         auto varAddrB = factory.variableAddress(var);
         EXPECT_EQ(varAddrA, varAddrB);
         EXPECT_TRUE(varAddrA.isa<symbolic::VariableAddress>());
+        EXPECT_TRUE(varAddrA->isVariableAddress());
 
         symbolic::AddressBox handleBox{varAddrA};
         symbolic::AddressBox copiedHandleBox{handleBox};
@@ -2071,11 +2080,13 @@ namespace acslg::test::unit::analyzer {
             std::optional<symbolic::ExprHandle>{factory.literal(2)});
         EXPECT_EQ(symAddrA, symAddrB);
         EXPECT_TRUE(symAddrA.isa<symbolic::SymbolAddress>());
+        EXPECT_TRUE(symAddrA->isSymbolAddress());
 
         auto fieldAddrA = factory.fieldAddress(firstField->getType(), record, varAddrA, 0);
         auto fieldAddrB = factory.fieldAddress(firstField->getType(), record, varAddrB, 0);
         EXPECT_EQ(fieldAddrA, fieldAddrB);
         EXPECT_TRUE(fieldAddrA.isa<symbolic::FieldAddress>());
+        EXPECT_TRUE(fieldAddrA->isFieldAddress());
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getFieldIndex(), 0u);
         EXPECT_EQ(fieldAddrA.cast<symbolic::FieldAddress>().getBaseAddr().handle(), varAddrA);
     }
@@ -2159,6 +2170,7 @@ namespace acslg::test::unit::analyzer {
         auto varAddr = factory.variableAddress(var);
         auto structure = factory.structure(record, layout, varAddr, point);
         const auto &structureNode = structure.cast<symbolic::Structure>();
+        EXPECT_TRUE(structure->isStructure());
 
         auto structureFrom = symbolic::getFromAddrHandle(factory, structureNode);
         ASSERT_TRUE(structureFrom);

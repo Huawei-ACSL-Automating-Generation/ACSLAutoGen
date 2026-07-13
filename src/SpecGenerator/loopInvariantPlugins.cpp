@@ -350,7 +350,7 @@ namespace acslg::spec_generator {
                 // - avoid injecting complex expressions that may worsen aliasing/structure
                 // - avoid unsound overrides on non-variable addresses (e.g. SymbolAddress)
                 for (const auto &[addr, val] : *loopInfo.sharedMemoryMap) {
-                    if (!symb::isa<symb::VariableAddress>(addr.get()))
+                    if (!addr.get().isVariableAddress())
                         continue;
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
@@ -469,7 +469,7 @@ namespace acslg::spec_generator {
                 // Same as LinearInvariantPlugin: only write back constant-evaluable VariableAddress
                 // entries.
                 for (const auto &[addr, val] : *loopInfo.sharedMemoryMap) {
-                    if (!symb::isa<symb::VariableAddress>(addr.get()))
+                    if (!addr.get().isVariableAddress())
                         continue;
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
@@ -1261,7 +1261,7 @@ namespace acslg::spec_generator {
                     switch (bin->getOpcode()) {
                         case BO_LE:
                         case BO_LT:
-                            if (symb::isa<symb::SymbolValue>(*indexInfo.indexBound))
+                            if (indexInfo.indexBound->isSymbolValue())
                                 specTemplate = maxOnLeft ? FIND_MAX_LOOP_WITH_VAR_BOUND
                                                          : FIND_MIN_LOOP_WITH_VAR_BOUND;
                             else
@@ -1272,7 +1272,7 @@ namespace acslg::spec_generator {
                             break;
                         case BO_GE:
                         case BO_GT:
-                            if (symb::isa<symb::SymbolValue>(*indexInfo.indexBound))
+                            if (indexInfo.indexBound->isSymbolValue())
                                 specTemplate = maxOnLeft ? FIND_MIN_LOOP_WITH_VAR_BOUND
                                                          : FIND_MAX_LOOP_WITH_VAR_BOUND;
                             else
@@ -1317,7 +1317,7 @@ namespace acslg::spec_generator {
                     symbolState->step(thenStmt);
                     for (auto &path : symbolState->getPaths()) {
                         auto maxValue = path->getVarStateHandle(maxDecl);
-                        if (!maxValue.isa<symb::SymbolValue>())
+                        if (!maxValue->isSymbolValue())
                             return;
 
                         auto evalResult = path->evalExpr(elementExpr);

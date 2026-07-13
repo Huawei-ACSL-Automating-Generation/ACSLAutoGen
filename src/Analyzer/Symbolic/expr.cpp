@@ -2455,7 +2455,7 @@ namespace acslg::analyzer::symbolic {
         return true;
     }
 
-    bool is_symbol_addr(const Address &a) noexcept { return isa<SymbolAddress>(a); }
+    bool is_symbol_addr(const Address &a) noexcept { return a.isSymbolAddress(); }
 
     std::optional<SourcePoint> Structure::getFromPoint() const {
         auto origin = getStructureOrigin(*this);
