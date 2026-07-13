@@ -757,15 +757,6 @@ namespace acslg::test::unit::analyzer {
             int id_;
         };
 
-        class NonLinearBinaryProbe final : public symbolic::detail::BinaryOpExprNode {
-          public:
-            using symbolic::detail::BinaryOpExprNode::BinaryOpExprNode;
-
-            symbolic::ExprHandle callSimplifiedExprIfLinear() const {
-                return simplifiedExprIfLinear();
-            }
-        };
-
     } // namespace
 
     TEST(ExprFactoryTest, StripSizeofFactorPreservesHandleIdentity) {
@@ -1135,17 +1126,17 @@ namespace acslg::test::unit::analyzer {
         auto xHandle =
             symbolic::Expr::symbolValue(symbolic::deriveType(var->getType()), from, point)
                 .handle();
-        NonLinearBinaryProbe legacyProduct{
-            xHandle, symbolic::BinaryOpExpr::Operator::Multiply, xHandle};
+        auto legacyProduct = factory.binary(
+            xHandle, symbolic::BinaryOpExpr::Operator::Multiply, xHandle);
 
-        auto simplified = legacyProduct.callSimplifiedExprIfLinear();
+        auto simplified = legacyProduct->simplifiedExpr();
         const auto &product = simplified.cast<symbolic::BinaryOpExpr>();
 
         EXPECT_EQ(product.getLeft().get(),
                   factory.importExpr(*product.getLeft().get()).get().get());
         EXPECT_EQ(product.getRight().get(),
                   factory.importExpr(*product.getRight().get()).get().get());
-        EXPECT_EQ(simplified, factory.importExpr(legacyProduct));
+        EXPECT_EQ(simplified, factory.importExpr(*legacyProduct));
     }
 
     TEST(ExprFactoryTest, SimplifiedExprHandleReturnsInternedNode) {
@@ -1238,13 +1229,12 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory source;
         auto sourceUnary = source.unary(symbolic::UnaryOpExpr::Operator::Minus,
                                         source.literal(int64_t{1}));
-        symbolic::detail::BinaryOpExprNode sourceTree{
-            sourceUnary, symbolic::BinaryOpExpr::Operator::Add,
-            source.literal(int64_t{2})};
+        auto sourceTree = source.binary(sourceUnary, symbolic::BinaryOpExpr::Operator::Add,
+                                        source.literal(int64_t{2}));
 
         symbolic::ExprFactory factory;
-        auto imported = factory.importExpr(sourceTree);
-        auto repeated = factory.importExpr(sourceTree);
+        auto imported = factory.importExpr(*sourceTree);
+        auto repeated = factory.importExpr(*sourceTree);
 
         EXPECT_EQ(imported, repeated);
         auto one = factory.literal(int64_t{1});
@@ -1256,7 +1246,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(unary->getSub().get(), one.get().get());
 
         symbolic::ExprFactoryScope scope(factory);
-        symbolic::Expr facade{sourceTree};
+        symbolic::Expr facade{*sourceTree};
         EXPECT_EQ(facade.handle(), imported);
     }
 

@@ -977,16 +977,8 @@ namespace acslg::test::unit::analyzer {
         auto rangeIndex = symbolic::ExprFactoryScope::current().rangeIndex("i");
         mm.write(aRange, rangeIndex);
 
-        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 0, symbolic::detail::LiteralExprNode{uint64_t{0}}));
-        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 1, symbolic::detail::LiteralExprNode{uint64_t{1}}));
-        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 2, symbolic::detail::LiteralExprNode{uint64_t{2}}));
-        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 3, symbolic::detail::LiteralExprNode{uint64_t{3}}));
-        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 4, symbolic::detail::LiteralExprNode{uint64_t{4}}));
-        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 5, symbolic::detail::LiteralExprNode{uint64_t{5}}));
-        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 6, symbolic::detail::LiteralExprNode{uint64_t{6}}));
-        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 7, symbolic::detail::LiteralExprNode{uint64_t{7}}));
-        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 8, symbolic::detail::LiteralExprNode{uint64_t{8}}));
-        EXPECT_TRUE(ExpectReadEqAt(mm, baseId, 9, symbolic::detail::LiteralExprNode{uint64_t{9}}));
+        for (uint64_t offset = 0; offset < 10; ++offset)
+            EXPECT_TRUE(ExpectReadEqAt(mm, baseId, offset, *factory.literal(offset)));
 
         EXPECT_TRUE(ExpectReadNullAt(mm, baseId, 10));
     }

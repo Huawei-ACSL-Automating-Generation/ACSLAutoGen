@@ -2125,7 +2125,7 @@ namespace acslg::analyzer {
                 if (auto &len = key.getLength()) {
                     it.rightHash = addedHash(*key.getOffset(), *len.value());
                 } else {
-                    it.rightHash = addedHash(*key.getOffset(), symbolic::detail::LiteralExprNode{1});
+                    it.rightHash = addedHash(*key.getOffset(), *factory_->literal(int64_t{1}));
                 }
 
                 items.emplace_back(std::move(it));
