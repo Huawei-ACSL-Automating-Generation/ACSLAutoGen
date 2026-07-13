@@ -79,10 +79,10 @@ namespace acslg::analyzer {
             symbolic::ExprFactory &factory,
             const symbolic::SymbolicExpr &expr,
             const std::unordered_set<const clang::VarDecl *> &locals) {
-            if (const auto *bin = symbolic::dyn_cast<symbolic::detail::BinaryOpExprNode>(&expr);
-                bin && bin->getOperator() == symbolic::BinaryOp::LogicalAnd) {
-                auto lhs = dropLocalConjuncts(factory, *bin->getLeft(), locals);
-                auto rhs = dropLocalConjuncts(factory, *bin->getRight(), locals);
+            if (const auto bin = symbolic::BinaryExprView::tryFrom(expr);
+                bin && bin->operation() == symbolic::BinaryOp::LogicalAnd) {
+                auto lhs = dropLocalConjuncts(factory, *bin->left(), locals);
+                auto rhs = dropLocalConjuncts(factory, *bin->right(), locals);
                 if (!lhs && !rhs)
                     return std::nullopt;
                 if (!lhs)
@@ -703,9 +703,8 @@ namespace acslg::analyzer {
                         auto &factory = context_.getExprFactory();
                         if (varDecl->getType()->isPointerType() &&
                             !symbolic::tryEvalAsSymbolAddrHandle(factory, *varExpr)) {
-                            if (auto *lit =
-                                    symbolic::dyn_cast<symbolic::detail::LiteralExprNode>(varExpr.get().get());
-                                lit && lit->getLiteralValue() == 0) {
+                            if (auto lit = symbolic::LiteralExprView::tryFrom(varExpr);
+                                lit && lit->value() == 0) {
                                 // Keep NULL as Int(0) rather than fabricating a pointer.
                             } else {
                                 WARN("DeclRefExpr to pointer '"
@@ -1089,9 +1088,8 @@ namespace acslg::analyzer {
 
                         auto lengthExpr = countExpr;
                         bool noCopy     = false;
-                        if (auto *lit =
-                                symbolic::dyn_cast<symbolic::detail::LiteralExprNode>(lengthExpr.get().get())) {
-                            const auto raw = static_cast<uint64_t>(lit->getLiteralValue());
+                        if (auto lit = symbolic::LiteralExprView::tryFrom(lengthExpr)) {
+                            const auto raw = static_cast<uint64_t>(lit->value());
                             if (raw == 0) {
                                 noCopy = true;
                             } else if (sz > 1) {
@@ -1183,9 +1181,8 @@ namespace acslg::analyzer {
 
                         auto lengthExpr = countExpr;
                         bool noSet      = false;
-                        if (auto *lit =
-                                symbolic::dyn_cast<symbolic::detail::LiteralExprNode>(lengthExpr.get().get())) {
-                            const auto raw = static_cast<uint64_t>(lit->getLiteralValue());
+                        if (auto lit = symbolic::LiteralExprView::tryFrom(lengthExpr)) {
+                            const auto raw = static_cast<uint64_t>(lit->value());
                             if (raw == 0) {
                                 noSet = true;
                             } else if (sz > 1) {

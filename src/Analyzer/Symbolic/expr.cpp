@@ -1262,6 +1262,78 @@ namespace acslg::analyzer::symbolic {
         return utils::dump_fmt::hint("{unknown}");
     }
 
+    LiteralExprView::LiteralExprView(ExprHandle handle) : handle_(handle) {
+        if (!handle_->isLiteralExpr())
+            ERROR("LiteralExprView requires a literal expression.");
+    }
+
+    std::optional<LiteralExprView> LiteralExprView::tryFrom(ExprHandle handle) {
+        if (!handle->isLiteralExpr())
+            return std::nullopt;
+        return LiteralExprView{handle};
+    }
+
+    std::optional<LiteralExprView> LiteralExprView::tryFrom(const SymbolicExpr &expr) {
+        return tryFrom(ExprHandle{&expr});
+    }
+
+    int64_t LiteralExprView::value() const {
+        return cast<const detail::LiteralExprNode>(handle_.get().get())->getLiteralValue();
+    }
+
+    UnaryExprView::UnaryExprView(ExprHandle handle) : handle_(handle) {
+        if (!handle_->isUnaryExpr())
+            ERROR("UnaryExprView requires a unary expression.");
+    }
+
+    std::optional<UnaryExprView> UnaryExprView::tryFrom(ExprHandle handle) {
+        if (!handle->isUnaryExpr())
+            return std::nullopt;
+        return UnaryExprView{handle};
+    }
+
+    std::optional<UnaryExprView> UnaryExprView::tryFrom(const SymbolicExpr &expr) {
+        return tryFrom(ExprHandle{&expr});
+    }
+
+    UnaryOp UnaryExprView::operation() const {
+        return cast<const detail::UnaryOpExprNode>(handle_.get().get())->getOperator();
+    }
+
+    ExprHandle UnaryExprView::operand() const {
+        return ExprHandle{
+            cast<const detail::UnaryOpExprNode>(handle_.get().get())->getSub()};
+    }
+
+    BinaryExprView::BinaryExprView(ExprHandle handle) : handle_(handle) {
+        if (!handle_->isBinaryExpr())
+            ERROR("BinaryExprView requires a binary expression.");
+    }
+
+    std::optional<BinaryExprView> BinaryExprView::tryFrom(ExprHandle handle) {
+        if (!handle->isBinaryExpr())
+            return std::nullopt;
+        return BinaryExprView{handle};
+    }
+
+    std::optional<BinaryExprView> BinaryExprView::tryFrom(const SymbolicExpr &expr) {
+        return tryFrom(ExprHandle{&expr});
+    }
+
+    BinaryOp BinaryExprView::operation() const {
+        return cast<const detail::BinaryOpExprNode>(handle_.get().get())->getOperator();
+    }
+
+    ExprHandle BinaryExprView::left() const {
+        return ExprHandle{
+            cast<const detail::BinaryOpExprNode>(handle_.get().get())->getLeft()};
+    }
+
+    ExprHandle BinaryExprView::right() const {
+        return ExprHandle{
+            cast<const detail::BinaryOpExprNode>(handle_.get().get())->getRight()};
+    }
+
     std::string SymbolValueNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;

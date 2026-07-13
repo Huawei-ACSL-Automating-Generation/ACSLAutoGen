@@ -450,6 +450,9 @@ namespace acslg::analyzer::symbolic {
          */
         virtual bool isUnknown() const { return false; };
 
+        bool isLiteralExpr() const { return kind_ == ExprKind::K_LiteralExpr; }
+        bool isUnaryExpr() const { return kind_ == ExprKind::K_UnaryOpExpr; }
+        bool isBinaryExpr() const { return kind_ == ExprKind::K_BinaryOpExpr; }
         bool isStructure() const { return kind_ == ExprKind::K_Structure; }
         bool isSymbolValue() const { return kind_ == ExprKind::K_SymbolValue; }
         bool isSymbolAddress() const { return kind_ == ExprKind::K_SymbolAddress; }
@@ -586,6 +589,55 @@ namespace acslg::analyzer::symbolic {
                                               const SymbolAddrBaseInfo &rangeBase,
                                               ExprHandle indexExpr);
     ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr);
+
+    /// Public read-only access to a factory-owned literal expression.
+    class LiteralExprView {
+      public:
+        explicit LiteralExprView(ExprHandle handle);
+
+        static std::optional<LiteralExprView> tryFrom(ExprHandle handle);
+        static std::optional<LiteralExprView> tryFrom(const SymbolicExpr &expr);
+
+        ExprHandle handle() const { return handle_; }
+        int64_t value() const;
+
+      private:
+        ExprHandle handle_;
+    };
+
+    /// Public read-only access to a factory-owned unary expression.
+    class UnaryExprView {
+      public:
+        explicit UnaryExprView(ExprHandle handle);
+
+        static std::optional<UnaryExprView> tryFrom(ExprHandle handle);
+        static std::optional<UnaryExprView> tryFrom(const SymbolicExpr &expr);
+
+        ExprHandle handle() const { return handle_; }
+        UnaryOp operation() const;
+        ExprHandle operand() const;
+
+      private:
+        ExprHandle handle_;
+    };
+
+    /// Public read-only access to a factory-owned binary expression.
+    class BinaryExprView {
+      public:
+        explicit BinaryExprView(ExprHandle handle);
+
+        static std::optional<BinaryExprView> tryFrom(ExprHandle handle);
+        static std::optional<BinaryExprView> tryFrom(const SymbolicExpr &expr);
+
+        ExprHandle handle() const { return handle_; }
+        BinaryOp operation() const;
+        ExprHandle left() const;
+        ExprHandle right() const;
+
+      private:
+        ExprHandle handle_;
+    };
+
     class ExprChild {
       public:
         explicit ExprChild(ExprHandle handle) : handle_(handle) {}
@@ -2168,22 +2220,20 @@ namespace acslg::analyzer::symbolic {
     inline ExprHandle strip_sizeof_factor(ExprFactory &factory,
                                           ExprHandle in,
                                           std::uint64_t sizeofBytes) {
-        using detail::LiteralExprNode;
-
-        if (auto *lit = in.dyn_cast<LiteralExprNode>()) {
-            const auto value = static_cast<std::uint64_t>(lit->getLiteralValue());
+        if (auto lit = LiteralExprView::tryFrom(in)) {
+            const auto value = static_cast<std::uint64_t>(lit->value());
             return value == sizeofBytes ? factory.literal(std::uint64_t{1}) : in;
         }
 
-        if (auto *bin = in.dyn_cast<detail::BinaryOpExprNode>();
-            bin && bin->getOperator() == BinaryOp::Multiply) {
-            auto left  = bin->getLeft();
-            auto right = bin->getRight();
-            if (auto *literal = dyn_cast<LiteralExprNode>(left.get());
-                literal && static_cast<std::uint64_t>(literal->getLiteralValue()) == sizeofBytes)
+        if (auto bin = BinaryExprView::tryFrom(in);
+            bin && bin->operation() == BinaryOp::Multiply) {
+            auto left  = bin->left();
+            auto right = bin->right();
+            if (auto literal = LiteralExprView::tryFrom(left);
+                literal && static_cast<std::uint64_t>(literal->value()) == sizeofBytes)
                 return factory.importExpr(*right);
-            if (auto *literal = dyn_cast<LiteralExprNode>(right.get());
-                literal && static_cast<std::uint64_t>(literal->getLiteralValue()) == sizeofBytes)
+            if (auto literal = LiteralExprView::tryFrom(right);
+                literal && static_cast<std::uint64_t>(literal->value()) == sizeofBytes)
                 return factory.importExpr(*left);
         }
         return in;

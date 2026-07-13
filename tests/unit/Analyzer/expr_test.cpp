@@ -798,8 +798,9 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_EQ(oneA, oneB);
         EXPECT_NE(oneA, two);
-        EXPECT_TRUE(oneA.isa<symbolic::detail::LiteralExprNode>());
-        EXPECT_EQ(oneA.cast<symbolic::detail::LiteralExprNode>().getLiteralValue(), 1);
+        auto oneView = symbolic::LiteralExprView::tryFrom(oneA);
+        ASSERT_TRUE(oneView.has_value());
+        EXPECT_EQ(oneView->value(), 1);
 
         auto sumA =
             factory.binary(oneA, symbolic::BinaryOp::Add, two);
@@ -809,19 +810,26 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_EQ(sumA, sumB);
         EXPECT_NE(sumA, diff);
-        ASSERT_NE(sumA.dyn_cast<symbolic::detail::BinaryOpExprNode>(), nullptr);
-        ASSERT_NE(sumA.dyn_cast<symbolic::detail::BinaryOpExprNode>(), nullptr);
-        EXPECT_EQ(sumA.cast<symbolic::detail::BinaryOpExprNode>().getOperator(),
-                  symbolic::BinaryOp::Add);
-        EXPECT_EQ(sumA.cast<symbolic::detail::BinaryOpExprNode>().getLeft().get(), oneA.get().get());
-        EXPECT_EQ(sumA.cast<symbolic::detail::BinaryOpExprNode>().getRight().get(), two.get().get());
+        auto sumView = symbolic::BinaryExprView::tryFrom(sumA);
+        ASSERT_TRUE(sumView.has_value());
+        EXPECT_EQ(sumView->operation(), symbolic::BinaryOp::Add);
+        EXPECT_EQ(sumView->left(), oneA);
+        EXPECT_EQ(sumView->right(), two);
 
         auto negA = factory.unary(symbolic::UnaryOp::Minus, oneA);
         auto negB = factory.unary(symbolic::UnaryOp::Minus, oneB);
         EXPECT_EQ(negA, negB);
-        EXPECT_TRUE(negA.isa<symbolic::detail::UnaryOpExprNode>());
-        EXPECT_TRUE(negA.isa<symbolic::detail::UnaryOpExprNode>());
-        EXPECT_EQ(negA.cast<symbolic::detail::UnaryOpExprNode>().getSub().get(), oneA.get().get());
+        auto negView = symbolic::UnaryExprView::tryFrom(negA);
+        ASSERT_TRUE(negView.has_value());
+        EXPECT_EQ(negView->operation(), symbolic::UnaryOp::Minus);
+        EXPECT_EQ(negView->operand(), oneA);
+
+        EXPECT_FALSE(symbolic::LiteralExprView::tryFrom(sumA).has_value());
+        EXPECT_FALSE(symbolic::UnaryExprView::tryFrom(oneA).has_value());
+        EXPECT_FALSE(symbolic::BinaryExprView::tryFrom(negA).has_value());
+        EXPECT_DEATH((void)symbolic::LiteralExprView{sumA}, "");
+        EXPECT_DEATH((void)symbolic::UnaryExprView{oneA}, "");
+        EXPECT_DEATH((void)symbolic::BinaryExprView{negA}, "");
     }
 
     TEST(ExprFactoryTest, WithValTypeDoesNotMutateFactorySharedOperation) {

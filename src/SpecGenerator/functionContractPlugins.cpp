@@ -42,12 +42,7 @@ namespace acslg::spec_generator {
 
         void collectReferencedVarDecls(const symb::SymbolicExpr &expr,
                                        std::unordered_set<const clang::VarDecl *> &out) {
-            using symb::detail::BinaryOpExprNode;
-            using symb::detail::LiteralExprNode;
-            using symb::detail::UnaryOpExprNode;
-
-            if (auto *lit = symb::dyn_cast<LiteralExprNode>(&expr)) {
-                (void)lit;
+            if (symb::LiteralExprView::tryFrom(expr)) {
                 return;
             }
             if (auto sv = symb::SymbolValueView::tryFrom(expr)) {
@@ -72,13 +67,13 @@ namespace acslg::spec_generator {
                     out.insert(from.value().get());
                 return;
             }
-            if (auto *bin = symb::dyn_cast<BinaryOpExprNode>(&expr)) {
-                collectReferencedVarDecls(*bin->getLeft(), out);
-                collectReferencedVarDecls(*bin->getRight(), out);
+            if (auto bin = symb::BinaryExprView::tryFrom(expr)) {
+                collectReferencedVarDecls(*bin->left(), out);
+                collectReferencedVarDecls(*bin->right(), out);
                 return;
             }
-            if (auto *un = symb::dyn_cast<UnaryOpExprNode>(&expr)) {
-                collectReferencedVarDecls(*un->getSub(), out);
+            if (auto unary = symb::UnaryExprView::tryFrom(expr)) {
+                collectReferencedVarDecls(*unary->operand(), out);
                 return;
             }
 
