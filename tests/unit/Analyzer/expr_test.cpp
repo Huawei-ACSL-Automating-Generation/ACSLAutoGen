@@ -31,20 +31,8 @@ namespace acslg::test::unit::analyzer {
     static_assert(std::is_copy_constructible_v<symbolic::SumOverRangeView>);
     static_assert(std::is_copy_constructible_v<symbolic::QuantifierOverRangeView>);
     static_assert(std::is_copy_constructible_v<symbolic::MaxMinOverRangeView>);
-    static_assert(!std::is_default_constructible_v<symbolic::detail::UnknownExprNode>);
-    static_assert(!std::is_copy_constructible_v<symbolic::detail::StructureNode>);
-    static_assert(!std::is_copy_constructible_v<symbolic::detail::SymbolValueNode>);
-    static_assert(!std::is_copy_constructible_v<symbolic::detail::RangeIndexNode>);
-    static_assert(!std::is_constructible_v<symbolic::detail::SymbolValueNode,
-                                           symbolic::SymbolicExpr::Type,
-                                           symbolic::AddrHandle,
-                                           symbolic::SourcePoint>);
-    static_assert(!std::is_constructible_v<symbolic::detail::RangeIndexNode,
-                                           std::string_view>);
-    static_assert(!std::is_constructible_v<symbolic::detail::StructureNode,
-                                           symbolic::StructureInfo,
-                                           std::vector<symbolic::ExprHandle>>);
-    static_assert(!std::is_copy_assignable_v<symbolic::detail::StructureNode>);
+    static_assert(std::is_copy_constructible_v<symbolic::StructureView>);
+    static_assert(std::is_copy_constructible_v<symbolic::SymbolValueView>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {
@@ -1260,7 +1248,6 @@ namespace acslg::test::unit::analyzer {
 
         EXPECT_EQ(k, i);
         EXPECT_TRUE(k->isRangeIndex());
-        EXPECT_TRUE(k.isa<symbolic::detail::RangeIndexNode>());
         EXPECT_FALSE(factory.literal(0)->isRangeIndex());
         EXPECT_FALSE(k->isStructure());
         EXPECT_FALSE(k->isSymbolValue());
