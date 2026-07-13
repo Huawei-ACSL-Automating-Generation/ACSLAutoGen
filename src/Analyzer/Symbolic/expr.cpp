@@ -1280,6 +1280,33 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
+    SymbolValueView::SymbolValueView(ExprHandle handle) : handle_(handle) {
+        if (!handle_->isSymbolValue())
+            ERROR("SymbolValueView requires a SymbolValue expression.");
+    }
+
+    std::optional<SymbolValueView> SymbolValueView::tryFrom(ExprHandle handle) {
+        if (!handle->isSymbolValue())
+            return std::nullopt;
+        return SymbolValueView{handle};
+    }
+
+    std::optional<SymbolValueView> SymbolValueView::tryFrom(const SymbolicExpr &expr) {
+        return tryFrom(ExprHandle{&expr});
+    }
+
+    AddrHandle SymbolValueView::from() const {
+        return cast<const SymbolValue>(handle_.get().get())->getFromAddrHandle();
+    }
+
+    std::optional<SourcePoint> SymbolValueView::fromPoint() const {
+        return cast<const SymbolValue>(handle_.get().get())->getFromPoint();
+    }
+
+    std::optional<utils::not_null<const clang::VarDecl *>> SymbolValueView::fromRoot() const {
+        return cast<const SymbolValue>(handle_.get().get())->getFromRoot();
+    }
+
     std::string SymbolAddress::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;

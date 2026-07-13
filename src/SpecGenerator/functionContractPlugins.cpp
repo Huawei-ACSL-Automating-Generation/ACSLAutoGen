@@ -46,7 +46,6 @@ namespace acslg::spec_generator {
             using symb::FieldAddress;
             using symb::detail::LiteralExprNode;
             using symb::SymbolAddress;
-            using symb::SymbolValue;
             using symb::detail::UnaryOpExprNode;
             using symb::VariableAddress;
 
@@ -54,8 +53,8 @@ namespace acslg::spec_generator {
                 (void)lit;
                 return;
             }
-            if (auto *sv = symb::dyn_cast<SymbolValue>(&expr)) {
-                if (auto from = sv->getFromRoot())
+            if (auto sv = symb::SymbolValueView::tryFrom(expr)) {
+                if (auto from = sv->fromRoot())
                     out.insert(from.value().get());
                 return;
             }

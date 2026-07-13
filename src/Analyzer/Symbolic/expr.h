@@ -1973,6 +1973,22 @@ namespace acslg::analyzer::symbolic {
         std::size_t operator()(const Address &addr) const noexcept { return addr.hash(); }
     };
 
+    class SymbolValueView {
+      public:
+        explicit SymbolValueView(ExprHandle handle);
+
+        static std::optional<SymbolValueView> tryFrom(ExprHandle handle);
+        static std::optional<SymbolValueView> tryFrom(const SymbolicExpr &expr);
+
+        ExprHandle handle() const { return handle_; }
+        AddrHandle from() const;
+        std::optional<SourcePoint> fromPoint() const;
+        std::optional<utils::not_null<const clang::VarDecl *>> fromRoot() const;
+
+      private:
+        ExprHandle handle_;
+    };
+
     /// @class Symbol value
     /// @brief Symbolic value with unique ID and optional origin.
     /// Origin can't be nullptr, use nullopt.

@@ -650,8 +650,8 @@ namespace acslg::spec_generator {
 
                 auto offset = symbolAddr->getOffset();
                 // Is offset x-step?
-                if (auto symbolValue = symb::dyn_cast<const symb::SymbolValue>(offset.get())) {
-                    auto symbolValueFrom = symbolValue->getFromAddrHandle();
+                if (auto symbolValue = symb::SymbolValueView::tryFrom(*offset)) {
+                    auto symbolValueFrom = symbolValue->from();
                     if (auto it = patternInfo.normalExitPatternsMap.find(*symbolValueFrom);
                         it != patternInfo.normalExitPatternsMap.end()) {
                         auto &pattern = it->second;

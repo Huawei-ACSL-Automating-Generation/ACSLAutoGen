@@ -1860,8 +1860,12 @@ namespace acslg::test::unit::analyzer {
                   factory.symbolValue(symbolic::SymbolicExpr::Type{
                                           symbolic::SymbolicExpr::ScalarKind::Int, 32},
                                       varAddr.handle(), point));
-        EXPECT_TRUE(symbolValue.isa<symbolic::SymbolValue>());
         EXPECT_TRUE(symbolValue->isSymbolValue());
+        symbolic::SymbolValueView symbolValueView{symbolValue.handle()};
+        EXPECT_EQ(symbolValueView.from(), varAddr.handle());
+        EXPECT_EQ(symbolValueView.fromPoint(), point);
+        EXPECT_EQ(symbolValueView.fromRoot().value().get(), var);
+        EXPECT_FALSE(symbolic::SymbolValueView::tryFrom(unknown.handle()).has_value());
     }
 
     TEST(AddrFacadeTest, ImportsCrossFactoryAddressThroughCurrentFactory) {
@@ -2051,7 +2055,7 @@ namespace acslg::test::unit::analyzer {
         auto symbolValue = factory.symbolValue(
             symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::Int, 32},
             varAddrA, point);
-        EXPECT_EQ(symbolValue.cast<symbolic::SymbolValue>().getFromAddrHandle(), varAddrA);
+        EXPECT_EQ(symbolic::SymbolValueView{symbolValue}.from(), varAddrA);
 
         auto defaultSymAddr = factory.symbolAddress(
             firstField->getType(), std::optional<symbolic::AddrHandle>{varAddrA}, point);
@@ -2133,7 +2137,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(importedValue, expectedValue);
         EXPECT_EQ(importedField.cast<symbolic::FieldAddress>().getBaseAddr().handle(),
                   expectedVariable);
-        EXPECT_EQ(importedValue.cast<symbolic::SymbolValue>().getFromAddrHandle(), expectedField);
+        EXPECT_EQ(symbolic::SymbolValueView{importedValue}.from(), expectedField);
         EXPECT_NE(importedVariable.get().get(), sourceVariable.get().get());
         EXPECT_NE(importedField.get().get(), sourceField.get().get());
         EXPECT_NE(importedValue.get().get(), sourceValue.get().get());

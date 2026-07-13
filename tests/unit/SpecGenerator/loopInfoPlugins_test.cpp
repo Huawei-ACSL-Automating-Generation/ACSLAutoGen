@@ -277,7 +277,7 @@ namespace acslg::test::unit::spec_generator {
         expectIndexInfoHandlesCanonical(indexInfo, factory);
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
+        EXPECT_TRUE(indexInfo.indexSymbolicValue->isSymbolValue());
         EXPECT_OK_AND_FIRST_EQ(
             indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
         EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_LT);
@@ -307,7 +307,7 @@ namespace acslg::test::unit::spec_generator {
         expectIndexInfoHandlesCanonical(indexInfo, factory);
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
+        EXPECT_TRUE(indexInfo.indexSymbolicValue->isSymbolValue());
         EXPECT_OK_AND_FIRST_EQ(
             indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
         EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_NE);
@@ -339,7 +339,7 @@ namespace acslg::test::unit::spec_generator {
         expectIndexInfoHandlesCanonical(indexInfo, factory);
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
+        EXPECT_TRUE(indexInfo.indexSymbolicValue->isSymbolValue());
         EXPECT_OK_AND_FIRST_EQ(
             indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
         EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_GE);
@@ -437,7 +437,7 @@ namespace acslg::test::unit::spec_generator {
         expectIndexInfoHandlesCanonical(indexInfo, factory);
         ASSERT_NE(indexInfo.indexRealAddr->getFromRoot(), nullopt);
         EXPECT_EQ(indexInfo.indexRealAddr->getFromRoot().value()->getNameAsString(), "i");
-        EXPECT_TRUE(isa<SymbolValue>(*indexInfo.indexSymbolicValue));
+        EXPECT_TRUE(indexInfo.indexSymbolicValue->isSymbolValue());
         EXPECT_OK_AND_FIRST_EQ(
             indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true}), "i");
         EXPECT_EQ(indexInfo.op, clang::BinaryOperatorKind::BO_LT);

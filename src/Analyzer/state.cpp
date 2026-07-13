@@ -31,8 +31,8 @@ namespace acslg::analyzer {
 
     namespace {
         std::optional<const clang::VarDecl *> getRootFromSymbol(const symbolic::Symbol &symbol) {
-            if (auto *sv = symbolic::dyn_cast<const symbolic::SymbolValue>(&symbol))
-                return sv->getFromRoot();
+            if (auto sv = symbolic::SymbolValueView::tryFrom(*symbol.toSymbolicExpr()))
+                return sv->fromRoot();
             if (auto *sa = symbolic::dyn_cast<const symbolic::SymbolAddress>(&symbol))
                 return sa->getFromRoot();
             return std::nullopt;
