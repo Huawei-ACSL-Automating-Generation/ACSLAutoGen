@@ -954,8 +954,6 @@ namespace acslg::analyzer::symbolic {
             size_t getNumFields() const { return layout_.getFieldCount(); }
         };
 
-        Structure(Info info, std::vector<ExprHandle> fields);
-
         Structure(const Structure &) = delete;
 
         static bool classof(const SymbolicExpr *expr) {
@@ -1000,6 +998,10 @@ namespace acslg::analyzer::symbolic {
             bool isRightChild) const override;
 
       private:
+        friend struct detail::ExprFactoryInternals;
+
+        Structure(Info info, std::vector<ExprHandle> fields);
+
         Info info_;
         std::vector<ExprChild> fields_;
     };

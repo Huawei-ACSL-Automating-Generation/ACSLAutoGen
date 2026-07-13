@@ -81,7 +81,9 @@ namespace acslg::analyzer::symbolic {
             return internTyped(std::make_unique<detail::UnknownExprNode>());
 
         if (auto *index = expr.dyn_cast<const SymbolAddress::RangeIndex>())
-            return internTyped(std::make_unique<SymbolAddress::RangeIndex>(index->getName()));
+            return internTyped(
+                detail::ExprFactoryInternals::makeNode<SymbolAddress::RangeIndex>(
+                    index->getName()));
 
         if (auto *unaryExpr = expr.dyn_cast<const detail::UnaryOpExprNode>())
             return internTyped(std::make_unique<detail::UnaryOpExprNode>(
@@ -124,8 +126,8 @@ namespace acslg::analyzer::symbolic {
             fields.reserve(structure->getNumFields());
             for (auto field : structure->fieldsValues())
                 fields.push_back(importExpr(*field));
-            return internTyped(
-                std::make_unique<Structure>(structure->getInfo(), std::move(fields)));
+            return internTyped(detail::ExprFactoryInternals::makeNode<Structure>(
+                structure->getInfo(), std::move(fields)));
         }
 
         if (auto *sum = expr.dyn_cast<const SumOverRange>())
@@ -559,8 +561,9 @@ namespace acslg::analyzer::symbolic {
             fields.reserve(structure->getNumFields());
             for (auto field : structure->fieldsValues())
                 fields.push_back(importExpr(*field));
-            return preserveImportedType(
-                intern(std::make_unique<Structure>(structure->getInfo(), std::move(fields))));
+            return preserveImportedType(intern(
+                detail::ExprFactoryInternals::makeNode<Structure>(
+                    structure->getInfo(), std::move(fields))));
         }
 
         if (auto *sum = dyn_cast<SumOverRange>(&expr)) {
@@ -707,7 +710,8 @@ namespace acslg::analyzer::symbolic {
     } // namespace
 
     ExprHandle ExprFactory::rangeIndex(std::string_view name) {
-        return intern(std::make_unique<SymbolAddress::RangeIndex>(name));
+        return intern(
+            detail::ExprFactoryInternals::makeNode<SymbolAddress::RangeIndex>(name));
     }
 
     ExprHandle ExprFactory::symbolValue(SymbolicExpr::Type varType,
@@ -841,8 +845,8 @@ namespace acslg::analyzer::symbolic {
 
         if (fields.size() != layout.getFieldCount())
             UNREACHABLE();
-        return intern(std::make_unique<Structure>(Structure::Info{record, layout},
-                                                  std::move(fields)));
+        return intern(detail::ExprFactoryInternals::makeNode<Structure>(
+            Structure::Info{record, layout}, std::move(fields)));
     }
 
     ExprHandle ExprFactory::withField(ExprHandle structure, size_t index, ExprHandle value) {
@@ -858,7 +862,8 @@ namespace acslg::analyzer::symbolic {
             ++currentIndex;
         }
 
-        return intern(std::make_unique<Structure>(structureNode.getInfo(), std::move(fields)));
+        return intern(detail::ExprFactoryInternals::makeNode<Structure>(
+            structureNode.getInfo(), std::move(fields)));
     }
 
     ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr) {

@@ -26,9 +26,6 @@ namespace acslg::analyzer::symbolic {
             return e->getKind() == ExprKind::K_RangeIndex;
         }
 
-        RangeIndex(std::string_view name)
-            : SymbolicExpr(ExprKind::K_RangeIndex, Type{ScalarKind::UInt, 64}), name_(name) {}
-
         std::string_view getName() const { return name_; }
 
         // SymbolicExpr
@@ -56,6 +53,11 @@ namespace acslg::analyzer::symbolic {
         };
 
       private:
+        friend struct detail::ExprFactoryInternals;
+
+        explicit RangeIndex(std::string_view name)
+            : SymbolicExpr(ExprKind::K_RangeIndex, Type{ScalarKind::UInt, 64}), name_(name) {}
+
         std::string name_;
     };
 
