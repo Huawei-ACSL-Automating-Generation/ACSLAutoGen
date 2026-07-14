@@ -839,6 +839,18 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedLarge->getValType(), targetType);
         EXPECT_EQ(factory.withValType(typedLarge, large.getValType()), large);
 
+        auto leafTargetType = symbolic::SymbolicExpr::Type{
+            symbolic::SymbolicExpr::ScalarKind::Bool, 8};
+        for (auto original : {factory.unknown(), factory.rangeIndex("i")}) {
+            auto originalType = original->getValType();
+            auto typed        = factory.withValType(original, leafTargetType);
+
+            EXPECT_EQ(original->getValType(), originalType);
+            EXPECT_EQ(typed->getValType(), leafTargetType);
+            EXPECT_NE(typed, original);
+            EXPECT_EQ(typed, factory.withValType(original, leafTargetType));
+        }
+
         symbolic::ExprFactoryScope scope(factory);
         symbolic::Expr facade{one};
         auto typedFacade = facade.withType(targetType);
@@ -943,6 +955,61 @@ namespace acslg::test::unit::analyzer {
         EXPECT_FALSE(symbolic::QuantifierOverRangeView::tryFrom(typedMax).has_value());
         EXPECT_FALSE(symbolic::MaxMinOverRangeView::tryFrom(typedSum).has_value());
         EXPECT_DEATH((void)symbolic::SumOverRangeView{typedMax}, "");
+    }
+
+    TEST(ExprFactoryTest, WithValTypeDoesNotMutateSharedSymbolOrStructure) {
+        ASTExtractor e;
+        e.init(R"c(
+            struct Pair {
+                int first;
+                int second;
+            };
+
+            int f(void) {
+                struct Pair value = {1, 2};
+                return value.first;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto *record = var->getType()->getAsRecordDecl()->getDefinition();
+        ASSERT_NE(record, nullptr);
+        const auto &layout = record->getASTContext().getASTRecordLayout(record);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory source;
+        auto sourceAddress = source.variableAddress(var);
+        auto sourceValue   = source.symbolValue(
+            symbolic::deriveType(var->getType()), sourceAddress, point);
+        auto sourceStructure = source.structure(record, layout, sourceAddress, point);
+        auto valueType       = sourceValue->getValType();
+        auto structureType   = sourceStructure->getValType();
+
+        symbolic::ExprFactory target;
+        auto targetType = symbolic::SymbolicExpr::Type{
+            symbolic::SymbolicExpr::ScalarKind::UInt, 64};
+        auto typedValue     = target.withValType(sourceValue, targetType);
+        auto typedStructure = target.withValType(sourceStructure, targetType);
+
+        EXPECT_EQ(sourceValue->getValType(), valueType);
+        EXPECT_EQ(sourceStructure->getValType(), structureType);
+        EXPECT_EQ(typedValue->getValType(), targetType);
+        EXPECT_EQ(typedStructure->getValType(), targetType);
+        EXPECT_EQ(typedValue, target.withValType(sourceValue, targetType));
+        EXPECT_EQ(typedStructure, target.withValType(sourceStructure, targetType));
+
+        symbolic::SymbolValueView typedValueView{typedValue};
+        EXPECT_EQ(typedValueView.from(), target.variableAddress(var));
+
+        symbolic::StructureView sourceView{sourceStructure};
+        symbolic::StructureView typedView{typedStructure};
+        ASSERT_EQ(typedView.size(), sourceView.size());
+        for (size_t i = 0; i < typedView.size(); ++i)
+            EXPECT_EQ(typedView.field(i), target.importExpr(*sourceView.field(i)));
     }
 
     TEST(ExprFactoryTest, ValueSubstitutionHandleMapImportsReplacement) {

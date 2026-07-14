@@ -118,8 +118,10 @@ namespace acslg::analyzer::symbolic {
       private:
         friend struct detail::ExprFactoryInternals;
 
-        explicit RangeIndexNode(std::string_view name)
-            : SymbolicExpr(ExprKind::K_RangeIndex, Type{ScalarKind::UInt, 64}), name_(name) {}
+        explicit RangeIndexNode(std::string_view name,
+                                std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(ExprKind::K_RangeIndex, Type{ScalarKind::UInt, 64}, explicitType),
+              name_(name) {}
 
         std::string name_;
     };
@@ -150,8 +152,13 @@ namespace acslg::analyzer::symbolic {
         std::string_view getIndexName() const { return indexName_; }
 
       protected:
-        OverRangeExprNode(ExprKind kind, Type type, AddrHandle range, std::string_view indexName)
-            : SymbolicExpr(kind, type), range_(range.asExpr()), indexName_(indexName) {
+        OverRangeExprNode(ExprKind kind,
+                          Type naturalType,
+                          AddrHandle range,
+                          std::string_view indexName,
+                          std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(kind, naturalType, explicitType), range_(range.asExpr()),
+              indexName_(indexName) {
             if (!this->range().length())
                 ERROR("`range_` is not a memory *range*.");
             }
@@ -201,7 +208,10 @@ namespace acslg::analyzer::symbolic {
       private:
         friend struct ExprFactoryInternals;
 
-        SumOverRangeNode(AddrHandle range, std::string_view indexName, SourcePoint fromPoint);
+        SumOverRangeNode(AddrHandle range,
+                         std::string_view indexName,
+                         SourcePoint fromPoint,
+                         std::optional<Type> explicitType = std::nullopt);
 
         SourcePoint fromPoint_;
 
@@ -243,13 +253,15 @@ namespace acslg::analyzer::symbolic {
         friend struct ExprFactoryInternals;
 
         QuantifierOverRangeNode(AddrHandle range,
-                            std::string_view indexName,
-                            RangeQuantifier quant,
-                            ExprHandle pred)
+                                std::string_view indexName,
+                                RangeQuantifier quant,
+                                ExprHandle pred,
+                                std::optional<Type> explicitType = std::nullopt)
             : OverRangeExprNode(ExprKind::K_QuantifierOverRange,
-                            Type{ScalarKind::Bool, 8},
-                            range,
-                            indexName),
+                                Type{ScalarKind::Bool, 8},
+                                range,
+                                indexName,
+                                explicitType),
               quant_(quant), pred_(pred) {}
 
         RangeQuantifier quant_;
@@ -299,14 +311,16 @@ namespace acslg::analyzer::symbolic {
         friend struct ExprFactoryInternals;
 
         MaxMinOverRangeNode(AddrHandle range,
-                        std::string_view indexName,
-                        RangeExtremum extremum,
-                        ExprHandle expr,
-                        SourcePoint fromPoint)
+                            std::string_view indexName,
+                            RangeExtremum extremum,
+                            ExprHandle expr,
+                            SourcePoint fromPoint,
+                            std::optional<Type> explicitType = std::nullopt)
             : OverRangeExprNode(ExprKind::K_MaxMinOverRange,
-                            expr.getValType(),
-                            range,
-                            indexName),
+                                expr.getValType(),
+                                range,
+                                indexName,
+                                explicitType),
               Symbol(Kind::K_MaxMinOverRange), extremum_(extremum), expr_(expr),
               fromPoint_(std::move(fromPoint)) {}
 

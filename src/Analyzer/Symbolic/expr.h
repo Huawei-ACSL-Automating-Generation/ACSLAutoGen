@@ -515,9 +515,13 @@ namespace acslg::analyzer::symbolic {
 
       protected:
         /// @brief Construct a symbolic expression.
-        /// @param type Expression type
-        /// @param valueType Underlying value type
-        SymbolicExpr(ExprKind kind, Type valueType) : kind_(kind), valueType_(valueType) {}
+        /// @param kind Concrete expression kind.
+        /// @param naturalType Type derived from the node's value and children.
+        /// @param explicitType Optional factory-requested type override.
+        SymbolicExpr(ExprKind kind,
+                     Type naturalType,
+                     std::optional<Type> explicitType = std::nullopt)
+            : kind_(kind), valueType_(explicitType.value_or(naturalType)) {}
 
         /// @brief Simplify a linear expression through the active factory.
         ExprHandle simplifiedExprIfLinear() const;
@@ -534,8 +538,6 @@ namespace acslg::analyzer::symbolic {
         }
 
       private:
-        void setValType(Type newType) { valueType_ = newType; }
-        friend class ::acslg::analyzer::symbolic::ExprFactory;
         friend ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr);
 
         virtual utils::expected<std::string, GetACSLError> doGetACSL(
@@ -682,44 +684,44 @@ namespace acslg::analyzer::symbolic {
       private:
         friend class ::acslg::analyzer::symbolic::ExprFactory;
 
-        LiteralExprNode(bool value)
-            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Bool, 1}),
+        LiteralExprNode(bool value, std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Bool, 1}, explicitType),
               type_(LiteralType::Boolean) {
             data_.boolValue = value;
         }
 
-        LiteralExprNode(int value)
-            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Int, 32}),
+        LiteralExprNode(int value, std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Int, 32}, explicitType),
               type_(LiteralType::Int) {
             data_.intValue = value;
         }
 
-        LiteralExprNode(unsigned int value)
-            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::UInt, 32}),
+        LiteralExprNode(unsigned int value, std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::UInt, 32}, explicitType),
               type_(LiteralType::UnsignedInt) {
             data_.uintValue = value;
         }
 
-        LiteralExprNode(short value)
-            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Int, 16}),
+        LiteralExprNode(short value, std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Int, 16}, explicitType),
               type_(LiteralType::Short) {
             data_.shortValue = value;
         }
 
-        LiteralExprNode(unsigned short value)
-            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::UInt, 16}),
+        LiteralExprNode(unsigned short value, std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::UInt, 16}, explicitType),
               type_(LiteralType::UnsignedShort) {
             data_.ushortValue = value;
         }
 
-        LiteralExprNode(int64_t value)
-            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Int, 64}),
+        LiteralExprNode(int64_t value, std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::Int, 64}, explicitType),
               type_(LiteralType::Int64) {
             data_.int64Value = value;
         }
 
-        LiteralExprNode(uint64_t value)
-            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::UInt, 64}),
+        LiteralExprNode(uint64_t value, std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(ExprKind::K_LiteralExpr, {ScalarKind::UInt, 64}, explicitType),
               type_(LiteralType::UInt64) {
             data_.uint64Value = value;
         }
@@ -731,7 +733,8 @@ namespace acslg::analyzer::symbolic {
 
         LiteralType getLiteralType() const { return type_; }
         ExprHandle importInto(ExprFactory &factory) const;
-        std::unique_ptr<LiteralExprNode> rebuildNode() const;
+        std::unique_ptr<LiteralExprNode> rebuildNode(
+            std::optional<Type> explicitType = std::nullopt) const;
 
         std::string dump() const override;
         virtual std::size_t hash() const override;
@@ -835,9 +838,12 @@ namespace acslg::analyzer::symbolic {
       private:
         friend class ::acslg::analyzer::symbolic::ExprFactory;
 
-        BinaryOpExprNode(ExprHandle left, Operator op, ExprHandle right)
-            : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType()), left_(left), op_(op),
-              right_(right) {}
+        BinaryOpExprNode(ExprHandle left,
+                         Operator op,
+                         ExprHandle right,
+                         std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(ExprKind::K_BinaryOpExpr, left->getValType(), explicitType), left_(left),
+              op_(op), right_(right) {}
 
         ExprChild left_;
         Operator op_;
@@ -905,8 +911,11 @@ namespace acslg::analyzer::symbolic {
       private:
         friend class ::acslg::analyzer::symbolic::ExprFactory;
 
-        UnaryOpExprNode(Operator op, ExprHandle expr)
-            : SymbolicExpr(ExprKind::K_UnaryOpExpr, expr->getValType()), op_(op), expr_(expr) {}
+        UnaryOpExprNode(Operator op,
+                        ExprHandle expr,
+                        std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(ExprKind::K_UnaryOpExpr, expr->getValType(), explicitType), op_(op),
+              expr_(expr) {}
 
         Operator op_;
         ExprChild expr_;
@@ -938,7 +947,8 @@ namespace acslg::analyzer::symbolic {
       private:
         friend class ::acslg::analyzer::symbolic::ExprFactory;
 
-        UnknownExprNode() : SymbolicExpr(ExprKind::K_UnknownExpr, {ScalarKind::Void, 0}) {}
+        explicit UnknownExprNode(std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(ExprKind::K_UnknownExpr, {ScalarKind::Void, 0}, explicitType) {}
 
         utils::expected<std::string, GetACSLError> doGetACSL(
             const GetACSLConfig &config,
@@ -1096,7 +1106,9 @@ namespace acslg::analyzer::symbolic {
       private:
         friend struct ExprFactoryInternals;
 
-        StructureNode(StructureInfo info, std::vector<ExprHandle> fields);
+        StructureNode(StructureInfo info,
+                      std::vector<ExprHandle> fields,
+                      std::optional<Type> explicitType = std::nullopt);
 
         StructureInfo info_;
         std::vector<ExprChild> fields_;
@@ -1142,8 +1154,11 @@ namespace acslg::analyzer::symbolic {
         auto getPointeeType() const -> const auto & { return pointeeType_; }
 
       protected:
-        Address(ExprKind kind, Type valueType, const clang::QualType &pointeeType)
-            : SymbolicExpr(kind, valueType), pointeeType_(pointeeType) {};
+        Address(ExprKind kind,
+                Type naturalType,
+                const clang::QualType &pointeeType,
+                std::optional<Type> explicitType = std::nullopt)
+            : SymbolicExpr(kind, naturalType, explicitType), pointeeType_(pointeeType) {};
 
         /*---------------- Bridge -----------------*/
         static utils::expected<std::string, GetACSLError> callGetACSLOfValue(
@@ -1866,7 +1881,8 @@ namespace acslg::analyzer::symbolic {
                           std::optional<AddrHandle> from,
                           SourcePoint fromPoint,
                           ExprHandle offset,
-                          std::optional<ExprHandle> length);
+                          std::optional<ExprHandle> length,
+                          std::optional<Type> explicitType = std::nullopt);
 
         ExprChild offset_; ///< Offset relative to an address.
         std::optional<AddressChild>
@@ -1999,10 +2015,11 @@ namespace acslg::analyzer::symbolic {
       private:
         friend struct detail::ExprFactoryInternals;
 
-        explicit VariableAddressNode(utils::not_null<const clang::VarDecl *> from)
+        explicit VariableAddressNode(utils::not_null<const clang::VarDecl *> from,
+                                     std::optional<Type> explicitType = std::nullopt)
             : Address(SymbolicExpr::ExprKind::K_VariableAddress,
                       SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
-                      from->getType()),
+                      from->getType(), explicitType),
               from_(std::move(from)) {};
 
         utils::not_null<const clang::VarDecl *> from_;
@@ -2078,10 +2095,11 @@ namespace acslg::analyzer::symbolic {
         FieldAddressNode(clang::QualType pointeeType,
                          const clang::RecordDecl *RD,
                          AddrHandle baseAddr,
-                         size_t fieldIndex)
+                         size_t fieldIndex,
+                         std::optional<Type> explicitType = std::nullopt)
             : Address(SymbolicExpr::ExprKind::K_FieldAddress,
                       SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
-                      pointeeType),
+                      pointeeType, explicitType),
               definition_(RD), baseAddr_(baseAddr), fieldIndex_(fieldIndex) {
             if (!RD->isCompleteDefinition())
                 ERROR("Incomplete struct definition");

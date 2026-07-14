@@ -194,12 +194,14 @@ namespace acslg::analyzer::symbolic {
     }
 
     SumOverRangeNode::SumOverRangeNode(AddrHandle range,
-                               std::string_view indexName,
-                               SourcePoint fromPoint)
+                                       std::string_view indexName,
+                                       SourcePoint fromPoint,
+                                       std::optional<Type> explicitType)
         : OverRangeExprNode(ExprKind::K_SumOverRange,
-                        deriveType(SymbolAddressView{range}.pointeeType()),
-                        range,
-                        indexName),
+                            deriveType(SymbolAddressView{range}.pointeeType()),
+                            range,
+                            indexName,
+                            explicitType),
           Symbol(Kind::K_SumOverRange),
           fromPoint_(std::move(fromPoint)) {}
 

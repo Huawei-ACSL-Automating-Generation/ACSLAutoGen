@@ -77,40 +77,39 @@ namespace acslg::analyzer::symbolic {
         if (expr->getValType() == newType)
             return expr;
 
-        auto internTyped = [this, newType](auto node) {
-            node->setValType(newType);
+        auto internTyped = [this](auto node) {
             std::unique_ptr<SymbolicExpr> base = std::move(node);
             return intern(utils::not_null<std::unique_ptr<SymbolicExpr>>{std::move(base)});
         };
 
         if (auto *literal = expr.dyn_cast<const detail::LiteralExprNode>())
-            return internTyped(literal->rebuildNode());
+            return internTyped(literal->rebuildNode(newType));
 
         if (expr.isa<detail::UnknownExprNode>())
-            return internTyped(makeNode<detail::UnknownExprNode>());
+            return internTyped(makeNode<detail::UnknownExprNode>(newType));
 
         if (auto *index = expr.dyn_cast<const detail::RangeIndexNode>())
             return internTyped(
                 detail::ExprFactoryInternals::makeNode<detail::RangeIndexNode>(
-                    index->getName()));
+                    index->getName(), newType));
 
         if (auto *unaryExpr = expr.dyn_cast<const detail::UnaryOpExprNode>())
             return internTyped(makeNode<detail::UnaryOpExprNode>(
-                unaryExpr->getOperator(), importExpr(*unaryExpr->getSub())));
+                unaryExpr->getOperator(), importExpr(*unaryExpr->getSub()), newType));
 
         if (auto *binaryExpr = expr.dyn_cast<const detail::BinaryOpExprNode>())
             return internTyped(makeNode<detail::BinaryOpExprNode>(
                 importExpr(*binaryExpr->getLeft()), binaryExpr->getOperator(),
-                importExpr(*binaryExpr->getRight())));
+                importExpr(*binaryExpr->getRight()), newType));
 
         if (auto *variableAddr = expr.dyn_cast<const VariableAddressNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<VariableAddressNode>(
-                variableAddr->getFrom()));
+                variableAddr->getFrom(), newType));
 
         if (auto *fieldAddr = expr.dyn_cast<const FieldAddressNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<FieldAddressNode>(
                 fieldAddr->getPointeeType(), fieldAddr->getDefinition(),
-                importAddress(*fieldAddr->getBaseAddr()), fieldAddr->getFieldIndex()));
+                importAddress(*fieldAddr->getBaseAddr()), fieldAddr->getFieldIndex(), newType));
 
         if (auto *symbolAddr = expr.dyn_cast<const SymbolAddressNode>()) {
             std::optional<AddrHandle> from;
@@ -123,12 +122,13 @@ namespace acslg::analyzer::symbolic {
 
             return internTyped(detail::ExprFactoryInternals::makeNode<SymbolAddressNode>(
                 symbolAddr->getPointeeType(), from,
-                symbolAddr->getFromPoint().value(), importExpr(*symbolAddr->getOffset()), length));
+                symbolAddr->getFromPoint().value(), importExpr(*symbolAddr->getOffset()), length,
+                newType));
         }
 
         if (auto *symbolVal = expr.dyn_cast<const SymbolValueNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<SymbolValueNode>(
-                symbolVal->getValType(), importAddress(*symbolVal->getFromAddrHandle()),
+                newType, importAddress(*symbolVal->getFromAddrHandle()),
                 symbolVal->getFromPoint().value()));
 
         if (auto *structure = expr.dyn_cast<const StructureNode>()) {
@@ -137,24 +137,24 @@ namespace acslg::analyzer::symbolic {
             for (auto field : structure->fieldsValues())
                 fields.push_back(importExpr(*field));
             return internTyped(detail::ExprFactoryInternals::makeNode<StructureNode>(
-                structure->getInfo(), std::move(fields)));
+                structure->getInfo(), std::move(fields), newType));
         }
 
         if (auto *sum = expr.dyn_cast<const SumOverRangeNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<SumOverRangeNode>(
                 importAddress(*sum->getRange().handle()), sum->getIndexName(),
-                sum->getFromPoint().value()));
+                sum->getFromPoint().value(), newType));
 
         if (auto *quantifier = expr.dyn_cast<const QuantifierOverRangeNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<QuantifierOverRangeNode>(
                 importAddress(*quantifier->getRange().handle()), quantifier->getIndexName(),
-                quantifier->getQuantifier(), importExpr(quantifier->getPredicate())));
+                quantifier->getQuantifier(), importExpr(quantifier->getPredicate()), newType));
 
         if (auto *maxMin = expr.dyn_cast<const MaxMinOverRangeNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<MaxMinOverRangeNode>(
                 importAddress(*maxMin->getRange().handle()), maxMin->getIndexName(),
                 maxMin->getExtremum(), importExpr(maxMin->getExpr()),
-                maxMin->getFromPoint().value()));
+                maxMin->getFromPoint().value(), newType));
 
         ERROR("Unsupported SymbolicExpr type in ExprFactory::withValType: " + expr.dump());
     }
@@ -1088,22 +1088,30 @@ namespace acslg::analyzer::symbolic {
         UNREACHABLE();
     }
 
-    std::unique_ptr<detail::LiteralExprNode> detail::LiteralExprNode::rebuildNode() const {
+    std::unique_ptr<detail::LiteralExprNode>
+    detail::LiteralExprNode::rebuildNode(std::optional<Type> explicitType) const {
         switch (getLiteralType()) {
             case LiteralType::Boolean:
-                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.boolValue)};
+                return std::unique_ptr<LiteralExprNode>{
+                    new LiteralExprNode(data_.boolValue, explicitType)};
             case LiteralType::Int:
-                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.intValue)};
+                return std::unique_ptr<LiteralExprNode>{
+                    new LiteralExprNode(data_.intValue, explicitType)};
             case LiteralType::UnsignedInt:
-                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.uintValue)};
+                return std::unique_ptr<LiteralExprNode>{
+                    new LiteralExprNode(data_.uintValue, explicitType)};
             case LiteralType::Short:
-                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.shortValue)};
+                return std::unique_ptr<LiteralExprNode>{
+                    new LiteralExprNode(data_.shortValue, explicitType)};
             case LiteralType::UnsignedShort:
-                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.ushortValue)};
+                return std::unique_ptr<LiteralExprNode>{
+                    new LiteralExprNode(data_.ushortValue, explicitType)};
             case LiteralType::Int64:
-                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.int64Value)};
+                return std::unique_ptr<LiteralExprNode>{
+                    new LiteralExprNode(data_.int64Value, explicitType)};
             case LiteralType::UInt64:
-                return std::unique_ptr<LiteralExprNode>{new LiteralExprNode(data_.uint64Value)};
+                return std::unique_ptr<LiteralExprNode>{
+                    new LiteralExprNode(data_.uint64Value, explicitType)};
         }
 
         UNREACHABLE();
@@ -2418,10 +2426,11 @@ namespace acslg::analyzer::symbolic {
                                  std::optional<AddrHandle> from,
                                  SourcePoint fromPoint,
                                  ExprHandle offset,
-                                 std::optional<ExprHandle> length)
+                                 std::optional<ExprHandle> length,
+                                 std::optional<Type> explicitType)
         : Address(SymbolicExpr::ExprKind::K_SymbolAddress,
                   SymbolicExpr::Type{SymbolicExpr::ScalarKind::UInt, 64},
-                  pointeeType),
+                  pointeeType, explicitType),
           Symbol(Kind::K_SymbolAddress), offset_(offset), fromAddr_(std::nullopt),
           fromPoint_(std::move(fromPoint)), length_(std::nullopt) {
         if (from)
@@ -2462,11 +2471,14 @@ namespace acslg::analyzer::symbolic {
 
     int FieldAddressNode::getDimension() const { return baseAddr_->getDimension(); }
 
-    StructureNode::StructureNode(StructureInfo info, std::vector<ExprHandle> fields)
+    StructureNode::StructureNode(StructureInfo info,
+                                 std::vector<ExprHandle> fields,
+                                 std::optional<Type> explicitType)
         : SymbolicExpr(
               ExprKind::K_Structure,
               Type{ScalarKind::Structure, static_cast<unsigned>(info.layout_.getSize().getQuantity()) *
-                                              8 /*By default, char is 8-bit.*/}),
+                                              8 /*By default, char is 8-bit.*/},
+              explicitType),
           Symbol(Kind::K_Structure), info_(info) {
         if (fields.size() != info_.layout_.getFieldCount())
             ERROR("Structure field count mismatch");
