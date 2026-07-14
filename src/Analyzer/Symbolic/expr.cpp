@@ -720,6 +720,38 @@ namespace acslg::analyzer::symbolic {
         inline bool literalAsBool(const detail::LiteralExprNode &L) { return L.getLiteralValue() != 0; }
     } // namespace
 
+    ExprHandle ExprFactory::literal(bool value) {
+        return intern(makeNode<detail::LiteralExprNode>(value));
+    }
+
+    ExprHandle ExprFactory::literal(int value) {
+        return intern(makeNode<detail::LiteralExprNode>(value));
+    }
+
+    ExprHandle ExprFactory::literal(unsigned int value) {
+        return intern(makeNode<detail::LiteralExprNode>(value));
+    }
+
+    ExprHandle ExprFactory::literal(short value) {
+        return intern(makeNode<detail::LiteralExprNode>(value));
+    }
+
+    ExprHandle ExprFactory::literal(unsigned short value) {
+        return intern(makeNode<detail::LiteralExprNode>(value));
+    }
+
+    ExprHandle ExprFactory::literal(int64_t value) {
+        return intern(makeNode<detail::LiteralExprNode>(value));
+    }
+
+    ExprHandle ExprFactory::literal(uint64_t value) {
+        return intern(makeNode<detail::LiteralExprNode>(value));
+    }
+
+    ExprHandle ExprFactory::unknown() {
+        return intern(makeNode<detail::UnknownExprNode>());
+    }
+
     ExprHandle ExprFactory::rangeIndex(std::string_view name) {
         return intern(
             detail::ExprFactoryInternals::makeNode<detail::RangeIndexNode>(name));
@@ -730,6 +762,14 @@ namespace acslg::analyzer::symbolic {
                                         SourcePoint fromPoint) {
         return intern(detail::ExprFactoryInternals::makeNode<SymbolValueNode>(
             varType, from, std::move(fromPoint)));
+    }
+
+    ExprHandle ExprFactory::unary(UnaryOp op, ExprHandle expr) {
+        return intern(makeNode<detail::UnaryOpExprNode>(op, expr));
+    }
+
+    ExprHandle ExprFactory::binary(ExprHandle left, BinaryOp op, ExprHandle right) {
+        return intern(makeNode<detail::BinaryOpExprNode>(left, op, right));
     }
 
     ExprHandle ExprFactory::simplifiedBinary(ExprHandle left,

@@ -1288,42 +1288,24 @@ namespace acslg::analyzer::symbolic {
 
     class ExprFactory {
       public:
-        ExprHandle literal(bool value) {
-            return intern(makeNode<detail::LiteralExprNode>(value));
-        }
-        ExprHandle literal(int value) {
-            return intern(makeNode<detail::LiteralExprNode>(value));
-        }
-        ExprHandle literal(unsigned int value) {
-            return intern(makeNode<detail::LiteralExprNode>(value));
-        }
-        ExprHandle literal(short value) {
-            return intern(makeNode<detail::LiteralExprNode>(value));
-        }
-        ExprHandle literal(unsigned short value) {
-            return intern(makeNode<detail::LiteralExprNode>(value));
-        }
-        ExprHandle literal(int64_t value) {
-            return intern(makeNode<detail::LiteralExprNode>(value));
-        }
-        ExprHandle literal(uint64_t value) {
-            return intern(makeNode<detail::LiteralExprNode>(value));
-        }
+        ExprHandle literal(bool value);
+        ExprHandle literal(int value);
+        ExprHandle literal(unsigned int value);
+        ExprHandle literal(short value);
+        ExprHandle literal(unsigned short value);
+        ExprHandle literal(int64_t value);
+        ExprHandle literal(uint64_t value);
 
-        ExprHandle unknown() { return intern(makeNode<detail::UnknownExprNode>()); }
+        ExprHandle unknown();
 
         ExprHandle rangeIndex(std::string_view name);
         ExprHandle symbolValue(SymbolicExpr::Type varType,
                                AddrHandle from,
                                SourcePoint fromPoint);
 
-        ExprHandle unary(UnaryOp op, ExprHandle expr) {
-            return intern(makeNode<detail::UnaryOpExprNode>(op, expr));
-        }
+        ExprHandle unary(UnaryOp op, ExprHandle expr);
 
-        ExprHandle binary(ExprHandle left, BinaryOp op, ExprHandle right) {
-            return intern(makeNode<detail::BinaryOpExprNode>(left, op, right));
-        }
+        ExprHandle binary(ExprHandle left, BinaryOp op, ExprHandle right);
         ExprHandle simplifiedBinary(ExprHandle left, BinaryOp op, ExprHandle right);
 
         ExprHandle withValType(ExprHandle expr, SymbolicExpr::Type newType);
