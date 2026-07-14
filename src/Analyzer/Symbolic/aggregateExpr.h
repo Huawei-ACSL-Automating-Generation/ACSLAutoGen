@@ -75,58 +75,6 @@ namespace acslg::analyzer::symbolic {
     namespace detail {
 
     /**
-     * @class RangeIndexNode
-     * @brief Placeholder representing the induction variable when reasoning over address ranges.
-     */
-    class RangeIndexNode : public SymbolicExpr {
-      public:
-        RangeIndexNode(const RangeIndexNode &)            = delete;
-        RangeIndexNode(RangeIndexNode &&)                 = default;
-        RangeIndexNode &operator=(const RangeIndexNode &) = delete;
-        RangeIndexNode &operator=(RangeIndexNode &&)      = delete;
-
-        static bool classof(const SymbolicExpr *e) {
-            return e->getKind() == ExprKind::K_RangeIndex;
-        }
-
-        std::string_view getName() const { return name_; }
-
-        // SymbolicExpr
-      public:
-        /**
-         * @brief Dump a human-readable representation.
-         * @return Textual description.
-         */
-        std::string dump() const override;
-        /**
-         * @brief Equality check ignoring the placeholder name (names do not affect semantics).
-         * @param other Expression to compare.
-         */
-        bool equal(const SymbolicExpr &) const override;
-        std::size_t hash() const override;
-        bool isLinear() const override { return false; };
-        int getMaxDegree() const override { return -1; };
-      private:
-        utils::expected<std::string, GetACSLError> doGetACSL(const GetACSLConfig &,
-                                                             std::unordered_set<SourcePoint> &,
-                                                             std::optional<SourcePoint>,
-                                                             unsigned,
-                                                             bool) const override {
-            return name_;
-        };
-
-      private:
-        friend struct detail::ExprFactoryInternals;
-
-        explicit RangeIndexNode(std::string_view name,
-                                std::optional<Type> explicitType = std::nullopt)
-            : SymbolicExpr(ExprKind::K_RangeIndex, Type{ScalarKind::UInt, 64}, explicitType),
-              name_(name) {}
-
-        std::string name_;
-    };
-
-    /**
      * @class OverRangeExprNode
      * @brief Base class for expressions that quantify or aggregate over a symbolic address range.
      */

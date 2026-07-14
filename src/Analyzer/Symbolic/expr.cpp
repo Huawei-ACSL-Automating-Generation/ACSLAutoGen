@@ -16,6 +16,7 @@
 #include <llvm/Support/Casting.h>
 
 #include "aggregateExpr.h" // IWYU pragma: keep
+#include "detail/aggregateNodes.h"
 #include "detail/exprNodes.h"
 #include "macros.h"
 #include "utils.h"
