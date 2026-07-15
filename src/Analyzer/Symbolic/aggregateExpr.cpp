@@ -46,10 +46,6 @@ namespace acslg::analyzer::symbolic {
         return SumOverRangeView{handle};
     }
 
-    std::optional<SumOverRangeView> SumOverRangeView::tryFrom(const SymbolicExpr &expr) {
-        return tryFrom(ExprHandle{&expr});
-    }
-
     SymbolAddressView SumOverRangeView::range() const {
         return cast<const SumOverRangeNode>(handle_.get().get())->getRange();
     }
@@ -71,11 +67,6 @@ namespace acslg::analyzer::symbolic {
         if (!handle->isQuantifierOverRange())
             return std::nullopt;
         return QuantifierOverRangeView{handle};
-    }
-
-    std::optional<QuantifierOverRangeView>
-    QuantifierOverRangeView::tryFrom(const SymbolicExpr &expr) {
-        return tryFrom(ExprHandle{&expr});
     }
 
     SymbolAddressView QuantifierOverRangeView::range() const {
@@ -103,10 +94,6 @@ namespace acslg::analyzer::symbolic {
         if (!handle->isMaxMinOverRange())
             return std::nullopt;
         return MaxMinOverRangeView{handle};
-    }
-
-    std::optional<MaxMinOverRangeView> MaxMinOverRangeView::tryFrom(const SymbolicExpr &expr) {
-        return tryFrom(ExprHandle{&expr});
     }
 
     SymbolAddressView MaxMinOverRangeView::range() const {
