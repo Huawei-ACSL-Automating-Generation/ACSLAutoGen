@@ -507,6 +507,10 @@ namespace acslg::analyzer::symbolic {
         return Substituter{factory, rangeBase, indexExpr}.run(expr);
     }
 
+    ExprHandle ExprFactory::importExpr(ExprHandle expr) { return importExpr(*expr); }
+
+    AddrHandle ExprFactory::importAddress(AddrHandle address) { return importAddress(*address); }
+
     AddrHandle ExprFactory::importAddress(const Address &address) {
         return AddrHandle{cast<const Address>(importExpr(address).get().get())};
     }

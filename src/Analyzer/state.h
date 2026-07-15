@@ -200,7 +200,7 @@ namespace acslg::analyzer {
             memoryMap_symbolicRange_;
 
         symbolic::ExprFactory &factory() const { return *factory_; }
-        StoredValue importValue(const symbolic::SymbolicExpr &value);
+        StoredValue importValue(symbolic::ExprHandle value);
         StoredValue copyStoredValueFrom(const MemoryModel &other, StoredValue value);
         void writeImported(symbolic::AddrHandle address, StoredValue value);
 
@@ -235,7 +235,7 @@ namespace acslg::analyzer {
             auto &factory = owner.factory();
             std::optional<symbolic::Addr> from;
             if (base.fromAddr_)
-                from.emplace(factory, factory.importAddress(*base.fromAddr_.value()));
+                from.emplace(factory, factory.importAddress(base.fromAddr_->handle()));
 
             symbolic::LiteralExpr offset{factory, off};
             auto addr = [&]() {
@@ -350,7 +350,7 @@ namespace acslg::analyzer {
                         auto &factory = owner_.factory();
                         auto addr = factory.fieldAddress(
                             fieldType, st.info().definition_,
-                            factory.importAddress(*baseAddr.handle()), index);
+                            factory.importAddress(baseAddr.handle()), index);
                         return R{symbolic::AddressBox{addr}, st.field(index)};
                     }
                     default: break;
@@ -659,7 +659,7 @@ namespace acslg::analyzer {
 
         void setReturnExpr(std::nullopt_t) { returnExpr_.reset(); }
         void setReturnExpr(symbolic::ExprHandle expr) {
-            returnExpr_.emplace(context_.getExprFactory().importExpr(*expr));
+            returnExpr_.emplace(context_.getExprFactory().importExpr(expr));
         }
         /// @brief Update the control-flow marker for this path.
         void setPathState(PathState state) { currentState_ = state; }

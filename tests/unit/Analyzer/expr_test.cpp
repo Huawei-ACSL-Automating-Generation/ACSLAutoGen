@@ -2210,9 +2210,9 @@ namespace acslg::test::unit::analyzer {
                                               sourceField, point);
 
         symbolic::ExprFactory target;
-        auto importedVariable = target.importAddress(*sourceVariable);
-        auto importedField    = target.importAddress(*sourceField);
-        auto importedValue    = target.importExpr(*sourceValue);
+        auto importedVariable = target.importAddress(sourceVariable);
+        auto importedField    = target.importAddress(sourceField);
+        auto importedValue    = target.importExpr(sourceValue);
 
         auto expectedVariable = target.variableAddress(var);
         auto expectedField =

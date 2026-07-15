@@ -943,7 +943,9 @@ namespace acslg::analyzer::symbolic {
 
         ExprHandle withValType(ExprHandle expr, SymbolicExpr::Type newType);
 
+        ExprHandle importExpr(ExprHandle expr);
         ExprHandle importExpr(const SymbolicExpr &expr);
+        AddrHandle importAddress(AddrHandle address);
         AddrHandle importAddress(const Address &address);
         AddrHandle variableAddress(utils::not_null<const clang::VarDecl *> from);
         AddrHandle symbolAddress(

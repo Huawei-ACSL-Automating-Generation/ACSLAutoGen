@@ -96,7 +96,7 @@ namespace acslg::analyzer {
 
             if (containsLocalVar(expr, locals))
                 return std::nullopt;
-            return factory.importExpr(*expr);
+            return factory.importExpr(expr);
         }
 
     } // namespace
@@ -154,7 +154,7 @@ namespace acslg::analyzer {
 
         // Union variable addresses so that both paths agree on storage locations.
         for (const auto &[var, addr] : other.varAddr_)
-            varAddr_.emplace(var, context_.getExprFactory().importAddress(*addr));
+            varAddr_.emplace(var, context_.getExprFactory().importAddress(addr));
 
         // Collect all addresses touched by either path to merge differing symbolic values.
         MemoryModel::KeySet addresses;
@@ -246,7 +246,7 @@ namespace acslg::analyzer {
         for (auto &[varDecl, addr] : varAddr_) {
             clang::QualType ty = varDecl->getType();
 
-            auto symbol = getSymbol(ty, context_.getExprFactory().importAddress(*addr),
+            auto symbol = getSymbol(ty, context_.getExprFactory().importAddress(addr),
                                     startPoint_);
             updateMemory(addr, symbol);
         }
@@ -286,7 +286,7 @@ namespace acslg::analyzer {
                     ERROR("This location does not support control flow branches.");
                 auto &factory = context_.getExprFactory();
                 symbolic::Addr baseAddrFacade{
-                    factory, factory.importAddress(*symbolAddr->handle())};
+                    factory, factory.importAddress(symbolAddr->handle())};
                 symbolic::Expr idxExpr{factory, idxEval.second[0]};
                 auto resultAddr = baseAddrFacade.withAddedOffset(idxExpr);
                 if (!memoryState_.contains(resultAddr.handle())) {
@@ -419,7 +419,7 @@ namespace acslg::analyzer {
      * @param expr Symbolic value to store.
      */
     void Path::updateMemory(symbolic::AddrHandle addr, symbolic::ExprHandle expr) {
-        auto imported = context_.getExprFactory().importExpr(*expr);
+        auto imported = context_.getExprFactory().importExpr(expr);
         if (imported->isUnknown()) {
             if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addr)) {
                 if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
@@ -463,7 +463,7 @@ namespace acslg::analyzer {
      * @param cond Condition to add.
      */
     void Path::insertPathCondition(symbolic::ExprHandle cond) {
-        pathConditions_.emplace(context_.getExprFactory().importExpr(*cond));
+        pathConditions_.emplace(context_.getExprFactory().importExpr(cond));
     }
 
     /**
@@ -752,7 +752,7 @@ namespace acslg::analyzer {
                                       "neither "
                                       "pointer nor "
                                       "array?");
-                            addr = factory.importAddress(*ptr->handle());
+                            addr = factory.importAddress(ptr->handle());
                         } else {
                             ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither "
                                   "pointer "
@@ -1262,7 +1262,7 @@ namespace acslg::analyzer {
                             for (const auto &[vd, addrPtr] : callerSnapshot->varAddr_) {
                                 if (!p->varAddr_.contains(vd)) {
                                     p->varAddr_.emplace(
-                                        vd, p->context_.getExprFactory().importAddress(*addrPtr));
+                                        vd, p->context_.getExprFactory().importAddress(addrPtr));
                                 }
                                 if (auto val = callerSnapshot->memoryState_.read(addrPtr)) {
                                     auto &dstAddr = p->varAddr_.at(vd);
@@ -1474,7 +1474,7 @@ namespace acslg::analyzer {
                             st = makeStructureForRecord(factory, RD, baseAddr.value(), startPoint_);
                             memoryState_.write(baseAddr.value(), st.value());
                         } else if (auto stVal = symbolic::StructureView::tryFrom(val.value())) {
-                            st = factory.importExpr(*stVal->handle());
+                            st = factory.importExpr(stVal->handle());
                         } else {
                             ERROR("Dereferenced value is not a structure");
                         }
@@ -1489,7 +1489,7 @@ namespace acslg::analyzer {
                     const symbolic::StructureView structure{st.value()};
                     if (idx >= structure.size())
                         UNREACHABLE();
-                    auto fieldValue = context_.getExprFactory().importExpr(*structure.field(idx));
+                    auto fieldValue = context_.getExprFactory().importExpr(structure.field(idx));
                     DEBUG("MemberExpr field " << FD->getNameAsString() << " idx=" << idx
                                               << " value: " << fieldValue->dump());
                     EvalResult result{};
@@ -1724,7 +1724,7 @@ namespace acslg::analyzer {
 
     MemoryModel::MemoryModel(symbolic::ExprFactory &factory) : factory_(&factory) {}
 
-    auto MemoryModel::importValue(const symbolic::SymbolicExpr &value) -> StoredValue {
+    auto MemoryModel::importValue(symbolic::ExprHandle value) -> StoredValue {
         return factory().importExpr(value);
     }
 
@@ -1732,13 +1732,13 @@ namespace acslg::analyzer {
         -> StoredValue {
         if (&factory() == &other.factory())
             return value;
-        return importValue(*value);
+        return importValue(value);
     }
 
     MemoryModel::MemoryModel(const MemoryModel &other) : MemoryModel(other.factory()) {
         for (auto &[addr, value] : other.memoryMap_variableAddr_) {
             memoryMap_variableAddr_.emplace(
-                symbolic::AddressBox{factory().importAddress(*addr.handle())},
+                symbolic::AddressBox{factory().importAddress(addr.handle())},
                 copyStoredValueFrom(other, value));
         }
         for (auto &[baseInfo, rangeValueMap] : other.memoryMap_constantRange_) {
@@ -1752,7 +1752,7 @@ namespace acslg::analyzer {
             auto &mapToFill = memoryMap_symbolicRange_[baseHash];
             for (auto &[addr, value] : addrValueMap) {
                 mapToFill.emplace(
-                    symbolic::AddressBox{factory().importAddress(*addr.handle())},
+                    symbolic::AddressBox{factory().importAddress(addr.handle())},
                     copyStoredValueFrom(other, value));
             }
         }
@@ -1766,7 +1766,7 @@ namespace acslg::analyzer {
 
         for (auto &[addr, value] : other.memoryMap_variableAddr_) {
             memoryMap_variableAddr_.emplace(
-                symbolic::AddressBox{factory().importAddress(*addr.handle())},
+                symbolic::AddressBox{factory().importAddress(addr.handle())},
                 copyStoredValueFrom(other, value));
         }
         for (auto &[baseInfo, rangeValueMap] : other.memoryMap_constantRange_) {
@@ -1780,7 +1780,7 @@ namespace acslg::analyzer {
             auto &mapToFill = memoryMap_symbolicRange_[baseHash];
             for (auto &[addr, value] : addrValueMap) {
                 mapToFill.emplace(
-                    symbolic::AddressBox{factory().importAddress(*addr.handle())},
+                    symbolic::AddressBox{factory().importAddress(addr.handle())},
                     copyStoredValueFrom(other, value));
             }
         }
@@ -1817,7 +1817,7 @@ namespace acslg::analyzer {
                         firstLEIt->first.second <= unsignedOffset)
                         return std::nullopt;
                     return symbolic::getRangeIndexSubstitutedHandle(
-                        factory(), *firstLEIt->second, baseInfo, factory().importExpr(*offset));
+                        factory(), *firstLEIt->second, baseInfo, factory().importExpr(offset));
                 } else if (constOffset && length && length.value()->tryEvalAsConstant()) {
                     UNIMPLEMENT(
                         "There doesn't appear to be a need for constant-range range queries at "
@@ -1831,7 +1831,7 @@ namespace acslg::analyzer {
             if (length && length.value()->tryEvalAsConstant() &&
                 length.value()->tryEvalAsConstant().value() == 1) {
                 auto fakeRangeHandle =
-                    factory().withoutLength(factory().importAddress(*symbolAddr->handle()));
+                    factory().withoutLength(factory().importAddress(symbolAddr->handle()));
                 auto it = addrValueMap.find(*fakeRangeHandle);
                 if (it == addrValueMap.end())
                     return std::nullopt;
@@ -1850,19 +1850,19 @@ namespace acslg::analyzer {
             auto baseSt = symbolic::StructureView::tryFrom(baseValue.value());
             if (!baseSt)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
-            return factory().importExpr(*baseSt->field(index));
+            return factory().importExpr(baseSt->field(index));
         }
         UNREACHABLE();
     }
 
     void MemoryModel::write(symbolic::AddrHandle addr, symbolic::ExprHandle value) {
-        writeImported(addr, factory().importExpr(*value));
+        writeImported(addr, factory().importExpr(value));
     }
 
     void MemoryModel::writeImported(symbolic::AddrHandle addr, StoredValue valueHandle) {
         if (auto varAddr = symbolic::VariableAddressView::tryFrom(addr)) {
             memoryMap_variableAddr_.insert_or_assign(
-                symbolic::AddressBox{factory().importAddress(*varAddr->handle())}, valueHandle);
+                symbolic::AddressBox{factory().importAddress(varAddr->handle())}, valueHandle);
             return;
         } else if (auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr)) {
             auto baseInfo = symbolAddr->baseInfo();
@@ -1920,12 +1920,12 @@ namespace acslg::analyzer {
             if (length && length.value()->tryEvalAsConstant() &&
                 length.value()->tryEvalAsConstant() == 1) {
                 auto fakeRangeHandle =
-                    factory().withoutLength(factory().importAddress(*symbolAddr->handle()));
+                    factory().withoutLength(factory().importAddress(symbolAddr->handle()));
                 addrValueMap.insert_or_assign(symbolic::AddressBox{fakeRangeHandle}, valueHandle);
                 return;
             }
             addrValueMap.insert_or_assign(
-                symbolic::AddressBox{factory().importAddress(*symbolAddr->handle())}, valueHandle);
+                symbolic::AddressBox{factory().importAddress(symbolAddr->handle())}, valueHandle);
             return;
         } else if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addr)) {
             auto baseAddr = fieldAddr->base();
@@ -1939,8 +1939,8 @@ namespace acslg::analyzer {
             auto baseSt = symbolic::StructureView::tryFrom(baseValue.value());
             if (!baseSt)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
-            auto updated = factory().withField(factory().importExpr(*baseSt->handle()), index,
-                                               factory().importExpr(*valueHandle));
+            auto updated = factory().withField(factory().importExpr(baseSt->handle()), index,
+                                               factory().importExpr(valueHandle));
             write(baseAddr, updated);
             return;
         }
@@ -2176,7 +2176,7 @@ namespace acslg::analyzer {
                         auto addressToBeMerged = itemToBeMerged.address();
                         if (auto len = addressToBeMerged.length()) {
                             mergedKey = factory().withAddedLength(
-                                mergedKey, factory().importExpr(*len.value()));
+                                mergedKey, factory().importExpr(len.value()));
                         } else {
                             mergedKey = factory().withAddedLength(mergedKey, factory().literal(1));
                         }
