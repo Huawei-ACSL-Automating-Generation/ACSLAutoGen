@@ -219,7 +219,7 @@ namespace acslg::spec_generator {
                 auto &patternInfo = loopInfo.patternInfo.value();
                 INFO("patternInfo_ is std::set.");
                 for (auto &[addr, pattern] : patternInfo.normalExitPatternsMap) {
-                    INFO("address: " + addr.get().dump());
+                    INFO("address: " + addr.handle().dump());
                     if (pattern)
                         INFO("pattern: " + pattern.value().dump());
                     else
@@ -342,7 +342,7 @@ namespace acslg::spec_generator {
                 // - avoid injecting complex expressions that may worsen aliasing/structure
                 // - avoid unsound overrides on non-variable addresses (e.g. SymbolAddress)
                 for (const auto &[addr, val] : *loopInfo.sharedMemoryMap) {
-                    if (!addr.get().isVariableAddress())
+                    if (!addr.handle()->isVariableAddress())
                         continue;
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
@@ -461,7 +461,7 @@ namespace acslg::spec_generator {
                 // Same as LinearInvariantPlugin: only write back constant-evaluable VariableAddress
                 // entries.
                 for (const auto &[addr, val] : *loopInfo.sharedMemoryMap) {
-                    if (!addr.get().isVariableAddress())
+                    if (!addr.handle()->isVariableAddress())
                         continue;
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
@@ -826,7 +826,8 @@ namespace acslg::spec_generator {
             for (auto &addr : assignedAddrs) {
                 for (auto &path : loopEntry.getPaths()) {
                     auto concreteAddrExpr =
-                        symb::getSubstitutedExprHandle(factory, addr.get(), *path, loopEntryPoint);
+                        symb::getSubstitutedExprHandle(factory, *addr.handle(), *path,
+                                                       loopEntryPoint);
                     auto concreteAddr =
                         symb::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
                     if (concreteAddr == nullptr)
@@ -837,7 +838,7 @@ namespace acslg::spec_generator {
                         concreteAddr->getACSLOfValue({.noStateLabelFunctionAt = true});
                     if (!acslExpected &&
                         acslExpected.error() == symb::SymbolicExpr::GetACSLError::UnknownExpr)
-                        acslExpected = addr.get().getACSLOfValue(
+                        acslExpected = addr.handle()->getACSLOfValue(
                             {.predefinedLabels = {{loopEntryPoint, "LoopEntry"}}}, loopEntryPoint);
                     if (!acslExpected) {
                         WARN("Value of {" + concreteAddr->dump() + "} getACSL failed.");
@@ -978,7 +979,8 @@ namespace acslg::spec_generator {
             for (auto &addr : assignedAddrs) {
                 for (auto &path : loopEntry.getPaths()) {
                     auto concreteAddrExpr =
-                        symb::getSubstitutedExprHandle(factory, addr.get(), *path, loopEntryPoint);
+                        symb::getSubstitutedExprHandle(factory, *addr.handle(), *path,
+                                                       loopEntryPoint);
                     auto concreteAddr =
                         symb::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
                     if (concreteAddr == nullptr)
@@ -989,7 +991,7 @@ namespace acslg::spec_generator {
                         concreteAddr->getACSLOfValue({.noStateLabelFunctionAt = true});
                     if (!acslExpected &&
                         acslExpected.error() == symb::SymbolicExpr::GetACSLError::UnknownExpr)
-                        acslExpected = addr.get().getACSLOfValue(
+                        acslExpected = addr.handle()->getACSLOfValue(
                             {.predefinedLabels = {{loopEntryPoint, "LoopEntry"}}}, loopEntryPoint);
                     if (!acslExpected) {
                         WARN("Value of {" + concreteAddr->dump() + "} getACSL failed.");

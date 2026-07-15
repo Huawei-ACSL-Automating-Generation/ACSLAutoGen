@@ -1641,8 +1641,8 @@ namespace acslg::analyzer {
             bool any = false;
             for (auto &&[addr, value] : memoryState_.flat()) {
                 any = true;
-                oss << "    " << addr.get().dump() << " " << op("->") << " " << value->dump()
-                    << "\n";
+                oss << "    " << addr.handle().dump() << " " << op("->") << " "
+                    << value->dump() << "\n";
             }
             if (!any) {
                 oss << "    " << hint("<empty>") << "\n";
@@ -1738,7 +1738,7 @@ namespace acslg::analyzer {
     MemoryModel::MemoryModel(const MemoryModel &other) : MemoryModel(other.factory()) {
         for (auto &[addr, value] : other.memoryMap_variableAddr_) {
             memoryMap_variableAddr_.emplace(
-                symbolic::AddressBox{factory().importAddress(addr.get())},
+                symbolic::AddressBox{factory().importAddress(*addr.handle())},
                 copyStoredValueFrom(other, value));
         }
         for (auto &[baseInfo, rangeValueMap] : other.memoryMap_constantRange_) {
@@ -1752,7 +1752,7 @@ namespace acslg::analyzer {
             auto &mapToFill = memoryMap_symbolicRange_[baseHash];
             for (auto &[addr, value] : addrValueMap) {
                 mapToFill.emplace(
-                    symbolic::AddressBox{factory().importAddress(addr.get())},
+                    symbolic::AddressBox{factory().importAddress(*addr.handle())},
                     copyStoredValueFrom(other, value));
             }
         }
@@ -1766,7 +1766,7 @@ namespace acslg::analyzer {
 
         for (auto &[addr, value] : other.memoryMap_variableAddr_) {
             memoryMap_variableAddr_.emplace(
-                symbolic::AddressBox{factory().importAddress(addr.get())},
+                symbolic::AddressBox{factory().importAddress(*addr.handle())},
                 copyStoredValueFrom(other, value));
         }
         for (auto &[baseInfo, rangeValueMap] : other.memoryMap_constantRange_) {
@@ -1780,7 +1780,7 @@ namespace acslg::analyzer {
             auto &mapToFill = memoryMap_symbolicRange_[baseHash];
             for (auto &[addr, value] : addrValueMap) {
                 mapToFill.emplace(
-                    symbolic::AddressBox{factory().importAddress(addr.get())},
+                    symbolic::AddressBox{factory().importAddress(*addr.handle())},
                     copyStoredValueFrom(other, value));
             }
         }
@@ -1959,7 +1959,7 @@ namespace acslg::analyzer {
     void MemoryModel::eraseExpiredLocals(
         const std::unordered_set<const clang::VarDecl *> &localVars) {
         std::erase_if(memoryMap_variableAddr_, [&](auto const &kv) {
-            auto fromRoot = kv.first.get().getFromRoot();
+            auto fromRoot = kv.first.handle()->getFromRoot();
             if (fromRoot == std::nullopt)
                 UNREACHABLE(); // VarriableAddress should have a *from*.
             return localVars.contains(fromRoot.value());
@@ -2078,7 +2078,7 @@ namespace acslg::analyzer {
 
             // (1) Move entries to items and precompute hashes/constants
             for (auto &[addr, expr] : umap) {
-                Item it{symbolic::AddrHandle{&addr.get()}, std::move(expr)};
+                Item it{addr.handle(), std::move(expr)};
                 auto key = it.address();
 
                 it.constOff = key.offset()->tryEvalAsConstant();

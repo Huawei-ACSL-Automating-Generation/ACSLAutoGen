@@ -325,7 +325,8 @@ namespace acslg::spec_generator {
             auto &factory = symb::ExprFactoryScope::current();
             for (const auto &[addr, value] : info.memoryMap) {
                 auto subedAddrExpr =
-                    symb::getSubstitutedExprHandle(factory, addr.get(), currentPath, loopEntryPoint);
+                    symb::getSubstitutedExprHandle(factory, *addr.handle(), currentPath,
+                                                   loopEntryPoint);
                 auto subedAddr = symb::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
                 if (subedAddr == nullptr)
                     UNREACHABLE();
@@ -573,7 +574,7 @@ namespace acslg::spec_generator {
                 for (auto &postBranchInfo : branches) {
                     auto postPath = prePath->clone();
                     for (auto [addr, value] : postBranchInfo.memoryMap) {
-                        auto root = addr.get().getFromRoot();
+                        auto root = addr.handle()->getFromRoot();
                         if (root == std::nullopt)
                             TODO();
                         // Skip writes to symbols that were not visible in the pre-path to avoid

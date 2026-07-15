@@ -202,7 +202,7 @@ namespace acslg::test::integration {
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+                addr.handle()->getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
             if (addrStr == "x") {
@@ -242,7 +242,7 @@ namespace acslg::test::integration {
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.handle()->getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
@@ -286,7 +286,7 @@ namespace acslg::test::integration {
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.handle()->getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(

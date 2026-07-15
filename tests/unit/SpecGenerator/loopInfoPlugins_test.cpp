@@ -60,7 +60,7 @@ namespace acslg::test::unit::spec_generator {
         expectPatternInitialValuesCanonical(patternInfo, factory);
         EXPECT_EQ(patternInfo.allPatternsMap.size(), 2);
         for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
-            DEBUG(addr.get().dump());
+            DEBUG(addr.handle().dump());
             if (pattern != nullopt) {
                 DEBUG(pattern.value().initialValue->dump() +
                       ", step: " + to_string(pattern.value().step));
@@ -93,7 +93,7 @@ namespace acslg::test::unit::spec_generator {
         expectPatternInitialValuesCanonical(patternInfo, factory);
         EXPECT_EQ(patternInfo.allPatternsMap.size(), 2);
         for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
-            DEBUG(addr.get().dump());
+            DEBUG(addr.handle().dump());
             if (pattern != nullopt) {
                 DEBUG(pattern.value().initialValue->dump() +
                       ", step: " + to_string(pattern.value().step));
@@ -125,14 +125,14 @@ namespace acslg::test::unit::spec_generator {
         expectPatternInitialValuesCanonical(patternInfo, factory);
         EXPECT_EQ(patternInfo.allPatternsMap.size(), 3);
         for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
-            DEBUG(addr.get().dump());
+            DEBUG(addr.handle().dump());
             if (pattern != nullopt) {
                 DEBUG(pattern.value().initialValue->dump() +
                       ", step: " + to_string(pattern.value().step));
                 EXPECT_EQ(pattern.value().step, 1);
             } else {
                 DEBUG("too complex");
-                if (!addr.get().isSymbolAddress())
+                if (!addr.handle()->isSymbolAddress())
                     FAIL();
             }
         }
@@ -157,11 +157,11 @@ namespace acslg::test::unit::spec_generator {
         expectPatternInitialValuesCanonical(patternInfo, factory);
         EXPECT_EQ(patternInfo.allPatternsMap.size(), 2);
         for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
-            DEBUG(addr.get().dump());
+            DEBUG(addr.handle().dump());
             ASSERT_NE(pattern, nullopt);
             DEBUG(pattern.value().initialValue->dump() +
                   ", step: " + to_string(pattern.value().step));
-            if (addr.get().isSymbolAddress())
+            if (addr.handle()->isSymbolAddress())
                 EXPECT_EQ(pattern.value().step, -1);
             else
                 EXPECT_EQ(pattern.value().step, 1);
@@ -209,8 +209,8 @@ namespace acslg::test::unit::spec_generator {
         expectPatternInitialValuesCanonical(patternInfo, factory);
         EXPECT_EQ(patternInfo.allPatternsMap.size(), 6);
         for (auto &[addr, pattern] : patternInfo.allPatternsMap) {
-            auto res = addr.get().getACSLOfValue({.noStateLabelFunctionAt = true});
-            ASSERT_TRUE(res) << "Address {" + addr.get().dump() << "} getACSL failed.";
+            auto res = addr.handle()->getACSLOfValue({.noStateLabelFunctionAt = true});
+            ASSERT_TRUE(res) << "Address {" + addr.handle().dump() + "} getACSL failed.";
             auto addrStr = res.value().first;
             if (addrStr == "aa") {
                 ASSERT_NE(pattern, nullopt);

@@ -111,7 +111,7 @@ namespace acslg::spec_generator {
                 auto &preMS = symbolicLoopEntry->getPaths().at(0)->getMemoryState();
                 auto &factory = symb::ExprFactoryScope::current();
                 for (auto &&[addr, currentExpr] : currentEntry.getMemoryState().flat()) {
-                    if (auto rootDecl = addr.get().getFromRoot();
+                    if (auto rootDecl = addr.handle()->getFromRoot();
                         rootDecl == std::nullopt || !preVA.contains(rootDecl.value()))
                         continue; // skip locals that do not appear at loop entry
                     if (auto preValue = preMS.read(addr.handle())) {

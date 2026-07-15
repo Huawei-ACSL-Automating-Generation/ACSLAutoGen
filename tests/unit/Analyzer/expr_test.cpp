@@ -2125,8 +2125,8 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::AddressBox handleBox{varAddrA};
         symbolic::AddressBox copiedHandleBox{handleBox};
-        EXPECT_EQ(&handleBox.get(), varAddrA.get().get());
-        EXPECT_EQ(&copiedHandleBox.get(), varAddrA.get().get());
+        EXPECT_EQ(handleBox.handle(), varAddrA);
+        EXPECT_EQ(copiedHandleBox.handle(), varAddrA);
 
         auto symbolValue = factory.symbolValue(
             symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::Int, 32},

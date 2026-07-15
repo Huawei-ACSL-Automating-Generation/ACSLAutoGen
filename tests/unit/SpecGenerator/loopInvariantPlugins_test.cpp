@@ -64,7 +64,7 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.handle()->getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
@@ -106,7 +106,7 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.handle()->getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
@@ -151,7 +151,7 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.handle()->getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
@@ -221,7 +221,7 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.handle()->getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
@@ -287,7 +287,7 @@ namespace acslg::test::unit::spec_generator {
     //     EXPECT_EQ(postInfo.memoryMap.size(), 2);
     //     for (auto &[addr, value] : postInfo.memoryMap) {
     //         ASSERT_OK_AND_GET_FIRST_TO_VAR(
-    //             addr.get().getACSLOfValue(
+    //             addr.handle()->getACSLOfValue(
     //                 {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
     //             addrStr);
     //         if (addrStr == "p[i .. n - 1]") {
@@ -324,7 +324,7 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_TRUE(normalPostInfo.memoryMap.size() == 1);
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.handle()->getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             if (addrStr == "i") {
@@ -337,7 +337,7 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_TRUE(interruptPostInfos.front().memoryMap.size() == 2);
         for (auto &[addr, value] : interruptPostInfos.front().memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.handle()->getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             if (addrStr == "i") {
@@ -501,7 +501,7 @@ namespace acslg::test::unit::spec_generator {
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+                addr.handle()->getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
             if (addrStr == "x") {
@@ -540,7 +540,7 @@ namespace acslg::test::unit::spec_generator {
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+                addr.handle()->getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
             if (addrStr == "x") {
@@ -575,7 +575,7 @@ namespace acslg::test::unit::spec_generator {
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+                addr.handle()->getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
             if (addrStr == "i") {
@@ -609,7 +609,7 @@ namespace acslg::test::unit::spec_generator {
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+                addr.handle()->getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
             if (addrStr == "pt") {
@@ -682,7 +682,7 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
         for (auto &postInfo : normalPostInfos) {
             DEBUG("");
             for (auto &[addr, value] : postInfo.memoryMap) {
-                DEBUG(addr.get().dump());
+                DEBUG(addr.handle().dump());
                 DEBUG(value->dump());
             }
             for (auto &pathCond : postInfo.pathConds) {

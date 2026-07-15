@@ -818,7 +818,6 @@ namespace acslg::analyzer::symbolic {
         AddressBox(AddressBox &&) noexcept            = default;
         AddressBox &operator=(AddressBox &&) noexcept = default;
 
-        const Address &get() const { return *ptr_; }
         AddrHandle handle() const;
 
         friend bool operator==(const AddressBox &a, const AddressBox &b) {
@@ -843,9 +842,9 @@ namespace acslg::analyzer::symbolic {
     struct AddressBoxEq {
         using is_transparent = void;
 
-        bool operator()(const AddressBox &a, const AddressBox &b) const { return a == b; }
-        bool operator()(const AddressBox &a, const Address &b) const { return a.get().equal(b); }
-        bool operator()(const Address &a, const AddressBox &b) const { return a.equal(b.get()); }
+        bool operator()(const AddressBox &a, const AddressBox &b) const;
+        bool operator()(const AddressBox &a, const Address &b) const;
+        bool operator()(const Address &a, const AddressBox &b) const;
     };
 
     template <class T>
@@ -890,6 +889,18 @@ namespace acslg::analyzer::symbolic {
     inline AddressBox::AddressBox(AddrHandle handle) noexcept : ptr_(handle.get().get()) {}
 
     inline AddrHandle AddressBox::handle() const { return AddrHandle{ptr_}; }
+
+    inline bool AddressBoxEq::operator()(const AddressBox &a, const AddressBox &b) const {
+        return a == b;
+    }
+
+    inline bool AddressBoxEq::operator()(const AddressBox &a, const Address &b) const {
+        return a.handle()->equal(b);
+    }
+
+    inline bool AddressBoxEq::operator()(const Address &a, const AddressBox &b) const {
+        return a.equal(*b.handle());
+    }
 
     class AddressChild {
       public:

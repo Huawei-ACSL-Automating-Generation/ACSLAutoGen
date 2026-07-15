@@ -70,7 +70,7 @@ namespace acslg::test::unit::analyzer {
 
         size_t flatCount = 0;
         for (auto &&[addr, value] : postState->getPaths().front()->getMemoryState().flat()) {
-            auto interned = postState->getExprFactory().importAddress(addr.get());
+            auto interned = postState->getExprFactory().importAddress(*addr.handle());
             EXPECT_EQ(addr.handle(), interned);
             auto readBack = postState->getPaths().front()->getMemoryState().read(addr.handle());
             ASSERT_TRUE(readBack);
@@ -482,13 +482,13 @@ namespace acslg::test::unit::analyzer {
         for (auto &&[addr, value] : mm.flat()) {
             if (*value == *saveEA) {
                 fA = true;
-                EXPECT_EQ(&addr.get(), addrAHandle.get().get());
+                EXPECT_EQ(addr.handle(), addrAHandle);
             } else if (*value == *saveEB) {
                 fB = true;
-                EXPECT_EQ(&addr.get(), addrBHandle.get().get());
+                EXPECT_EQ(addr.handle(), addrBHandle);
             } else if (*value == *saveEC) {
                 fC = true;
-                EXPECT_EQ(&addr.get(), addrCHandle.get().get());
+                EXPECT_EQ(addr.handle(), addrCHandle);
             }
         }
 

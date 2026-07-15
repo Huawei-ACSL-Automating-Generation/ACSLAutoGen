@@ -122,14 +122,14 @@ namespace acslg::spec_generator {
                 for (auto &postPath : post.getPaths()) {
                     // INFO("path");
                     for (auto &&[addr, value] : postPath->getMemoryState().flat()) {
-                        auto fromRoot = addr.get().getFromRoot();
+                        auto fromRoot = addr.handle()->getFromRoot();
                         if (fromRoot == std::nullopt)
                             continue;
                         if (!prePath->getVarAddr().contains(fromRoot.value()))
                             continue;
                         if (!is_symbol_addr(addr.handle()))
                             continue;
-                        // INFO(addr.get().dump());
+                        // INFO(addr.handle().dump());
                         // INFO(value->dump());
 
                         // If the current address corresponds to a pointer targeting a
@@ -157,11 +157,11 @@ namespace acslg::spec_generator {
                     droppedOrFailed = true;
                     continue;
                 }
-                auto acslExpected = addr.get().getACSLOfValue(
+                auto acslExpected = addr.handle()->getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .predefinedLabels = {{oldPoint, "Old"}}},
                     oldPoint);
                 if (!acslExpected) {
-                    WARN("Value of {" + addr.get().dump() + "} getACSL failed.");
+                    WARN("Value of {" + addr.handle().dump() + "} getACSL failed.");
                     droppedOrFailed = true;
                     continue;
                 }
@@ -272,7 +272,7 @@ namespace acslg::spec_generator {
 
                 std::unordered_map<size_t, const symb::AddressBox> assignedAddrs;
                 for (auto &&[a, v] : path.getMemoryState().flat()) {
-                    auto fromRoot = a.get().getFromRoot();
+                    auto fromRoot = a.handle()->getFromRoot();
                     if (fromRoot != std::nullopt) {
                         if (!prePath->getVarAddr().contains(fromRoot.value()))
                             continue;
@@ -299,7 +299,7 @@ namespace acslg::spec_generator {
                     }
                     symb::SymbolicExpr::GetACSLConfig cfg{.noStateLabelFunctionAt = true,
                                                           .predefinedLabels = {{oldPoint, "Old"}}};
-                    auto acslExpected = a.get().getACSLOfValue(cfg, oldPoint);
+                    auto acslExpected = a.handle()->getACSLOfValue(cfg, oldPoint);
                     if (!acslExpected) {
                         if (acslExpected.error() == symb::SymbolicExpr::GetACSLError::HeapAddress) {
                             if (auto fallback = getResultBaseACSL(a, cfg, oldPoint)) {
@@ -314,7 +314,7 @@ namespace acslg::spec_generator {
                                 continue;
                             }
                         }
-                        WARN("Value of {" + a.get().dump() + "} getACSL failed.");
+                        WARN("Value of {" + a.handle().dump() + "} getACSL failed.");
                         droppedOrFailed = true;
                         continue;
                     }
@@ -365,7 +365,7 @@ namespace acslg::spec_generator {
 
                 // Memory equations
                 for (auto &&[addr, value] : path.getMemoryState().flat()) {
-                    auto fromRoot = addr.get().getFromRoot();
+                    auto fromRoot = addr.handle()->getFromRoot();
                     if (fromRoot != std::nullopt) {
                         if (!prePath->getVarAddr().contains(fromRoot.value()))
                             continue;
@@ -412,7 +412,7 @@ namespace acslg::spec_generator {
                     auto simplifiedRhs = simplifyExpr(value);
                     if (referencesNonContractVisibleLocals(simplifiedRhs.handle(), FD))
                         continue;
-                    auto lhsOpt = addr.get().getACSLOfValue(cfg);
+                    auto lhsOpt = addr.handle()->getACSLOfValue(cfg);
                     if (!lhsOpt) {
                         if (lhsOpt.error() == symb::SymbolicExpr::GetACSLError::HeapAddress) {
                             if (auto fallback = getResultBaseACSL(addr, cfg, oldPoint)) {

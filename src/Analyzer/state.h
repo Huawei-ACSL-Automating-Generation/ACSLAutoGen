@@ -348,9 +348,9 @@ namespace acslg::analyzer {
                             std::ranges::next(st.info().definition_->field_begin(), index)
                                 ->getType();
                         auto &factory = owner_.factory();
-                        auto addr = factory.fieldAddress(fieldType, st.info().definition_,
-                                                         factory.importAddress(baseAddr.get()),
-                                                         index);
+                        auto addr = factory.fieldAddress(
+                            fieldType, st.info().definition_,
+                            factory.importAddress(*baseAddr.handle()), index);
                         return R{symbolic::AddressBox{addr}, st.field(index)};
                     }
                     default: break;
