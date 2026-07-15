@@ -366,4 +366,236 @@ namespace acslg::analyzer::symbolic::detail {
         SourcePoint fromPoint_;
     };
 
+    /// Internal symbolic address with immutable origin, offset, and optional length.
+    class SymbolAddressNode : public Address, public Symbol {
+      public:
+        SymbolAddressNode(const SymbolAddressNode &) = delete;
+        SymbolAddressNode(SymbolAddressNode &&)      = default;
+
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getKind() == ExprKind::K_SymbolAddress;
+        }
+        static bool classof(const Symbol *symbol) {
+            return symbol->getKind() == Symbol::Kind::K_SymbolAddress;
+        }
+
+        bool operator==(const SymbolAddressNode &other) const { return equal(other); }
+        utils::not_null<const SymbolicExpr *> getOffset() const { return offset_.get(); }
+        const std::optional<ExprChild> &getLength() const { return length_; }
+        std::optional<ExprHandle> getRightBound() const;
+        SymbolAddrBaseInfo getBaseInfo() const;
+
+        std::string dump() const override;
+        bool equal(const SymbolicExpr &expr) const override;
+        std::size_t hash() const override;
+        UsedMap collectUsedSymbols() const override;
+        bool isLinear() const override {
+            if (length_)
+                ERROR("Address range is solely for address representation and should not be "
+                      "used as an expression.");
+            return true;
+        }
+        int getMaxDegree() const override {
+            if (length_)
+                ERROR("Address range is solely for address representation and should not be "
+                      "used as an expression.");
+            return 1;
+        }
+        std::optional<Parma_Polyhedra_Library::Linear_Expression> toLinearExpr(
+            const std::unordered_map<std::string, size_t> &) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
+            const std::unordered_map<size_t, size_t> &) const override;
+        std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
+        int getDimension() const override;
+        std::optional<AddrHandle> getFromAddrHandle() const {
+            if (!fromAddr_)
+                return std::nullopt;
+            return AddrHandle{fromAddr_->get().get()};
+        }
+        std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
+
+      private:
+        friend struct ExprFactoryInternals;
+
+        SymbolAddressNode(clang::QualType pointeeType,
+                          std::optional<AddrHandle> from,
+                          SourcePoint fromPoint,
+                          ExprHandle offset,
+                          std::optional<ExprHandle> length,
+                          std::optional<Type> explicitType = std::nullopt);
+
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+        utils::expected<std::string, GetACSLError> doGetACSLOfValue(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
+        ExprChild offset_;
+        std::optional<AddressChild> fromAddr_;
+        SourcePoint fromPoint_;
+        std::optional<ExprChild> length_;
+    };
+
+    /// Internal address of a C variable.
+    class VariableAddressNode : public Address {
+      public:
+        VariableAddressNode(const VariableAddressNode &)            = delete;
+        VariableAddressNode &operator=(const VariableAddressNode &) = delete;
+        VariableAddressNode(VariableAddressNode &&)                 = default;
+        VariableAddressNode &operator=(VariableAddressNode &&)      = delete;
+
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getKind() == ExprKind::K_VariableAddress;
+        }
+
+        bool operator==(const VariableAddressNode &other) const { return equal(other); }
+        std::string dump() const override;
+        ExprHandle simplifiedExpr() const override {
+            ERROR("VariableAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+        bool equal(const SymbolicExpr &expr) const override;
+        std::size_t hash() const override;
+        utils::not_null<const clang::VarDecl *> getFrom() const { return from_; }
+        std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
+        int getDimension() const override;
+        UsedMap collectUsedSymbols() const override {
+            ERROR("VariableAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+        bool isLinear() const override {
+            ERROR("VariableAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+        int getMaxDegree() const override {
+            ERROR("VariableAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+        std::optional<Parma_Polyhedra_Library::Linear_Expression> toLinearExpr(
+            const std::unordered_map<std::string, size_t> &) const override {
+            ERROR("VariableAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
+            const std::unordered_map<size_t, size_t> &) const override {
+            ERROR("VariableAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+
+      private:
+        friend struct ExprFactoryInternals;
+
+        explicit VariableAddressNode(utils::not_null<const clang::VarDecl *> from,
+                                     std::optional<Type> explicitType = std::nullopt)
+            : Address(ExprKind::K_VariableAddress,
+                      Type{ScalarKind::UInt, 64},
+                      from->getType(),
+                      explicitType),
+              from_(from) {}
+
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+        utils::expected<std::string, GetACSLError> doGetACSLOfValue(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
+        utils::not_null<const clang::VarDecl *> from_;
+    };
+
+    /// Internal address of a C record field.
+    class FieldAddressNode : public Address {
+      public:
+        FieldAddressNode(const FieldAddressNode &)            = delete;
+        FieldAddressNode &operator=(const FieldAddressNode &) = delete;
+        FieldAddressNode(FieldAddressNode &&)                 = default;
+
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getKind() == ExprKind::K_FieldAddress;
+        }
+
+        std::string dump() const override;
+        ExprHandle simplifiedExpr() const override {
+            ERROR("FieldAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+        bool equal(const SymbolicExpr &expr) const override;
+        std::size_t hash() const override;
+        utils::not_null<const clang::RecordDecl *> getDefinition() const { return definition_; }
+        const AddressChild &getBaseAddr() const { return baseAddr_; }
+        size_t getFieldIndex() const { return fieldIndex_; }
+        std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
+        int getDimension() const override;
+        UsedMap collectUsedSymbols() const override {
+            ERROR("FieldAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+        bool isLinear() const override {
+            ERROR("FieldAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+        int getMaxDegree() const override {
+            ERROR("FieldAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+        std::optional<Parma_Polyhedra_Library::Linear_Expression> toLinearExpr(
+            const std::unordered_map<std::string, size_t> &) const override {
+            ERROR("FieldAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
+            const std::unordered_map<size_t, size_t> &) const override {
+            ERROR("FieldAddress should not appear in expressions, and therefore, this function "
+                  "should not be called.");
+        }
+
+      private:
+        friend struct ExprFactoryInternals;
+
+        FieldAddressNode(clang::QualType pointeeType,
+                         const clang::RecordDecl *record,
+                         AddrHandle baseAddr,
+                         size_t fieldIndex,
+                         std::optional<Type> explicitType = std::nullopt)
+            : Address(ExprKind::K_FieldAddress,
+                      Type{ScalarKind::UInt, 64},
+                      pointeeType,
+                      explicitType),
+              definition_(record), baseAddr_(baseAddr), fieldIndex_(fieldIndex) {
+            if (!record->isCompleteDefinition())
+                ERROR("Incomplete struct definition");
+            definition_ = record->getDefinition();
+        }
+
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+        utils::expected<std::string, GetACSLError> doGetACSLOfValue(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
+        utils::not_null<const clang::RecordDecl *> definition_;
+        AddressChild baseAddr_;
+        size_t fieldIndex_;
+    };
+
 } // namespace acslg::analyzer::symbolic::detail
