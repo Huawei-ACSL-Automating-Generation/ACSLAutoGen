@@ -425,7 +425,7 @@ namespace acslg::analyzer::symbolic {
 
             AddrHandle requireAddress(ExprHandle handle) const {
                 if (auto *addr = handle.dyn_cast<const Address>())
-                    return factory.importAddress(*addr);
+                    return factory.importAddress(AddrHandle{addr});
                 UNREACHABLE();
             }
 
@@ -433,85 +433,87 @@ namespace acslg::analyzer::symbolic {
                 if (auto range = SymbolAddressView::tryFrom(handle)) {
                     if (!range->length())
                         ERROR("Substituted expression should be a *range*");
-                    return factory.importAddress(*range->handle());
+                    return factory.importAddress(range->handle());
                 }
                 UNREACHABLE();
             }
 
-            ExprHandle run(const SymbolicExpr &expr) const {
+            ExprHandle run(ExprHandle expr) const {
                 (void)rangeBase;
 
-                if (auto *literal = dyn_cast<const detail::LiteralExprNode>(&expr))
+                if (auto *literal = expr.dyn_cast<const detail::LiteralExprNode>())
                     return literal->importInto(factory);
-                if (expr.isUnknown())
+                if (expr->isUnknown())
                     return factory.unknown();
-                if (expr.isRangeIndex())
+                if (expr->isRangeIndex())
                     return indexExpr;
-                if (auto *varAddr = dyn_cast<const VariableAddressNode>(&expr))
+                if (auto *varAddr = expr.dyn_cast<const VariableAddressNode>())
                     return factory.variableAddress(varAddr->getFrom()).asExpr();
-                if (auto *fieldAddr = dyn_cast<const FieldAddressNode>(&expr)) {
-                    auto base = requireAddress(run(*fieldAddr->getBaseAddr()));
+                if (auto *fieldAddr = expr.dyn_cast<const FieldAddressNode>()) {
+                    auto base = requireAddress(run(fieldAddr->getBaseAddr().handle().asExpr()));
                     return factory
                         .fieldAddress(fieldAddr->getPointeeType(),
                                       fieldAddr->getDefinition(), base,
                                       fieldAddr->getFieldIndex())
                         .asExpr();
                 }
-                if (auto *symbolValue = dyn_cast<const SymbolValueNode>(&expr)) {
-                    auto from = requireAddress(run(*symbolValue->getFromAddrHandle()));
+                if (auto *symbolValue = expr.dyn_cast<const SymbolValueNode>()) {
+                    auto from = requireAddress(run(symbolValue->getFromAddrHandle().asExpr()));
                     return factory.symbolValue(symbolValue->getValType(), from,
                                                symbolValue->getFromPoint().value());
                 }
-                if (auto *symbolAddr = dyn_cast<const SymbolAddressNode>(&expr)) {
+                if (auto *symbolAddr = expr.dyn_cast<const SymbolAddressNode>()) {
                     std::optional<AddrHandle> from;
                     if (auto fromAddr = symbolAddr->getFromAddrHandle())
-                        from = requireAddress(run(**fromAddr));
+                        from = requireAddress(run(fromAddr->asExpr()));
 
                     std::optional<ExprHandle> length;
                     if (symbolAddr->getLength())
-                        length = run(*symbolAddr->getLength().value());
+                        length = run(symbolAddr->getLength()->handle());
 
                     return factory
                         .symbolAddress(symbolAddr->getPointeeType(), from,
                                        symbolAddr->getFromPoint().value(),
-                                       run(*symbolAddr->getOffset()), length)
+                                       run(ExprHandle{symbolAddr->getOffset()}), length)
                         .asExpr();
                 }
-                if (auto *binary = dyn_cast<const detail::BinaryOpExprNode>(&expr))
-                    return factory.binary(run(*binary->getLeft()), binary->getOperator(),
-                                          run(*binary->getRight()));
-                if (auto *unary = dyn_cast<const detail::UnaryOpExprNode>(&expr))
-                    return factory.unary(unary->getOperator(), run(*unary->getSub()));
-                if (auto *structure = dyn_cast<const StructureNode>(&expr)) {
-                    auto rebuilt = factory.importExpr(*structure);
+                if (auto *binary = expr.dyn_cast<const detail::BinaryOpExprNode>())
+                    return factory.binary(run(ExprHandle{binary->getLeft()}),
+                                          binary->getOperator(),
+                                          run(ExprHandle{binary->getRight()}));
+                if (auto *unary = expr.dyn_cast<const detail::UnaryOpExprNode>())
+                    return factory.unary(unary->getOperator(),
+                                         run(ExprHandle{unary->getSub()}));
+                if (auto *structure = expr.dyn_cast<const StructureNode>()) {
+                    auto rebuilt = factory.importExpr(ExprHandle{structure});
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
-                        rebuilt = factory.withField(rebuilt, i,
-                                                    run(*structure->getFieldValue(i)));
+                        rebuilt = factory.withField(
+                            rebuilt, i, run(ExprHandle{structure->getFieldValue(i)}));
                     return rebuilt;
                 }
-                if (auto *sum = dyn_cast<const SumOverRangeNode>(&expr)) {
+                if (auto *sum = expr.dyn_cast<const SumOverRangeNode>()) {
                     return makeSumOverRangeHandle(
-                        factory, requireRange(run(*sum->getRange().handle())),
+                        factory, requireRange(run(sum->getRange().handle().asExpr())),
                         sum->getIndexName(), sum->getFromPoint().value());
                 }
-                if (auto *quantifier = dyn_cast<const QuantifierOverRangeNode>(&expr)) {
+                if (auto *quantifier = expr.dyn_cast<const QuantifierOverRangeNode>()) {
                     return makeQuantifierOverRangeHandle(
-                        factory, requireRange(run(*quantifier->getRange().handle())),
+                        factory, requireRange(run(quantifier->getRange().handle().asExpr())),
                         quantifier->getIndexName(), quantifier->getQuantifier(),
-                        run(*quantifier->getPredicate()));
+                        run(ExprHandle{quantifier->getPredicate()}));
                 }
-                if (auto *maxMin = dyn_cast<const MaxMinOverRangeNode>(&expr)) {
+                if (auto *maxMin = expr.dyn_cast<const MaxMinOverRangeNode>()) {
                     return makeMaxMinOverRangeHandle(
-                        factory, requireRange(run(*maxMin->getRange().handle())),
+                        factory, requireRange(run(maxMin->getRange().handle().asExpr())),
                         maxMin->getIndexName(), maxMin->getExtremum(),
-                        run(*maxMin->getExpr()), maxMin->getFromPoint().value());
+                        run(ExprHandle{maxMin->getExpr()}), maxMin->getFromPoint().value());
                 }
 
                 ERROR("Unsupported SymbolicExpr node in handle range-index substitution.");
             }
         };
 
-        return Substituter{factory, rangeBase, indexExpr}.run(expr);
+        return Substituter{factory, rangeBase, indexExpr}.run(ExprHandle{&expr});
     }
 
     ExprHandle ExprFactory::importExpr(ExprHandle expr) { return importExpr(*expr); }
