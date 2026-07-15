@@ -576,8 +576,8 @@ namespace acslg::test::unit::analyzer {
         auto val0     = makeSymbolValue(10);
         auto val1     = makeSymbolValue(20);
 
-        pathA->updateMemory(*addr0A, acslContext.getExprFactory().importExpr(*val0));
-        pathB->updateMemory(*addr1B, acslContext.getExprFactory().importExpr(*val1));
+        pathA->updateMemory(addr0A, acslContext.getExprFactory().importExpr(*val0));
+        pathB->updateMemory(addr1B, acslContext.getExprFactory().importExpr(*val1));
 
         pathA->mergeWith(*pathB);
 
@@ -586,11 +586,11 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(pathA->getVarAddr().contains(var1));
         EXPECT_EQ(pathA->getVarAddr().at(var1).get().get(), addr1B.get().get());
 
-        auto gotVal1 = pathA->getMemoryState().read(*pathA->getVarAddr().at(var0));
+        auto gotVal1 = pathA->getMemoryState().read(pathA->getVarAddr().at(var0));
         ASSERT_TRUE(gotVal1);
         EXPECT_TRUE(gotVal1.value()->isUnknown());
 
-        auto gotVal2 = pathA->getMemoryState().read(*pathA->getVarAddr().at(var1));
+        auto gotVal2 = pathA->getMemoryState().read(pathA->getVarAddr().at(var1));
         ASSERT_TRUE(gotVal2);
         EXPECT_TRUE(gotVal2.value()->isUnknown());
     }
@@ -602,12 +602,12 @@ namespace acslg::test::unit::analyzer {
 
         auto valueA = makeSymbolValue(1);
         auto valueB = makeSymbolValue(2);
-        pathA->updateMemory(*addr0A, acslContext.getExprFactory().importExpr(*valueA));
-        pathB->updateMemory(*addr0B, acslContext.getExprFactory().importExpr(*valueB));
+        pathA->updateMemory(addr0A, acslContext.getExprFactory().importExpr(*valueA));
+        pathB->updateMemory(addr0B, acslContext.getExprFactory().importExpr(*valueB));
 
         pathA->mergeWith(*pathB);
 
-        auto val = pathA->getMemoryState().read(*addr0A);
+        auto val = pathA->getMemoryState().read(addr0A);
         ASSERT_TRUE(val);
         EXPECT_TRUE((*val)->isUnknown());
     }

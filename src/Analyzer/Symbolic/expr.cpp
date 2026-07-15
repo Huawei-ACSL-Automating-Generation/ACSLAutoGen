@@ -317,7 +317,7 @@ namespace acslg::analyzer::symbolic {
                         return factory.importExpr(expr);
 
                     auto realFromAddr = requireAddress(run(*symbolValue->getFromAddrHandle()));
-                    if (auto value = pathSubTo.getMemoryState().read(*realFromAddr))
+                    if (auto value = pathSubTo.getMemoryState().read(realFromAddr))
                         return factory.importExpr(*value.value());
 
                     return factory.symbolValue(symbolValue->getValType(), realFromAddr,
@@ -345,7 +345,7 @@ namespace acslg::analyzer::symbolic {
                     if (symbolAddr->getLength())
                         length = simplified(run(*symbolAddr->getLength().value()));
 
-                    if (auto value = pathSubTo.getMemoryState().read(*realFromAddr)) {
+                    if (auto value = pathSubTo.getMemoryState().read(realFromAddr)) {
                         auto realAddr = tryEvalAsSymbolAddrHandle(factory, *value.value());
                         if (realAddr == std::nullopt)
                             ERROR("This expr should be a `SymbolAddress");

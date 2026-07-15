@@ -164,8 +164,8 @@ namespace acslg::analyzer {
             addresses.insert(addr);
 
         for (const auto &addrBox : addresses) {
-            auto lhsVal = memoryState_.read(addrBox);
-            auto rhsVal = other.memoryState_.read(addrBox);
+            auto lhsVal = memoryState_.read(addrBox.handle());
+            auto rhsVal = other.memoryState_.read(addrBox.handle());
 
             if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addrBox.handle())) {
                 if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
@@ -209,7 +209,7 @@ namespace acslg::analyzer {
                     DEBUG("mergeWith BigNum->data: writing Unknown due to mismatch");
                 }
             }
-            memoryState_.write(addrBox, context_.getExprFactory().unknown());
+            memoryState_.write(addrBox.handle(), context_.getExprFactory().unknown());
         }
 
         // Intersect path conditions; a merged path must satisfy constraints from both sides.
@@ -248,7 +248,7 @@ namespace acslg::analyzer {
 
             auto symbol = getSymbol(ty, context_.getExprFactory().importAddress(*addr),
                                     startPoint_);
-            updateMemory(*addr, symbol);
+            updateMemory(addr, symbol);
         }
     }
 
@@ -376,7 +376,7 @@ namespace acslg::analyzer {
             // different VarDecl instances). Do not allocate new memory here.
             for (const auto &[vd, addrPtr] : varAddr_) {
                 if (vd && vd->getName() == canonicalVar->getName()) {
-                    if (auto val = memoryState_.read(*addrPtr))
+                    if (auto val = memoryState_.read(addrPtr))
                         return val.value();
                 }
             }
@@ -418,10 +418,6 @@ namespace acslg::analyzer {
      * @param addr Target address for the write.
      * @param expr Symbolic value to store.
      */
-    void Path::updateMemory(const symbolic::Address &addr, symbolic::ExprHandle expr) {
-        updateMemory(symbolic::AddrHandle{&addr}, expr);
-    }
-
     void Path::updateMemory(symbolic::AddrHandle addr, symbolic::ExprHandle expr) {
         auto imported = context_.getExprFactory().importExpr(*expr);
         if (imported->isUnknown()) {
@@ -526,7 +522,7 @@ namespace acslg::analyzer {
                           << funcStr << " param=" << paramStr << " index=" << i << " type="
                           << T.getAsString() << " loc=" << locStr << " arg=" << args[i]->dump());
                 }
-                calleePath->updateMemory(*slot, m.value().asExpr());
+                calleePath->updateMemory(slot, m.value().asExpr());
             } else if (T->isStructureType()) {
                 calleePath->updateMemory(slot, args[i]);
             } else if (T->isArrayType()) {
@@ -1268,9 +1264,9 @@ namespace acslg::analyzer {
                                     p->varAddr_.emplace(
                                         vd, p->context_.getExprFactory().importAddress(*addrPtr));
                                 }
-                                if (auto val = callerSnapshot->memoryState_.read(*addrPtr)) {
+                                if (auto val = callerSnapshot->memoryState_.read(addrPtr)) {
                                     auto &dstAddr = p->varAddr_.at(vd);
-                                    p->memoryState_.write(*dstAddr, val.value());
+                                    p->memoryState_.write(dstAddr, val.value());
                                 }
                             }
                             // Restore statement context back to the caller.
@@ -1628,7 +1624,7 @@ namespace acslg::analyzer {
             oss << "    @" << (name.empty() ? hint("<unnamed>") : path(name)) << " " << op("->")
                 << " " << addr->dump();
 
-            if (auto value = memoryState_.read(*addr)) {
+            if (auto value = memoryState_.read(addr)) {
                 oss << " " << op("->") << " " << value.value()->dump();
             } else {
                 oss << " " << op("->") << " " << hint("null");
@@ -1694,10 +1690,6 @@ namespace acslg::analyzer {
         return oss.str();
     }
 
-    bool Path::isUnchanged(const symbolic::Address &addr, const Path &since) const {
-        return isUnchanged(symbolic::AddrHandle{&addr}, since);
-    }
-
     bool Path::isUnchanged(symbolic::AddrHandle addr, const Path &since) const {
         if (auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr)) {
             if (symbolAddr->length())
@@ -1711,10 +1703,6 @@ namespace acslg::analyzer {
         if (oldValue)
             return *value.value() == *oldValue.value();
         return isFrom(value.value(), addr, since.getStartPoint());
-    }
-
-    bool Path::is_point_to_structure(const symbolic::Address &addr) const {
-        return is_point_to_structure(symbolic::AddrHandle{&addr});
     }
 
     bool Path::is_point_to_structure(symbolic::AddrHandle addr) const {
@@ -1800,10 +1788,6 @@ namespace acslg::analyzer {
         return *this;
     }
 
-    std::optional<symbolic::ExprHandle> MemoryModel::read(const symbolic::Address &addr) const {
-        return read(symbolic::AddrHandle{&addr});
-    }
-
     std::optional<symbolic::ExprHandle> MemoryModel::read(symbolic::AddrHandle addr) const {
         if (auto varAddr = symbolic::VariableAddressView::tryFrom(addr)) {
             if (auto it = memoryMap_variableAddr_.find(*varAddr->handle());
@@ -1869,10 +1853,6 @@ namespace acslg::analyzer {
             return factory().importExpr(*baseSt->field(index));
         }
         UNREACHABLE();
-    }
-
-    void MemoryModel::write(const symbolic::Address &addr, symbolic::ExprHandle value) {
-        write(symbolic::AddrHandle{&addr}, value);
     }
 
     void MemoryModel::write(symbolic::AddrHandle addr, symbolic::ExprHandle value) {
@@ -1965,10 +1945,6 @@ namespace acslg::analyzer {
             return;
         }
         UNREACHABLE();
-    }
-
-    bool MemoryModel::contains(const symbolic::Address &addr) const {
-        return contains(symbolic::AddrHandle{&addr});
     }
 
     bool MemoryModel::contains(symbolic::AddrHandle addr) const {

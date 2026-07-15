@@ -580,7 +580,7 @@ namespace acslg::spec_generator {
                         // inventing new locals.
                         if (!postPath->getVarAddr().contains(root.value()))
                             continue;
-                        postPath->updateMemory(addr, value);
+                        postPath->updateMemory(addr.handle(), value);
                     }
                     // Carry over path termination state and optional return expression.
                     postPath->setPathState(postBranchInfo.pathState);

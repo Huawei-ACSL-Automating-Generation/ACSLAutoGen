@@ -74,7 +74,6 @@ namespace acslg::analyzer {
          * @param addr The symbolic address to read from.
          * @return Optional containing the expression if found, otherwise empty.
          */
-        std::optional<symbolic::ExprHandle> read(const symbolic::Address &addr) const;
         std::optional<symbolic::ExprHandle> read(symbolic::AddrHandle addr) const;
 
         /**
@@ -82,7 +81,6 @@ namespace acslg::analyzer {
          * @param address The symbolic address to write to.
          * @param value The symbolic expression to store.
          */
-        void write(const symbolic::Address &address, symbolic::ExprHandle value);
         void write(symbolic::AddrHandle address, symbolic::ExprHandle value);
 
         /**
@@ -90,7 +88,6 @@ namespace acslg::analyzer {
          * @param addr The address to check.
          * @return true if address exists, false otherwise.
          */
-        bool contains(const symbolic::Address &addr) const;
         bool contains(symbolic::AddrHandle addr) const;
 
         /// Clears all memory maps.
@@ -646,7 +643,6 @@ namespace acslg::analyzer {
          * @param addr [in] Target address.
          * @param expr [in] Symbolic expression to store.
          */
-        void updateMemory(const symbolic::Address &addr, symbolic::ExprHandle expr);
         void updateMemory(symbolic::AddrHandle addr, symbolic::ExprHandle expr);
         /**
          * @brief Update the symbolic state of a variable.
@@ -676,14 +672,12 @@ namespace acslg::analyzer {
          * @param since [in] Reference path providing the baseline state.
          * @return True if the address holds the same symbolic value.
          */
-        bool isUnchanged(const symbolic::Address &addr, const Path &since) const;
         bool isUnchanged(symbolic::AddrHandle addr, const Path &since) const;
         /**
          * @brief Test if the address refers to a structure object.
          * @param addr [in] Address to inspect.
          * @return True if the address resolves to a structure.
          */
-        bool is_point_to_structure(const symbolic::Address &addr) const;
         bool is_point_to_structure(symbolic::AddrHandle addr) const;
         /**
          * @brief Merge another compatible path into this one, reconciling memory and conditions.

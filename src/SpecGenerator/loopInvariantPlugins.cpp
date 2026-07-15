@@ -347,7 +347,7 @@ namespace acslg::spec_generator {
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
                         continue;
-                    symbolEntry->getMutMemoryState().write(addr, factory.literal(constVal.value()));
+                    symbolEntry->getMutMemoryState().write(addr.handle(), factory.literal(constVal.value()));
                 }
             }
             auto loopCurrent = entryAndCurrentInfo.symbolicLoopCurrent->clone();
@@ -466,7 +466,7 @@ namespace acslg::spec_generator {
                     auto constVal = val->tryEvalAsConstant();
                     if (constVal == std::nullopt)
                         continue;
-                    symbolEntry->getMutMemoryState().write(addr, factory.literal(constVal.value()));
+                    symbolEntry->getMutMemoryState().write(addr.handle(), factory.literal(constVal.value()));
                 }
             }
 
