@@ -135,7 +135,7 @@ namespace acslg::analyzer::symbolic::detail {
         QuantifierOverRangeNode &operator=(QuantifierOverRangeNode &&)      = delete;
 
         RangeQuantifier getQuantifier() const { return quant_; }
-        const SymbolicExpr &getPredicate() const { return *pred_; }
+        ExprHandle getPredicate() const { return pred_.handle(); }
 
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
@@ -186,7 +186,7 @@ namespace acslg::analyzer::symbolic::detail {
         MaxMinOverRangeNode &operator=(MaxMinOverRangeNode &&)      = delete;
 
         RangeExtremum getExtremum() const { return extremum_; }
-        const SymbolicExpr &getExpr() const { return *expr_; }
+        ExprHandle getExpr() const { return expr_.handle(); }
 
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;

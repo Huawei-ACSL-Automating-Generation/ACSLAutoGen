@@ -151,12 +151,12 @@ namespace acslg::analyzer::symbolic {
         if (auto *quantifier = expr.dyn_cast<const QuantifierOverRangeNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<QuantifierOverRangeNode>(
                 importAddress(*quantifier->getRange().handle()), quantifier->getIndexName(),
-                quantifier->getQuantifier(), importExpr(quantifier->getPredicate()), newType));
+                quantifier->getQuantifier(), importExpr(*quantifier->getPredicate()), newType));
 
         if (auto *maxMin = expr.dyn_cast<const MaxMinOverRangeNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<MaxMinOverRangeNode>(
                 importAddress(*maxMin->getRange().handle()), maxMin->getIndexName(),
-                maxMin->getExtremum(), importExpr(maxMin->getExpr()),
+                maxMin->getExtremum(), importExpr(*maxMin->getExpr()),
                 maxMin->getFromPoint().value(), newType));
 
         ERROR("Unsupported SymbolicExpr type in ExprFactory::withValType: " + expr.dump());
@@ -248,13 +248,13 @@ namespace acslg::analyzer::symbolic {
                     return makeQuantifierOverRangeHandle(
                         factory, requireRange(run(*quantifier->getRange().handle())),
                         quantifier->getIndexName(), quantifier->getQuantifier(),
-                        *run(quantifier->getPredicate()));
+                        run(*quantifier->getPredicate()));
                 }
                 if (auto *maxMin = dyn_cast<const MaxMinOverRangeNode>(&expr)) {
                     return makeMaxMinOverRangeHandle(
                         factory, requireRange(run(*maxMin->getRange().handle())),
                         maxMin->getIndexName(), maxMin->getExtremum(),
-                        run(maxMin->getExpr()), maxMin->getFromPoint().value());
+                        run(*maxMin->getExpr()), maxMin->getFromPoint().value());
                 }
 
                 ERROR("Unsupported SymbolicExpr node in handle value substitution.");
@@ -386,11 +386,11 @@ namespace acslg::analyzer::symbolic {
                     return makeQuantifierOverRangeHandle(
                         factory, requireRange(run(*quantifier->getRange().handle())),
                         quantifier->getIndexName(), quantifier->getQuantifier(),
-                        *run(quantifier->getPredicate()));
+                        run(*quantifier->getPredicate()));
                 }
                 if (auto *maxMin = dyn_cast<const MaxMinOverRangeNode>(&expr)) {
                     auto range = requireRange(run(*maxMin->getRange().handle()));
-                    auto body  = run(maxMin->getExpr());
+                    auto body  = run(*maxMin->getExpr());
                     if (maxMin->getFromPoint().value() == pointToSub)
                         TODO();
                     return makeMaxMinOverRangeHandle(factory, range, maxMin->getIndexName(),
@@ -491,13 +491,13 @@ namespace acslg::analyzer::symbolic {
                     return makeQuantifierOverRangeHandle(
                         factory, requireRange(run(*quantifier->getRange().handle())),
                         quantifier->getIndexName(), quantifier->getQuantifier(),
-                        *run(quantifier->getPredicate()));
+                        run(*quantifier->getPredicate()));
                 }
                 if (auto *maxMin = dyn_cast<const MaxMinOverRangeNode>(&expr)) {
                     return makeMaxMinOverRangeHandle(
                         factory, requireRange(run(*maxMin->getRange().handle())),
                         maxMin->getIndexName(), maxMin->getExtremum(),
-                        run(maxMin->getExpr()), maxMin->getFromPoint().value());
+                        run(*maxMin->getExpr()), maxMin->getFromPoint().value());
                 }
 
                 ERROR("Unsupported SymbolicExpr node in handle range-index substitution.");

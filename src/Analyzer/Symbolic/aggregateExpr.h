@@ -81,11 +81,6 @@ namespace acslg::analyzer::symbolic {
                                              AddrHandle range,
                                              std::string_view indexName,
                                              RangeQuantifier quantifier,
-                                             const SymbolicExpr &predicate);
-    ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
-                                             AddrHandle range,
-                                             std::string_view indexName,
-                                             RangeQuantifier quantifier,
                                              ExprHandle predicate);
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
@@ -101,12 +96,6 @@ namespace acslg::analyzer::symbolic {
                                          ExprHandle body,
                                          SourcePoint fromPoint);
 
-    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
-                                         AddrHandle range,
-                                         std::string_view indexName,
-                                         RangeExtremum extremum,
-                                         const SymbolicExpr &body,
-                                         SourcePoint fromPoint);
 } // namespace acslg::analyzer::symbolic
 
 #endif

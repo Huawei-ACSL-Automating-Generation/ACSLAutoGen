@@ -1094,10 +1094,10 @@ namespace acslg::test::unit::analyzer {
             factory.binary(three, symbolic::BinaryOp::LessThan, two);
         auto original = symbolic::makeQuantifierOverRangeHandle(
             factory, range, "i",
-            symbolic::RangeQuantifier::ForAll, *pred);
+            symbolic::RangeQuantifier::ForAll, pred);
         auto expected = symbolic::makeQuantifierOverRangeHandle(
             factory, range, "i",
-            symbolic::RangeQuantifier::ForAll, *expectedPred);
+            symbolic::RangeQuantifier::ForAll, expectedPred);
 
         symbolic::HashExprHandleMap substitutions;
         substitutions.emplace(one.hash(), three);

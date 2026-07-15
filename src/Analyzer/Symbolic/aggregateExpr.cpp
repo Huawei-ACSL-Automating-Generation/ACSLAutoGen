@@ -91,8 +91,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle QuantifierOverRangeView::predicate() const {
-        return ExprHandle{
-            &cast<const QuantifierOverRangeNode>(handle_.get().get())->getPredicate()};
+        return cast<const QuantifierOverRangeNode>(handle_.get().get())->getPredicate();
     }
 
     MaxMinOverRangeView::MaxMinOverRangeView(ExprHandle handle) : handle_(handle) {
@@ -123,7 +122,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle MaxMinOverRangeView::body() const {
-        return ExprHandle{&cast<const MaxMinOverRangeNode>(handle_.get().get())->getExpr()};
+        return cast<const MaxMinOverRangeNode>(handle_.get().get())->getExpr();
     }
 
     SourcePoint MaxMinOverRangeView::fromPoint() const {
@@ -139,16 +138,6 @@ namespace acslg::analyzer::symbolic {
             factory, detail::ExprFactoryInternals::makeNode<SumOverRangeNode>(
                          factory.importAddress(*rangeView.handle()), indexName,
                          std::move(fromPoint)));
-    }
-
-    ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
-                                             AddrHandle range,
-                                             std::string_view indexName,
-                                             RangeQuantifier quantifier,
-                                             const SymbolicExpr &predicate) {
-        return makeQuantifierOverRangeHandle(factory, factory.importAddress(*range), indexName,
-                                             quantifier,
-                                             factory.importExpr(predicate));
     }
 
     ExprHandle makeQuantifierOverRangeHandle(ExprFactory &factory,
@@ -183,16 +172,6 @@ namespace acslg::analyzer::symbolic {
         return detail::ExprFactoryInternals::intern(
             factory, detail::ExprFactoryInternals::makeNode<MaxMinOverRangeNode>(
                          range, indexName, extremum, body, std::move(fromPoint)));
-    }
-
-    ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
-                                         AddrHandle range,
-                                         std::string_view indexName,
-                                         RangeExtremum extremum,
-                                         const SymbolicExpr &body,
-                                         SourcePoint fromPoint) {
-        return makeMaxMinOverRangeHandle(factory, range, indexName, extremum,
-                                         factory.importExpr(body), std::move(fromPoint));
     }
 
     SumOverRangeNode::SumOverRangeNode(AddrHandle range,
