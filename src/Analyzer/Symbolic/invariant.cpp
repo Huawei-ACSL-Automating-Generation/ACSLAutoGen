@@ -9,6 +9,7 @@
 #include "ppl.hh"
 
 #include "Symbolic/aggregateExpr.h"
+#include "detail/aggregateNodes.h"
 #include "detail/exprNodes.h"
 #include "expr.h"
 #include "Analyzer/state.h"
