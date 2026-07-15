@@ -10,6 +10,7 @@
 #include "ASTExtractor.h"
 #include "Context/context.h"
 #include "Symbolic/aggregateExpr.h"
+#include "Symbolic/detail/factoryInternals.h"
 #include "Symbolic/expr.h"
 #include "testHelper.h"
 

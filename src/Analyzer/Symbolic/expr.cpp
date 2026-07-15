@@ -18,6 +18,7 @@
 #include "aggregateExpr.h" // IWYU pragma: keep
 #include "detail/aggregateNodes.h"
 #include "detail/exprNodes.h"
+#include "detail/factoryInternals.h"
 #include "macros.h"
 #include "utils.h"
 #include "Analyzer/state.h"

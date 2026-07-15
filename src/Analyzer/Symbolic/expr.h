@@ -968,9 +968,7 @@ namespace acslg::analyzer::symbolic {
         friend struct detail::ExprFactoryInternals;
 
         template <typename Node, typename... Args>
-        static std::unique_ptr<Node> makeNode(Args &&...args) {
-            return std::unique_ptr<Node>{new Node(std::forward<Args>(args)...)};
-        }
+        static std::unique_ptr<Node> makeNode(Args &&...args);
 
         ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node);
         AddrHandle internAddress(utils::not_null<std::unique_ptr<Address>> node);
@@ -978,21 +976,6 @@ namespace acslg::analyzer::symbolic {
         std::vector<std::unique_ptr<SymbolicExpr>> owned_;
         std::unordered_map<size_t, std::vector<const SymbolicExpr *>> interned_;
     };
-
-    namespace detail {
-        struct ExprFactoryInternals {
-            template <typename Node, typename... Args>
-            static std::unique_ptr<Node> makeNode(Args &&...args) {
-                return std::unique_ptr<Node>{new Node(std::forward<Args>(args)...)};
-            }
-
-            static ExprHandle intern(
-                ExprFactory &factory,
-                utils::not_null<std::unique_ptr<SymbolicExpr>> node) {
-                return factory.intern(std::move(node));
-            }
-        };
-    } // namespace detail
 
     class ExprFactoryScope {
       public:

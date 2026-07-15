@@ -10,6 +10,7 @@
 
 #include "expr.h"
 #include "detail/aggregateNodes.h"
+#include "detail/factoryInternals.h"
 #include "macros.h"
 #include "utils.h"
 #include "stringTemplate.h"
