@@ -163,7 +163,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle getSubstitutedValueHandle(ExprFactory &factory,
-                                         const SymbolicExpr &expr,
+                                         ExprHandle expr,
                                          const HashExprHandleMap &hashToExprMap) {
         ExprFactoryScope scope(factory);
 
@@ -263,11 +263,11 @@ namespace acslg::analyzer::symbolic {
             }
         };
 
-        return Substituter{factory, hashToExprMap}.run(ExprHandle{&expr});
+        return Substituter{factory, hashToExprMap}.run(expr);
     }
 
     ExprHandle getSubstitutedExprHandle(ExprFactory &factory,
-                                        const SymbolicExpr &expr,
+                                        ExprHandle expr,
                                         const Path &pathSubTo,
                                         const SourcePoint &pointToSub) {
         ExprFactoryScope scope(factory);
@@ -409,11 +409,11 @@ namespace acslg::analyzer::symbolic {
             }
         };
 
-        return Substituter{factory, pathSubTo, pointToSub}.run(ExprHandle{&expr});
+        return Substituter{factory, pathSubTo, pointToSub}.run(expr);
     }
 
     ExprHandle getRangeIndexSubstitutedHandle(ExprFactory &factory,
-                                              const SymbolicExpr &expr,
+                                              ExprHandle expr,
                                               const SymbolAddrBaseInfo &rangeBase,
                                               ExprHandle indexExpr) {
         ExprFactoryScope scope(factory);
@@ -513,7 +513,7 @@ namespace acslg::analyzer::symbolic {
             }
         };
 
-        return Substituter{factory, rangeBase, indexExpr}.run(ExprHandle{&expr});
+        return Substituter{factory, rangeBase, indexExpr}.run(expr);
     }
 
     ExprHandle ExprFactory::importExpr(ExprHandle expr) { return importExpr(*expr); }

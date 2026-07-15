@@ -574,14 +574,14 @@ namespace acslg::analyzer::symbolic {
 
     using HashExprHandleMap = std::unordered_map<size_t, ExprHandle>;
     ExprHandle getSubstitutedValueHandle(ExprFactory &factory,
-                                         const SymbolicExpr &expr,
+                                         ExprHandle expr,
                                          const HashExprHandleMap &hashToExprMap);
     ExprHandle getSubstitutedExprHandle(ExprFactory &factory,
-                                        const SymbolicExpr &expr,
+                                        ExprHandle expr,
                                         const Path &pathSubTo,
                                         const SourcePoint &pointToSub);
     ExprHandle getRangeIndexSubstitutedHandle(ExprFactory &factory,
-                                              const SymbolicExpr &expr,
+                                              ExprHandle expr,
                                               const SymbolAddrBaseInfo &rangeBase,
                                               ExprHandle indexExpr);
     ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr);

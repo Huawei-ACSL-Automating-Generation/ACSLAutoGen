@@ -826,7 +826,7 @@ namespace acslg::spec_generator {
             for (auto &addr : assignedAddrs) {
                 for (auto &path : loopEntry.getPaths()) {
                     auto concreteAddrExpr =
-                        symb::getSubstitutedExprHandle(factory, *addr.handle(), *path,
+                        symb::getSubstitutedExprHandle(factory, addr.handle().asExpr(), *path,
                                                        loopEntryPoint);
                     auto concreteAddr =
                         symb::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
@@ -979,7 +979,7 @@ namespace acslg::spec_generator {
             for (auto &addr : assignedAddrs) {
                 for (auto &path : loopEntry.getPaths()) {
                     auto concreteAddrExpr =
-                        symb::getSubstitutedExprHandle(factory, *addr.handle(), *path,
+                        symb::getSubstitutedExprHandle(factory, addr.handle().asExpr(), *path,
                                                        loopEntryPoint);
                     auto concreteAddr =
                         symb::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
@@ -1587,7 +1587,7 @@ namespace acslg::spec_generator {
             // - If substituting the expression on each entry path yields the same result, return
             //   that common value
             // - Otherwise return nullopt (meaning the initial value may differ across entry paths)
-            auto sameValueOnRealEntries = [&](const symb::SymbolicExpr &expr)
+            auto sameValueOnRealEntries = [&](symb::ExprHandle expr)
                 -> std::optional<symb::ExprHandle> {
                 std::optional<symb::ExprHandle> commonValue;
                 for (auto &entry : loopEntry.getPaths()) {
@@ -1635,7 +1635,7 @@ namespace acslg::spec_generator {
             // Rewrite the interrupted predicate by replacing its symbols with k-parameterized
             // expressions, yielding pred(k).
             auto pred =
-                symb::getSubstitutedValueHandle(factory, *interruptedCond, hashExprMapForSub);
+                symb::getSubstitutedValueHandle(factory, interruptedCond, hashExprMapForSub);
             symb::Expr predExpr{factory, pred};
 
             std::vector<PostPSInfo> normalPostInfos{1};
@@ -1715,7 +1715,7 @@ namespace acslg::spec_generator {
                 usedPoints = std::move(expected.value().second);
                 std::string leftBoundStr, rightBoundStr;
                 if (indexStep > 0) {
-                    auto leftBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
+                    auto leftBound = sameValueOnRealEntries(indexInfo.indexPattern.initialValue);
                     if (leftBound == std::nullopt)
                         leftBound = factory.importExpr(indexInfo.indexPattern.initialValue);
                     assert(leftBound);
@@ -1734,7 +1734,7 @@ namespace acslg::spec_generator {
                     auto leftExpected =
                         indexInfo.indexSymbolicValue->getACSL({.noStateLabelFunctionAt = true});
                     assert(leftExpected);
-                    auto rightBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
+                    auto rightBound = sameValueOnRealEntries(indexInfo.indexPattern.initialValue);
                     if (rightBound == std::nullopt)
                         rightBound = factory.importExpr(indexInfo.indexPattern.initialValue);
                     assert(rightBound);

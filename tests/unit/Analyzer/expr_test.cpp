@@ -249,7 +249,7 @@ namespace acslg::test::unit::analyzer {
         auto point   = getSourcePoint(0);
         auto varNode = makeSymbolValue(0, point);
         auto result =
-            symbolic::getSubstitutedExprHandle(factory, *varNode, *path, point);
+            symbolic::getSubstitutedExprHandle(factory, varNode, *path, point);
 
         ASSERT_EQ(result.get().get(), factory.literal(uint64_t{42}).get().get());
     }
@@ -264,7 +264,7 @@ namespace acslg::test::unit::analyzer {
         auto point   = getSourcePoint(0);
         auto varNode = makeSymbolValue(0, point);
         auto result =
-            symbolic::getSubstitutedExprHandle(factory, *varNode, *path, point);
+            symbolic::getSubstitutedExprHandle(factory, varNode, *path, point);
 
         EXPECT_EQ(result.get().get(), factory.literal(uint64_t{42}).get().get());
     }
@@ -279,7 +279,7 @@ namespace acslg::test::unit::analyzer {
         auto point = getSourcePoint(0);
         auto varNode = makeSymbolValue(0, point);
         auto result =
-            symbolic::getSubstitutedExprHandle(factory, *varNode, *path, point);
+            symbolic::getSubstitutedExprHandle(factory, varNode, *path, point);
 
         EXPECT_EQ(result.get().get(), factory.literal(uint64_t{42}).get().get());
     }
@@ -295,7 +295,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactoryScope scope(factory);
         auto exprBefore = factory.importExpr(*varNode);
         auto result =
-            symbolic::getSubstitutedExprHandle(factory, *varNode, *path, getSourcePoint(42));
+            symbolic::getSubstitutedExprHandle(factory, varNode, *path, getSourcePoint(42));
 
         ASSERT_EQ(*result, *exprBefore);
     }
@@ -315,7 +315,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto expected = makeAdd(factory.literal(uint64_t{1}), factory.literal(uint64_t{2}));
-        auto result = symbolic::getSubstitutedExprHandle(factory, *expr, *path, point);
+        auto result = symbolic::getSubstitutedExprHandle(factory, expr, *path, point);
         ASSERT_EQ(*result, *expected);
     }
 
@@ -331,7 +331,7 @@ namespace acslg::test::unit::analyzer {
         auto bVar = makeSymbolValue(2, point);
         auto expr = makeAdd(std::move(aVar), std::move(bVar));
 
-        auto result = symbolic::getSubstitutedExprHandle(factory, *expr, *path, point);
+        auto result = symbolic::getSubstitutedExprHandle(factory, expr, *path, point);
         auto expected = factory.binary(factory.literal(uint64_t{1}),
                                        symbolic::BinaryOp::Add,
                                        factory.literal(uint64_t{2}));
@@ -359,7 +359,7 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto result = symbolic::getSubstitutedExprHandle(factory, *sym, *path, point);
+        auto result = symbolic::getSubstitutedExprHandle(factory, sym.asExpr(), *path, point);
         ASSERT_EQ(*result->simplifiedExpr(), *expected);
     }
 
@@ -368,7 +368,8 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto result = symbolic::getSubstitutedExprHandle(factory, *sym, *path, defaultPoint);
+        auto result =
+            symbolic::getSubstitutedExprHandle(factory, sym.asExpr(), *path, defaultPoint);
         ASSERT_EQ(*result, *sym);
     }
 
@@ -377,7 +378,8 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto result = symbolic::getSubstitutedExprHandle(factory, *varAddr, *path, defaultPoint);
+        auto result = symbolic::getSubstitutedExprHandle(factory, varAddr.asExpr(), *path,
+                                                         defaultPoint);
         ASSERT_EQ(*result, *varAddr);
     }
 
@@ -394,7 +396,7 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto result = symbolic::getSubstitutedExprHandle(factory, *sym, *path, otherPoint);
+        auto result = symbolic::getSubstitutedExprHandle(factory, sym.asExpr(), *path, otherPoint);
         ASSERT_EQ(*result, *sym);
     }
 
@@ -411,7 +413,7 @@ namespace acslg::test::unit::analyzer {
         auto sym = makeRangeAddr(/*origin id*/ 8, internForTest(offset), std::nullopt, point);
 
         auto otherPoint = getSourcePoint(1);
-        auto result = symbolic::getSubstitutedExprHandle(factory, *sym, *path, otherPoint);
+        auto result = symbolic::getSubstitutedExprHandle(factory, sym.asExpr(), *path, otherPoint);
         auto *resultAddr = symbolic::cast<symbolic::Address>(result.get().get());
 
         EXPECT_EQ(factory.importAddress(*resultAddr), factory.importAddress(*sym));
@@ -425,7 +427,8 @@ namespace acslg::test::unit::analyzer {
         auto point = getSourcePoint(0);
         auto symHandle = factory.symbolAddress(var->getType(), std::nullopt, point);
 
-        auto result = symbolic::getSubstitutedExprHandle(factory, *symHandle, *path, point);
+        auto result =
+            symbolic::getSubstitutedExprHandle(factory, symHandle.asExpr(), *path, point);
         auto *resultAddr = symbolic::cast<symbolic::Address>(result.get().get());
 
         EXPECT_EQ(factory.importAddress(*resultAddr), symHandle);
@@ -441,7 +444,8 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        ASSERT_DEATH(symbolic::getSubstitutedExprHandle(factory, *sym, *path, point), "");
+        ASSERT_DEATH(
+            symbolic::getSubstitutedExprHandle(factory, sym.asExpr(), *path, point), "");
         SUCCEED();
     }
 
@@ -1028,7 +1032,7 @@ namespace acslg::test::unit::analyzer {
         substitutions.emplace(original.hash(), replacement);
 
         auto substituted =
-            symbolic::getSubstitutedValueHandle(factory, *original, substitutions);
+            symbolic::getSubstitutedValueHandle(factory, original, substitutions);
         EXPECT_EQ(substituted.get().get(), replacement.get().get());
     }
 
@@ -1045,7 +1049,7 @@ namespace acslg::test::unit::analyzer {
         substitutions.emplace(original.hash(), replacement);
 
         auto substituted =
-            symbolic::getSubstitutedValueHandle(factory, *original, substitutions);
+            symbolic::getSubstitutedValueHandle(factory, original, substitutions);
         EXPECT_EQ(substituted.get().get(), replacement.get().get());
     }
 
@@ -1062,7 +1066,7 @@ namespace acslg::test::unit::analyzer {
         substitutions.emplace(one.hash(), three);
 
         auto substituted =
-            symbolic::getSubstitutedValueHandle(factory, *original, substitutions);
+            symbolic::getSubstitutedValueHandle(factory, original, substitutions);
         EXPECT_EQ(substituted.get().get(), expected.get().get());
     }
 
@@ -1105,7 +1109,7 @@ namespace acslg::test::unit::analyzer {
         substitutions.emplace(one.hash(), three);
 
         auto substituted =
-            symbolic::getSubstitutedValueHandle(factory, *original, substitutions);
+            symbolic::getSubstitutedValueHandle(factory, original, substitutions);
         EXPECT_EQ(substituted.get().get(), expected.get().get());
     }
 
@@ -1400,7 +1404,7 @@ namespace acslg::test::unit::analyzer {
 
         auto rangeIndexHandle = factory.rangeIndex("i");
         auto substituted =
-            symbolic::getRangeIndexSubstitutedHandle(factory, *rangeIndexHandle, rangeBase,
+            symbolic::getRangeIndexSubstitutedHandle(factory, rangeIndexHandle, rangeBase,
                                                       replacement);
         symbolic::BinaryExprView node{substituted};
 
@@ -1415,7 +1419,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::deriveType(var->getType()), indexedFrom, point);
         auto indexedRangeBase = symbolic::SymbolAddressView{indexedFrom}.baseInfo();
         auto substitutedValue = symbolic::getRangeIndexSubstitutedHandle(
-            factory, *indexedValue, indexedRangeBase, replacement);
+            factory, indexedValue, indexedRangeBase, replacement);
         auto expectedFrom =
             factory.symbolAddress(var->getType(), varAddr, point, replacement, replacement);
         EXPECT_EQ(substitutedValue.get().get(),
@@ -1448,17 +1452,17 @@ namespace acslg::test::unit::analyzer {
         auto literal = factory.literal(int64_t{7});
         auto index = factory.literal(int64_t{0});
         auto substitutedLiteral =
-            symbolic::getRangeIndexSubstitutedHandle(factory, *literal, rangeBase, index);
+            symbolic::getRangeIndexSubstitutedHandle(factory, literal, rangeBase, index);
         EXPECT_EQ(substitutedLiteral.get().get(), literal.get().get());
 
         symbolic::HashExprHandleMap emptySubstitutions;
         auto valueSubstitutedLiteral =
-            symbolic::getSubstitutedValueHandle(factory, *literal, emptySubstitutions);
+            symbolic::getSubstitutedValueHandle(factory, literal, emptySubstitutions);
         EXPECT_EQ(valueSubstitutedLiteral.get().get(), literal.get().get());
 
         auto varAddr = factory.variableAddress(var);
         auto substitutedAddr =
-            symbolic::getRangeIndexSubstitutedHandle(factory, *varAddr, rangeBase, index);
+            symbolic::getRangeIndexSubstitutedHandle(factory, varAddr.asExpr(), rangeBase, index);
         EXPECT_EQ(substitutedAddr.get().get(), varAddr.asExpr().get().get());
     }
 
@@ -1566,7 +1570,7 @@ namespace acslg::test::unit::analyzer {
 
         auto index = factory.literal(int64_t{1});
         auto substituted =
-            symbolic::getRangeIndexSubstitutedHandle(factory, *sum.handle(), rangeBase, index);
+            symbolic::getRangeIndexSubstitutedHandle(factory, sum.handle(), rangeBase, index);
         EXPECT_NE(substituted, sum.handle());
     }
 
@@ -1608,7 +1612,7 @@ namespace acslg::test::unit::analyzer {
 
         auto index = factory.literal(int64_t{1});
         auto substituted =
-            symbolic::getRangeIndexSubstitutedHandle(factory, *quantifier.handle(), rangeBase,
+            symbolic::getRangeIndexSubstitutedHandle(factory, quantifier.handle(), rangeBase,
                                                       index);
         EXPECT_NE(substituted, quantifier.handle());
     }
@@ -1653,7 +1657,7 @@ namespace acslg::test::unit::analyzer {
 
         auto index = factory.literal(int64_t{1});
         auto substituted =
-            symbolic::getRangeIndexSubstitutedHandle(factory, *max.handle(), rangeBase, index);
+            symbolic::getRangeIndexSubstitutedHandle(factory, max.handle(), rangeBase, index);
         EXPECT_NE(substituted, max.handle());
     }
 
@@ -1714,7 +1718,7 @@ namespace acslg::test::unit::analyzer {
         auto sumHandle = symbolic::makeSumOverRangeHandle(
             factory, sumRange, "i", point);
         auto substitutedSum =
-            symbolic::getRangeIndexSubstitutedHandle(factory, *sumHandle, rangeBase, one);
+            symbolic::getRangeIndexSubstitutedHandle(factory, sumHandle, rangeBase, one);
         auto sumRangeView = symbolic::SumOverRangeView{substitutedSum}.range();
         EXPECT_EQ(sumRangeView.offset(), one);
         ASSERT_TRUE(sumRangeView.length());
@@ -1726,7 +1730,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::RangeQuantifier::ForAll,
             factory.rangeIndex("i"));
         auto substitutedQuantifier =
-            symbolic::getRangeIndexSubstitutedHandle(factory, *quantifierHandle, rangeBase, one);
+            symbolic::getRangeIndexSubstitutedHandle(factory, quantifierHandle, rangeBase, one);
         EXPECT_EQ(symbolic::QuantifierOverRangeView{substitutedQuantifier}.predicate(), one);
 
         auto maxRange = makeRange();
@@ -1734,7 +1738,7 @@ namespace acslg::test::unit::analyzer {
             factory, maxRange, "i", symbolic::RangeExtremum::Max,
             factory.rangeIndex("i"), point);
         auto substitutedMax =
-            symbolic::getRangeIndexSubstitutedHandle(factory, *maxHandle, rangeBase, one);
+            symbolic::getRangeIndexSubstitutedHandle(factory, maxHandle, rangeBase, one);
         EXPECT_EQ(symbolic::MaxMinOverRangeView{substitutedMax}.body(), one);
     }
 
@@ -2509,7 +2513,8 @@ namespace acslg::test::unit::analyzer {
         auto rangeBase = symbolic::SymbolAddressView{indexedAddr}.baseInfo();
 
         auto substitutedAddr =
-            symbolic::getRangeIndexSubstitutedHandle(factory, *indexedAddr, rangeBase, index);
+            symbolic::getRangeIndexSubstitutedHandle(factory, indexedAddr.asExpr(), rangeBase,
+                                                      index);
         EXPECT_EQ(substitutedAddr.get().get(),
                   factory.symbolAddress(x->getType(), varAddr, point, index, index)
                       .asExpr()
@@ -2519,7 +2524,8 @@ namespace acslg::test::unit::analyzer {
         auto fieldAddr = factory.fieldAddress(
             firstField->getType(), record, factory.variableAddress(s), 0);
         auto substitutedField =
-            symbolic::getRangeIndexSubstitutedHandle(factory, *fieldAddr, rangeBase, index);
+            symbolic::getRangeIndexSubstitutedHandle(factory, fieldAddr.asExpr(), rangeBase,
+                                                      index);
         EXPECT_EQ(substitutedField.get().get(), fieldAddr.asExpr().get().get());
 
         auto indexedStructAddr = factory.symbolAddress(
@@ -2528,7 +2534,7 @@ namespace acslg::test::unit::analyzer {
             factory.fieldAddress(firstField->getType(), record, indexedStructAddr, 0);
         auto indexedRangeBase = symbolic::SymbolAddressView{indexedStructAddr}.baseInfo();
         auto substitutedIndexedField = symbolic::getRangeIndexSubstitutedHandle(
-            factory, *indexedFieldAddr, indexedRangeBase, index);
+            factory, indexedFieldAddr.asExpr(), indexedRangeBase, index);
         auto expectedStructAddr = factory.symbolAddress(
             s->getType(), factory.variableAddress(s), point, index, index);
         EXPECT_EQ(substitutedIndexedField.get().get(),
@@ -2842,7 +2848,7 @@ namespace acslg::test::unit::analyzer {
         substitutions.emplace(structure.field(0)->hash(), replacement);
 
         auto substituted =
-            symbolic::getSubstitutedValueHandle(factory, *structure.handle(), substitutions);
+            symbolic::getSubstitutedValueHandle(factory, structure.handle(), substitutions);
         symbolic::StructureView substitutedStructure{substituted};
 
         EXPECT_EQ(substitutedStructure.field(0), replacement);

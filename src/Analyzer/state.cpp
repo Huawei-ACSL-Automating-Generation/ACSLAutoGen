@@ -1817,7 +1817,7 @@ namespace acslg::analyzer {
                         firstLEIt->first.second <= unsignedOffset)
                         return std::nullopt;
                     return symbolic::getRangeIndexSubstitutedHandle(
-                        factory(), *firstLEIt->second, baseInfo, factory().importExpr(offset));
+                        factory(), firstLEIt->second, baseInfo, factory().importExpr(offset));
                 } else if (constOffset && length && length.value()->tryEvalAsConstant()) {
                     UNIMPLEMENT(
                         "There doesn't appear to be a need for constant-range range queries at "
