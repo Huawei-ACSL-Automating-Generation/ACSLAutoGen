@@ -22,9 +22,9 @@ namespace acslg::spec_generator {
         const std::string IND1 = "  ";
         const std::string IND2 = "    ";
 
-        symb::Expr simplifyExpr(const symb::SymbolicExpr &expr) {
+        symb::Expr simplifyExpr(symb::ExprHandle expr) {
             auto &factory = symb::ExprFactoryScope::current();
-            return symb::Expr{factory, symb::simplifiedExprHandle(factory, expr)};
+            return symb::Expr{factory, symb::simplifiedExprHandle(factory, *expr)};
         }
 
         // Frama-C does not resolve ACSL logic labels derived from internal C labels
@@ -40,7 +40,7 @@ namespace acslg::spec_generator {
             return acsl.find("After_CompoundStmt_") != std::string_view::npos;
         }
 
-        void collectReferencedVarDecls(const symb::SymbolicExpr &expr,
+        void collectReferencedVarDecls(symb::ExprHandle expr,
                                        std::unordered_set<const clang::VarDecl *> &out) {
             if (symb::LiteralExprView::tryFrom(expr)) {
                 return;
@@ -57,9 +57,9 @@ namespace acslg::spec_generator {
             if (auto sa = symb::SymbolAddressView::tryFrom(expr)) {
                 if (auto from = sa->fromRoot())
                     out.insert(from.value().get());
-                collectReferencedVarDecls(*sa->offset(), out);
+                collectReferencedVarDecls(sa->offset(), out);
                 if (auto length = sa->length())
-                    collectReferencedVarDecls(**length, out);
+                    collectReferencedVarDecls(*length, out);
                 return;
             }
             if (auto fa = symb::FieldAddressView::tryFrom(expr)) {
@@ -68,12 +68,12 @@ namespace acslg::spec_generator {
                 return;
             }
             if (auto bin = symb::BinaryExprView::tryFrom(expr)) {
-                collectReferencedVarDecls(*bin->left(), out);
-                collectReferencedVarDecls(*bin->right(), out);
+                collectReferencedVarDecls(bin->left(), out);
+                collectReferencedVarDecls(bin->right(), out);
                 return;
             }
             if (auto unary = symb::UnaryExprView::tryFrom(expr)) {
-                collectReferencedVarDecls(*unary->operand(), out);
+                collectReferencedVarDecls(unary->operand(), out);
                 return;
             }
 
@@ -81,7 +81,7 @@ namespace acslg::spec_generator {
             // conservatively treat failures elsewhere as dropped).
         }
 
-        bool referencesNonContractVisibleLocals(const symb::SymbolicExpr &expr,
+        bool referencesNonContractVisibleLocals(symb::ExprHandle expr,
                                                 const clang::FunctionDecl *fd) {
             (void)fd; // currently unused, but kept for future global/param policy tuning.
             std::unordered_set<const clang::VarDecl *> decls;
@@ -148,11 +148,11 @@ namespace acslg::spec_generator {
             }
 
             auto oldPoint = pre.getStartPoint();
-            auto *FD = pre.getFunction()->getFunctionDecl();
+            auto *FD      = pre.getFunction()->getFunctionDecl();
             std::unordered_set<symb::SourcePoint> allUsedPoints;
             bool droppedOrFailed = false;
             for (auto &[_, addr] : assignedAddrs) {
-                if (referencesNonContractVisibleLocals(addr.get(), FD)) {
+                if (referencesNonContractVisibleLocals(addr.handle().asExpr(), FD)) {
                     droppedOrFailed = true;
                     continue;
                 }
@@ -175,11 +175,10 @@ namespace acslg::spec_generator {
             }
 
             if (spec.empty())
-                return std::pair{
-                    IND1 +
-                        std::string(assignedAddrs.empty() && !droppedOrFailed ? "assigns \\nothing;\n"
-                                                                              : "assigns \\everything;\n"),
-                    std::unordered_set<symb::SourcePoint>{}};
+                return std::pair{IND1 + std::string(assignedAddrs.empty() && !droppedOrFailed
+                                                        ? "assigns \\nothing;\n"
+                                                        : "assigns \\everything;\n"),
+                                 std::unordered_set<symb::SourcePoint>{}};
             else
                 return std::pair{IND1 + std::string("assigns ") +
                                      spec.substr(0, spec.length() - 2) + ";\n",
@@ -224,20 +223,19 @@ namespace acslg::spec_generator {
                 auto isRetBaseAddr = [&](const symb::AddressBox &addr) -> bool {
                     if (!retBase)
                         return false;
-                    auto sa = symb::SymbolAddressView::tryFrom(addr.get());
+                    auto sa = symb::SymbolAddressView::tryFrom(addr.handle());
                     if (!sa)
                         return false;
                     return sa->baseInfo() == retBase.value();
                 };
 
-                auto getResultBaseACSL =
-                    [&](const symb::AddressBox &addr,
-                        const symb::SymbolicExpr::GetACSLConfig &config,
-                        std::optional<symb::SourcePoint> currentPoint)
+                auto getResultBaseACSL = [&](const symb::AddressBox &addr,
+                                             const symb::SymbolicExpr::GetACSLConfig &config,
+                                             std::optional<symb::SourcePoint> currentPoint)
                     -> std::optional<std::pair<std::string, std::unordered_set<symb::SourcePoint>>> {
                     if (!isRetBaseAddr(addr))
                         return std::nullopt;
-                    auto sa = symb::SymbolAddressView::tryFrom(addr.get());
+                    auto sa = symb::SymbolAddressView::tryFrom(addr.handle());
                     if (!sa)
                         return std::nullopt;
 
@@ -267,7 +265,7 @@ namespace acslg::spec_generator {
                                       std::make_move_iterator(lenPts.end()));
 
                     std::string rightBound = "(" + offsetStr + " + " + lenStr + " - 1)";
-                    std::string addrStr = "\\result[" + offsetStr + " .. " + rightBound + "]";
+                    std::string addrStr    = "\\result[" + offsetStr + " .. " + rightBound + "]";
                     return std::pair{std::move(addrStr), std::move(usedPoints)};
                 };
 
@@ -292,14 +290,14 @@ namespace acslg::spec_generator {
 
                 std::string assignsSpec;
                 bool droppedOrFailed = false;
-                auto *FD = pre.getFunction()->getFunctionDecl();
+                auto *FD             = pre.getFunction()->getFunctionDecl();
                 for (auto &[_, a] : assignedAddrs) {
-                    if (referencesNonContractVisibleLocals(a.get(), FD)) {
+                    if (referencesNonContractVisibleLocals(a.handle().asExpr(), FD)) {
                         droppedOrFailed = true;
                         continue;
                     }
-                    symb::SymbolicExpr::GetACSLConfig cfg{
-                        .noStateLabelFunctionAt = true, .predefinedLabels = {{oldPoint, "Old"}}};
+                    symb::SymbolicExpr::GetACSLConfig cfg{.noStateLabelFunctionAt = true,
+                                                          .predefinedLabels = {{oldPoint, "Old"}}};
                     auto acslExpected = a.get().getACSLOfValue(cfg, oldPoint);
                     if (!acslExpected) {
                         if (acslExpected.error() == symb::SymbolicExpr::GetACSLError::HeapAddress) {
@@ -338,30 +336,30 @@ namespace acslg::spec_generator {
 
                 // result
                 if (auto &ret = path.getReturnExpr()) {
-                    auto simplifiedRet = simplifyExpr(*ret.value());
-                    if (!referencesNonContractVisibleLocals(*simplifiedRet, FD))
-                    if (auto expected = simplifiedRet->getACSL(
-                            {.noStateLabelFunctionAt = true,
-                             .predefinedLabels = {{oldPoint, "Old"}}})) {
-                        auto &[spec, usedPoints] = expected.value();
-                        if (usedPoints.empty())
-                            if (!ret.value()->isOverRange())
-                                ensures.push_back("\\result == (" + spec + ")");
-                            else
-                                ensures.push_back(spec);
-                        else {
-                            // todo: maintain the write information, so can we know two source
-                            // point are *same*. no way to do it right now :)
-                            auto wrongExpected =
-                                simplifiedRet->getACSL({.noStateLabelFunctionAt = true});
-                            assert(wrongExpected);
-                            if (!ret.value()->isOverRange())
-                                ensures.push_back("\\result == (" + wrongExpected.value().first +
-                                                  ")");
-                            else
-                                ensures.push_back(wrongExpected.value().first);
+                    auto simplifiedRet = simplifyExpr(ret.value());
+                    if (!referencesNonContractVisibleLocals(simplifiedRet.handle(), FD))
+                        if (auto expected =
+                                simplifiedRet->getACSL({.noStateLabelFunctionAt = true,
+                                                        .predefinedLabels = {{oldPoint, "Old"}}})) {
+                            auto &[spec, usedPoints] = expected.value();
+                            if (usedPoints.empty())
+                                if (!ret.value()->isOverRange())
+                                    ensures.push_back("\\result == (" + spec + ")");
+                                else
+                                    ensures.push_back(spec);
+                            else {
+                                // todo: maintain the write information, so can we know two source
+                                // point are *same*. no way to do it right now :)
+                                auto wrongExpected =
+                                    simplifiedRet->getACSL({.noStateLabelFunctionAt = true});
+                                assert(wrongExpected);
+                                if (!ret.value()->isOverRange())
+                                    ensures.push_back("\\result == (" +
+                                                      wrongExpected.value().first + ")");
+                                else
+                                    ensures.push_back(wrongExpected.value().first);
+                            }
                         }
-                    }
                 }
 
                 // Memory equations
@@ -378,20 +376,21 @@ namespace acslg::spec_generator {
                     if (is_symbol_addr(addr) && value->isStructure()) {
                         if (isRetBaseAddr(addr)) {
                             symb::StructureView st{value};
-                            auto &info = st.info();
+                            auto &info      = st.info();
                             size_t idxField = 0;
                             for (auto field : info.definition_->fields()) {
                                 std::string fieldName = field->getNameAsString();
-                                auto simplifiedField = simplifyExpr(*st.field(idxField));
+                                auto simplifiedField  = simplifyExpr(st.field(idxField));
                                 ++idxField;
                                 if (fieldName.empty())
                                     continue;
 
-                                if (referencesNonContractVisibleLocals(*simplifiedField, FD))
+                                if (referencesNonContractVisibleLocals(simplifiedField.handle(),
+                                                                       FD))
                                     continue;
                                 symb::SymbolicExpr::GetACSLConfig cfg{
                                     .noStateLabelFunctionAt = true,
-                                    .predefinedLabels = {{oldPoint, "Old"}}};
+                                    .predefinedLabels       = {{oldPoint, "Old"}}};
                                 auto rhsOpt = simplifiedField->getACSL(cfg);
                                 if (!rhsOpt)
                                     continue;
@@ -405,12 +404,12 @@ namespace acslg::spec_generator {
                         continue;
                     }
 
-                    symb::SymbolicExpr::GetACSLConfig cfg{
-                        .noStateLabelFunctionAt = true, .predefinedLabels = {{oldPoint, "Old"}}};
-                    if (referencesNonContractVisibleLocals(addr.get(), FD))
+                    symb::SymbolicExpr::GetACSLConfig cfg{.noStateLabelFunctionAt = true,
+                                                          .predefinedLabels = {{oldPoint, "Old"}}};
+                    if (referencesNonContractVisibleLocals(addr.handle().asExpr(), FD))
                         continue;
-                    auto simplifiedRhs = simplifyExpr(*value);
-                    if (referencesNonContractVisibleLocals(*simplifiedRhs, FD))
+                    auto simplifiedRhs = simplifyExpr(value);
+                    if (referencesNonContractVisibleLocals(simplifiedRhs.handle(), FD))
                         continue;
                     auto lhsOpt = addr.get().getACSLOfValue(cfg);
                     if (!lhsOpt) {
@@ -447,7 +446,7 @@ namespace acslg::spec_generator {
 
                 if (auto &ret = path.getReturnExpr()) {
                     if (auto retSt = symb::StructureView::tryFrom(ret.value())) {
-                        auto &info = retSt->info();
+                        auto &info      = retSt->info();
                         size_t idxField = 0;
                         for (auto field : info.definition_->fields()) {
                             std::string fieldName = field->getNameAsString();
@@ -455,8 +454,8 @@ namespace acslg::spec_generator {
                                 ++idxField;
                                 continue;
                             }
-                            auto simplifiedField = simplifyExpr(*retSt->field(idxField));
-                            if (referencesNonContractVisibleLocals(*simplifiedField, FD)) {
+                            auto simplifiedField = simplifyExpr(retSt->field(idxField));
+                            if (referencesNonContractVisibleLocals(simplifiedField.handle(), FD)) {
                                 ++idxField;
                                 continue;
                             }
@@ -524,8 +523,8 @@ namespace acslg::spec_generator {
             for (auto &cond : conds) {
                 if (cond->isUnknown())
                     continue;
-                auto simplified = simplifyExpr(*cond);
-                if (referencesNonContractVisibleLocals(*simplified, FD))
+                auto simplified = simplifyExpr(cond);
+                if (referencesNonContractVisibleLocals(simplified.handle(), FD))
                     continue;
                 auto rf = simplified->getACSL({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
                 if (!rf || rf.value().first.empty())
