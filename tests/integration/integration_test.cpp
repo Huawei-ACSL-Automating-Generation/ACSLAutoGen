@@ -650,7 +650,7 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
             string symbolAddrs;
             unsigned count{0};
             for (auto &&[addr, value] : path->getMemoryState().flat()) {
-                auto symbolAddr = analyzer::symbolic::SymbolAddressView::tryFrom(addr.get());
+                auto symbolAddr = analyzer::symbolic::SymbolAddressView::tryFrom(addr.handle());
                 if (!symbolAddr)
                     continue;
                 ASSERT_OK_AND_GET_FIRST_TO_VAR(

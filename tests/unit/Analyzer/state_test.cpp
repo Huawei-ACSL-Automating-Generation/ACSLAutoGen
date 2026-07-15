@@ -912,7 +912,7 @@ namespace acslg::test::unit::analyzer {
         for (auto &&[addr, value] : mm.flat()) {
             if (*value != *svA && *value != *svB)
                 continue;
-            auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr.get());
+            auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr.handle());
             ASSERT_TRUE(symbolAddr);
             if (symbolAddr->baseInfo() == symbolic::SymbolAddressView{a0A}.baseInfo())
                 ++cntA;
@@ -947,7 +947,7 @@ namespace acslg::test::unit::analyzer {
         // Approximate check: there should be exactly one entry (start at X, total length = 1 + 3 = 4)
         EXPECT_EQ(mm.sizeWithoutFields(), 1);
         for (auto &&[addr, value] : mm.flat()) {
-            auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr.get());
+            auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr.handle());
             ASSERT_TRUE(symbolAddr);
             if (symbolAddr->baseInfo() == symbolic::SymbolAddressView{a0}.baseInfo() &&
                 *value == *sv) {

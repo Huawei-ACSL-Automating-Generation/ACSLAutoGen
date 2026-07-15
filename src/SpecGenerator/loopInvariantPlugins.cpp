@@ -600,8 +600,7 @@ namespace acslg::spec_generator {
                 return false;
             }; // isLocal end
 
-            auto tryGetAsRange =
-                [&](const symb::Address &addr) -> std::optional<symb::AddrHandle> {
+            auto tryGetAsRange = [&](symb::AddrHandle addr) -> std::optional<symb::AddrHandle> {
                 // If `addr` is not a SymbolAddress (e.g. a plain variable address), we cannot lift
                 // it to a range form.
                 auto symbolAddr = symb::SymbolAddressView::tryFrom(addr);
@@ -685,7 +684,7 @@ namespace acslg::spec_generator {
                     continue;
                 // 1) Try to lift the address to a range form (more compact assigns; use range addr
                 // in the post-state as well).
-                if (auto range = tryGetAsRange(addr)) {
+                if (auto range = tryGetAsRange(addr.handle())) {
                     symb::AddressBox rangeBox{*range};
                     if (pattern) {
                         auto [_, ok] = memoryMap.emplace(rangeBox, unknownHandle());
@@ -870,7 +869,7 @@ namespace acslg::spec_generator {
                     postMemoryMap.emplace(assignedAddr, unknownHandle());
                 }
                 for (auto &[addr, _] : patternInfo.interruptedPathPatternsMaps.at(i)) {
-                    if (auto range = tryGetAsRange(addr)) {
+                    if (auto range = tryGetAsRange(addr.handle())) {
                         postMemoryMap.emplace(
                             symb::AddressBox{*range},
                             unknownHandle());

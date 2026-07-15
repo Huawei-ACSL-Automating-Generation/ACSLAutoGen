@@ -167,7 +167,7 @@ namespace acslg::analyzer {
             auto lhsVal = memoryState_.read(addrBox);
             auto rhsVal = other.memoryState_.read(addrBox);
 
-            if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addrBox.get())) {
+            if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addrBox.handle())) {
                 if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
                     fieldAddr->fieldIndex() == 4) {
                     DEBUG(
@@ -203,7 +203,7 @@ namespace acslg::analyzer {
             } else {
                 UNREACHABLE();
             }
-            if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addrBox.get())) {
+            if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addrBox.handle())) {
                 if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
                     fieldAddr->fieldIndex() == 4) {
                     DEBUG("mergeWith BigNum->data: writing Unknown due to mismatch");
@@ -419,6 +419,10 @@ namespace acslg::analyzer {
      * @param expr Symbolic value to store.
      */
     void Path::updateMemory(const symbolic::Address &addr, symbolic::ExprHandle expr) {
+        updateMemory(symbolic::AddrHandle{&addr}, expr);
+    }
+
+    void Path::updateMemory(symbolic::AddrHandle addr, symbolic::ExprHandle expr) {
         auto imported = context_.getExprFactory().importExpr(*expr);
         if (imported->isUnknown()) {
             if (auto fieldAddr = symbolic::FieldAddressView::tryFrom(addr)) {
@@ -440,10 +444,6 @@ namespace acslg::analyzer {
             }
         }
         memoryState_.write(addr, imported);
-    }
-
-    void Path::updateMemory(symbolic::AddrHandle addr, symbolic::ExprHandle expr) {
-        updateMemory(*addr, expr);
     }
 
     /**
