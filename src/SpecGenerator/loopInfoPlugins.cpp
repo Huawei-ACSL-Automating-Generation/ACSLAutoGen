@@ -135,7 +135,8 @@ namespace acslg::spec_generator {
                         // If the value is derived from the same address at loop entry, accept it as
                         // the baseline; otherwise mark as too complex.
                         auto symbolExpr = hashAddrMap.begin()->second->toSymbolicExpr();
-                        if (isFrom(*symbolExpr, addr.get(), symbolicLoopEntry->getStartPoint())) {
+                        if (isFrom(symb::ExprHandle{symbolExpr}, addr.handle(),
+                                   symbolicLoopEntry->getStartPoint())) {
                             entryExpr = factory.importExpr(*symbolExpr);
                         } else {
                             patterns.emplace(addr, std::nullopt);

@@ -127,7 +127,7 @@ namespace acslg::spec_generator {
                             continue;
                         if (!prePath->getVarAddr().contains(fromRoot.value()))
                             continue;
-                        if (!is_symbol_addr(addr))
+                        if (!is_symbol_addr(addr.handle()))
                             continue;
                         // INFO(addr.get().dump());
                         // INFO(value->dump());
@@ -137,7 +137,7 @@ namespace acslg::spec_generator {
                         // omission is justified by the design of the flat() traversal: the
                         // fields of the structure are enumerated and processed individually.
                         // Thus, treating the pointer itself would introduce redundancy.
-                        if (is_symbol_addr(addr) &&
+                        if (is_symbol_addr(addr.handle()) &&
                             postPath->is_point_to_structure(addr.handle()))
                             continue;
 
@@ -276,12 +276,12 @@ namespace acslg::spec_generator {
                     if (fromRoot != std::nullopt) {
                         if (!prePath->getVarAddr().contains(fromRoot.value()))
                             continue;
-                        if (!is_symbol_addr(a))
+                        if (!is_symbol_addr(a.handle()))
                             continue;
                     } else if (!isRetBaseAddr(a)) {
                         continue;
                     }
-                    if (is_symbol_addr(a) && path.is_point_to_structure(a.handle()))
+                    if (is_symbol_addr(a.handle()) && path.is_point_to_structure(a.handle()))
                         continue;
                     if (!path.isUnchanged(a.handle(), *pre.getPaths().front()))
                         // The address was modified on this path; record it for the assigns
@@ -369,12 +369,12 @@ namespace acslg::spec_generator {
                     if (fromRoot != std::nullopt) {
                         if (!prePath->getVarAddr().contains(fromRoot.value()))
                             continue;
-                        if (!is_symbol_addr(addr))
+                        if (!is_symbol_addr(addr.handle()))
                             continue;
                     } else if (!isRetBaseAddr(addr)) {
                         continue;
                     }
-                    if (is_symbol_addr(addr) && value->isStructure()) {
+                    if (is_symbol_addr(addr.handle()) && value->isStructure()) {
                         if (isRetBaseAddr(addr)) {
                             symb::StructureView st{value};
                             auto &info      = st.info();

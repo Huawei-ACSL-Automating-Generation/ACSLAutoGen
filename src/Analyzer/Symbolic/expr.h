@@ -1455,9 +1455,9 @@ namespace acslg::analyzer::symbolic {
     SymbolicExpr::Type deriveType(clang::QualType type);
     bool isValidOffsetOrLength(const SymbolicExpr &expr);
 
-    bool is_symbol_addr(const Address &a) noexcept;
+    bool is_symbol_addr(AddrHandle address) noexcept;
 
-    bool isFrom(const SymbolicExpr &expr, const Address &fromAddr, SourcePoint fromPoint);
+    bool isFrom(ExprHandle expr, AddrHandle fromAddr, SourcePoint fromPoint);
     std::optional<AddrHandle> getFromAddrHandle(ExprFactory &factory, const Symbol &symbol);
     std::optional<AddrHandle> getFromAddrHandle(ExprFactory &factory, ExprHandle symbol);
 

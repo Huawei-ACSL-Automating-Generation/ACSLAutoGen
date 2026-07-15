@@ -2767,7 +2767,7 @@ namespace acslg::analyzer::symbolic {
         return true;
     }
 
-    bool is_symbol_addr(const Address &a) noexcept { return a.isSymbolAddress(); }
+    bool is_symbol_addr(AddrHandle address) noexcept { return address->isSymbolAddress(); }
 
     std::optional<SourcePoint> StructureNode::getFromPoint() const {
         auto origin = getStructureOrigin(*this);
@@ -2790,8 +2790,8 @@ namespace acslg::analyzer::symbolic {
         return getFromAddrHandle(factory, *symbolNode);
     }
 
-    bool isFrom(const SymbolicExpr &expr, const Address &fromAddr, SourcePoint fromPoint) {
-        auto *symbol = dyn_cast<const Symbol>(&expr);
+    bool isFrom(ExprHandle expr, AddrHandle fromAddr, SourcePoint fromPoint) {
+        auto *symbol = dyn_cast<const Symbol>(expr.get().get());
         if (symbol == nullptr)
             return false;
 
@@ -2800,7 +2800,7 @@ namespace acslg::analyzer::symbolic {
             return false;
 
         auto origin = getBorrowedSymbolOrigin(*symbol);
-        return origin && fromAddr == *origin->address;
+        return origin && *fromAddr == *origin->address;
     }
 
     namespace {

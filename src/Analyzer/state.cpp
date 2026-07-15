@@ -174,11 +174,13 @@ namespace acslg::analyzer {
                         "mergeWith BigNum->data: lhs="
                         << (lhsVal ? lhsVal.value()->dump() : "<none>")
                         << " rhs=" << (rhsVal ? rhsVal.value()->dump() : "<none>") << " lhsFrom="
-                        << (lhsVal && symbolic::isFrom(*lhsVal.value(), addrBox, startPoint_)
+                        << (lhsVal &&
+                                    symbolic::isFrom(lhsVal.value(), addrBox.handle(), startPoint_)
                                 ? "yes"
                                 : "no")
                         << " rhsFrom="
-                        << (rhsVal && symbolic::isFrom(*rhsVal.value(), addrBox, other.startPoint_)
+                        << (rhsVal && symbolic::isFrom(rhsVal.value(), addrBox.handle(),
+                                                       other.startPoint_)
                                 ? "yes"
                                 : "no"));
                 }
@@ -193,10 +195,10 @@ namespace acslg::analyzer {
                 if (*lhsVal.value() == *rhsVal.value())
                     continue;
             } else if (rhsVal) {
-                if (symbolic::isFrom(*rhsVal.value(), addrBox, other.startPoint_))
+                if (symbolic::isFrom(rhsVal.value(), addrBox.handle(), other.startPoint_))
                     continue;
             } else if (lhsVal) {
-                if (symbolic::isFrom(*lhsVal.value(), addrBox, startPoint_))
+                if (symbolic::isFrom(lhsVal.value(), addrBox.handle(), startPoint_))
                     continue;
             } else {
                 UNREACHABLE();
@@ -1708,7 +1710,7 @@ namespace acslg::analyzer {
         auto oldValue = since.getMemoryState().read(addr);
         if (oldValue)
             return *value.value() == *oldValue.value();
-        return isFrom(*value.value(), *addr, since.getStartPoint());
+        return isFrom(value.value(), addr, since.getStartPoint());
     }
 
     bool Path::is_point_to_structure(const symbolic::Address &addr) const {
