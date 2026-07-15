@@ -76,7 +76,7 @@ namespace acslg::analyzer::symbolic::detail {
 
         std::string dump() const override;
         std::size_t hash() const override;
-        const LiteralExprNode *evalToConstExpr() const override;
+        const LiteralExprNode *evalToConstExpr() const;
         bool equal(const SymbolicExpr &expr) const override;
         bool isLinear() const override { return true; }
         int getMaxDegree() const override { return 0; }
@@ -140,7 +140,7 @@ namespace acslg::analyzer::symbolic::detail {
 
         std::string dump() const override;
         std::size_t hash() const override;
-        const LiteralExprNode *evalToConstExpr() const override;
+        const LiteralExprNode *evalToConstExpr() const;
         bool equal(const SymbolicExpr &expr) const override;
         bool isUnknown() const override { return left_->isUnknown() || right_->isUnknown(); }
         UsedMap collectUsedSymbols() const override;
@@ -203,7 +203,7 @@ namespace acslg::analyzer::symbolic::detail {
 
         std::string dump() const override;
         std::size_t hash() const override;
-        const LiteralExprNode *evalToConstExpr() const override;
+        const LiteralExprNode *evalToConstExpr() const;
         bool equal(const SymbolicExpr &expr) const override;
         bool isUnknown() const override { return expr_->isUnknown(); }
         UsedMap collectUsedSymbols() const override;

@@ -652,6 +652,8 @@ namespace acslg::analyzer::symbolic {
             return cast<const detail::LiteralExprNode>(handle.get().get());
         }
 
+        const detail::LiteralExprNode *evaluateToLiteralNode(const SymbolicExpr &expr);
+
         inline const detail::LiteralExprNode *makeLiteralFromUnifiedType(Type t,
                                                                          bool asBool,
                                                                          uint64_t raw) {
@@ -936,7 +938,7 @@ namespace acslg::analyzer::symbolic {
             if (binary->isLinear())
                 return binary->simplifiedExprIfLinear();
 
-            if (auto c = binary->evalToConstExpr())
+            if (auto c = evaluateToLiteralNode(*binary))
                 return factory.importExpr(*c);
 
             auto lhs = simplifiedExprHandle(factory, *binary->getLeft());
@@ -970,23 +972,23 @@ namespace acslg::analyzer::symbolic {
             }
 
             if (binary->getOperator() == Op::LogicalAnd) {
-                if (auto leftConst = lhs->evalToConstExpr()) {
+                if (auto leftConst = evaluateToLiteralNode(*lhs)) {
                     if (!literalAsBool(*leftConst))
                         return factory.importExpr(*leftConst);
                     return rhs;
                 }
-                if (auto rightConst = rhs->evalToConstExpr()) {
+                if (auto rightConst = evaluateToLiteralNode(*rhs)) {
                     if (!literalAsBool(*rightConst))
                         return factory.importExpr(*rightConst);
                     return lhs;
                 }
             } else if (binary->getOperator() == Op::LogicalOr) {
-                if (auto leftConst = lhs->evalToConstExpr()) {
+                if (auto leftConst = evaluateToLiteralNode(*lhs)) {
                     if (literalAsBool(*leftConst))
                         return factory.importExpr(*leftConst);
                     return rhs;
                 }
-                if (auto rightConst = rhs->evalToConstExpr()) {
+                if (auto rightConst = evaluateToLiteralNode(*rhs)) {
                     if (literalAsBool(*rightConst))
                         return factory.importExpr(*rightConst);
                     return lhs;
@@ -2112,7 +2114,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     const detail::LiteralExprNode *detail::UnaryOpExprNode::evalToConstExpr() const {
-        auto C = expr_->evalToConstExpr();
+        auto C = evaluateToLiteralNode(*expr_);
         if (!C)
             return nullptr;
 
@@ -2154,14 +2156,14 @@ namespace acslg::analyzer::symbolic {
     const detail::LiteralExprNode *detail::BinaryOpExprNode::evalToConstExpr() const {
         using BO = detail::BinaryOpExprNode::Operator;
 
-        auto Lc = left_->evalToConstExpr();
+        auto Lc = evaluateToLiteralNode(*left_);
         if (!Lc)
             return nullptr;
 
         if (op_ == BO::LogicalAnd) {
             if (!literalAsBool(*Lc))
                 return literalNode(ExprFactoryScope::current().literal(false));
-            auto Rc = right_->evalToConstExpr();
+            auto Rc = evaluateToLiteralNode(*right_);
             if (!Rc)
                 return nullptr;
             return literalNode(ExprFactoryScope::current().literal(literalAsBool(*Rc)));
@@ -2169,13 +2171,13 @@ namespace acslg::analyzer::symbolic {
         if (op_ == BO::LogicalOr) {
             if (literalAsBool(*Lc))
                 return literalNode(ExprFactoryScope::current().literal(true));
-            auto Rc = right_->evalToConstExpr();
+            auto Rc = evaluateToLiteralNode(*right_);
             if (!Rc)
                 return nullptr;
             return literalNode(ExprFactoryScope::current().literal(literalAsBool(*Rc)));
         }
 
-        auto Rc = right_->evalToConstExpr();
+        auto Rc = evaluateToLiteralNode(*right_);
         if (!Rc)
             return nullptr;
 
@@ -2282,8 +2284,20 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
+    namespace {
+        const detail::LiteralExprNode *evaluateToLiteralNode(const SymbolicExpr &expr) {
+            if (auto *literal = dyn_cast<const detail::LiteralExprNode>(&expr))
+                return literal->evalToConstExpr();
+            if (auto *unary = dyn_cast<const detail::UnaryOpExprNode>(&expr))
+                return unary->evalToConstExpr();
+            if (auto *binary = dyn_cast<const detail::BinaryOpExprNode>(&expr))
+                return binary->evalToConstExpr();
+            return nullptr;
+        }
+    } // namespace
+
     std::optional<int64_t> SymbolicExpr::tryEvalToConstant() const {
-        auto *literal = evalToConstExpr();
+        auto *literal = evaluateToLiteralNode(*this);
         if (literal == nullptr)
             return std::nullopt;
         return literal->getLiteralValue();

@@ -1256,6 +1256,48 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(factory.importExpr(*simplified), factory.literal(int64_t{3}));
     }
 
+    TEST(ExprFactoryTest, ConstantEvalPreservesOperatorAndShortCircuitSemantics) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+
+        auto eval = [](symbolic::ExprHandle expr) { return expr->tryEvalToConstant(); };
+
+        EXPECT_EQ(eval(factory.unary(symbolic::UnaryOp::Minus,
+                                     factory.literal(int64_t{5}))),
+                  -5);
+        EXPECT_EQ(eval(factory.binary(factory.literal(int64_t{-1}),
+                                      symbolic::BinaryOp::LessThan,
+                                      factory.literal(int64_t{1}))),
+                  1);
+        EXPECT_EQ(eval(factory.binary(
+                      factory.literal(std::numeric_limits<uint64_t>::max()),
+                      symbolic::BinaryOp::Add,
+                      factory.literal(uint64_t{1}))),
+                  0);
+        EXPECT_FALSE(eval(factory.binary(factory.literal(int64_t{1}),
+                                         symbolic::BinaryOp::Divide,
+                                         factory.literal(int64_t{0})))
+                         .has_value());
+
+        auto unknown = factory.unknown();
+        EXPECT_EQ(eval(factory.binary(factory.literal(false),
+                                      symbolic::BinaryOp::LogicalAnd,
+                                      unknown)),
+                  0);
+        EXPECT_EQ(eval(factory.binary(factory.literal(true),
+                                      symbolic::BinaryOp::LogicalOr,
+                                      unknown)),
+                  1);
+        EXPECT_FALSE(eval(factory.binary(factory.literal(true),
+                                         symbolic::BinaryOp::LogicalAnd,
+                                         unknown))
+                         .has_value());
+        EXPECT_FALSE(eval(factory.binary(factory.literal(false),
+                                         symbolic::BinaryOp::LogicalOr,
+                                         unknown))
+                         .has_value());
+    }
+
     TEST(ExprFactoryTest, ImportsOperationTreesAcrossFactoriesIntoInternedDag) {
         symbolic::ExprFactory source;
         auto sourceUnary = source.unary(symbolic::UnaryOp::Minus,

@@ -52,15 +52,6 @@ namespace acslg::analyzer::symbolic {
     };
 
     namespace detail {
-        class LiteralExprNode;
-        class RangeIndexNode;
-        class StructureNode;
-        class SymbolValueNode;
-        class UnaryOpExprNode;
-        class BinaryOpExprNode;
-        class VariableAddressNode;
-        class FieldAddressNode;
-        class SymbolAddressNode;
         struct ExprFactoryInternals;
     }
 
@@ -441,13 +432,8 @@ namespace acslg::analyzer::symbolic {
         /**
          * @brief Evaluate any fully constant expression using symbolic operator semantics.
          * @return The resulting integer value, or nullopt when evaluation is not possible.
-         */
+        */
         std::optional<int64_t> tryEvalToConstant() const;
-        /**
-         * @brief Evaluate to a factory-owned literal node when the expression is fully constant.
-         * @return Interned literal or nullptr if not constant.
-         */
-        virtual const detail::LiteralExprNode *evalToConstExpr() const { return nullptr; }
 
         /**
          * @brief Identify whether this expression represents an unknown value.
@@ -662,10 +648,6 @@ namespace acslg::analyzer::symbolic {
       private:
         ExprHandle handle_;
     };
-
-    namespace detail {
-        using SymbolicExprNode = SymbolicExpr;
-    } // namespace detail
 
     /**
      * @class Symbol
