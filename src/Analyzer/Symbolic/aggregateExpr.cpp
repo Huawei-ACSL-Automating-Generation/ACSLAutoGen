@@ -333,7 +333,7 @@ namespace acslg::analyzer::symbolic {
             default: UNREACHABLE();
         }
 
-        auto zero = simplifiedExprHandle(factory, *range().offset());
+        auto zero = simplifiedExprHandle(factory, range().offset());
         auto zeroStr = callGetACSL(*zero, config, usedPoints, currentPoint,
                                    getPrecedence(Operator::LessThan), false);
         if (!zeroStr)
@@ -342,13 +342,13 @@ namespace acslg::analyzer::symbolic {
         auto rightBound = range().rightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
-        auto upper = simplifiedExprHandle(factory, *rightBound.value());
+        auto upper = simplifiedExprHandle(factory, rightBound.value());
         auto nStr = callGetACSL(*upper, config, usedPoints, currentPoint,
                                 getPrecedence(Operator::LessThan), true);
         if (!nStr)
             return nStr.error();
 
-        auto pred = simplifiedExprHandle(factory, *pred_);
+        auto pred = simplifiedExprHandle(factory, pred_.handle());
         auto predStr = callGetACSL(
             *pred, config, usedPoints, currentPoint,
             getPrecedence(entailOrAnd == "==>" ? Operator::Entailment : Operator::LogicalAnd),
@@ -417,20 +417,20 @@ namespace acslg::analyzer::symbolic {
         auto [prefix, suffix] =
             details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
 
-        auto lower = simplifiedExprHandle(factory, *range().offset());
+        auto lower = simplifiedExprHandle(factory, range().offset());
         auto lowerStr = callGetACSL(*lower, config, usedPoints, fromPoint_,
                                     getPrecedence(Operator::LessEqual), false);
         if (!lowerStr)
             return lowerStr.error();
 
-        auto upper = simplifiedExprHandle(factory, *rightBound.value());
+        auto upper = simplifiedExprHandle(factory, rightBound.value());
         auto upperStr = callGetACSL(*upper, config, usedPoints, fromPoint_,
                                     getPrecedence(Operator::LessThan), true);
         if (!upperStr)
             return upperStr.error();
 
         auto cmpOp   = extremum_ == RangeExtremum::Max ? Operator::GreaterEqual : Operator::LessEqual;
-        auto expr    = simplifiedExprHandle(factory, *expr_);
+        auto expr    = simplifiedExprHandle(factory, expr_.handle());
         auto exprStr = callGetACSL(*expr, config, usedPoints, fromPoint_,
                                    getPrecedence(cmpOp), true);
         if (!exprStr)

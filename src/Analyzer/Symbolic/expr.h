@@ -524,7 +524,7 @@ namespace acslg::analyzer::symbolic {
         }
 
       private:
-        friend ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr);
+        friend ExprHandle simplifiedExprHandle(ExprFactory &factory, ExprHandle expr);
 
         virtual utils::expected<std::string, GetACSLError> doGetACSL(
             const GetACSLConfig &config,
@@ -584,7 +584,7 @@ namespace acslg::analyzer::symbolic {
                                               ExprHandle expr,
                                               const SymbolAddrBaseInfo &rangeBase,
                                               ExprHandle indexExpr);
-    ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr);
+    ExprHandle simplifiedExprHandle(ExprFactory &factory, ExprHandle expr);
 
     /// Public read-only access to a factory-owned literal expression.
     class LiteralExprView {
@@ -1121,7 +1121,7 @@ namespace acslg::analyzer::symbolic {
             return Expr{factory(), factory().withValType(handle_, newType)};
         }
         Expr simplified() const {
-            return Expr{factory(), simplifiedExprHandle(factory(), *handle_)};
+            return Expr{factory(), simplifiedExprHandle(factory(), handle_)};
         }
 
         template <typename T> bool isa() const { return handle_.isa<T>(); }

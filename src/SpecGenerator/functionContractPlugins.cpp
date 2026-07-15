@@ -24,7 +24,7 @@ namespace acslg::spec_generator {
 
         symb::Expr simplifyExpr(symb::ExprHandle expr) {
             auto &factory = symb::ExprFactoryScope::current();
-            return symb::Expr{factory, symb::simplifiedExprHandle(factory, *expr)};
+            return symb::Expr{factory, symb::simplifiedExprHandle(factory, expr)};
         }
 
         // Frama-C does not resolve ACSL logic labels derived from internal C labels

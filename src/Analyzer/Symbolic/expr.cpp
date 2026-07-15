@@ -293,7 +293,7 @@ namespace acslg::analyzer::symbolic {
             }
 
             ExprHandle simplified(ExprHandle handle) const {
-                return simplifiedExprHandle(factory, *handle);
+                return simplifiedExprHandle(factory, handle);
             }
 
             ExprHandle run(ExprHandle expr) const {
@@ -793,7 +793,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle ExprFactory::simplifiedBinary(ExprHandle left,
                                              BinaryOp op,
                                              ExprHandle right) {
-        return simplifiedExprHandle(*this, *binary(left, op, right));
+        return simplifiedExprHandle(*this, binary(left, op, right));
     }
 
     AddrHandle ExprFactory::variableAddress(utils::not_null<const clang::VarDecl *> from) {
@@ -936,27 +936,27 @@ namespace acslg::analyzer::symbolic {
             structureNode.getInfo(), std::move(fields)));
     }
 
-    ExprHandle simplifiedExprHandle(ExprFactory &factory, const SymbolicExpr &expr) {
+    ExprHandle simplifiedExprHandle(ExprFactory &factory, ExprHandle expr) {
         ExprFactoryScope scope(factory);
-        if (expr.isUnknown())
+        if (expr->isUnknown())
             return factory.unknown();
 
-        if (auto *symbolAddr = dyn_cast<const SymbolAddressNode>(&expr)) {
+        if (auto *symbolAddr = expr.dyn_cast<const SymbolAddressNode>()) {
             if (symbolAddr->getLength())
                 ERROR("Address range is solely for address representation and should not be "
                       "used as an expression.");
             return factory.importExpr(*symbolAddr);
         }
 
-        if (auto *binary = dyn_cast<const detail::BinaryOpExprNode>(&expr)) {
+        if (auto *binary = expr.dyn_cast<const detail::BinaryOpExprNode>()) {
             if (binary->isLinear())
                 return binary->simplifiedExprIfLinear();
 
             if (auto c = evaluateToLiteralNode(*binary))
                 return factory.importExpr(*c);
 
-            auto lhs = simplifiedExprHandle(factory, *binary->getLeft());
-            auto rhs = simplifiedExprHandle(factory, *binary->getRight());
+            auto lhs = simplifiedExprHandle(factory, ExprHandle{binary->getLeft()});
+            auto rhs = simplifiedExprHandle(factory, ExprHandle{binary->getRight()});
 
             using Op = detail::BinaryOpExprNode::Operator;
             if (binary->getOperator() == Op::Equal || binary->getOperator() == Op::NotEqual) {
@@ -1012,14 +1012,14 @@ namespace acslg::analyzer::symbolic {
             return factory.binary(lhs, binary->getOperator(), rhs);
         }
 
-        if (auto *unary = dyn_cast<const detail::UnaryOpExprNode>(&expr)) {
+        if (auto *unary = expr.dyn_cast<const detail::UnaryOpExprNode>()) {
             if (unary->isLinear())
                 return unary->simplifiedExprIfLinear();
             return factory.unary(unary->getOperator(),
-                                 simplifiedExprHandle(factory, *unary->getSub()));
+                                 simplifiedExprHandle(factory, ExprHandle{unary->getSub()}));
         }
 
-        if (auto *literal = dyn_cast<const detail::LiteralExprNode>(&expr))
+        if (auto *literal = expr.dyn_cast<const detail::LiteralExprNode>())
             return literal->simplifiedExprIfLinear();
 
         return factory.importExpr(expr);
@@ -1028,7 +1028,7 @@ namespace acslg::analyzer::symbolic {
     std::optional<AddrHandle> tryEvalAsSymbolAddrHandle(ExprFactory &factory,
                                                         const SymbolicExpr &expr) {
         ExprFactoryScope scope(factory);
-        auto simplified = simplifiedExprHandle(factory, expr);
+        auto simplified = simplifiedExprHandle(factory, ExprHandle{&expr});
 
         if (auto *symbolAddr = simplified.dyn_cast<const SymbolAddressNode>())
             return factory.importAddress(*symbolAddr);
@@ -1074,7 +1074,7 @@ namespace acslg::analyzer::symbolic {
 
     ExprHandle SymbolicExpr::simplifiedExpr() const {
         auto &factory = ExprFactoryScope::current();
-        return simplifiedExprHandle(factory, *this);
+        return simplifiedExprHandle(factory, ExprHandle{this});
     }
 
     /**
@@ -2335,8 +2335,8 @@ namespace acslg::analyzer::symbolic {
         // compare offset
         // todo: Need a `offsetEqual`, here is not correct now.
         auto &factory = ExprFactoryScope::current();
-        if (*simplifiedExprHandle(factory, *offset_) !=
-            *simplifiedExprHandle(factory, *other->getOffset())) {
+        if (*simplifiedExprHandle(factory, offset_.handle()) !=
+            *simplifiedExprHandle(factory, ExprHandle{other->getOffset()})) {
             return false;
         }
 

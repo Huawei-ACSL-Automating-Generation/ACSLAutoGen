@@ -1460,7 +1460,7 @@ namespace acslg::spec_generator {
             // Yes, the expression of the loop variant is maxLoopCount. :)
             auto &factory = symb::ExprFactoryScope::current();
             auto simplifiedMaxLoopCount =
-                symb::simplifiedExprHandle(factory, *indexInfo.maxLoopCount);
+                symb::simplifiedExprHandle(factory, indexInfo.maxLoopCount);
             auto acslExpected =
                 simplifiedMaxLoopCount.getACSL({.noStateLabelFunctionAt = true});
             if (!acslExpected) {

@@ -36,6 +36,9 @@ namespace acslg::test::unit::analyzer {
     static_assert(std::is_copy_constructible_v<symbolic::SymbolValueView>);
     static_assert(!std::is_convertible_v<symbolic::AddressBox &, symbolic::Address &>);
     static_assert(!std::is_convertible_v<const symbolic::AddressBox &, const symbolic::Address &>);
+    static_assert(std::is_same_v<decltype(&symbolic::simplifiedExprHandle),
+                                 symbolic::ExprHandle (*)(symbolic::ExprFactory &,
+                                                          symbolic::ExprHandle)>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {
@@ -1185,7 +1188,7 @@ namespace acslg::test::unit::analyzer {
                                    symbolic::BinaryOp::Add,
                                    factory.literal(int64_t{2}));
 
-        auto simplified = symbolic::simplifiedExprHandle(factory, *expr);
+        auto simplified = symbolic::simplifiedExprHandle(factory, expr);
 
         EXPECT_EQ(simplified, factory.literal(int64_t{3}));
     }

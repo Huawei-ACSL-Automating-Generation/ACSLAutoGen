@@ -2016,8 +2016,8 @@ namespace acslg::analyzer {
                 uint64_t cLeft = cr.first, cRight = cr.second;
 
                 // Adjacent endpoints and equal values → coalesce by extending the length
-                auto pSimplified = symbolic::simplifiedExprHandle(*factory_, *pexpr);
-                auto cSimplified = symbolic::simplifiedExprHandle(*factory_, *cexpr);
+                auto pSimplified = symbolic::simplifiedExprHandle(*factory_, pexpr);
+                auto cSimplified = symbolic::simplifiedExprHandle(*factory_, cexpr);
                 if (pRight == cLeft && *pSimplified == *cSimplified) {
                     pr.second = cRight;
                 } else {
@@ -2039,8 +2039,8 @@ namespace acslg::analyzer {
         using Expr = symbolic::SymbolicExpr;
 
         auto valueEquivalent = [this](StoredValue a, StoredValue b) -> bool {
-            return *symbolic::simplifiedExprHandle(*factory_, *a) ==
-                   *symbolic::simplifiedExprHandle(*factory_, *b);
+            return *symbolic::simplifiedExprHandle(*factory_, a) ==
+                   *symbolic::simplifiedExprHandle(*factory_, b);
         };
 
         // Compute hash of (a + b) by constructing a factory-backed BinaryOp(Add), simplifying,
@@ -2049,7 +2049,7 @@ namespace acslg::analyzer {
             auto added = factory_->binary(factory_->importExpr(a),
                                           symbolic::BinaryOp::Add,
                                           factory_->importExpr(b));
-            return symbolic::simplifiedExprHandle(*factory_, *added).hash();
+            return symbolic::simplifiedExprHandle(*factory_, added).hash();
         };
 
         for (auto &[base, umap] : memoryMap_symbolicRange_) {
@@ -2092,10 +2092,10 @@ namespace acslg::analyzer {
                           "memoryMap_constantRange_ instead.");
 
                 // Precompute endpoint/value hashes (using simplified forms)
-                it.offHash = symbolic::simplifiedExprHandle(*factory_, *key.offset()).hash();
-                it.valHash = symbolic::simplifiedExprHandle(*factory_, *it.val).hash();
+                it.offHash = symbolic::simplifiedExprHandle(*factory_, key.offset()).hash();
+                it.valHash = symbolic::simplifiedExprHandle(*factory_, it.val).hash();
                 if (auto len = key.length())
-                    it.lenHash = symbolic::simplifiedExprHandle(*factory_, *len.value()).hash();
+                    it.lenHash = symbolic::simplifiedExprHandle(*factory_, len.value()).hash();
 
                 // Right endpoint hash:
                 // - range: hash(offset + length)
