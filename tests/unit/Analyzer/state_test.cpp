@@ -71,7 +71,10 @@ namespace acslg::test::unit::analyzer {
         size_t flatCount = 0;
         for (auto &&[addr, value] : postState->getPaths().front()->getMemoryState().flat()) {
             auto interned = postState->getExprFactory().importAddress(addr.get());
-            EXPECT_EQ(&addr.get(), interned.get().get());
+            EXPECT_EQ(addr.handle(), interned);
+            auto readBack = postState->getPaths().front()->getMemoryState().read(addr.handle());
+            ASSERT_TRUE(readBack);
+            EXPECT_EQ(value, *readBack);
             ++flatCount;
         }
         EXPECT_GE(flatCount, 2u);

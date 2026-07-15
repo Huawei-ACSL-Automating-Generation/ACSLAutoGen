@@ -377,7 +377,7 @@ namespace acslg::spec_generator {
                     }
                     if (is_symbol_addr(addr) && value->isStructure()) {
                         if (isRetBaseAddr(addr)) {
-                            symb::StructureView st{symb::ExprHandle{value}};
+                            symb::StructureView st{value};
                             auto &info = st.info();
                             size_t idxField = 0;
                             for (auto field : info.definition_->fields()) {

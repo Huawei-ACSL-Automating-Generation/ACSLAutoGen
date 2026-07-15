@@ -827,6 +827,7 @@ namespace acslg::analyzer::symbolic {
 
         Address &get() { return const_cast<Address &>(*ptr_); }
         const Address &get() const { return *ptr_; }
+        AddrHandle handle() const;
 
         friend bool operator==(const AddressBox &a, const AddressBox &b) {
             return a.ptr_->equal(*b.ptr_);
@@ -895,6 +896,8 @@ namespace acslg::analyzer::symbolic {
     };
 
     inline AddressBox::AddressBox(AddrHandle handle) noexcept : ptr_(handle.get().get()) {}
+
+    inline AddrHandle AddressBox::handle() const { return AddrHandle{ptr_}; }
 
     class AddressChild {
       public:

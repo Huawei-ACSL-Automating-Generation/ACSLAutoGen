@@ -278,7 +278,7 @@ namespace acslg::analyzer {
          *
          * Iterates over all memory entries (variable addresses, constant ranges,
          * symbolic ranges, and fields of Structure objects). Produces pairs of
-         * (Address, SymbolicExpr).
+         * (Address, factory-owned expression handle).
          *
          * @tparam IsConst true for const_iterator, false for iterator
          */
@@ -292,8 +292,7 @@ namespace acslg::analyzer {
             using SInner =
                 decltype(symb_range_map(std::declval<Owner &>()).begin()->second.begin());
 
-            using R =
-                std::pair<symbolic::AddressBox, utils::not_null<const symbolic::SymbolicExpr *>>;
+            using R = std::pair<symbolic::AddressBox, symbolic::ExprHandle>;
 
           public:
             /// Default constructor
@@ -322,7 +321,7 @@ namespace acslg::analyzer {
 
             /**
              * @brief Dereference operator
-             * @return A pair of (AddressBox, SymbolicExpr reference)
+             * @return A pair of (AddressBox, ExprHandle)
              *
              * Depending on phase, extracts variable's address, constant range, symbolic range,
              * or Structure field as address and associated value.
@@ -330,16 +329,16 @@ namespace acslg::analyzer {
             R operator*() const {
                 switch (phase_) {
                     case Phase::VarAddr: {
-                        return R{var_outer_->first, var_outer_->second.get()};
+                        return R{var_outer_->first, var_outer_->second};
                     }
                     case Phase::Const: {
                         const symbolic::SymbolAddrBaseInfo &base = c_outer_->first;
                         const auto [off, offPlusLen]             = c_inner_->first;
                         auto addr = compose_address(owner_, base, off, offPlusLen - off);
-                        return R{symbolic::AddressBox{addr}, c_inner_->second.get()};
+                        return R{symbolic::AddressBox{addr}, c_inner_->second};
                     }
                     case Phase::Symb: {
-                        return R{s_inner_->first, s_inner_->second.get()};
+                        return R{s_inner_->first, s_inner_->second};
                     }
                     case Phase::Field: {
                         // Handle Structure fields
@@ -355,7 +354,7 @@ namespace acslg::analyzer {
                         auto addr = factory.fieldAddress(fieldType, st.info().definition_,
                                                          factory.importAddress(baseAddr.get()),
                                                          index);
-                        return R{symbolic::AddressBox{addr}, st.field(index).get()};
+                        return R{symbolic::AddressBox{addr}, st.field(index)};
                     }
                     default: break;
                 }
