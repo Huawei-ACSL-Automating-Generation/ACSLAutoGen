@@ -351,7 +351,7 @@ namespace acslg::analyzer::symbolic {
                         length = simplified(run(symbolAddr->getLength()->handle()));
 
                     if (auto value = pathSubTo.getMemoryState().read(realFromAddr)) {
-                        auto realAddr = tryEvalAsSymbolAddrHandle(factory, *value.value());
+                        auto realAddr = tryEvalAsSymbolAddrHandle(factory, value.value());
                         if (realAddr == std::nullopt)
                             ERROR("This expr should be a `SymbolAddress");
 
@@ -1026,35 +1026,37 @@ namespace acslg::analyzer::symbolic {
     }
 
     std::optional<AddrHandle> tryEvalAsSymbolAddrHandle(ExprFactory &factory,
-                                                        const SymbolicExpr &expr) {
+                                                        ExprHandle expr) {
         ExprFactoryScope scope(factory);
-        auto simplified = simplifiedExprHandle(factory, ExprHandle{&expr});
+        auto simplified = simplifiedExprHandle(factory, expr);
 
         if (auto *symbolAddr = simplified.dyn_cast<const SymbolAddressNode>())
-            return factory.importAddress(*symbolAddr);
+            return factory.importAddress(AddrHandle{symbolAddr});
 
         auto *binary = simplified.dyn_cast<const detail::BinaryOpExprNode>();
         if (!binary)
             return std::nullopt;
 
-        auto lhs = tryEvalAsSymbolAddrHandle(factory, *binary->getLeft());
-        auto rhs = tryEvalAsSymbolAddrHandle(factory, *binary->getRight());
+        auto left  = ExprHandle{binary->getLeft()};
+        auto right = ExprHandle{binary->getRight()};
+        auto lhs   = tryEvalAsSymbolAddrHandle(factory, left);
+        auto rhs   = tryEvalAsSymbolAddrHandle(factory, right);
         if (lhs && rhs)
             return std::nullopt;
         if (!lhs && !rhs)
             return std::nullopt;
 
-        auto isValidOffsetOrLengthHandle = [&](const SymbolicExpr &candidate) {
-            if (candidate.isUnknown())
+        auto isValidOffsetOrLengthHandle = [&](ExprHandle candidate) {
+            if (candidate->isUnknown())
                 return true;
             return !tryEvalAsSymbolAddrHandle(factory, candidate).has_value();
         };
 
         using Op = detail::BinaryOpExprNode::Operator;
         if (lhs) {
-            if (!isValidOffsetOrLengthHandle(*binary->getRight()))
+            if (!isValidOffsetOrLengthHandle(right))
                 return std::nullopt;
-            auto offset = factory.importExpr(*binary->getRight());
+            auto offset = factory.importExpr(right);
             switch (binary->getOperator()) {
                 case Op::Add: return factory.withAddedOffset(*lhs, offset);
                 case Op::Subtract: return factory.withSubtractedOffset(*lhs, offset);
@@ -1062,9 +1064,9 @@ namespace acslg::analyzer::symbolic {
             }
         }
 
-        if (!isValidOffsetOrLengthHandle(*binary->getLeft()))
+        if (!isValidOffsetOrLengthHandle(left))
             return std::nullopt;
-        auto offset = factory.importExpr(*binary->getLeft());
+        auto offset = factory.importExpr(left);
         switch (binary->getOperator()) {
             case Op::Add: return factory.withAddedOffset(*rhs, offset);
             case Op::Subtract: return std::nullopt;
@@ -2759,8 +2761,8 @@ namespace acslg::analyzer::symbolic {
             });
     }
 
-    bool isValidOffsetOrLength(const SymbolicExpr &expr) {
-        if (expr.isUnknown())
+    bool isValidOffsetOrLength(ExprHandle expr) {
+        if (expr->isUnknown())
             return true;
         auto &factory = ExprFactoryScope::current();
         if (tryEvalAsSymbolAddrHandle(factory, expr))

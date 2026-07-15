@@ -39,6 +39,9 @@ namespace acslg::test::unit::analyzer {
     static_assert(std::is_same_v<decltype(&symbolic::simplifiedExprHandle),
                                  symbolic::ExprHandle (*)(symbolic::ExprFactory &,
                                                           symbolic::ExprHandle)>);
+    static_assert(std::is_same_v<decltype(&symbolic::tryEvalAsSymbolAddrHandle),
+                                 std::optional<symbolic::AddrHandle> (*)(
+                                     symbolic::ExprFactory &, symbolic::ExprHandle)>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {
@@ -2571,7 +2574,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
         auto sizeBefore = factory.size();
-        auto evaluated = symbolic::tryEvalAsSymbolAddrHandle(factory, *source);
+        auto evaluated = symbolic::tryEvalAsSymbolAddrHandle(factory, source.asExpr());
         ASSERT_TRUE(evaluated);
         EXPECT_GT(factory.size(), sizeBefore);
         EXPECT_EQ(evaluated.value(),
@@ -2606,12 +2609,49 @@ namespace acslg::test::unit::analyzer {
         auto expected =
             factory.symbolAddress(var->getType(), std::nullopt, point, factory.literal(int64_t{4}));
 
-        auto evaluatedHandle = symbolic::tryEvalAsSymbolAddrHandle(factory, *legacyAdd);
+        auto evaluatedHandle = symbolic::tryEvalAsSymbolAddrHandle(factory, legacyAdd);
         ASSERT_TRUE(evaluatedHandle);
         EXPECT_EQ(*evaluatedHandle, expected);
         EXPECT_EQ(symbolic::SymbolAddressView{evaluatedHandle.value()}.offset().get(),
                   factory.literal(int64_t{4}).get().get());
 
+    }
+
+    TEST(ExprFactoryTest, TryEvalSymbolAddressPreservesDirectionalArithmeticRules) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto address = factory.symbolAddress(var->getType(), std::nullopt, point);
+        auto offset  = factory.literal(int64_t{4});
+
+        auto commutedAdd = factory.binary(
+            offset, symbolic::BinaryOp::Add, address.asExpr());
+        auto evaluated = symbolic::tryEvalAsSymbolAddrHandle(factory, commutedAdd);
+        ASSERT_TRUE(evaluated);
+        EXPECT_EQ(*evaluated,
+                  factory.symbolAddress(var->getType(), std::nullopt, point, offset));
+
+        auto invalidSubtract = factory.binary(
+            offset, symbolic::BinaryOp::Subtract, address.asExpr());
+        EXPECT_FALSE(symbolic::tryEvalAsSymbolAddrHandle(factory, invalidSubtract));
+
+        auto twoAddresses = factory.binary(
+            address.asExpr(), symbolic::BinaryOp::Add, address.asExpr());
+        EXPECT_FALSE(symbolic::tryEvalAsSymbolAddrHandle(factory, twoAddresses));
     }
 
     TEST(ExprFactoryTest, AddressRebuildsReuseInternedRangeChildren) {

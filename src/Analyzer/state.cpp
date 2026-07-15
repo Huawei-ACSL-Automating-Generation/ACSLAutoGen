@@ -308,7 +308,7 @@ namespace acslg::analyzer {
 
                 auto addrExpr = addrEval.second[0];
                 auto &factory = context_.getExprFactory();
-                if (auto addr = symbolic::tryEvalAsSymbolAddrHandle(factory, *addrExpr)) {
+                if (auto addr = symbolic::tryEvalAsSymbolAddrHandle(factory, addrExpr)) {
                     if (!memoryState_.contains(*addr)) {
                         auto symbol = getSymbol(uop->getType(), *addr, startPoint_);
                         memoryState_.write(*addr, symbol);
@@ -337,7 +337,7 @@ namespace acslg::analyzer {
                     ERROR("This location does not support control flow branches.");
                 auto baseExpr = addrEval.second[0];
                 auto &factory = context_.getExprFactory();
-                auto baseAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, *baseExpr);
+                auto baseAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, baseExpr);
                 if (baseAddr == std::nullopt)
                     ERROR("Expected symbolic::Address for '->' base, got: " << baseExpr->dump());
 
@@ -511,7 +511,7 @@ namespace acslg::analyzer {
 
             if (T->isPointerType()) {
                 auto &factory = calleePath->getContext().getExprFactory();
-                auto m        = symbolic::tryEvalAsSymbolAddrHandle(factory, *args[i]);
+                auto m        = symbolic::tryEvalAsSymbolAddrHandle(factory, args[i]);
                 if (!m) {
                     auto &SM     = FD->getASTContext().getSourceManager();
                     auto locStr  = FD->getLocation().isValid() ? FD->getLocation().printToString(SM)
@@ -701,7 +701,7 @@ namespace acslg::analyzer {
                         // the null pointer constant 0.
                         auto &factory = context_.getExprFactory();
                         if (varDecl->getType()->isPointerType() &&
-                            !symbolic::tryEvalAsSymbolAddrHandle(factory, *varExpr)) {
+                            !symbolic::tryEvalAsSymbolAddrHandle(factory, varExpr)) {
                             if (auto lit = symbolic::LiteralExprView::tryFrom(varExpr);
                                 lit && lit->value() == 0) {
                                 // Keep NULL as Int(0) rather than fabricating a pointer.
@@ -1025,7 +1025,7 @@ namespace acslg::analyzer {
 
                         // The argument must be a symbolic address.
                         auto &factory   = context_.getExprFactory();
-                        auto maybeAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, *p);
+                        auto maybeAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, p);
                         if (!maybeAddr)
                             UNIMPLEMENT("BSL_SAL_Free argument must be a valid pointer value.");
 
@@ -1067,8 +1067,8 @@ namespace acslg::analyzer {
                         DEBUG("memcpy dest expr: " << destExpr->dump());
 
                         auto &factory = context_.getExprFactory();
-                        auto destAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, *destExpr);
-                        auto srcAddr  = symbolic::tryEvalAsSymbolAddrHandle(factory, *srcExpr);
+                        auto destAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, destExpr);
+                        auto srcAddr  = symbolic::tryEvalAsSymbolAddrHandle(factory, srcExpr);
                         if (!srcAddr)
                             UNIMPLEMENT("memcpy expects a pointer source argument.");
 
@@ -1160,7 +1160,7 @@ namespace acslg::analyzer {
                         }
 
                         auto &factory = context_.getExprFactory();
-                        auto destAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, *destExpr);
+                        auto destAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, destExpr);
                         if (!destAddr)
                             UNIMPLEMENT("memset_s expects a pointer destination argument.");
 
@@ -1392,7 +1392,7 @@ namespace acslg::analyzer {
                             } else if (op == Dereference) {
                                 // *x
                                 auto &factory = path->context_.getExprFactory();
-                                auto addr = symbolic::tryEvalAsSymbolAddrHandle(factory, *unExpr);
+                                auto addr = symbolic::tryEvalAsSymbolAddrHandle(factory, unExpr);
                                 if (addr == std::nullopt)
                                     ERROR("Expected symbolic::Address, got: " << unExpr->dump());
                                 if (auto value = path->memoryState_.read(addr.value());
@@ -1458,7 +1458,7 @@ namespace acslg::analyzer {
                     auto baseExpr = base.second[0];
                     if (memberExpr->isArrow()) {
                         auto &factory = context_.getExprFactory();
-                        auto baseAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, *baseExpr);
+                        auto baseAddr = symbolic::tryEvalAsSymbolAddrHandle(factory, baseExpr);
                         if (baseAddr == std::nullopt) {
                             WARN("LHS of '->' is not an address; fabricating symbolic pointer to "
                                  "continue.");

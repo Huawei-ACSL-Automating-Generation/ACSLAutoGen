@@ -917,7 +917,7 @@ namespace acslg::analyzer::symbolic {
     };
 
     std::optional<AddrHandle> tryEvalAsSymbolAddrHandle(ExprFactory &factory,
-                                                        const SymbolicExpr &expr);
+                                                        ExprHandle expr);
 
     class ExprFactory {
       public:
@@ -1459,7 +1459,7 @@ namespace acslg::analyzer::symbolic {
     BinaryOp getCompoundAssignOp(clang::BinaryOperatorKind compoundAssignOp);
     BinaryOp getBinaryOp(clang::BinaryOperatorKind op);
     SymbolicExpr::Type deriveType(clang::QualType type);
-    bool isValidOffsetOrLength(const SymbolicExpr &expr);
+    bool isValidOffsetOrLength(ExprHandle expr);
 
     bool is_symbol_addr(AddrHandle address) noexcept;
 
