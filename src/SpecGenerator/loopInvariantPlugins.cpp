@@ -642,7 +642,7 @@ namespace acslg::spec_generator {
 
                 auto offset = symbolAddr->offset();
                 // Is offset x-step?
-                if (auto symbolValue = symb::SymbolValueView::tryFrom(*offset)) {
+                if (auto symbolValue = symb::SymbolValueView::tryFrom(offset)) {
                     auto symbolValueFrom = symbolValue->from();
                     if (auto it = patternInfo.normalExitPatternsMap.find(*symbolValueFrom);
                         it != patternInfo.normalExitPatternsMap.end()) {

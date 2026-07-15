@@ -1326,10 +1326,6 @@ namespace acslg::analyzer::symbolic {
         return LiteralExprView{handle};
     }
 
-    std::optional<LiteralExprView> LiteralExprView::tryFrom(const SymbolicExpr &expr) {
-        return tryFrom(ExprHandle{&expr});
-    }
-
     int64_t LiteralExprView::value() const {
         return cast<const detail::LiteralExprNode>(handle_.get().get())->getLiteralValue();
     }
@@ -1343,10 +1339,6 @@ namespace acslg::analyzer::symbolic {
         if (!handle->isUnaryExpr())
             return std::nullopt;
         return UnaryExprView{handle};
-    }
-
-    std::optional<UnaryExprView> UnaryExprView::tryFrom(const SymbolicExpr &expr) {
-        return tryFrom(ExprHandle{&expr});
     }
 
     UnaryOp UnaryExprView::operation() const {
@@ -1367,10 +1359,6 @@ namespace acslg::analyzer::symbolic {
         if (!handle->isBinaryExpr())
             return std::nullopt;
         return BinaryExprView{handle};
-    }
-
-    std::optional<BinaryExprView> BinaryExprView::tryFrom(const SymbolicExpr &expr) {
-        return tryFrom(ExprHandle{&expr});
     }
 
     BinaryOp BinaryExprView::operation() const {
@@ -1419,10 +1407,6 @@ namespace acslg::analyzer::symbolic {
         if (!handle->isSymbolValue())
             return std::nullopt;
         return SymbolValueView{handle};
-    }
-
-    std::optional<SymbolValueView> SymbolValueView::tryFrom(const SymbolicExpr &expr) {
-        return tryFrom(ExprHandle{&expr});
     }
 
     AddrHandle SymbolValueView::from() const {
@@ -1639,10 +1623,6 @@ namespace acslg::analyzer::symbolic {
         if (!handle->isStructure())
             return std::nullopt;
         return StructureView{handle};
-    }
-
-    std::optional<StructureView> StructureView::tryFrom(const SymbolicExpr &expr) {
-        return tryFrom(ExprHandle{&expr});
     }
 
     size_t StructureView::size() const {

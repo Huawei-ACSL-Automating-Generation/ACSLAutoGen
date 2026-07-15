@@ -592,7 +592,6 @@ namespace acslg::analyzer::symbolic {
         explicit LiteralExprView(ExprHandle handle);
 
         static std::optional<LiteralExprView> tryFrom(ExprHandle handle);
-        static std::optional<LiteralExprView> tryFrom(const SymbolicExpr &expr);
 
         ExprHandle handle() const { return handle_; }
         int64_t value() const;
@@ -607,7 +606,6 @@ namespace acslg::analyzer::symbolic {
         explicit UnaryExprView(ExprHandle handle);
 
         static std::optional<UnaryExprView> tryFrom(ExprHandle handle);
-        static std::optional<UnaryExprView> tryFrom(const SymbolicExpr &expr);
 
         ExprHandle handle() const { return handle_; }
         UnaryOp operation() const;
@@ -623,7 +621,6 @@ namespace acslg::analyzer::symbolic {
         explicit BinaryExprView(ExprHandle handle);
 
         static std::optional<BinaryExprView> tryFrom(ExprHandle handle);
-        static std::optional<BinaryExprView> tryFrom(const SymbolicExpr &expr);
 
         ExprHandle handle() const { return handle_; }
         BinaryOp operation() const;
@@ -727,7 +724,6 @@ namespace acslg::analyzer::symbolic {
         explicit StructureView(ExprHandle handle);
 
         static std::optional<StructureView> tryFrom(ExprHandle handle);
-        static std::optional<StructureView> tryFrom(const SymbolicExpr &expr);
 
         ExprHandle handle() const { return handle_; }
         size_t size() const;
@@ -1447,7 +1443,6 @@ namespace acslg::analyzer::symbolic {
         explicit SymbolValueView(ExprHandle handle);
 
         static std::optional<SymbolValueView> tryFrom(ExprHandle handle);
-        static std::optional<SymbolValueView> tryFrom(const SymbolicExpr &expr);
 
         ExprHandle handle() const { return handle_; }
         AddrHandle from() const;

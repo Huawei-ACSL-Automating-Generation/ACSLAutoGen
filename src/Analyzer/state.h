@@ -533,7 +533,7 @@ namespace acslg::analyzer {
             /// Advance iterator, diving into Structure fields if needed
             void advance() {
                 auto &&[addr, value] = (*this).operator*();
-                auto st = symbolic::StructureView::tryFrom(*value);
+                auto st = symbolic::StructureView::tryFrom(value);
                 if (!st) {
                     advance_without_check();
                     return;

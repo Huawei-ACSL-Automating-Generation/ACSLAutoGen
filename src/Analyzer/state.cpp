@@ -31,9 +31,10 @@ namespace acslg::analyzer {
 
     namespace {
         std::optional<const clang::VarDecl *> getRootFromSymbol(const symbolic::Symbol &symbol) {
-            if (auto sv = symbolic::SymbolValueView::tryFrom(*symbol.toSymbolicExpr()))
+            symbolic::ExprHandle symbolExpr{symbol.toSymbolicExpr()};
+            if (auto sv = symbolic::SymbolValueView::tryFrom(symbolExpr))
                 return sv->fromRoot();
-            if (auto sa = symbolic::SymbolAddressView::tryFrom(*symbol.toSymbolicExpr()))
+            if (auto sa = symbolic::SymbolAddressView::tryFrom(symbolExpr))
                 return sa->fromRoot();
             return std::nullopt;
         }
@@ -60,9 +61,9 @@ namespace acslg::analyzer {
             return makeStructureForRecord(factory, type->getAsRecordDecl(), base, point);
         }
 
-        bool containsLocalVar(const symbolic::SymbolicExpr &expr,
+        bool containsLocalVar(symbolic::ExprHandle expr,
                               const std::unordered_set<const clang::VarDecl *> &locals) {
-            auto [usedSymbols, unusedSymbols] = symbolic::SymbolicExpr::collectUsedSymbols(expr);
+            auto [usedSymbols, unusedSymbols] = symbolic::SymbolicExpr::collectUsedSymbols(*expr);
             (void)unusedSymbols;
             for (const auto &entry : usedSymbols) {
                 const auto &symbol = entry.second;
@@ -77,12 +78,12 @@ namespace acslg::analyzer {
 
         std::optional<symbolic::ExprHandle> dropLocalConjuncts(
             symbolic::ExprFactory &factory,
-            const symbolic::SymbolicExpr &expr,
+            symbolic::ExprHandle expr,
             const std::unordered_set<const clang::VarDecl *> &locals) {
             if (const auto bin = symbolic::BinaryExprView::tryFrom(expr);
                 bin && bin->operation() == symbolic::BinaryOp::LogicalAnd) {
-                auto lhs = dropLocalConjuncts(factory, *bin->left(), locals);
-                auto rhs = dropLocalConjuncts(factory, *bin->right(), locals);
+                auto lhs = dropLocalConjuncts(factory, bin->left(), locals);
+                auto rhs = dropLocalConjuncts(factory, bin->right(), locals);
                 if (!lhs && !rhs)
                     return std::nullopt;
                 if (!lhs)
@@ -95,7 +96,7 @@ namespace acslg::analyzer {
 
             if (containsLocalVar(expr, locals))
                 return std::nullopt;
-            return factory.importExpr(expr);
+            return factory.importExpr(*expr);
         }
 
     } // namespace
@@ -2423,7 +2424,7 @@ namespace acslg::analyzer {
                 filtered.reserve(path->pathConditions_.size());
                 for (auto &cond : path->pathConditions_) {
                     auto stripped =
-                        dropLocalConjuncts(path->context_.getExprFactory(), *cond, localVars);
+                        dropLocalConjuncts(path->context_.getExprFactory(), cond, localVars);
                     if (!stripped)
                         continue;
                     filtered.emplace(stripped.value());
