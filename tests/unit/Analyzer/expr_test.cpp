@@ -34,6 +34,8 @@ namespace acslg::test::unit::analyzer {
     static_assert(std::is_copy_constructible_v<symbolic::MaxMinOverRangeView>);
     static_assert(std::is_copy_constructible_v<symbolic::StructureView>);
     static_assert(std::is_copy_constructible_v<symbolic::SymbolValueView>);
+    static_assert(!std::is_convertible_v<symbolic::AddressBox &, symbolic::Address &>);
+    static_assert(!std::is_convertible_v<const symbolic::AddressBox &, const symbolic::Address &>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {

@@ -818,10 +818,6 @@ namespace acslg::analyzer::symbolic {
         AddressBox(AddressBox &&) noexcept            = default;
         AddressBox &operator=(AddressBox &&) noexcept = default;
 
-        operator Address &() { return const_cast<Address &>(*ptr_); }
-        operator const Address &() const { return *ptr_; }
-
-        Address &get() { return const_cast<Address &>(*ptr_); }
         const Address &get() const { return *ptr_; }
         AddrHandle handle() const;
 
@@ -849,7 +845,7 @@ namespace acslg::analyzer::symbolic {
 
         bool operator()(const AddressBox &a, const AddressBox &b) const { return a == b; }
         bool operator()(const AddressBox &a, const Address &b) const { return a.get().equal(b); }
-        bool operator()(const Address &a, const AddressBox &b) const { return a.equal(b); }
+        bool operator()(const Address &a, const AddressBox &b) const { return a.equal(b.get()); }
     };
 
     template <class T>

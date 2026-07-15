@@ -590,8 +590,8 @@ namespace acslg::spec_generator {
             // - If its root decl is not in preState's varAddrMap, treat it as local (e.g. declared
             //   inside the loop, or an otherwise invisible temporary)
             // - We only include non-local locations in the loop assigns clause
-            auto isLocal = [&](const symb::Address &addr) {
-                auto root = addr.getFromRoot();
+            auto isLocal = [&](symb::AddrHandle addr) {
+                auto root = addr->getFromRoot();
                 if (root == std::nullopt)
                     TODO();
                 auto &varAddrMap = preState.getPaths().at(0)->getVarAddr();
@@ -680,7 +680,7 @@ namespace acslg::spec_generator {
             // interpreting/printing the synthesized post-state.
             std::unordered_map<size_t, symb::ExprHandle> condsForInsert;
             for (auto &[addr, pattern] : patternInfo.normalExitPatternsMap) {
-                if (isLocal(addr))
+                if (isLocal(addr.handle()))
                     continue;
                 // 1) Try to lift the address to a range form (more compact assigns; use range addr
                 // in the post-state as well).
@@ -928,8 +928,8 @@ namespace acslg::spec_generator {
             auto loopEntryPoint = entryAndCurrentInfo.symbolicLoopEntry->getStartPoint();
             auto &factory       = symb::ExprFactoryScope::current();
 
-            auto isLocal = [&](const symb::Address &addr) {
-                auto root = addr.getFromRoot();
+            auto isLocal = [&](symb::AddrHandle addr) {
+                auto root = addr->getFromRoot();
                 if (root == std::nullopt)
                     TODO();
                 auto &varAddrMap = preState.getPaths().at(0)->getVarAddr();
@@ -952,7 +952,7 @@ namespace acslg::spec_generator {
                     // - unchanged w.r.t. the entry snapshot: excluded
                     for (auto &&[addr, value] : path.getMemoryState().flat()) {
                         (void)value;
-                        if (isLocal(addr.get()))
+                        if (isLocal(addr.handle()))
                             continue;
                         if (path.is_point_to_structure(addr.handle()))
                             continue;
