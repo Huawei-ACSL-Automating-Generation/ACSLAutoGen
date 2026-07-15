@@ -955,10 +955,11 @@ namespace acslg::spec_generator {
                         (void)value;
                         if (isLocal(addr.get()))
                             continue;
-                        if (path.is_point_to_structure(addr))
+                        if (path.is_point_to_structure(addr.handle()))
                             continue;
                         if (path.isUnchanged(
-                                addr, *entryAndCurrentInfo.symbolicLoopEntry->getPaths().front()))
+                                addr.handle(),
+                                *entryAndCurrentInfo.symbolicLoopEntry->getPaths().front()))
                             continue;
                         setToUpdate.insert(addr);
                     }
@@ -1335,7 +1336,7 @@ namespace acslg::spec_generator {
                             varAddrIt != path->getVarAddr().end()) {
                             auto &maxAddr = varAddrIt->second;
                             if (!path->isUnchanged(
-                                    *maxAddr,
+                                    maxAddr,
                                     *entryAndCurrentInfo.symbolicLoopEntry->getPaths().front()))
                                 return;
                         } else {

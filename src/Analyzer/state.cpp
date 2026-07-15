@@ -1693,6 +1693,10 @@ namespace acslg::analyzer {
     }
 
     bool Path::isUnchanged(const symbolic::Address &addr, const Path &since) const {
+        return isUnchanged(symbolic::AddrHandle{&addr}, since);
+    }
+
+    bool Path::isUnchanged(symbolic::AddrHandle addr, const Path &since) const {
         if (auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr)) {
             if (symbolAddr->length())
                 return false;
@@ -1704,10 +1708,14 @@ namespace acslg::analyzer {
         auto oldValue = since.getMemoryState().read(addr);
         if (oldValue)
             return *value.value() == *oldValue.value();
-        return isFrom(*value.value(), addr, since.getStartPoint());
+        return isFrom(*value.value(), *addr, since.getStartPoint());
     }
 
     bool Path::is_point_to_structure(const symbolic::Address &addr) const {
+        return is_point_to_structure(symbolic::AddrHandle{&addr});
+    }
+
+    bool Path::is_point_to_structure(symbolic::AddrHandle addr) const {
         if (auto symbolAddr = symbolic::SymbolAddressView::tryFrom(addr)) {
             if (symbolAddr->length())
                 return false;

@@ -137,11 +137,12 @@ namespace acslg::spec_generator {
                         // omission is justified by the design of the flat() traversal: the
                         // fields of the structure are enumerated and processed individually.
                         // Thus, treating the pointer itself would introduce redundancy.
-                        if (is_symbol_addr(addr) && postPath->is_point_to_structure(addr))
+                        if (is_symbol_addr(addr) &&
+                            postPath->is_point_to_structure(addr.handle()))
                             continue;
 
                         // Track the address only if the value differs between pre/post states.
-                        if (!postPath->isUnchanged(addr, *pre.getPaths().front()))
+                        if (!postPath->isUnchanged(addr.handle(), *pre.getPaths().front()))
                             auto [_, ok] = assignedAddrs.try_emplace(addr.hash(), std::move(addr));
                     }
                 }
@@ -280,9 +281,9 @@ namespace acslg::spec_generator {
                     } else if (!isRetBaseAddr(a)) {
                         continue;
                     }
-                    if (is_symbol_addr(a) && path.is_point_to_structure(a))
+                    if (is_symbol_addr(a) && path.is_point_to_structure(a.handle()))
                         continue;
-                    if (!path.isUnchanged(a, *pre.getPaths().front()))
+                    if (!path.isUnchanged(a.handle(), *pre.getPaths().front()))
                         // The address was modified on this path; record it for the assigns
                         // clause of this behavior.
                         (void)assignedAddrs.try_emplace(a.hash(), std::move(a));

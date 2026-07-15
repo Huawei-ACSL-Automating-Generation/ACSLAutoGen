@@ -118,7 +118,8 @@ namespace acslg::spec_generator {
                         if (*preValue.value() == *currentExpr)
                             continue; // unchanged relative to entry snapshot
                     } else {
-                        if (currentEntry.isUnchanged(addr, *symbolicLoopEntry->getPaths().front()))
+                        if (currentEntry.isUnchanged(
+                                addr.handle(), *symbolicLoopEntry->getPaths().front()))
                             continue; // unchanged relative to entry snapshot
                     }
                     std::optional<symb::ExprHandle> entryExpr;
@@ -134,7 +135,7 @@ namespace acslg::spec_generator {
                         // If the value is derived from the same address at loop entry, accept it as
                         // the baseline; otherwise mark as too complex.
                         auto symbolExpr = hashAddrMap.begin()->second->toSymbolicExpr();
-                        if (isFrom(*symbolExpr, addr, symbolicLoopEntry->getStartPoint())) {
+                        if (isFrom(*symbolExpr, addr.get(), symbolicLoopEntry->getStartPoint())) {
                             entryExpr = factory.importExpr(*symbolExpr);
                         } else {
                             patterns.emplace(addr, std::nullopt);
