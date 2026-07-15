@@ -264,4 +264,106 @@ namespace acslg::analyzer::symbolic::detail {
             bool isRightChild) const override;
     };
 
+    /// Internal node containing the immutable field handles of a structure value.
+    class StructureNode : public SymbolicExpr, public Symbol {
+      public:
+        StructureNode(const StructureNode &) = delete;
+
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getKind() == ExprKind::K_Structure;
+        }
+        static bool classof(const Symbol *symbol) {
+            return symbol->getKind() == Symbol::Kind::K_Structure;
+        }
+
+        size_t getNumFields() const { return info_.getNumFields(); }
+        utils::not_null<const SymbolicExpr *> getFieldValue(size_t index) const {
+            if (index >= fields_.size())
+                ERROR("Out-of-bounds access");
+            return fields_[index].get();
+        }
+        auto fieldsValues() const {
+            return fields_ | std::views::transform(
+                                 [](const ExprChild &field) -> utils::not_null<const SymbolicExpr *> {
+                                     return field.get();
+                                 });
+        }
+        const StructureInfo &getInfo() const { return info_; }
+
+        std::string dump() const override;
+        std::optional<SourcePoint> getFromPoint() const override;
+        std::size_t hash() const override;
+        bool equal(const SymbolicExpr &expr) const override;
+        bool isLinear() const override {
+            WARN("Met Structure in isLinear.");
+            return false;
+        }
+        int getMaxDegree() const override {
+            WARN("Met Structure in getMaxDegree.");
+            return -1;
+        }
+
+      private:
+        friend struct ExprFactoryInternals;
+
+        StructureNode(StructureInfo info,
+                      std::vector<ExprHandle> fields,
+                      std::optional<Type> explicitType = std::nullopt);
+
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
+        StructureInfo info_;
+        std::vector<ExprChild> fields_;
+    };
+
+    /// Internal symbolic value with an immutable address origin.
+    class SymbolValueNode : public SymbolicExpr, public Symbol {
+      public:
+        SymbolValueNode(const SymbolValueNode &) = delete;
+        SymbolValueNode(SymbolValueNode &&)      = default;
+
+        static bool classof(const SymbolicExpr *expr) {
+            return expr->getKind() == ExprKind::K_SymbolValue;
+        }
+        static bool classof(const Symbol *symbol) {
+            return symbol->getKind() == Symbol::Kind::K_SymbolValue;
+        }
+
+        std::string dump() const override;
+        std::size_t hash() const override;
+        bool equal(const SymbolicExpr &expr) const override;
+        AddrHandle getFromAddrHandle() const { return AddrHandle{fromAddr_.get().get()}; }
+        std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
+        std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const;
+        UsedMap collectUsedSymbols() const override;
+        bool isLinear() const override { return true; }
+        int getMaxDegree() const override { return 1; }
+        std::optional<Parma_Polyhedra_Library::Linear_Expression> toLinearExpr(
+            const std::unordered_map<std::string, size_t> &) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
+            const std::unordered_map<size_t, size_t> &) const override;
+
+      private:
+        friend struct ExprFactoryInternals;
+
+        SymbolValueNode(Type varType, AddrHandle from, SourcePoint fromPoint)
+            : SymbolicExpr(ExprKind::K_SymbolValue, varType), Symbol(Kind::K_SymbolValue),
+              fromAddr_(from), fromPoint_(std::move(fromPoint)) {}
+
+        utils::expected<std::string, GetACSLError> doGetACSL(
+            const GetACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
+        AddressChild fromAddr_;
+        SourcePoint fromPoint_;
+    };
+
 } // namespace acslg::analyzer::symbolic::detail
