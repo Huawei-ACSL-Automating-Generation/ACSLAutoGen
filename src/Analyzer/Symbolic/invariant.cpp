@@ -1203,7 +1203,7 @@ namespace acslg::analyzer {
                 auto &addr   = initPath.getVarAddr().at(varDecl);
                 if (resolvedExprs.contains(i)) {
                     auto addrHandle =
-                        symbolic::ExprFactoryScope::current().importAddress(*addr);
+                        symbolic::ExprFactoryScope::current().importAddress(addr);
                     auto [_, ok] = newVars.emplace(symbolic::AddressBox{addrHandle},
                                                    resolvedExprs.at(i));
                     if (!ok)

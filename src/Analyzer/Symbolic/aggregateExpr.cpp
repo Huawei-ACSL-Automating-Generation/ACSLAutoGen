@@ -28,7 +28,7 @@ namespace acslg::analyzer::symbolic {
                                          SymbolAddressView range,
                                          std::string_view indexName,
                                          const SourcePoint &fromPoint) {
-            auto indexedRange = Addr{factory, factory.importAddress(*range.handle())}
+            auto indexedRange = Addr{factory, factory.importAddress(range.handle())}
                                     .withOffset(Expr{factory, factory.rangeIndex(indexName)});
             indexedRange = indexedRange.withoutLength();
             return getSymbol(range.pointeeType(), indexedRange.handle(), fromPoint);
@@ -123,7 +123,7 @@ namespace acslg::analyzer::symbolic {
         SymbolAddressView rangeView{range};
         return detail::ExprFactoryInternals::intern(
             factory, detail::ExprFactoryInternals::makeNode<SumOverRangeNode>(
-                         factory.importAddress(*rangeView.handle()), indexName,
+                         factory.importAddress(rangeView.handle()), indexName,
                          std::move(fromPoint)));
     }
 
@@ -143,7 +143,7 @@ namespace acslg::analyzer::symbolic {
                                          std::string_view indexName,
                                          RangeExtremum extremum,
                                          SourcePoint fromPoint) {
-        auto importedRange = factory.importAddress(*range);
+        auto importedRange = factory.importAddress(range);
         auto body = makeMaxMinDefaultBody(factory, SymbolAddressView{importedRange}, indexName,
                                           fromPoint);
         return makeMaxMinOverRangeHandle(factory, importedRange, indexName, extremum, body,

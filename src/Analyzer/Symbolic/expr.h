@@ -1527,10 +1527,10 @@ namespace acslg::analyzer::symbolic {
             auto right = bin->right();
             if (auto literal = LiteralExprView::tryFrom(left);
                 literal && static_cast<std::uint64_t>(literal->value()) == sizeofBytes)
-                return factory.importExpr(*right);
+                return factory.importExpr(right);
             if (auto literal = LiteralExprView::tryFrom(right);
                 literal && static_cast<std::uint64_t>(literal->value()) == sizeofBytes)
-                return factory.importExpr(*left);
+                return factory.importExpr(left);
         }
         return in;
     }
