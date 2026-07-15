@@ -655,7 +655,7 @@ namespace acslg::spec_generator {
                             [&pattern](symb::ExprFactory &factory, symb::AddrHandle address) {
                                 return factory.withOffset(
                                     address,
-                                    factory.importExpr(*pattern.value().initialValue));
+                                    factory.importExpr(pattern.value().initialValue));
                             });
                         auto loopCount =
                             !indexInfo.preciseLoopCount->isUnknown() ? indexInfo.preciseLoopCount
@@ -1374,7 +1374,7 @@ namespace acslg::spec_generator {
                         arrayRange,
                         [&](symb::ExprFactory &factory, symb::AddrHandle address) {
                             return factory.withLength(
-                                address, factory.importExpr(*indexInfo.indexBound));
+                                address, factory.importExpr(indexInfo.indexBound));
                         });
                 } else {
                     // Negative-step ranges keep the existing offset behavior; only length is
@@ -1567,7 +1567,7 @@ namespace acslg::spec_generator {
                 auto it = patternInfo.normalExitPatternsMap.find(**fromAddr);
                 // The value on this address doesn't change during loop, so just copy it.
                 if (it == patternInfo.normalExitPatternsMap.end())
-                    return factory.importExpr(*symbol.toSymbolicExpr());
+                    return factory.importExpr(symb::ExprHandle{symbol.toSymbolicExpr()});
                 if (it->second == std::nullopt)
                     return std::nullopt;
                 auto &[initValue, step] = it->second.value();
@@ -1669,7 +1669,7 @@ namespace acslg::spec_generator {
                     arrayRange,
                     [&](symb::ExprFactory &factory, symb::AddrHandle address) {
                         return factory.withOffset(
-                            address, factory.importExpr(*indexInfo.indexSymbolicValue));
+                            address, factory.importExpr(indexInfo.indexSymbolicValue));
                     });
                 symb::Expr indexBound{factory, indexInfo.indexBound};
                 symb::Expr indexSymbolic{factory, indexInfo.indexSymbolicValue};
@@ -1684,7 +1684,7 @@ namespace acslg::spec_generator {
                     arrayRange,
                     [&](symb::ExprFactory &factory, symb::AddrHandle address) {
                         return factory.withOffset(
-                            address, factory.importExpr(*indexInfo.indexBound));
+                            address, factory.importExpr(indexInfo.indexBound));
                     });
                 symb::Expr indexSymbolic{factory, indexInfo.indexSymbolicValue};
                 symb::Expr indexBound{factory, indexInfo.indexBound};
@@ -1717,7 +1717,7 @@ namespace acslg::spec_generator {
                 if (indexStep > 0) {
                     auto leftBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
                     if (leftBound == std::nullopt)
-                        leftBound = factory.importExpr(*indexInfo.indexPattern.initialValue);
+                        leftBound = factory.importExpr(indexInfo.indexPattern.initialValue);
                     assert(leftBound);
                     auto leftExpected =
                         leftBound.value()->getACSL({}, entryAndCurrentInfo.loopEntryPoint);
@@ -1736,7 +1736,7 @@ namespace acslg::spec_generator {
                     assert(leftExpected);
                     auto rightBound = sameValueOnRealEntries(*indexInfo.indexPattern.initialValue);
                     if (rightBound == std::nullopt)
-                        rightBound = factory.importExpr(*indexInfo.indexPattern.initialValue);
+                        rightBound = factory.importExpr(indexInfo.indexPattern.initialValue);
                     assert(rightBound);
                     auto rightExpected =
                         rightBound.value()->getACSL({}, entryAndCurrentInfo.loopEntryPoint);

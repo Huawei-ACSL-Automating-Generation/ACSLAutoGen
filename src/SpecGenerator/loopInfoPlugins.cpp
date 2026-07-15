@@ -137,7 +137,7 @@ namespace acslg::spec_generator {
                         auto symbolExpr = hashAddrMap.begin()->second->toSymbolicExpr();
                         if (isFrom(symb::ExprHandle{symbolExpr}, addr.handle(),
                                    symbolicLoopEntry->getStartPoint())) {
-                            entryExpr = factory.importExpr(*symbolExpr);
+                            entryExpr = factory.importExpr(symb::ExprHandle{symbolExpr});
                         } else {
                             patterns.emplace(addr, std::nullopt);
                             continue;

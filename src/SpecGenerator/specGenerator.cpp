@@ -340,7 +340,8 @@ namespace acslg::spec_generator {
                     continue;
                 }
                 toUpdate.memoryMap.insert_or_assign(
-                    symb::AddressBox{factory.importAddress(*subedAddr)}, subedValue);
+                    symb::AddressBox{factory.importAddress(symb::AddrHandle{subedAddr})},
+                    subedValue);
             }
 
             for (const auto &cond : info.pathConds) {
