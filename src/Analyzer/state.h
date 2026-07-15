@@ -205,7 +205,7 @@ namespace acslg::analyzer {
         symbolic::ExprFactory &factory() const { return *factory_; }
         StoredValue importValue(const symbolic::SymbolicExpr &value);
         StoredValue copyStoredValueFrom(const MemoryModel &other, StoredValue value);
-        void writeImported(const symbolic::Address &address, StoredValue value);
+        void writeImported(symbolic::AddrHandle address, StoredValue value);
 
         symbolic::ExprFactory *factory_;
     };

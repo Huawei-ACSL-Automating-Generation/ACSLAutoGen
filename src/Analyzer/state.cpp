@@ -1791,6 +1791,10 @@ namespace acslg::analyzer {
     }
 
     std::optional<symbolic::ExprHandle> MemoryModel::read(const symbolic::Address &addr) const {
+        return read(symbolic::AddrHandle{&addr});
+    }
+
+    std::optional<symbolic::ExprHandle> MemoryModel::read(symbolic::AddrHandle addr) const {
         if (auto varAddr = symbolic::VariableAddressView::tryFrom(addr)) {
             if (auto it = memoryMap_variableAddr_.find(*varAddr->handle());
                 it != memoryMap_variableAddr_.end())
@@ -1857,19 +1861,15 @@ namespace acslg::analyzer {
         UNREACHABLE();
     }
 
-    std::optional<symbolic::ExprHandle> MemoryModel::read(symbolic::AddrHandle addr) const {
-        return read(*addr);
-    }
-
     void MemoryModel::write(const symbolic::Address &addr, symbolic::ExprHandle value) {
-        writeImported(addr, factory().importExpr(*value));
+        write(symbolic::AddrHandle{&addr}, value);
     }
 
     void MemoryModel::write(symbolic::AddrHandle addr, symbolic::ExprHandle value) {
-        write(*addr, value);
+        writeImported(addr, factory().importExpr(*value));
     }
 
-    void MemoryModel::writeImported(const symbolic::Address &addr, StoredValue valueHandle) {
+    void MemoryModel::writeImported(symbolic::AddrHandle addr, StoredValue valueHandle) {
         if (auto varAddr = symbolic::VariableAddressView::tryFrom(addr)) {
             memoryMap_variableAddr_.insert_or_assign(
                 symbolic::AddressBox{factory().importAddress(*varAddr->handle())}, valueHandle);
@@ -1958,11 +1958,11 @@ namespace acslg::analyzer {
     }
 
     bool MemoryModel::contains(const symbolic::Address &addr) const {
-        return read(addr).has_value();
+        return contains(symbolic::AddrHandle{&addr});
     }
 
     bool MemoryModel::contains(symbolic::AddrHandle addr) const {
-        return contains(*addr);
+        return read(addr).has_value();
     }
 
     // MemoryModel::flat_view MemoryModel::flat() { return MemoryModel::flat_view{*this}; }
