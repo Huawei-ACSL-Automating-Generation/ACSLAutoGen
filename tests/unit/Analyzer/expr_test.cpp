@@ -1375,8 +1375,9 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(unary.operand(), one);
 
         symbolic::ExprFactoryScope scope(factory);
-        symbolic::Expr facade{imported};
+        symbolic::Expr facade{sourceTree};
         EXPECT_EQ(facade.handle(), imported);
+        EXPECT_NE(facade.handle().get().get(), sourceTree.get().get());
     }
 
     TEST(ExprHandleTest, CollectUsedSymbolsMergesMultipleHandleInputs) {
@@ -2153,7 +2154,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::Addr addr{handle};
         symbolic::ExprFactory sourceFactory;
         auto source = sourceFactory.variableAddress(var);
-        symbolic::Addr imported{factory.importAddress(source)};
+        symbolic::Addr imported{source};
 
         EXPECT_EQ(&addr.factory(), &factory);
         EXPECT_EQ(addr.handle(), handle);
