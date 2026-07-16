@@ -33,6 +33,11 @@ namespace acslg::test::unit::analyzer {
         value.toSymbolicExpr();
     };
 
+    template <typename T>
+    concept HasLegacyClassof = requires(const symbolic::SymbolicExpr *expr) {
+        T::classof(expr);
+    };
+
     static_assert(std::is_constructible_v<symbolic::LiteralExpr,
                                           symbolic::ExprFactory &,
                                           int64_t>);
@@ -62,6 +67,8 @@ namespace acslg::test::unit::analyzer {
                                      symbolic::AddrHandle)>);
     static_assert(!HasLegacySymbolToThis<symbolic::Symbol>);
     static_assert(!HasLegacyToSymbolicExpr<symbolic::Symbol>);
+    static_assert(!HasLegacyClassof<symbolic::SymbolicExpr>);
+    static_assert(!HasLegacyClassof<symbolic::Address>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {

@@ -293,9 +293,6 @@ namespace acslg::analyzer::symbolic {
         SymbolicExpr(SymbolicExpr &&)                 = default;
         SymbolicExpr &operator=(SymbolicExpr &&)      = delete;
 
-        static bool classof(const SymbolicExpr *) { return true; }
-        static bool classof(const Symbol *) { return true; }
-
         ExprKind getKind() const { return kind_; }
         Type getValType() const { return valueType_; }
 
@@ -743,11 +740,6 @@ namespace acslg::analyzer::symbolic {
         Address &operator=(const Address &) = delete;
         Address(Address &&)                 = default;
         Address &operator=(Address &&)      = delete;
-
-        static bool classof(const SymbolicExpr *e) {
-            auto k = e->getKind();
-            return (k > ExprKind::K_FirstAddr) && (k < ExprKind::K_LastAddr);
-        }
 
         /**
          * @brief Convert the pointed-to value into ACSL text.

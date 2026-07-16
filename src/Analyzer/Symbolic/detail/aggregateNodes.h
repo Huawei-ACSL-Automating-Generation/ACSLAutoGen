@@ -12,10 +12,6 @@ namespace acslg::analyzer::symbolic::detail {
         RangeIndexNode &operator=(const RangeIndexNode &) = delete;
         RangeIndexNode &operator=(RangeIndexNode &&)      = delete;
 
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_RangeIndex;
-        }
-
         std::string_view getName() const { return name_; }
 
         std::string dump() const override;
@@ -52,11 +48,6 @@ namespace acslg::analyzer::symbolic::detail {
         OverRangeExprNode &operator=(OverRangeExprNode &&)      = delete;
         ~OverRangeExprNode() override                           = default;
 
-        static bool classof(const SymbolicExpr *expr) {
-            auto kind = expr->getKind();
-            return kind > ExprKind::K_FirstOverRange && kind < ExprKind::K_LastOverRange;
-        }
-
         std::string dump() const override;
         bool equal(const SymbolicExpr &) const override;
         std::size_t hash() const override;
@@ -84,13 +75,6 @@ namespace acslg::analyzer::symbolic::detail {
 
     class SumOverRangeNode : public OverRangeExprNode, public Symbol {
       public:
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_SumOverRange;
-        }
-        static bool classof(const Symbol *symbol) {
-            return symbol->getKind() == Symbol::Kind::K_SumOverRange;
-        }
-
         SumOverRangeNode(const SumOverRangeNode &)            = delete;
         SumOverRangeNode(SumOverRangeNode &&)                 = default;
         SumOverRangeNode &operator=(const SumOverRangeNode &) = delete;
@@ -125,10 +109,6 @@ namespace acslg::analyzer::symbolic::detail {
 
     class QuantifierOverRangeNode : public OverRangeExprNode {
       public:
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_QuantifierOverRange;
-        }
-
         QuantifierOverRangeNode(const QuantifierOverRangeNode &)            = delete;
         QuantifierOverRangeNode(QuantifierOverRangeNode &&)                 = default;
         QuantifierOverRangeNode &operator=(const QuantifierOverRangeNode &) = delete;
@@ -173,13 +153,6 @@ namespace acslg::analyzer::symbolic::detail {
 
     class MaxMinOverRangeNode : public OverRangeExprNode, public Symbol {
       public:
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_MaxMinOverRange;
-        }
-        static bool classof(const Symbol *symbol) {
-            return symbol->getKind() == Symbol::Kind::K_MaxMinOverRange;
-        }
-
         MaxMinOverRangeNode(const MaxMinOverRangeNode &)            = delete;
         MaxMinOverRangeNode(MaxMinOverRangeNode &&)                 = default;
         MaxMinOverRangeNode &operator=(const MaxMinOverRangeNode &) = delete;

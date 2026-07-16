@@ -65,10 +65,6 @@ namespace acslg::analyzer::symbolic::detail {
         }
 
       public:
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_LiteralExpr;
-        }
-
         LiteralType getLiteralType() const { return type_; }
         ExprHandle importInto(ExprFactory &factory) const;
         std::unique_ptr<LiteralExprNode> rebuildNode(
@@ -128,10 +124,6 @@ namespace acslg::analyzer::symbolic::detail {
 #include "../operators.def"
                 default: ERROR("Unknown operator");
             }
-        }
-
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_BinaryOpExpr;
         }
 
         ExprHandle getLeft() const { return left_.handle(); }
@@ -194,10 +186,6 @@ namespace acslg::analyzer::symbolic::detail {
             }
         }
 
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_UnaryOpExpr;
-        }
-
         ExprHandle getSub() const { return expr_.handle(); }
         Operator getOperator() const { return op_; }
 
@@ -239,10 +227,6 @@ namespace acslg::analyzer::symbolic::detail {
       public:
         ~UnknownExprNode() = default;
 
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_UnknownExpr;
-        }
-
         std::string dump() const override;
         std::size_t hash() const override;
         bool equal(const SymbolicExpr &expr) const override;
@@ -268,13 +252,6 @@ namespace acslg::analyzer::symbolic::detail {
     class StructureNode : public SymbolicExpr, public Symbol {
       public:
         StructureNode(const StructureNode &) = delete;
-
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_Structure;
-        }
-        static bool classof(const Symbol *symbol) {
-            return symbol->getKind() == Symbol::Kind::K_Structure;
-        }
 
         size_t getNumFields() const { return info_.getNumFields(); }
         ExprHandle getFieldValue(size_t index) const {
@@ -325,13 +302,6 @@ namespace acslg::analyzer::symbolic::detail {
         SymbolValueNode(const SymbolValueNode &) = delete;
         SymbolValueNode(SymbolValueNode &&)      = default;
 
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_SymbolValue;
-        }
-        static bool classof(const Symbol *symbol) {
-            return symbol->getKind() == Symbol::Kind::K_SymbolValue;
-        }
-
         std::string dump() const override;
         std::size_t hash() const override;
         bool equal(const SymbolicExpr &expr) const override;
@@ -369,13 +339,6 @@ namespace acslg::analyzer::symbolic::detail {
       public:
         SymbolAddressNode(const SymbolAddressNode &) = delete;
         SymbolAddressNode(SymbolAddressNode &&)      = default;
-
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_SymbolAddress;
-        }
-        static bool classof(const Symbol *symbol) {
-            return symbol->getKind() == Symbol::Kind::K_SymbolAddress;
-        }
 
         bool operator==(const SymbolAddressNode &other) const { return equal(other); }
         ExprHandle getOffset() const { return offset_.handle(); }
@@ -449,10 +412,6 @@ namespace acslg::analyzer::symbolic::detail {
         VariableAddressNode(VariableAddressNode &&)                 = default;
         VariableAddressNode &operator=(VariableAddressNode &&)      = delete;
 
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_VariableAddress;
-        }
-
         bool operator==(const VariableAddressNode &other) const { return equal(other); }
         std::string dump() const override;
         ExprHandle simplifiedExpr() const override {
@@ -520,10 +479,6 @@ namespace acslg::analyzer::symbolic::detail {
         FieldAddressNode(const FieldAddressNode &)            = delete;
         FieldAddressNode &operator=(const FieldAddressNode &) = delete;
         FieldAddressNode(FieldAddressNode &&)                 = default;
-
-        static bool classof(const SymbolicExpr *expr) {
-            return expr->getKind() == ExprKind::K_FieldAddress;
-        }
 
         std::string dump() const override;
         ExprHandle simplifiedExpr() const override {
