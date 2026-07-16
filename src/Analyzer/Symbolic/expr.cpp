@@ -127,7 +127,7 @@ namespace acslg::analyzer::symbolic {
             return internTyped(detail::ExprFactoryInternals::makeNode<SymbolAddressNode>(
                 symbolAddr->getPointeeType(), from,
                 symbolAddr->getFromPoint().value(),
-                importExpr(ExprHandle{symbolAddr->getOffset()}), length, newType));
+                importExpr(symbolAddr->getOffset()), length, newType));
         }
 
         if (auto *symbolVal = expr.dyn_cast<const SymbolValueNode>())
@@ -225,7 +225,7 @@ namespace acslg::analyzer::symbolic {
                     return factory
                         .symbolAddress(symbolAddr->getPointeeType(), from,
                                        symbolAddr->getFromPoint().value(),
-                                       run(ExprHandle{symbolAddr->getOffset()}), length)
+                                       run(symbolAddr->getOffset()), length)
                         .asExpr();
                 }
                 if (auto *binary = expr.dyn_cast<const detail::BinaryOpExprNode>()) {
@@ -343,12 +343,12 @@ namespace acslg::analyzer::symbolic {
                             .symbolAddress(symbolAddr->getPointeeType(), std::nullopt,
                                            pointToSub,
                                            factory.importExpr(
-                                               ExprHandle{symbolAddr->getOffset()}),
+                                               symbolAddr->getOffset()),
                                            length)
                             .asExpr();
 
                     auto realFromAddr = requireAddress(run(fromAddr->asExpr()));
-                    auto offset       = simplified(run(ExprHandle{symbolAddr->getOffset()}));
+                    auto offset       = simplified(run(symbolAddr->getOffset()));
                     if (symbolAddr->getLength())
                         length = simplified(run(symbolAddr->getLength()->handle()));
 
@@ -476,7 +476,7 @@ namespace acslg::analyzer::symbolic {
                     return factory
                         .symbolAddress(symbolAddr->getPointeeType(), from,
                                        symbolAddr->getFromPoint().value(),
-                                       run(ExprHandle{symbolAddr->getOffset()}), length)
+                                       run(symbolAddr->getOffset()), length)
                         .asExpr();
                 }
                 if (auto *binary = expr.dyn_cast<const detail::BinaryOpExprNode>())
@@ -832,14 +832,14 @@ namespace acslg::analyzer::symbolic {
 
     AddrHandle ExprFactory::withAddedOffset(AddrHandle address, ExprHandle extra) {
         const auto &symbolAddr = address.cast<SymbolAddressNode>();
-        auto newOffset = simplifiedBinary(importExpr(ExprHandle{symbolAddr.getOffset()}),
+        auto newOffset = simplifiedBinary(importExpr(symbolAddr.getOffset()),
                                           detail::BinaryOpExprNode::Operator::Add, extra);
         return withOffset(address, newOffset);
     }
 
     AddrHandle ExprFactory::withSubtractedOffset(AddrHandle address, ExprHandle extra) {
         const auto &symbolAddr = address.cast<SymbolAddressNode>();
-        auto newOffset = simplifiedBinary(importExpr(ExprHandle{symbolAddr.getOffset()}),
+        auto newOffset = simplifiedBinary(importExpr(symbolAddr.getOffset()),
                                           detail::BinaryOpExprNode::Operator::Subtract, extra);
         return withOffset(address, newOffset);
     }
@@ -850,7 +850,7 @@ namespace acslg::analyzer::symbolic {
 
         return symbolAddress(symbolAddr.getPointeeType(), from,
                              symbolAddr.getFromPoint().value(),
-                             importExpr(ExprHandle{symbolAddr.getOffset()}), length);
+                             importExpr(symbolAddr.getOffset()), length);
     }
 
     AddrHandle ExprFactory::withAddedLength(AddrHandle address, ExprHandle extra) {
@@ -868,7 +868,7 @@ namespace acslg::analyzer::symbolic {
 
         return symbolAddress(symbolAddr.getPointeeType(), from,
                              symbolAddr.getFromPoint().value(),
-                             importExpr(ExprHandle{symbolAddr.getOffset()}), std::nullopt);
+                             importExpr(symbolAddr.getOffset()), std::nullopt);
     }
 
     AddrHandle ExprFactory::fieldAddress(clang::QualType pointeeType,
@@ -1566,7 +1566,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle SymbolAddressView::offset() const {
-        return ExprHandle{cast<const SymbolAddressNode>(handle_.get().get())->getOffset()};
+        return cast<const SymbolAddressNode>(handle_.get().get())->getOffset();
     }
 
     std::optional<ExprHandle> SymbolAddressView::length() const {
@@ -1940,7 +1940,7 @@ namespace acslg::analyzer::symbolic {
 
         // offset + length - 1
         auto offsetPlusLength =
-            factory.simplifiedBinary(factory.importExpr(ExprHandle{getOffset()}),
+            factory.simplifiedBinary(factory.importExpr(getOffset()),
                                      detail::BinaryOpExprNode::Operator::Add,
                                      factory.importExpr(length_->handle()));
         auto rightBound =
@@ -2340,7 +2340,7 @@ namespace acslg::analyzer::symbolic {
         // todo: Need a `offsetEqual`, here is not correct now.
         auto &factory = ExprFactoryScope::current();
         if (*simplifiedExprHandle(factory, offset_.handle()) !=
-            *simplifiedExprHandle(factory, ExprHandle{other->getOffset()})) {
+            *simplifiedExprHandle(factory, other->getOffset())) {
             return false;
         }
 

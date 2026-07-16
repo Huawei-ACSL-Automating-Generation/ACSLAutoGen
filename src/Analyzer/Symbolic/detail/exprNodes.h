@@ -380,7 +380,7 @@ namespace acslg::analyzer::symbolic::detail {
         }
 
         bool operator==(const SymbolAddressNode &other) const { return equal(other); }
-        utils::not_null<const SymbolicExpr *> getOffset() const { return offset_.get(); }
+        ExprHandle getOffset() const { return offset_.handle(); }
         const std::optional<ExprChild> &getLength() const { return length_; }
         std::optional<ExprHandle> getRightBound() const;
         SymbolAddrBaseInfo getBaseInfo() const;
