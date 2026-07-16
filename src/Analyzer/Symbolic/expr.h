@@ -1014,14 +1014,15 @@ namespace acslg::analyzer::symbolic {
                            const Expr &offset,
                            const Expr &length);
 
-        const Address &operator*() const { return *handle_; }
-        const Address *operator->() const { return handle_.get().get(); }
         AddrHandle handle() const { return handle_; }
         ExprFactory &factory() const { return *factory_; }
 
         std::size_t hash() const { return handle_.hash(); }
         std::string dump() const { return handle_.dump(); }
         SymbolicExpr::Type getValType() const { return handle_.getValType(); }
+        bool isSymbolAddress() const { return handle_->isSymbolAddress(); }
+        bool isVariableAddress() const { return handle_->isVariableAddress(); }
+        bool isFieldAddress() const { return handle_->isFieldAddress(); }
         auto getACSL(
             const SymbolicExpr::GetACSLConfig &config,
             std::optional<SourcePoint> currentPoint = std::nullopt) const {
@@ -1042,10 +1043,6 @@ namespace acslg::analyzer::symbolic {
         Addr field(clang::QualType pointeeType,
                    const clang::RecordDecl *record,
                    size_t fieldIndex) const;
-
-        template <typename T> bool isa() const { return handle_.isa<T>(); }
-        template <typename T> const T *dyn_cast() const { return handle_.dyn_cast<T>(); }
-        template <typename T> const T &cast() const { return handle_.cast<T>(); }
 
         friend bool operator==(const Addr &lhs, const Addr &rhs) {
             return lhs.factory_ == rhs.factory_ && lhs.handle_ == rhs.handle_;
@@ -1077,14 +1074,16 @@ namespace acslg::analyzer::symbolic {
             return Expr{from.factory(), from.factory().symbolValue(varType, from.handle(), fromPoint)};
         }
 
-        const SymbolicExpr &operator*() const { return *handle_; }
-        const SymbolicExpr *operator->() const { return handle_.get().get(); }
         ExprHandle handle() const { return handle_; }
         ExprFactory &factory() const { return *factory_; }
 
         std::size_t hash() const { return handle_.hash(); }
         std::string dump() const { return handle_.dump(); }
         SymbolicExpr::Type getValType() const { return handle_.getValType(); }
+        bool isUnknown() const { return handle_->isUnknown(); }
+        bool isRangeIndex() const { return handle_->isRangeIndex(); }
+        bool isSymbolValue() const { return handle_->isSymbolValue(); }
+        bool isOverRange() const { return handle_->isOverRange(); }
         auto getACSL(
             const SymbolicExpr::GetACSLConfig &config,
             std::optional<SourcePoint> currentPoint = std::nullopt) const {
@@ -1096,10 +1095,6 @@ namespace acslg::analyzer::symbolic {
         Expr simplified() const {
             return Expr{factory(), simplifiedExprHandle(factory(), handle_)};
         }
-
-        template <typename T> bool isa() const { return handle_.isa<T>(); }
-        template <typename T> const T *dyn_cast() const { return handle_.dyn_cast<T>(); }
-        template <typename T> const T &cast() const { return handle_.cast<T>(); }
 
         Expr binary(BinaryOp op, const Expr &rhs) const {
             ensureSameFactory(rhs);

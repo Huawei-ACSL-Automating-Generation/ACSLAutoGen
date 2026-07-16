@@ -340,8 +340,8 @@ namespace acslg::spec_generator {
                     auto simplifiedRet = simplifyExpr(ret.value());
                     if (!referencesNonContractVisibleLocals(simplifiedRet.handle(), FD))
                         if (auto expected =
-                                simplifiedRet->getACSL({.noStateLabelFunctionAt = true,
-                                                        .predefinedLabels = {{oldPoint, "Old"}}})) {
+                                simplifiedRet.getACSL({.noStateLabelFunctionAt = true,
+                                                       .predefinedLabels = {{oldPoint, "Old"}}})) {
                             auto &[spec, usedPoints] = expected.value();
                             if (usedPoints.empty())
                                 if (!ret.value()->isOverRange())
@@ -352,7 +352,7 @@ namespace acslg::spec_generator {
                                 // todo: maintain the write information, so can we know two source
                                 // point are *same*. no way to do it right now :)
                                 auto wrongExpected =
-                                    simplifiedRet->getACSL({.noStateLabelFunctionAt = true});
+                                    simplifiedRet.getACSL({.noStateLabelFunctionAt = true});
                                 assert(wrongExpected);
                                 if (!ret.value()->isOverRange())
                                     ensures.push_back("\\result == (" +
@@ -392,7 +392,7 @@ namespace acslg::spec_generator {
                                 symb::SymbolicExpr::GetACSLConfig cfg{
                                     .noStateLabelFunctionAt = true,
                                     .predefinedLabels       = {{oldPoint, "Old"}}};
-                                auto rhsOpt = simplifiedField->getACSL(cfg);
+                                auto rhsOpt = simplifiedField.getACSL(cfg);
                                 if (!rhsOpt)
                                     continue;
                                 ensures.push_back("\\result->" + fieldName + " == (" +
@@ -416,7 +416,7 @@ namespace acslg::spec_generator {
                     if (!lhsOpt) {
                         if (lhsOpt.error() == symb::SymbolicExpr::GetACSLError::HeapAddress) {
                             if (auto fallback = getResultBaseACSL(addr, cfg, oldPoint)) {
-                                auto rhsOpt = simplifiedRhs->getACSL(cfg);
+                                    auto rhsOpt = simplifiedRhs.getACSL(cfg);
                                 if (!rhsOpt)
                                     continue;
                                 ensures.push_back(fallback.value().first + " == (" +
@@ -433,7 +433,7 @@ namespace acslg::spec_generator {
                         continue;
                     }
 
-                    auto rhsOpt = simplifiedRhs->getACSL(cfg);
+                    auto rhsOpt = simplifiedRhs.getACSL(cfg);
                     if (!rhsOpt)
                         continue;
 
@@ -460,7 +460,7 @@ namespace acslg::spec_generator {
                                 ++idxField;
                                 continue;
                             }
-                            auto fieldExpected = simplifiedField->getACSL(
+                            auto fieldExpected = simplifiedField.getACSL(
                                 {.noStateLabelFunctionAt = true, .predefinedLabels = {}});
                             if (!fieldExpected) {
                                 ++idxField;
@@ -527,14 +527,14 @@ namespace acslg::spec_generator {
                 auto simplified = simplifyExpr(cond);
                 if (referencesNonContractVisibleLocals(simplified.handle(), FD))
                     continue;
-                auto rf = simplified->getACSL({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
+                auto rf = simplified.getACSL({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
                 if (!rf || rf.value().first.empty())
                     continue;
                 // TODO: Conditions involving heap-allocated pointers may require SourcePoint
                 // labels; we currently drop them because we cannot express usedPoints in requires.
                 if (!rf.value().second.empty())
                     continue;
-                auto &target = simplified->isOverRange() ? assumeStr : requireStr;
+                auto &target = simplified.isOverRange() ? assumeStr : requireStr;
                 if (!target.empty())
                     target += " && ";
                 target += rf.value().first;

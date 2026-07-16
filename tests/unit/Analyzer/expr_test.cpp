@@ -38,6 +38,12 @@ namespace acslg::test::unit::analyzer {
         T::classof(expr);
     };
 
+    template <typename T>
+    concept HasFacadeNodeAccess = requires(const T &value) {
+        *value;
+        value.operator->();
+    };
+
     static_assert(std::is_constructible_v<symbolic::LiteralExpr,
                                           symbolic::ExprFactory &,
                                           int64_t>);
@@ -76,6 +82,8 @@ namespace acslg::test::unit::analyzer {
     static_assert(!std::is_invocable_v<symbolic::AddressBoxEq,
                                        const symbolic::AddressBox &,
                                        const symbolic::Address &>);
+    static_assert(!HasFacadeNodeAccess<symbolic::Expr>);
+    static_assert(!HasFacadeNodeAccess<symbolic::Addr>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {
@@ -2017,13 +2025,13 @@ namespace acslg::test::unit::analyzer {
             varAddr, point);
 
         EXPECT_EQ(unknown.handle(), factory.unknown());
-        EXPECT_TRUE(unknown->isUnknown());
+        EXPECT_TRUE(unknown.isUnknown());
         EXPECT_EQ(index.handle(), factory.rangeIndex("i"));
-        EXPECT_TRUE(index->isRangeIndex());
+        EXPECT_TRUE(index.isRangeIndex());
         EXPECT_EQ(varAddr.handle(), factory.variableAddress(var));
-        EXPECT_TRUE(varAddr->isVariableAddress());
+        EXPECT_TRUE(varAddr.isVariableAddress());
         EXPECT_EQ(symbolAddr.handle(), factory.symbolAddress(var->getType(), varAddr.handle(), point));
-        EXPECT_TRUE(symbolAddr->isSymbolAddress());
+        EXPECT_TRUE(symbolAddr.isSymbolAddress());
         EXPECT_EQ(indexedSymbolAddr.handle(),
                   factory.symbolAddress(var->getType(), varAddr.handle(), point,
                                         index.handle(), length.handle()));
@@ -2034,7 +2042,7 @@ namespace acslg::test::unit::analyzer {
                   factory.symbolValue(symbolic::SymbolicExpr::Type{
                                           symbolic::SymbolicExpr::ScalarKind::Int, 32},
                                       varAddr.handle(), point));
-        EXPECT_TRUE(symbolValue->isSymbolValue());
+        EXPECT_TRUE(symbolValue.isSymbolValue());
         symbolic::SymbolValueView symbolValueView{symbolValue.handle()};
         EXPECT_EQ(symbolValueView.from(), varAddr.handle());
         EXPECT_EQ(symbolValueView.fromPoint(), point);
@@ -2067,7 +2075,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(addr.handle(), handle);
         EXPECT_EQ(imported.handle(), handle);
         EXPECT_EQ(addr, imported);
-        EXPECT_TRUE(addr->isVariableAddress());
+        EXPECT_TRUE(addr.isVariableAddress());
         EXPECT_EQ(addr.asExpr().handle(), handle.asExpr());
     }
 
