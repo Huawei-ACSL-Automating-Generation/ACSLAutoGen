@@ -670,16 +670,6 @@ namespace acslg::analyzer::symbolic {
         };
         Kind getKind() const { return kind_; }
 
-        static bool classof(const SymbolicExpr *e);
-        static bool classof(const Symbol *) { return true; }
-
-        static Symbol *toThis(SymbolicExpr *e);
-        static const Symbol *toThis(const SymbolicExpr *e);
-
-        /// @brief Downcast to the SymbolicExpr base.
-        utils::not_null<SymbolicExpr *> toSymbolicExpr();
-        /// @brief Const downcast to the SymbolicExpr base.
-        utils::not_null<const SymbolicExpr *> toSymbolicExpr() const;
         /// @brief Source point that created the symbol, if tracked.
         virtual std::optional<SourcePoint> getFromPoint() const = 0;
 

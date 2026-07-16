@@ -2859,18 +2859,6 @@ namespace acslg::analyzer::symbolic {
         return getSymbolFromAddr(type, std::move(fromAddr), std::move(fromPoint));
     }
 
-    bool Symbol::classof(const SymbolicExpr *e) {
-        return dynamic_cast<const Symbol *>(e) != nullptr;
-    }
-
-    Symbol *Symbol::toThis(SymbolicExpr *e) {
-        return dynamic_cast<Symbol *>(e);
-    }
-
-    const Symbol *Symbol::toThis(const SymbolicExpr *e) {
-        return toThis(const_cast<SymbolicExpr *>(e));
-    }
-
     utils::expected<std::string, SymbolicExpr::GetACSLError> Symbol::callGetACSLOfValueProxy(
         const Address &addr,
         const SymbolicExpr::GetACSLConfig &config,
@@ -2880,16 +2868,6 @@ namespace acslg::analyzer::symbolic {
         bool isRightChild) {
         return Address::callGetACSLOfValue(addr, config, usedPoints, currentPoint, parentPrec,
                                            isRightChild);
-    }
-
-    utils::not_null<SymbolicExpr *> Symbol::toSymbolicExpr() {
-        auto *result = dynamic_cast<SymbolicExpr *>(this);
-        if (result == nullptr)
-            UNREACHABLE();
-        return result;
-    }
-    utils::not_null<const SymbolicExpr *> Symbol::toSymbolicExpr() const {
-        return const_cast<Symbol *>(this)->toSymbolicExpr();
     }
 
 } // namespace acslg::analyzer::symbolic

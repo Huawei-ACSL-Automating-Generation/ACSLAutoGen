@@ -23,6 +23,16 @@ namespace acslg::test::unit::analyzer {
     using namespace acslg::analyzer;
     using namespace utils;
 
+    template <typename T>
+    concept HasLegacySymbolToThis = requires(symbolic::SymbolicExpr *expr) {
+        T::toThis(expr);
+    };
+
+    template <typename T>
+    concept HasLegacyToSymbolicExpr = requires(T &value) {
+        value.toSymbolicExpr();
+    };
+
     static_assert(std::is_constructible_v<symbolic::LiteralExpr,
                                           symbolic::ExprFactory &,
                                           int64_t>);
@@ -50,6 +60,8 @@ namespace acslg::test::unit::analyzer {
     static_assert(std::is_same_v<decltype(&symbolic::ExprFactory::importAddress),
                                  symbolic::AddrHandle (symbolic::ExprFactory::*)(
                                      symbolic::AddrHandle)>);
+    static_assert(!HasLegacySymbolToThis<symbolic::Symbol>);
+    static_assert(!HasLegacyToSymbolicExpr<symbolic::Symbol>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {
