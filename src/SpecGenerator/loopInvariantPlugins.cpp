@@ -829,9 +829,8 @@ namespace acslg::spec_generator {
                     auto concreteAddrExpr =
                         symb::getSubstitutedExprHandle(factory, addr.handle().asExpr(), *path,
                                                        loopEntryPoint);
-                    auto concreteAddr =
-                        symb::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
-                    if (concreteAddr == nullptr)
+                    auto concreteAddr = symb::AddrHandle::tryFrom(concreteAddrExpr);
+                    if (!concreteAddr)
                         UNREACHABLE();
 
                     // todo: it's wrong.
@@ -982,9 +981,8 @@ namespace acslg::spec_generator {
                     auto concreteAddrExpr =
                         symb::getSubstitutedExprHandle(factory, addr.handle().asExpr(), *path,
                                                        loopEntryPoint);
-                    auto concreteAddr =
-                        symb::dyn_cast<const symb::Address>(concreteAddrExpr.get().get());
-                    if (concreteAddr == nullptr)
+                    auto concreteAddr = symb::AddrHandle::tryFrom(concreteAddrExpr);
+                    if (!concreteAddr)
                         UNREACHABLE();
 
                     // todo: it's wrong

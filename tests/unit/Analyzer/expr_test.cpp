@@ -1406,6 +1406,26 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(hashIds.contains(yValue.hash()));
     }
 
+    TEST(AddrHandleTest, TryFromAcceptsAddressesAndRejectsValues) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(int x) {
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+
+        symbolic::ExprFactory factory;
+        auto address = factory.variableAddress(func->getParamDecl(0));
+        auto converted = symbolic::AddrHandle::tryFrom(address.asExpr());
+
+        ASSERT_TRUE(converted.has_value());
+        EXPECT_EQ(*converted, address);
+        EXPECT_FALSE(symbolic::AddrHandle::tryFrom(factory.literal(1)).has_value());
+    }
+
     TEST(ExprFactoryTest, ImportsCrossFactoryUInt64LiteralWithoutValueNarrowing) {
         const auto large = std::numeric_limits<std::uint64_t>::max();
         symbolic::ExprFactory sourceFactory;

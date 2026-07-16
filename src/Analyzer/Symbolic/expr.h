@@ -835,6 +835,12 @@ namespace acslg::analyzer::symbolic {
                 ERROR("AddrHandle cannot wrap null.");
         }
 
+        static std::optional<AddrHandle> tryFrom(ExprHandle handle) {
+            if (auto *address = handle.dyn_cast<const Address>())
+                return AddrHandle{address};
+            return std::nullopt;
+        }
+
         const Address &operator*() const { return *ptr_; }
         const Address *operator->() const { return ptr_; }
         utils::not_null<const Address *> get() const { return ptr_; }
@@ -843,6 +849,11 @@ namespace acslg::analyzer::symbolic {
         std::size_t hash() const { return ptr_->hash(); }
         std::string dump() const { return ptr_->dump(); }
         SymbolicExpr::Type getValType() const { return ptr_->getValType(); }
+        auto getACSLOfValue(
+            const SymbolicExpr::GetACSLConfig &config,
+            std::optional<SourcePoint> currentPoint = std::nullopt) const {
+            return ptr_->getACSLOfValue(config, currentPoint);
+        }
 
         template <typename T> bool isa() const {
             return ::acslg::analyzer::symbolic::isa<T>(ptr_);
