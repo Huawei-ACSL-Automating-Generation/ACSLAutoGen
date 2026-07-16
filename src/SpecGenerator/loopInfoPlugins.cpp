@@ -334,8 +334,8 @@ namespace acslg::spec_generator {
             }; // sameAddressBetweenEveryPaths end
 
             auto hasPattern =
-                [&](const symb::Address &addr) -> std::optional<const LoopInfo::Pattern> {
-                if (auto it = patternInfo.normalExitPatternsMap.find(addr);
+                [&](symb::AddrHandle addr) -> std::optional<const LoopInfo::Pattern> {
+                if (auto it = patternInfo.normalExitPatternsMap.find(symb::AddressBox{addr});
                     it != patternInfo.normalExitPatternsMap.end())
                     return it->second;
                 return std::nullopt;
@@ -481,7 +481,7 @@ namespace acslg::spec_generator {
                 using enum clang::BinaryOperator::Opcode;
 
                 if (auto addr = sameAddressBetweenEveryPaths(index)) {
-                    if (auto pattern = hasPattern(**addr); pattern == std::nullopt) {
+                    if (auto pattern = hasPattern(*addr); pattern == std::nullopt) {
                         INFO("Index has no parseable pattern.");
                         return false;
                     } else {
@@ -566,7 +566,7 @@ namespace acslg::spec_generator {
 
                 indexExpr = unaryExpr;
                 if (auto addr = sameAddressBetweenEveryPaths(unaryExpr)) {
-                    if (auto pattern = hasPattern(**addr); pattern == std::nullopt) {
+                    if (auto pattern = hasPattern(*addr); pattern == std::nullopt) {
                         INFO("Index has no parseable pattern.");
                         return false;
                     } else {
@@ -638,7 +638,7 @@ namespace acslg::spec_generator {
 
                 if (auto it = loopEntry.getPaths()[0]->getVarAddr().find(varDecl);
                     it != loopEntry.getPaths()[0]->getVarAddr().end()) {
-                    if (auto pattern = hasPattern(*it->second); pattern == std::nullopt) {
+                    if (auto pattern = hasPattern(it->second); pattern == std::nullopt) {
                         INFO("Index has no parseable pattern.");
                         return false;
                     } else {

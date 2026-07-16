@@ -69,6 +69,13 @@ namespace acslg::test::unit::analyzer {
     static_assert(!HasLegacyToSymbolicExpr<symbolic::Symbol>);
     static_assert(!HasLegacyClassof<symbolic::SymbolicExpr>);
     static_assert(!HasLegacyClassof<symbolic::Address>);
+    static_assert(std::is_invocable_v<symbolic::AddressBoxHash,
+                                      const symbolic::AddressBox &>);
+    static_assert(!std::is_invocable_v<symbolic::AddressBoxHash,
+                                       const symbolic::Address &>);
+    static_assert(!std::is_invocable_v<symbolic::AddressBoxEq,
+                                       const symbolic::AddressBox &,
+                                       const symbolic::Address &>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {

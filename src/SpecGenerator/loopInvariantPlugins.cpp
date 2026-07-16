@@ -612,7 +612,7 @@ namespace acslg::spec_generator {
                 // offset (or to check it for reliability).
                 if (from == std::nullopt)
                     ERROR("Invalid state");
-                if (auto it = patternInfo.normalExitPatternsMap.find(**from);
+                if (auto it = patternInfo.normalExitPatternsMap.find(symb::AddressBox{*from});
                     it != patternInfo.normalExitPatternsMap.end()) {
                     auto &pattern = it->second;
                     if (pattern == std::nullopt)
@@ -643,7 +643,8 @@ namespace acslg::spec_generator {
                 // Is offset x-step?
                 if (auto symbolValue = symb::SymbolValueView::tryFrom(offset)) {
                     auto symbolValueFrom = symbolValue->from();
-                    if (auto it = patternInfo.normalExitPatternsMap.find(*symbolValueFrom);
+                    if (auto it = patternInfo.normalExitPatternsMap.find(
+                            symb::AddressBox{symbolValueFrom});
                         it != patternInfo.normalExitPatternsMap.end()) {
                         auto &pattern = it->second;
                         if (pattern == std::nullopt)
@@ -1082,7 +1083,8 @@ namespace acslg::spec_generator {
 
             // Only work when loop is 1-step.
             int64_t indexStep;
-            if (auto it = patternInfo.normalExitPatternsMap.find(*indexInfo.indexSymbolicAddr);
+            if (auto it = patternInfo.normalExitPatternsMap.find(
+                    symb::AddressBox{indexInfo.indexSymbolicAddr});
                 it != patternInfo.normalExitPatternsMap.end()) {
                 if (it->second == std::nullopt)
                     ERROR("PatternsMap_ is in an invalid state");
@@ -1197,7 +1199,8 @@ namespace acslg::spec_generator {
                             if (addr == std::nullopt)
                                 return false;
                             // Does this variable step same as loop?
-                            if (auto it = patternInfo.normalExitPatternsMap.find(*addr.value());
+                            if (auto it = patternInfo.normalExitPatternsMap.find(
+                                    symb::AddressBox{addr.value()});
                                 it == patternInfo.normalExitPatternsMap.end() ||
                                 it->second == std::nullopt || (*it->second).step != indexStep)
                                 return false;
@@ -1536,7 +1539,8 @@ namespace acslg::spec_generator {
 
             // Only work when loop is 1-step.
             int64_t indexStep;
-            if (auto it = patternInfo.normalExitPatternsMap.find(*indexInfo.indexSymbolicAddr);
+            if (auto it = patternInfo.normalExitPatternsMap.find(
+                    symb::AddressBox{indexInfo.indexSymbolicAddr});
                 it != patternInfo.normalExitPatternsMap.end()) {
                 if (it->second == std::nullopt)
                     ERROR("Index Should have pattern.");
@@ -1564,7 +1568,7 @@ namespace acslg::spec_generator {
                 auto fromAddr = symb::getFromAddrHandle(factory, symbol);
                 if (fromAddr == std::nullopt)
                     return std::nullopt;
-                auto it = patternInfo.normalExitPatternsMap.find(**fromAddr);
+                auto it = patternInfo.normalExitPatternsMap.find(symb::AddressBox{*fromAddr});
                 // The value on this address doesn't change during loop, so just copy it.
                 if (it == patternInfo.normalExitPatternsMap.end())
                     return factory.importExpr(symbol);

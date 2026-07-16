@@ -330,9 +330,10 @@ namespace acslg::spec_generator {
                 auto subedAddr = symb::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
                 if (subedAddr == nullptr)
                     UNREACHABLE();
+                auto subedAddrHandle = symb::AddrHandle{subedAddr};
                 auto subedValue =
                     symb::getSubstitutedExprHandle(factory, value, currentPath, loopEntryPoint);
-                if (auto it = toUpdate.memoryMap.find(*subedAddr);
+                if (auto it = toUpdate.memoryMap.find(symb::AddressBox{subedAddrHandle});
                     it != toUpdate.memoryMap.end() && !it->second->isUnknown()) {
                     WARN("Another plugin has already updated this address. The new value: "
                          "{" +
@@ -340,7 +341,7 @@ namespace acslg::spec_generator {
                     continue;
                 }
                 toUpdate.memoryMap.insert_or_assign(
-                    symb::AddressBox{factory.importAddress(symb::AddrHandle{subedAddr})},
+                    symb::AddressBox{factory.importAddress(subedAddrHandle)},
                     subedValue);
             }
 

@@ -1790,7 +1790,8 @@ namespace acslg::analyzer {
 
     std::optional<symbolic::ExprHandle> MemoryModel::read(symbolic::AddrHandle addr) const {
         if (auto varAddr = symbolic::VariableAddressView::tryFrom(addr)) {
-            if (auto it = memoryMap_variableAddr_.find(*varAddr->handle());
+            if (auto it = memoryMap_variableAddr_.find(
+                    symbolic::AddressBox{varAddr->handle()});
                 it != memoryMap_variableAddr_.end())
                 return it->second;
             return std::nullopt;
@@ -1832,12 +1833,12 @@ namespace acslg::analyzer {
                 length.value()->tryEvalAsConstant().value() == 1) {
                 auto fakeRangeHandle =
                     factory().withoutLength(factory().importAddress(symbolAddr->handle()));
-                auto it = addrValueMap.find(*fakeRangeHandle);
+                auto it = addrValueMap.find(symbolic::AddressBox{fakeRangeHandle});
                 if (it == addrValueMap.end())
                     return std::nullopt;
                 return it->second;
             }
-            auto it = addrValueMap.find(*symbolAddr->handle());
+            auto it = addrValueMap.find(symbolic::AddressBox{symbolAddr->handle()});
             if (it == addrValueMap.end())
                 return std::nullopt;
             return it->second;

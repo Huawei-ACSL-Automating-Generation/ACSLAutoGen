@@ -818,18 +818,11 @@ namespace acslg::analyzer::symbolic {
     };
 
     struct AddressBoxHash {
-        using is_transparent = void;
-
         std::size_t operator()(const AddressBox &k) const noexcept { return k.hash(); }
-        std::size_t operator()(const Address &k) const noexcept { return k.hash(); }
     };
 
     struct AddressBoxEq {
-        using is_transparent = void;
-
         bool operator()(const AddressBox &a, const AddressBox &b) const;
-        bool operator()(const AddressBox &a, const Address &b) const;
-        bool operator()(const Address &a, const AddressBox &b) const;
     };
 
     template <class T>
@@ -877,14 +870,6 @@ namespace acslg::analyzer::symbolic {
 
     inline bool AddressBoxEq::operator()(const AddressBox &a, const AddressBox &b) const {
         return a == b;
-    }
-
-    inline bool AddressBoxEq::operator()(const AddressBox &a, const Address &b) const {
-        return a.handle()->equal(b);
-    }
-
-    inline bool AddressBoxEq::operator()(const Address &a, const AddressBox &b) const {
-        return a.equal(*b.handle());
     }
 
     class AddressChild {
@@ -1412,10 +1397,6 @@ namespace acslg::analyzer::symbolic {
         }
 
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const;
-    };
-
-    struct AddressHash {
-        std::size_t operator()(const Address &addr) const noexcept { return addr.hash(); }
     };
 
     class SymbolValueView {
