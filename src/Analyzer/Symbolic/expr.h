@@ -385,50 +385,14 @@ namespace acslg::analyzer::symbolic {
         }; // todo: may use virtual inheritance to override this at the level of `Symbol`.
 
         template <typename... Exprs>
-        static std::pair<UsedMap, HashIdMap> collectUsedSymbols(const SymbolicExpr &first,
-                                                                const Exprs &...rest) {
-            UsedMap merged;
-
-            auto mergeIntoOne = [&](const UsedMap &m) {
-                for (const auto &[k, v] : m) {
-                    auto it = merged.find(k);
-                    if (it == merged.end()) {
-                        merged.emplace(k, v);
-                    } else {
-#ifndef DEBUG_MODE
-                        const auto same = it->second.get() == v.get();
-                        assert(same &&
-                               "collectUsedVarsAndAddrs key conflict with different targets");
-#endif
-                    }
-                }
-            };
-
-            mergeIntoOne(first.collectUsedSymbols());
-            (mergeIntoOne(rest.collectUsedSymbols()), ...);
-
-            size_t index = 0;
-            std::unordered_map<size_t, size_t> hashIndexMap{};
-            for (auto &[hash, _] : merged) {
-                hashIndexMap[hash] = index++;
-            }
-            return std::pair{std::move(merged), std::move(hashIndexMap)};
-        }
+        static std::pair<UsedMap, HashIdMap> collectUsedSymbols(ExprHandle first,
+                                                                Exprs... rest);
 
         /**
          * @brief Attempt to evaluate the expression to a concrete integer constant.
          * @return Constant value when expression is linear and homogeneous; nullopt otherwise.
          */
-        std::optional<int64_t> tryEvalAsConstant() const {
-            // TODO: cache the result.
-            if (!isLinear())
-                return std::nullopt;
-            auto [hashPtrMap, hashIdMap] = SymbolicExpr::collectUsedSymbols(*this);
-            auto linearExpr              = toLinearExpr(hashIdMap);
-            if (linearExpr.all_homogeneous_terms_are_zero())
-                return linearExpr.inhomogeneous_term().get_si();
-            return std::nullopt;
-        };
+        std::optional<int64_t> tryEvalAsConstant() const;
         /**
          * @brief Evaluate any fully constant expression using symbolic operator semantics.
          * @return The resulting integer value, or nullopt when evaluation is not possible.
@@ -571,6 +535,47 @@ namespace acslg::analyzer::symbolic {
       private:
         utils::not_null<const SymbolicExpr *> expr_;
     };
+
+    template <typename... Exprs>
+    std::pair<SymbolicExpr::UsedMap, SymbolicExpr::HashIdMap>
+    SymbolicExpr::collectUsedSymbols(ExprHandle first, Exprs... rest) {
+        UsedMap merged;
+
+        auto mergeIntoOne = [&](const UsedMap &m) {
+            for (const auto &[k, v] : m) {
+                auto it = merged.find(k);
+                if (it == merged.end()) {
+                    merged.emplace(k, v);
+                } else {
+#ifndef DEBUG_MODE
+                    const auto same = it->second.get() == v.get();
+                    assert(same && "collectUsedVarsAndAddrs key conflict with different targets");
+#endif
+                }
+            }
+        };
+
+        mergeIntoOne(first->collectUsedSymbols());
+        (mergeIntoOne(rest->collectUsedSymbols()), ...);
+
+        size_t index = 0;
+        std::unordered_map<size_t, size_t> hashIndexMap{};
+        for (auto &[hash, _] : merged) {
+            hashIndexMap[hash] = index++;
+        }
+        return std::pair{std::move(merged), std::move(hashIndexMap)};
+    }
+
+    inline std::optional<int64_t> SymbolicExpr::tryEvalAsConstant() const {
+        // TODO: cache the result.
+        if (!isLinear())
+            return std::nullopt;
+        auto [hashPtrMap, hashIdMap] = collectUsedSymbols(ExprHandle{this});
+        auto linearExpr              = toLinearExpr(hashIdMap);
+        if (linearExpr.all_homogeneous_terms_are_zero())
+            return linearExpr.inhomogeneous_term().get_si();
+        return std::nullopt;
+    }
 
     using HashExprHandleMap = std::unordered_map<size_t, ExprHandle>;
     ExprHandle getSubstitutedValueHandle(ExprFactory &factory,

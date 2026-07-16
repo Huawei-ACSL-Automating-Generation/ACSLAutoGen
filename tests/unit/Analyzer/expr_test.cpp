@@ -1345,6 +1345,39 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(facade.handle(), imported);
     }
 
+    TEST(ExprHandleTest, CollectUsedSymbolsMergesMultipleHandleInputs) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(int x, int y) {
+                return x + y;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        ASSERT_EQ(func->getNumParams(), 2u);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        auto xAddr = factory.variableAddress(func->getParamDecl(0));
+        auto yAddr = factory.variableAddress(func->getParamDecl(1));
+        auto xValue = factory.symbolValue(
+            symbolic::deriveType(func->getParamDecl(0)->getType()), xAddr, point);
+        auto yValue = factory.symbolValue(
+            symbolic::deriveType(func->getParamDecl(1)->getType()), yAddr, point);
+
+        auto [usedSymbols, hashIds] =
+            symbolic::SymbolicExpr::collectUsedSymbols(xValue, yValue);
+
+        ASSERT_EQ(usedSymbols.size(), 2u);
+        ASSERT_EQ(hashIds.size(), 2u);
+        EXPECT_TRUE(usedSymbols.contains(xValue.hash()));
+        EXPECT_TRUE(usedSymbols.contains(yValue.hash()));
+        EXPECT_TRUE(hashIds.contains(xValue.hash()));
+        EXPECT_TRUE(hashIds.contains(yValue.hash()));
+    }
+
     TEST(ExprFactoryTest, ImportsCrossFactoryUInt64LiteralWithoutValueNarrowing) {
         const auto large = std::numeric_limits<std::uint64_t>::max();
         symbolic::ExprFactory sourceFactory;

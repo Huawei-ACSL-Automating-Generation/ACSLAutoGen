@@ -127,7 +127,7 @@ namespace acslg::spec_generator {
                         entryExpr = preValue.value();
                     } else {
                         auto [hashAddrMap, _] =
-                            symb::SymbolicExpr::collectUsedSymbols(*currentExpr);
+                            symb::SymbolicExpr::collectUsedSymbols(currentExpr);
                         if (hashAddrMap.size() != 1) {
                             patterns.emplace(addr, std::nullopt);
                             continue;
@@ -146,8 +146,8 @@ namespace acslg::spec_generator {
 
                     if (entryExpr == std::nullopt)
                         UNREACHABLE();
-                    auto [_, hashIdMap] =
-                        symb::SymbolicExpr::collectUsedSymbols(*currentExpr, *entryExpr.value());
+                    auto [_, hashIdMap] = symb::SymbolicExpr::collectUsedSymbols(
+                        currentExpr, entryExpr.value());
                     if (currentExpr->getMaxDegree() < 0 || entryExpr.value()->getMaxDegree() < 0) {
                         patterns.emplace(addr, std::nullopt);
                         continue;

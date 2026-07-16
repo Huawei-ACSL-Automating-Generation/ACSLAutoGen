@@ -1091,7 +1091,7 @@ namespace acslg::analyzer::symbolic {
     ExprHandle SymbolicExpr::simplifiedExprIfLinear() const {
         if (!isLinear())
             return ExprFactoryScope::current().importExpr(ExprHandle{this});
-        auto [hashPtrMap, hashIdMap] = collectUsedSymbols(*this);
+        auto [hashPtrMap, hashIdMap] = collectUsedSymbols(ExprHandle{this});
 
         auto &factory   = ExprFactoryScope::current();
         auto linearExpr = toLinearExpr(hashIdMap);

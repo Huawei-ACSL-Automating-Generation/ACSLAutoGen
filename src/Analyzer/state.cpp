@@ -63,7 +63,8 @@ namespace acslg::analyzer {
 
         bool containsLocalVar(symbolic::ExprHandle expr,
                               const std::unordered_set<const clang::VarDecl *> &locals) {
-            auto [usedSymbols, unusedSymbols] = symbolic::SymbolicExpr::collectUsedSymbols(*expr);
+            auto [usedSymbols, unusedSymbols] =
+                symbolic::SymbolicExpr::collectUsedSymbols(expr);
             (void)unusedSymbols;
             for (const auto &entry : usedSymbols) {
                 const auto &symbol = entry.second;
