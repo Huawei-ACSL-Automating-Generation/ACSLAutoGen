@@ -1009,9 +1009,6 @@ namespace acslg::analyzer::symbolic {
       public:
         Addr(ExprFactory &factory, AddrHandle handle) : factory_(&factory), handle_(handle) {}
         explicit Addr(AddrHandle handle) : Addr(ExprFactoryScope::current(), handle) {}
-        explicit Addr(const Address &address)
-            : Addr(ExprFactoryScope::current(),
-                   ExprFactoryScope::current().importAddress(address)) {}
 
         static Addr variable(utils::not_null<const clang::VarDecl *> from);
         static Addr symbol(ExprFactory &factory,
@@ -1086,9 +1083,6 @@ namespace acslg::analyzer::symbolic {
       public:
         Expr(ExprFactory &factory, ExprHandle handle) : factory_(&factory), handle_(handle) {}
         explicit Expr(ExprHandle handle) : Expr(ExprFactoryScope::current(), handle) {}
-        explicit Expr(const SymbolicExpr &expr)
-            : Expr(ExprFactoryScope::current(),
-                   ExprFactoryScope::current().importExpr(expr)) {}
 
         static Expr unknown() {
             auto &factory = ExprFactoryScope::current();

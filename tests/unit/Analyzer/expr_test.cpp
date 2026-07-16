@@ -42,6 +42,8 @@ namespace acslg::test::unit::analyzer {
     static_assert(std::is_same_v<decltype(&symbolic::tryEvalAsSymbolAddrHandle),
                                  std::optional<symbolic::AddrHandle> (*)(
                                      symbolic::ExprFactory &, symbolic::ExprHandle)>);
+    static_assert(!std::is_constructible_v<symbolic::Expr, const symbolic::SymbolicExpr &>);
+    static_assert(!std::is_constructible_v<symbolic::Addr, const symbolic::Address &>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {
@@ -1332,7 +1334,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(unary.operand(), one);
 
         symbolic::ExprFactoryScope scope(factory);
-        symbolic::Expr facade{*sourceTree};
+        symbolic::Expr facade{imported};
         EXPECT_EQ(facade.handle(), imported);
     }
 
@@ -1971,7 +1973,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::Addr addr{handle};
         symbolic::ExprFactory sourceFactory;
         auto source = sourceFactory.variableAddress(var);
-        symbolic::Addr imported{*source};
+        symbolic::Addr imported{factory.importAddress(source)};
 
         EXPECT_EQ(&addr.factory(), &factory);
         EXPECT_EQ(addr.handle(), handle);
