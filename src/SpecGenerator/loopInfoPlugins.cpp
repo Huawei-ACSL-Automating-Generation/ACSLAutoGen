@@ -274,7 +274,7 @@ namespace acslg::spec_generator {
             for (auto &&[addr, value] : merged->getMemoryState().flat()) {
                 if (value->isUnknown())
                     continue;
-                sharedMemory.emplace(addr, detail::importPostExprThroughCurrentFactory(*value));
+                sharedMemory.emplace(addr, detail::importPostExprThroughCurrentFactory(value));
             }
 
             analyzer::PathConditions sharedConds;

@@ -23,7 +23,7 @@
 namespace acslg::spec_generator {
     namespace detail {
         inline analyzer::symbolic::ExprHandle importPostExprThroughCurrentFactory(
-            const analyzer::symbolic::SymbolicExpr &expr) {
+            analyzer::symbolic::ExprHandle expr) {
             return analyzer::symbolic::ExprFactoryScope::current().importExpr(expr);
         }
     } // namespace detail
@@ -271,12 +271,12 @@ namespace acslg::spec_generator {
             for (const auto &kv : other.memoryMap) {
                 const auto &addr  = kv.first;
                 const auto &exprp = kv.second;
-                memoryMap.emplace(addr, detail::importPostExprThroughCurrentFactory(*exprp));
+                memoryMap.emplace(addr, detail::importPostExprThroughCurrentFactory(exprp));
             }
 
             pathConds.reserve(other.pathConds.size());
             for (const auto &expr : other.pathConds)
-                pathConds.emplace(detail::importPostExprThroughCurrentFactory(*expr));
+                pathConds.emplace(detail::importPostExprThroughCurrentFactory(expr));
         }
 
         PostPIInfo()                       = default;
@@ -323,15 +323,15 @@ namespace acslg::spec_generator {
             for (const auto &kv : other.memoryMap) {
                 const auto &addr = kv.first;
                 const auto &expr = kv.second;
-                memoryMap.emplace(addr, detail::importPostExprThroughCurrentFactory(*expr));
+                memoryMap.emplace(addr, detail::importPostExprThroughCurrentFactory(expr));
             }
 
             pathConds.reserve(other.pathConds.size());
             for (const auto &expr : other.pathConds)
-                pathConds.emplace(detail::importPostExprThroughCurrentFactory(*expr));
+                pathConds.emplace(detail::importPostExprThroughCurrentFactory(expr));
 
             if (other.returnExpr)
-                returnExpr = detail::importPostExprThroughCurrentFactory(*other.returnExpr.value());
+                returnExpr = detail::importPostExprThroughCurrentFactory(other.returnExpr.value());
         }
 
         PostPSInfo()                       = default;

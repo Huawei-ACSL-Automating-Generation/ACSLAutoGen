@@ -377,7 +377,7 @@ namespace acslg::analyzer {
 
         symbolic::ExprHandle internExpr(const symbolic::SymbolicExpr &expr) {
             auto &factory = symbolic::ExprFactoryScope::current();
-            return factory.importExpr(expr);
+            return factory.importExpr(symbolic::ExprHandle{&expr});
         }
 
         symbolic::ExprHandle buildUnary(symbolic::UnaryOp op,

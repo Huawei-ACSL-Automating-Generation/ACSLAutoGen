@@ -98,12 +98,12 @@ namespace acslg::analyzer::symbolic {
 
         if (auto *unaryExpr = expr.dyn_cast<const detail::UnaryOpExprNode>())
             return internTyped(makeNode<detail::UnaryOpExprNode>(
-                unaryExpr->getOperator(), importExpr(*unaryExpr->getSub()), newType));
+                unaryExpr->getOperator(), importExpr(ExprHandle{unaryExpr->getSub()}), newType));
 
         if (auto *binaryExpr = expr.dyn_cast<const detail::BinaryOpExprNode>())
             return internTyped(makeNode<detail::BinaryOpExprNode>(
-                importExpr(*binaryExpr->getLeft()), binaryExpr->getOperator(),
-                importExpr(*binaryExpr->getRight()), newType));
+                importExpr(ExprHandle{binaryExpr->getLeft()}), binaryExpr->getOperator(),
+                importExpr(ExprHandle{binaryExpr->getRight()}), newType));
 
         if (auto *variableAddr = expr.dyn_cast<const VariableAddressNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<VariableAddressNode>(
@@ -112,51 +112,53 @@ namespace acslg::analyzer::symbolic {
         if (auto *fieldAddr = expr.dyn_cast<const FieldAddressNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<FieldAddressNode>(
                 fieldAddr->getPointeeType(), fieldAddr->getDefinition(),
-                importAddress(*fieldAddr->getBaseAddr()), fieldAddr->getFieldIndex(), newType));
+                importAddress(fieldAddr->getBaseAddr().handle()), fieldAddr->getFieldIndex(),
+                newType));
 
         if (auto *symbolAddr = expr.dyn_cast<const SymbolAddressNode>()) {
             std::optional<AddrHandle> from;
             if (auto existingFrom = symbolAddr->getFromAddrHandle())
-                from = importAddress(**existingFrom);
+                from = importAddress(*existingFrom);
 
             std::optional<ExprHandle> length;
             if (const auto &existingLength = symbolAddr->getLength(); existingLength)
-                length = importExpr(*existingLength.value());
+                length = importExpr(existingLength->handle());
 
             return internTyped(detail::ExprFactoryInternals::makeNode<SymbolAddressNode>(
                 symbolAddr->getPointeeType(), from,
-                symbolAddr->getFromPoint().value(), importExpr(*symbolAddr->getOffset()), length,
-                newType));
+                symbolAddr->getFromPoint().value(),
+                importExpr(ExprHandle{symbolAddr->getOffset()}), length, newType));
         }
 
         if (auto *symbolVal = expr.dyn_cast<const SymbolValueNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<SymbolValueNode>(
-                newType, importAddress(*symbolVal->getFromAddrHandle()),
+                newType, importAddress(symbolVal->getFromAddrHandle()),
                 symbolVal->getFromPoint().value()));
 
         if (auto *structure = expr.dyn_cast<const StructureNode>()) {
             std::vector<ExprHandle> fields;
             fields.reserve(structure->getNumFields());
             for (auto field : structure->fieldsValues())
-                fields.push_back(importExpr(*field));
+                fields.push_back(importExpr(ExprHandle{field}));
             return internTyped(detail::ExprFactoryInternals::makeNode<StructureNode>(
                 structure->getInfo(), std::move(fields), newType));
         }
 
         if (auto *sum = expr.dyn_cast<const SumOverRangeNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<SumOverRangeNode>(
-                importAddress(*sum->getRange().handle()), sum->getIndexName(),
+                importAddress(sum->getRange().handle()), sum->getIndexName(),
                 sum->getFromPoint().value(), newType));
 
         if (auto *quantifier = expr.dyn_cast<const QuantifierOverRangeNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<QuantifierOverRangeNode>(
-                importAddress(*quantifier->getRange().handle()), quantifier->getIndexName(),
-                quantifier->getQuantifier(), importExpr(*quantifier->getPredicate()), newType));
+                importAddress(quantifier->getRange().handle()), quantifier->getIndexName(),
+                quantifier->getQuantifier(),
+                importExpr(ExprHandle{quantifier->getPredicate()}), newType));
 
         if (auto *maxMin = expr.dyn_cast<const MaxMinOverRangeNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<MaxMinOverRangeNode>(
-                importAddress(*maxMin->getRange().handle()), maxMin->getIndexName(),
-                maxMin->getExtremum(), importExpr(*maxMin->getExpr()),
+                importAddress(maxMin->getRange().handle()), maxMin->getIndexName(),
+                maxMin->getExtremum(), importExpr(ExprHandle{maxMin->getExpr()}),
                 maxMin->getFromPoint().value(), newType));
 
         ERROR("Unsupported SymbolicExpr type in ExprFactory::withValType: " + expr.dump());
@@ -516,15 +518,17 @@ namespace acslg::analyzer::symbolic {
         return Substituter{factory, rangeBase, indexExpr}.run(expr);
     }
 
-    ExprHandle ExprFactory::importExpr(ExprHandle expr) { return importExpr(*expr); }
+    ExprHandle ExprFactory::importExpr(ExprHandle expr) { return importNode(*expr); }
 
-    AddrHandle ExprFactory::importAddress(AddrHandle address) { return importAddress(*address); }
-
-    AddrHandle ExprFactory::importAddress(const Address &address) {
-        return AddrHandle{cast<const Address>(importExpr(address).get().get())};
+    AddrHandle ExprFactory::importAddress(AddrHandle address) {
+        return importAddressNode(*address);
     }
 
-    ExprHandle ExprFactory::importExpr(const SymbolicExpr &expr) {
+    AddrHandle ExprFactory::importAddressNode(const Address &address) {
+        return AddrHandle{cast<const Address>(importNode(address).get().get())};
+    }
+
+    ExprHandle ExprFactory::importNode(const SymbolicExpr &expr) {
         auto preserveImportedType = [this, &expr](ExprHandle imported) {
             if (imported->getValType() == expr.getValType())
                 return imported;
@@ -542,11 +546,11 @@ namespace acslg::analyzer::symbolic {
 
         if (auto *unaryExpr = dyn_cast<detail::UnaryOpExprNode>(&expr))
             return preserveImportedType(
-                unary(unaryExpr->getOperator(), importExpr(*unaryExpr->getSub())));
+                unary(unaryExpr->getOperator(), importNode(*unaryExpr->getSub())));
 
         if (auto *binaryExpr = dyn_cast<detail::BinaryOpExprNode>(&expr)) {
-            auto left  = importExpr(*binaryExpr->getLeft());
-            auto right = importExpr(*binaryExpr->getRight());
+            auto left  = importNode(*binaryExpr->getLeft());
+            auto right = importNode(*binaryExpr->getRight());
             return preserveImportedType(binary(left, binaryExpr->getOperator(), right));
         }
 
@@ -554,7 +558,7 @@ namespace acslg::analyzer::symbolic {
             return preserveImportedType(variableAddress(variableAddr->getFrom()).asExpr());
 
         if (auto *fieldAddr = dyn_cast<FieldAddressNode>(&expr)) {
-            auto base = importAddress(*fieldAddr->getBaseAddr());
+            auto base = importAddressNode(*fieldAddr->getBaseAddr());
             return preserveImportedType(
                 fieldAddress(fieldAddr->getPointeeType(), fieldAddr->getDefinition(), base,
                              fieldAddr->getFieldIndex())
@@ -564,29 +568,30 @@ namespace acslg::analyzer::symbolic {
         if (auto *symbolAddr = dyn_cast<SymbolAddressNode>(&expr)) {
             auto from = symbolAddr->getFromAddrHandle();
             if (from)
-                from = importAddress(**from);
+                from = importAddressNode(**from);
 
             std::optional<ExprHandle> length;
             if (const auto &legacyLength = symbolAddr->getLength(); legacyLength)
-                length = importExpr(*legacyLength.value());
+                length = importNode(*legacyLength.value());
 
             return preserveImportedType(
                 symbolAddress(symbolAddr->getPointeeType(), from,
                               symbolAddr->getFromPoint().value(),
-                              importExpr(*symbolAddr->getOffset()), length)
+                              importNode(*symbolAddr->getOffset()), length)
                     .asExpr());
         }
 
         if (auto *symbolVal = dyn_cast<SymbolValueNode>(&expr))
             return preserveImportedType(
-                symbolValue(symbolVal->getValType(), importAddress(*symbolVal->getFromAddrHandle()),
+                symbolValue(symbolVal->getValType(),
+                            importAddressNode(*symbolVal->getFromAddrHandle()),
                             symbolVal->getFromPoint().value()));
 
         if (auto *structure = dyn_cast<StructureNode>(&expr)) {
             std::vector<ExprHandle> fields;
             fields.reserve(structure->getNumFields());
             for (auto field : structure->fieldsValues())
-                fields.push_back(importExpr(*field));
+                fields.push_back(importNode(*field));
             return preserveImportedType(intern(
                 detail::ExprFactoryInternals::makeNode<StructureNode>(
                     structure->getInfo(), std::move(fields))));
@@ -819,7 +824,7 @@ namespace acslg::analyzer::symbolic {
 
         std::optional<ExprHandle> length;
         if (const auto &existingLength = symbolAddr.getLength(); existingLength)
-            length = importExpr(*existingLength.value());
+            length = importExpr(existingLength->handle());
 
         return symbolAddress(symbolAddr.getPointeeType(), from,
                              symbolAddr.getFromPoint().value(), offset, length);
@@ -827,14 +832,14 @@ namespace acslg::analyzer::symbolic {
 
     AddrHandle ExprFactory::withAddedOffset(AddrHandle address, ExprHandle extra) {
         const auto &symbolAddr = address.cast<SymbolAddressNode>();
-        auto newOffset = simplifiedBinary(importExpr(*symbolAddr.getOffset()),
+        auto newOffset = simplifiedBinary(importExpr(ExprHandle{symbolAddr.getOffset()}),
                                           detail::BinaryOpExprNode::Operator::Add, extra);
         return withOffset(address, newOffset);
     }
 
     AddrHandle ExprFactory::withSubtractedOffset(AddrHandle address, ExprHandle extra) {
         const auto &symbolAddr = address.cast<SymbolAddressNode>();
-        auto newOffset = simplifiedBinary(importExpr(*symbolAddr.getOffset()),
+        auto newOffset = simplifiedBinary(importExpr(ExprHandle{symbolAddr.getOffset()}),
                                           detail::BinaryOpExprNode::Operator::Subtract, extra);
         return withOffset(address, newOffset);
     }
@@ -845,13 +850,13 @@ namespace acslg::analyzer::symbolic {
 
         return symbolAddress(symbolAddr.getPointeeType(), from,
                              symbolAddr.getFromPoint().value(),
-                             importExpr(*symbolAddr.getOffset()), length);
+                             importExpr(ExprHandle{symbolAddr.getOffset()}), length);
     }
 
     AddrHandle ExprFactory::withAddedLength(AddrHandle address, ExprHandle extra) {
         const auto &symbolAddr = address.cast<SymbolAddressNode>();
         auto currentLength =
-            symbolAddr.getLength() ? importExpr(*symbolAddr.getLength().value()) : literal(1);
+            symbolAddr.getLength() ? importExpr(symbolAddr.getLength()->handle()) : literal(1);
         auto newLength = simplifiedBinary(currentLength, detail::BinaryOpExprNode::Operator::Add,
                                           extra);
         return withLength(address, newLength);
@@ -863,7 +868,7 @@ namespace acslg::analyzer::symbolic {
 
         return symbolAddress(symbolAddr.getPointeeType(), from,
                              symbolAddr.getFromPoint().value(),
-                             importExpr(*symbolAddr.getOffset()), std::nullopt);
+                             importExpr(ExprHandle{symbolAddr.getOffset()}), std::nullopt);
     }
 
     AddrHandle ExprFactory::fieldAddress(clang::QualType pointeeType,
@@ -928,7 +933,7 @@ namespace acslg::analyzer::symbolic {
         fields.reserve(structureNode.getNumFields());
         size_t currentIndex = 0;
         for (auto field : structureNode.fieldsValues()) {
-            fields.push_back(currentIndex == index ? value : importExpr(*field));
+            fields.push_back(currentIndex == index ? value : importExpr(ExprHandle{field}));
             ++currentIndex;
         }
 
@@ -945,7 +950,7 @@ namespace acslg::analyzer::symbolic {
             if (symbolAddr->getLength())
                 ERROR("Address range is solely for address representation and should not be "
                       "used as an expression.");
-            return factory.importExpr(*symbolAddr);
+            return factory.importExpr(ExprHandle{symbolAddr});
         }
 
         if (auto *binary = expr.dyn_cast<const detail::BinaryOpExprNode>()) {
@@ -953,7 +958,7 @@ namespace acslg::analyzer::symbolic {
                 return binary->simplifiedExprIfLinear();
 
             if (auto c = evaluateToLiteralNode(*binary))
-                return factory.importExpr(*c);
+                return factory.importExpr(ExprHandle{c});
 
             auto lhs = simplifiedExprHandle(factory, ExprHandle{binary->getLeft()});
             auto rhs = simplifiedExprHandle(factory, ExprHandle{binary->getRight()});
@@ -974,9 +979,9 @@ namespace acslg::analyzer::symbolic {
                     const bool expectTrue =
                         binary->getOperator() == Op::Equal ? value == 1 : value == 0;
                     if (expectTrue)
-                        return factory.importExpr(*boolExpr);
+                        return factory.importExpr(boolExpr);
                     return factory.unary(detail::UnaryOpExprNode::Operator::LogicalNot,
-                                         factory.importExpr(*boolExpr));
+                                         factory.importExpr(boolExpr));
                 };
 
                 if (auto simplified = simplifyBoolCmp(lhs, rhs))
@@ -988,23 +993,23 @@ namespace acslg::analyzer::symbolic {
             if (binary->getOperator() == Op::LogicalAnd) {
                 if (auto leftConst = evaluateToLiteralNode(*lhs)) {
                     if (!literalAsBool(*leftConst))
-                        return factory.importExpr(*leftConst);
+                        return factory.importExpr(ExprHandle{leftConst});
                     return rhs;
                 }
                 if (auto rightConst = evaluateToLiteralNode(*rhs)) {
                     if (!literalAsBool(*rightConst))
-                        return factory.importExpr(*rightConst);
+                        return factory.importExpr(ExprHandle{rightConst});
                     return lhs;
                 }
             } else if (binary->getOperator() == Op::LogicalOr) {
                 if (auto leftConst = evaluateToLiteralNode(*lhs)) {
                     if (literalAsBool(*leftConst))
-                        return factory.importExpr(*leftConst);
+                        return factory.importExpr(ExprHandle{leftConst});
                     return rhs;
                 }
                 if (auto rightConst = evaluateToLiteralNode(*rhs)) {
                     if (literalAsBool(*rightConst))
-                        return factory.importExpr(*rightConst);
+                        return factory.importExpr(ExprHandle{rightConst});
                     return lhs;
                 }
             }
@@ -1085,7 +1090,7 @@ namespace acslg::analyzer::symbolic {
      */
     ExprHandle SymbolicExpr::simplifiedExprIfLinear() const {
         if (!isLinear())
-            return ExprFactoryScope::current().importExpr(*this);
+            return ExprFactoryScope::current().importExpr(ExprHandle{this});
         auto [hashPtrMap, hashIdMap] = collectUsedSymbols(*this);
 
         auto &factory   = ExprFactoryScope::current();
@@ -1103,16 +1108,16 @@ namespace acslg::analyzer::symbolic {
             if (result == std::nullopt) {
                 // Seed the accumulator with the first non-zero term.
                 if (C == 1)
-                    result = factory.importExpr(*expr);
+                    result = factory.importExpr(ExprHandle{expr});
                 else
                     result = factory.binary(factory.literal(static_cast<int64_t>(C)),
-                                            Multiply, factory.importExpr(*expr));
+                                            Multiply, factory.importExpr(ExprHandle{expr}));
             } else {
                 unsigned absC = std::abs(C);
-                ExprHandle varExpr = factory.importExpr(*expr);
+                ExprHandle varExpr = factory.importExpr(ExprHandle{expr});
                 if (absC != 1)
                     varExpr = factory.binary(factory.literal(static_cast<int64_t>(absC)),
-                                             Multiply, factory.importExpr(*expr));
+                                             Multiply, factory.importExpr(ExprHandle{expr}));
                 // Combine the current polynomial with the new term using the sign of the
                 // coefficient.
                 result = factory.binary(result.value(), (C > 0 ? Add : Subtract), varExpr);
@@ -1938,9 +1943,9 @@ namespace acslg::analyzer::symbolic {
 
         // offset + length - 1
         auto offsetPlusLength =
-            factory.simplifiedBinary(factory.importExpr(*getOffset()),
+            factory.simplifiedBinary(factory.importExpr(ExprHandle{getOffset()}),
                                      detail::BinaryOpExprNode::Operator::Add,
-                                     factory.importExpr(*length_.value()));
+                                     factory.importExpr(length_->handle()));
         auto rightBound =
             factory.simplifiedBinary(offsetPlusLength,
                                      detail::BinaryOpExprNode::Operator::Subtract,
@@ -2470,9 +2475,9 @@ namespace acslg::analyzer::symbolic {
         if (length_ == std::nullopt)
             return std::nullopt;
         auto &factory = ExprFactoryScope::current();
-        return factory.binary(factory.importExpr(*offset_),
+        return factory.binary(factory.importExpr(offset_.handle()),
                               detail::BinaryOpExprNode::Operator::Add,
-                              factory.importExpr(*length_.value()));
+                              factory.importExpr(length_->handle()));
     }
 
     SymbolAddrBaseInfo SymbolAddressNode::getBaseInfo() const {
@@ -2783,7 +2788,7 @@ namespace acslg::analyzer::symbolic {
         auto origin = getBorrowedSymbolOrigin(symbol);
         if (!origin)
             return std::nullopt;
-        return factory.importAddress(*origin->address);
+        return factory.importAddress(AddrHandle{origin->address});
     }
 
     std::optional<AddrHandle> getFromAddrHandle(ExprFactory &factory, ExprHandle symbol) {

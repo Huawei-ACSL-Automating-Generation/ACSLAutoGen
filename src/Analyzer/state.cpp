@@ -2036,8 +2036,6 @@ namespace acslg::analyzer {
     }
 
     void MemoryModel::mergeSymbolicRanges() {
-        using Expr = symbolic::SymbolicExpr;
-
         auto valueEquivalent = [this](StoredValue a, StoredValue b) -> bool {
             return *symbolic::simplifiedExprHandle(*factory_, a) ==
                    *symbolic::simplifiedExprHandle(*factory_, b);
@@ -2045,7 +2043,7 @@ namespace acslg::analyzer {
 
         // Compute hash of (a + b) by constructing a factory-backed BinaryOp(Add), simplifying,
         // then hashing.
-        auto addedHash = [this](const Expr &a, const Expr &b) {
+        auto addedHash = [this](symbolic::ExprHandle a, symbolic::ExprHandle b) {
             auto added = factory_->binary(factory_->importExpr(a),
                                           symbolic::BinaryOp::Add,
                                           factory_->importExpr(b));
@@ -2101,9 +2099,9 @@ namespace acslg::analyzer {
                 // - range: hash(offset + length)
                 // - non-range: hash(offset + 1) → single-address treated as [off, off+1)
                 if (auto len = key.length()) {
-                    it.rightHash = addedHash(*key.offset(), *len.value());
+                    it.rightHash = addedHash(key.offset(), len.value());
                 } else {
-                    it.rightHash = addedHash(*key.offset(), *factory_->literal(int64_t{1}));
+                    it.rightHash = addedHash(key.offset(), factory_->literal(int64_t{1}));
                 }
 
                 items.emplace_back(std::move(it));

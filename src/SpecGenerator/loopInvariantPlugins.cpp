@@ -1652,7 +1652,7 @@ namespace acslg::spec_generator {
                 } else {
                     interruptedPathInfo.returnExpr =
                         detail::importPostExprThroughCurrentFactory(
-                            *interruptedPath->getReturnExpr().value());
+                            interruptedPath->getReturnExpr().value());
                 }
             }
             using enum symb::RangeQuantifier;

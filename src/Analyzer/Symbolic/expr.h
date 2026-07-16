@@ -944,9 +944,7 @@ namespace acslg::analyzer::symbolic {
         ExprHandle withValType(ExprHandle expr, SymbolicExpr::Type newType);
 
         ExprHandle importExpr(ExprHandle expr);
-        ExprHandle importExpr(const SymbolicExpr &expr);
         AddrHandle importAddress(AddrHandle address);
-        AddrHandle importAddress(const Address &address);
         AddrHandle variableAddress(utils::not_null<const clang::VarDecl *> from);
         AddrHandle symbolAddress(
             clang::QualType pointeeType,
@@ -980,6 +978,8 @@ namespace acslg::analyzer::symbolic {
 
         ExprHandle intern(utils::not_null<std::unique_ptr<SymbolicExpr>> node);
         AddrHandle internAddress(utils::not_null<std::unique_ptr<Address>> node);
+        ExprHandle importNode(const SymbolicExpr &expr);
+        AddrHandle importAddressNode(const Address &address);
 
         std::vector<std::unique_ptr<SymbolicExpr>> owned_;
         std::unordered_map<size_t, std::vector<const SymbolicExpr *>> interned_;

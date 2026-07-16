@@ -44,6 +44,12 @@ namespace acslg::test::unit::analyzer {
                                      symbolic::ExprFactory &, symbolic::ExprHandle)>);
     static_assert(!std::is_constructible_v<symbolic::Expr, const symbolic::SymbolicExpr &>);
     static_assert(!std::is_constructible_v<symbolic::Addr, const symbolic::Address &>);
+    static_assert(std::is_same_v<decltype(&symbolic::ExprFactory::importExpr),
+                                 symbolic::ExprHandle (symbolic::ExprFactory::*)(
+                                     symbolic::ExprHandle)>);
+    static_assert(std::is_same_v<decltype(&symbolic::ExprFactory::importAddress),
+                                 symbolic::AddrHandle (symbolic::ExprFactory::*)(
+                                     symbolic::AddrHandle)>);
 
     namespace {
         const Stmt *nthStmtInBody(const FunctionDecl *FD, unsigned n) {
