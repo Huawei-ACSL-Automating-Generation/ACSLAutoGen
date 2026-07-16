@@ -174,8 +174,8 @@ namespace acslg::analyzer::symbolic {
             const HashExprHandleMap &substitutions;
 
             AddrHandle requireAddress(ExprHandle handle) const {
-                if (auto *addr = handle.dyn_cast<const Address>())
-                    return factory.importAddress(AddrHandle{addr});
+                if (auto address = AddrHandle::tryFrom(handle))
+                    return factory.importAddress(*address);
                 UNREACHABLE();
             }
 
@@ -280,8 +280,8 @@ namespace acslg::analyzer::symbolic {
             const SourcePoint &pointToSub;
 
             AddrHandle requireAddress(ExprHandle handle) const {
-                if (auto *addr = handle.dyn_cast<const Address>())
-                    return factory.importAddress(AddrHandle{addr});
+                if (auto address = AddrHandle::tryFrom(handle))
+                    return factory.importAddress(*address);
                 UNREACHABLE();
             }
 
@@ -426,8 +426,8 @@ namespace acslg::analyzer::symbolic {
             ExprHandle indexExpr;
 
             AddrHandle requireAddress(ExprHandle handle) const {
-                if (auto *addr = handle.dyn_cast<const Address>())
-                    return factory.importAddress(AddrHandle{addr});
+                if (auto address = AddrHandle::tryFrom(handle))
+                    return factory.importAddress(*address);
                 UNREACHABLE();
             }
 
