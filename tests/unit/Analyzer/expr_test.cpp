@@ -211,7 +211,7 @@ namespace acslg::test::unit::analyzer {
         }
 
         template <class ExprPtr> ExprHandle internForTest(const ExprPtr &expr) {
-            return ExprFactoryScope::current().importExpr(*expr);
+            return ExprFactoryScope::current().importExpr(expr);
         }
 
         ExprHandle literalHandleForTest(uint64_t value) {
@@ -220,8 +220,8 @@ namespace acslg::test::unit::analyzer {
 
         ExprHandle makeAdd(ExprHandle a, ExprHandle b) {
             auto &factory = ExprFactoryScope::current();
-            return factory.binary(factory.importExpr(*a), BinaryOp::Add,
-                                  factory.importExpr(*b));
+            return factory.binary(factory.importExpr(a), BinaryOp::Add,
+                                  factory.importExpr(b));
         }
 
         struct SubstituteTest : public FixtureWithCode {
@@ -301,7 +301,7 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
-        auto exprBefore = factory.importExpr(*varNode);
+        auto exprBefore = factory.importExpr(varNode);
         auto result =
             symbolic::getSubstitutedExprHandle(factory, varNode, *path, getSourcePoint(42));
 
@@ -424,7 +424,8 @@ namespace acslg::test::unit::analyzer {
         auto result = symbolic::getSubstitutedExprHandle(factory, sym.asExpr(), *path, otherPoint);
         auto *resultAddr = symbolic::cast<symbolic::Address>(result.get().get());
 
-        EXPECT_EQ(factory.importAddress(*resultAddr), factory.importAddress(*sym));
+        EXPECT_EQ(factory.importAddress(symbolic::AddrHandle{resultAddr}),
+                  factory.importAddress(sym));
     }
 
     TEST_F(SubstituteTest, ScopedNoBaseSymbolAddrSubstitutionUsesFactory) {
@@ -439,7 +440,7 @@ namespace acslg::test::unit::analyzer {
             symbolic::getSubstitutedExprHandle(factory, symHandle.asExpr(), *path, point);
         auto *resultAddr = symbolic::cast<symbolic::Address>(result.get().get());
 
-        EXPECT_EQ(factory.importAddress(*resultAddr), symHandle);
+        EXPECT_EQ(factory.importAddress(symbolic::AddrHandle{resultAddr}), symHandle);
     }
 
     TEST_F(SubstituteTest, ResolvedValueNotAddressShouldError) {
@@ -527,7 +528,7 @@ namespace acslg::test::unit::analyzer {
 
         // Prefix increment (e.g., ++x)
         auto preInc = factory.unary(UnaryOp::PreInc,
-                                    factory.importExpr(*symVal0));
+                                    factory.importExpr(symVal0));
         auto resPre = preInc->getACSL(config);
         ASSERT_TRUE(resPre);
         EXPECT_EQ(resPre.value().first, "++" + name0);
@@ -539,7 +540,7 @@ namespace acslg::test::unit::analyzer {
 
         // Postfix increment (e.g., x++)
         auto postInc = factory.unary(UnaryOp::PostInc,
-                                     factory.importExpr(*symVal1));
+                                     factory.importExpr(symVal1));
         auto resPost = postInc->getACSL(config);
         ASSERT_TRUE(resPost);
         EXPECT_EQ(resPost.value().first, name1 + "++");
@@ -626,16 +627,16 @@ namespace acslg::test::unit::analyzer {
         auto rightBound = addrRangeView.rightBound();
         ASSERT_TRUE(rightBound);
 
-        auto expected = factory.binary(factory.importExpr(*addrRangeView.offset()),
+        auto expected = factory.binary(factory.importExpr(addrRangeView.offset()),
                                        BinaryOp::Add,
-                                       factory.importExpr(*addrRangeView.length().value()));
+                                       factory.importExpr(addrRangeView.length().value()));
         EXPECT_EQ(rightBound.value(), expected);
         EXPECT_EQ(addrRangeView.rightBound(), rightBound);
 
         symbolic::BinaryExprView rightBoundView{rightBound.value()};
-        EXPECT_EQ(rightBoundView.left(), factory.importExpr(*addrRangeView.offset()));
+        EXPECT_EQ(rightBoundView.left(), factory.importExpr(addrRangeView.offset()));
         EXPECT_EQ(rightBoundView.right(),
-                  factory.importExpr(*addrRangeView.length().value()));
+                  factory.importExpr(addrRangeView.length().value()));
     }
 
     // Test usage of \\at(...) when predefinedLabels is set.
@@ -765,7 +766,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         CollisionExpr unsupported{1};
 
-        EXPECT_DEATH((void)factory.importExpr(unsupported), "");
+        EXPECT_DEATH((void)factory.importExpr(symbolic::ExprHandle{&unsupported}), "");
     }
 
     TEST(ExprFactoryTest, TypedBuildersReuseEqualLiteralAndOperationNodes) {
@@ -953,15 +954,15 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(typedRangeView.offset().get(), targetOffset.get().get());
         EXPECT_EQ(typedRangeView.length().value().get(), targetLength.get().get());
 
-        auto targetRange = target.importAddress(*sourceRange);
+        auto targetRange = target.importAddress(sourceRange);
         symbolic::SumOverRangeView typedSumView{typedSum};
         symbolic::QuantifierOverRangeView typedQuantifierView{typedQuantifier};
         symbolic::MaxMinOverRangeView typedMaxView{typedMax};
         EXPECT_EQ(typedSumView.range().handle(), targetRange);
         EXPECT_EQ(typedQuantifierView.range().handle(), targetRange);
-        EXPECT_EQ(typedQuantifierView.predicate(), target.importExpr(*sourcePredicate));
+        EXPECT_EQ(typedQuantifierView.predicate(), target.importExpr(sourcePredicate));
         EXPECT_EQ(typedMaxView.range().handle(), targetRange);
-        EXPECT_EQ(typedMaxView.body(), target.importExpr(*sourceBody));
+        EXPECT_EQ(typedMaxView.body(), target.importExpr(sourceBody));
         EXPECT_EQ(typedSumView.indexName(), "i");
         EXPECT_EQ(typedQuantifierView.quantifier(), symbolic::RangeQuantifier::ForAll);
         EXPECT_EQ(typedMaxView.extremum(), symbolic::RangeExtremum::Max);
@@ -1024,7 +1025,7 @@ namespace acslg::test::unit::analyzer {
         symbolic::StructureView typedView{typedStructure};
         ASSERT_EQ(typedView.size(), sourceView.size());
         for (size_t i = 0; i < typedView.size(); ++i)
-            EXPECT_EQ(typedView.field(i), target.importExpr(*sourceView.field(i)));
+            EXPECT_EQ(typedView.field(i), target.importExpr(sourceView.field(i)));
     }
 
     TEST(ExprFactoryTest, ValueSubstitutionHandleMapImportsReplacement) {
@@ -1148,9 +1149,9 @@ namespace acslg::test::unit::analyzer {
         auto simplified = sum->simplifiedExpr();
         symbolic::BinaryExprView rebuilt{simplified};
 
-        EXPECT_EQ(rebuilt.left(), factory.importExpr(*rebuilt.left()));
-        EXPECT_EQ(rebuilt.right(), factory.importExpr(*rebuilt.right()));
-        EXPECT_EQ(simplified, factory.importExpr(*simplified));
+        EXPECT_EQ(rebuilt.left(), factory.importExpr(rebuilt.left()));
+        EXPECT_EQ(rebuilt.right(), factory.importExpr(rebuilt.right()));
+        EXPECT_EQ(simplified, factory.importExpr(simplified));
     }
 
     TEST(ExprFactoryTest, ScopedSimplifiedNonLinearFallbackImportsThroughFactory) {
@@ -1181,9 +1182,9 @@ namespace acslg::test::unit::analyzer {
         auto simplified = legacyProduct->simplifiedExpr();
         symbolic::BinaryExprView product{simplified};
 
-        EXPECT_EQ(product.left(), factory.importExpr(*product.left()));
-        EXPECT_EQ(product.right(), factory.importExpr(*product.right()));
-        EXPECT_EQ(simplified, factory.importExpr(*legacyProduct));
+        EXPECT_EQ(product.left(), factory.importExpr(product.left()));
+        EXPECT_EQ(product.right(), factory.importExpr(product.right()));
+        EXPECT_EQ(simplified, factory.importExpr(legacyProduct));
     }
 
     TEST(ExprFactoryTest, SimplifiedExprHandleReturnsInternedNode) {
@@ -1249,7 +1250,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(returnedPredicate.operation(), symbolic::BinaryOp::Equal);
         EXPECT_EQ(returnedPredicate.left(), x);
         EXPECT_EQ(returnedPredicate.right(), zero);
-        EXPECT_EQ(factory.importExpr(*simplified),
+        EXPECT_EQ(factory.importExpr(simplified),
                   factory.binary(x, symbolic::BinaryOp::Equal, zero));
     }
 
@@ -1268,7 +1269,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_FALSE(factory.rangeIndex("i")->tryEvalToConstant().has_value());
 
         auto simplified = expr->simplifiedExpr();
-        EXPECT_EQ(factory.importExpr(*simplified), factory.literal(int64_t{3}));
+        EXPECT_EQ(factory.importExpr(simplified), factory.literal(int64_t{3}));
     }
 
     TEST(ExprFactoryTest, ConstantEvalPreservesOperatorAndShortCircuitSemantics) {
@@ -1321,8 +1322,8 @@ namespace acslg::test::unit::analyzer {
                                         source.literal(int64_t{2}));
 
         symbolic::ExprFactory factory;
-        auto imported = factory.importExpr(*sourceTree);
-        auto repeated = factory.importExpr(*sourceTree);
+        auto imported = factory.importExpr(sourceTree);
+        auto repeated = factory.importExpr(sourceTree);
 
         EXPECT_EQ(imported, repeated);
         auto one = factory.literal(int64_t{1});
@@ -1344,7 +1345,7 @@ namespace acslg::test::unit::analyzer {
         auto source = sourceFactory.literal(large);
 
         symbolic::ExprFactory factory;
-        auto imported = factory.importExpr(*source);
+        auto imported = factory.importExpr(source);
         auto expected = factory.literal(large);
 
         EXPECT_EQ(imported, expected);
@@ -1381,7 +1382,7 @@ namespace acslg::test::unit::analyzer {
 
         symbolic::ExprFactory sourceFactory;
         auto source = sourceFactory.rangeIndex("j");
-        auto imported = factory.importExpr(*source);
+        auto imported = factory.importExpr(source);
 
         EXPECT_EQ(imported, k);
     }
@@ -1522,27 +1523,27 @@ namespace acslg::test::unit::analyzer {
             symbolic::RangeExtremum::Max, point);
         symbolic::MaxMinOverRangeView max{maxHandle};
 
-        auto importedSum = factory.importExpr(*sum.handle());
-        auto sumRange    = factory.importExpr(*sum.range().handle());
+        auto importedSum = factory.importExpr(sum.handle());
+        auto sumRange    = factory.importExpr(sum.range().handle().asExpr());
         symbolic::SumOverRangeView sumNode{importedSum};
         EXPECT_EQ(sumNode.range().handle().asExpr(), sumRange);
-        EXPECT_EQ(importedSum, factory.importExpr(*sum.handle()));
+        EXPECT_EQ(importedSum, factory.importExpr(sum.handle()));
 
-        auto importedQuantifier = factory.importExpr(*quantifier.handle());
-        auto quantifierRange = factory.importExpr(*quantifier.range().handle());
-        auto quantifierPred     = factory.importExpr(*quantifier.predicate());
+        auto importedQuantifier = factory.importExpr(quantifier.handle());
+        auto quantifierRange = factory.importExpr(quantifier.range().handle().asExpr());
+        auto quantifierPred     = factory.importExpr(quantifier.predicate());
         symbolic::QuantifierOverRangeView quantifierNode{importedQuantifier};
         EXPECT_EQ(quantifierNode.range().handle().asExpr(), quantifierRange);
         EXPECT_EQ(quantifierNode.predicate(), quantifierPred);
-        EXPECT_EQ(importedQuantifier, factory.importExpr(*quantifier.handle()));
+        EXPECT_EQ(importedQuantifier, factory.importExpr(quantifier.handle()));
 
-        auto importedMax = factory.importExpr(*max.handle());
-        auto maxRange    = factory.importExpr(*max.range().handle());
-        auto maxBody     = factory.importExpr(*max.body());
+        auto importedMax = factory.importExpr(max.handle());
+        auto maxRange    = factory.importExpr(max.range().handle().asExpr());
+        auto maxBody     = factory.importExpr(max.body());
         symbolic::MaxMinOverRangeView maxNode{importedMax};
         EXPECT_EQ(maxNode.range().handle().asExpr(), maxRange);
         EXPECT_EQ(maxNode.body(), maxBody);
-        EXPECT_EQ(importedMax, factory.importExpr(*max.handle()));
+        EXPECT_EQ(importedMax, factory.importExpr(max.handle()));
     }
 
     TEST(SumOverRangeRebuildTest, RangeUsesExprChildAcrossImportAndSubstitution) {
@@ -1572,7 +1573,7 @@ namespace acslg::test::unit::analyzer {
             factory, rangeHandle, "i", point);
         symbolic::SumOverRangeView sum{sumHandle};
 
-        auto imported = factory.importExpr(*sum.handle());
+        auto imported = factory.importExpr(sum.handle());
         EXPECT_EQ(imported, sum.handle());
         EXPECT_EQ(symbolic::SumOverRangeView{imported}.range().handle(), rangeHandle);
 
@@ -1612,11 +1613,11 @@ namespace acslg::test::unit::analyzer {
             symbolic::RangeQuantifier::ForAll, pred);
         symbolic::QuantifierOverRangeView quantifier{quantifierHandle};
 
-        auto imported = factory.importExpr(*quantifier.handle());
+        auto imported = factory.importExpr(quantifier.handle());
         EXPECT_EQ(imported, quantifier.handle());
         symbolic::QuantifierOverRangeView importedQuantifier{imported};
         EXPECT_EQ(importedQuantifier.range().handle(), rangeHandle);
-        EXPECT_EQ(importedQuantifier.predicate(), factory.importExpr(*quantifier.predicate()));
+        EXPECT_EQ(importedQuantifier.predicate(), factory.importExpr(quantifier.predicate()));
 
         auto index = factory.literal(int64_t{1});
         auto substituted =
@@ -1657,11 +1658,11 @@ namespace acslg::test::unit::analyzer {
             symbolic::getSymbol(rangeHandle->getPointeeType(), indexedRange, point);
         EXPECT_EQ(max.body(), expectedBody);
 
-        auto imported = factory.importExpr(*max.handle());
+        auto imported = factory.importExpr(max.handle());
         EXPECT_EQ(imported, max.handle());
         symbolic::MaxMinOverRangeView importedMax{imported};
         EXPECT_EQ(importedMax.range().handle(), rangeHandle);
-        EXPECT_EQ(importedMax.body(), factory.importExpr(*max.body()));
+        EXPECT_EQ(importedMax.body(), factory.importExpr(max.body()));
 
         auto index = factory.literal(int64_t{1});
         auto substituted =
@@ -1780,7 +1781,7 @@ namespace acslg::test::unit::analyzer {
             factory, sumRange, "i", point);
         symbolic::SumOverRangeView sumView{sum};
         EXPECT_TRUE(sum->isOverRange());
-        EXPECT_EQ(factory.importAddress(*sumView.range().handle()), sumView.range().handle());
+        EXPECT_EQ(factory.importAddress(sumView.range().handle()), sumView.range().handle());
 
         auto quantifier = symbolic::makeQuantifierOverRangeHandle(
             factory, makeRange(), "i",
@@ -1788,17 +1789,17 @@ namespace acslg::test::unit::analyzer {
             factory.rangeIndex("i"));
         symbolic::QuantifierOverRangeView quantifierView{quantifier};
         EXPECT_TRUE(quantifier->isOverRange());
-        EXPECT_EQ(factory.importAddress(*quantifierView.range().handle()),
+        EXPECT_EQ(factory.importAddress(quantifierView.range().handle()),
                   quantifierView.range().handle());
-        EXPECT_EQ(factory.importExpr(*quantifierView.predicate()), quantifierView.predicate());
+        EXPECT_EQ(factory.importExpr(quantifierView.predicate()), quantifierView.predicate());
 
         auto max = symbolic::makeMaxMinOverRangeHandle(
             factory, makeRange(), "i",
             symbolic::RangeExtremum::Max, point);
         symbolic::MaxMinOverRangeView maxView{max};
         EXPECT_TRUE(max->isOverRange());
-        EXPECT_EQ(factory.importAddress(*maxView.range().handle()), maxView.range().handle());
-        EXPECT_EQ(factory.importExpr(*maxView.body()), maxView.body());
+        EXPECT_EQ(factory.importAddress(maxView.range().handle()), maxView.range().handle());
+        EXPECT_EQ(factory.importExpr(maxView.body()), maxView.body());
         EXPECT_FALSE(factory.literal(0)->isOverRange());
     }
 
@@ -2294,9 +2295,9 @@ namespace acslg::test::unit::analyzer {
         ASSERT_TRUE(arrayAddr);
         ASSERT_TRUE(arrayAddr->length());
 
-        EXPECT_EQ(field0, factory.importExpr(*field0));
-        EXPECT_EQ(field1, factory.importExpr(*field1));
-        EXPECT_EQ(field2, factory.importExpr(*field2));
+        EXPECT_EQ(field0, factory.importExpr(field0));
+        EXPECT_EQ(field1, factory.importExpr(field1));
+        EXPECT_EQ(field2, factory.importExpr(field2));
         EXPECT_EQ(arrayAddr->length().value().get().get(),
                   factory.literal(uint64_t{2}).get().get());
 
@@ -2764,17 +2765,17 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        auto importedA = factory.importExpr(*source);
-        auto importedB = factory.importExpr(*source);
-        auto importedAddress = factory.importAddress(*source);
+        auto importedA = factory.importExpr(source.asExpr());
+        auto importedB = factory.importExpr(source.asExpr());
+        auto importedAddress = factory.importAddress(source);
         EXPECT_EQ(importedA, importedB);
         EXPECT_EQ(importedAddress.asExpr(), importedA);
 
         auto importedView = symbolic::SymbolAddressView::tryFrom(importedA).value();
-        auto importedOffset = factory.importExpr(*sourceView.offset());
+        auto importedOffset = factory.importExpr(sourceView.offset());
         ASSERT_TRUE(importedView.length());
         ASSERT_TRUE(sourceView.length());
-        auto importedLength = factory.importExpr(*sourceView.length().value());
+        auto importedLength = factory.importExpr(sourceView.length().value());
 
         EXPECT_EQ(importedView.offset().get(), importedOffset.get().get());
         EXPECT_EQ(importedView.length().value().get().get(), importedLength.get().get());
@@ -2808,13 +2809,13 @@ namespace acslg::test::unit::analyzer {
         symbolic::StructureView legacyStructure{legacyExpr};
 
         symbolic::ExprFactory factory;
-        auto importedA = factory.importExpr(*legacyStructure.handle());
-        auto importedB = factory.importExpr(*legacyStructure.handle());
+        auto importedA = factory.importExpr(legacyStructure.handle());
+        auto importedB = factory.importExpr(legacyStructure.handle());
         EXPECT_EQ(importedA, importedB);
 
         symbolic::StructureView importedStructure{importedA};
-        auto importedField0 = factory.importExpr(*legacyStructure.field(0));
-        auto importedField1 = factory.importExpr(*legacyStructure.field(1));
+        auto importedField0 = factory.importExpr(legacyStructure.field(0));
+        auto importedField1 = factory.importExpr(legacyStructure.field(1));
 
         EXPECT_EQ(importedStructure.field(0), importedField0);
         EXPECT_EQ(importedStructure.field(1), importedField1);
@@ -2847,8 +2848,8 @@ namespace acslg::test::unit::analyzer {
         auto &layout = record->getASTContext().getASTRecordLayout(record);
         auto structure = factory.structure(record, layout, factory.variableAddress(var), point);
         symbolic::StructureView original{structure};
-        auto originalField0 = factory.importExpr(*original.field(0));
-        auto originalField1 = factory.importExpr(*original.field(1));
+        auto originalField0 = factory.importExpr(original.field(0));
+        auto originalField1 = factory.importExpr(original.field(1));
         auto replacement = factory.literal(42);
 
         auto updated = factory.withField(structure, 0, replacement);
@@ -2897,6 +2898,6 @@ namespace acslg::test::unit::analyzer {
         symbolic::StructureView substitutedStructure{substituted};
 
         EXPECT_EQ(substitutedStructure.field(0), replacement);
-        EXPECT_EQ(substitutedStructure.field(1), factory.importExpr(*structure.field(1)));
+        EXPECT_EQ(substitutedStructure.field(1), factory.importExpr(structure.field(1)));
     }
 } // namespace acslg::test::unit::analyzer
