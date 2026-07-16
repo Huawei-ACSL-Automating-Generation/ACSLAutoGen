@@ -93,6 +93,101 @@ namespace acslg::analyzer::symbolic {
                                          ExprHandle body,
                                          SourcePoint fromPoint);
 
+    class SumOverRangeExpr : public Expr {
+      public:
+        SumOverRangeExpr(const Addr &range,
+                         std::string_view indexName,
+                         SourcePoint fromPoint)
+            : Expr(range.factory(), makeSumOverRangeHandle(
+                                        range.factory(), range.handle(), indexName,
+                                        std::move(fromPoint))) {}
+
+        SumOverRangeExpr(ExprFactory &factory,
+                         AddrHandle range,
+                         std::string_view indexName,
+                         SourcePoint fromPoint)
+            : Expr(factory, makeSumOverRangeHandle(
+                                factory, range, indexName, std::move(fromPoint))) {}
+    };
+
+    class QuantifierOverRangeExpr : public Expr {
+      public:
+        QuantifierOverRangeExpr(const Addr &range,
+                                std::string_view indexName,
+                                RangeQuantifier quantifier,
+                                const Expr &predicate)
+            : Expr(range.factory(), make(range, indexName, quantifier, predicate)) {}
+
+        QuantifierOverRangeExpr(ExprFactory &factory,
+                                AddrHandle range,
+                                std::string_view indexName,
+                                RangeQuantifier quantifier,
+                                ExprHandle predicate)
+            : Expr(factory, makeQuantifierOverRangeHandle(
+                                factory, range, indexName, quantifier, predicate)) {}
+
+      private:
+        static ExprHandle make(const Addr &range,
+                               std::string_view indexName,
+                               RangeQuantifier quantifier,
+                               const Expr &predicate) {
+            if (&range.factory() != &predicate.factory())
+                ERROR("Cannot build a quantifier from different factories.");
+            return makeQuantifierOverRangeHandle(
+                range.factory(), range.handle(), indexName, quantifier, predicate.handle());
+        }
+    };
+
+    class MaxMinOverRangeExpr : public Expr {
+      public:
+        MaxMinOverRangeExpr(const Addr &range,
+                            std::string_view indexName,
+                            RangeExtremum extremum,
+                            SourcePoint fromPoint)
+            : Expr(range.factory(), makeMaxMinOverRangeHandle(
+                                        range.factory(), range.handle(), indexName, extremum,
+                                        std::move(fromPoint))) {}
+
+        MaxMinOverRangeExpr(const Addr &range,
+                            std::string_view indexName,
+                            RangeExtremum extremum,
+                            const Expr &body,
+                            SourcePoint fromPoint)
+            : Expr(range.factory(), make(range, indexName, extremum, body,
+                                         std::move(fromPoint))) {}
+
+        MaxMinOverRangeExpr(ExprFactory &factory,
+                            AddrHandle range,
+                            std::string_view indexName,
+                            RangeExtremum extremum,
+                            SourcePoint fromPoint)
+            : Expr(factory, makeMaxMinOverRangeHandle(
+                                factory, range, indexName, extremum,
+                                std::move(fromPoint))) {}
+
+        MaxMinOverRangeExpr(ExprFactory &factory,
+                            AddrHandle range,
+                            std::string_view indexName,
+                            RangeExtremum extremum,
+                            ExprHandle body,
+                            SourcePoint fromPoint)
+            : Expr(factory, makeMaxMinOverRangeHandle(
+                                factory, range, indexName, extremum, body,
+                                std::move(fromPoint))) {}
+
+      private:
+        static ExprHandle make(const Addr &range,
+                               std::string_view indexName,
+                               RangeExtremum extremum,
+                               const Expr &body,
+                               SourcePoint fromPoint) {
+            if (&range.factory() != &body.factory())
+                ERROR("Cannot build a max/min expression from different factories.");
+            return makeMaxMinOverRangeHandle(range.factory(), range.handle(), indexName,
+                                             extremum, body.handle(), std::move(fromPoint));
+        }
+    };
+
 } // namespace acslg::analyzer::symbolic
 
 #endif

@@ -1412,8 +1412,8 @@ namespace acslg::spec_generator {
                 symb::AddressBox maxAddrBox{maxAddrIt->second};
                 normalPostInfo.memoryMap.emplace(
                     maxAddrBox,
-                    makeMaxMinOverRangeHandle(factory, arrayRange, "k", *extremum,
-                                              pointAfterLoop));
+                    symb::MaxMinOverRangeExpr{factory, arrayRange, "k", *extremum,
+                                              pointAfterLoop}.handle());
             }}; // ifVisitor end
             ifVisitor.runOn(loopInfo.bodyStmt);
 
@@ -1699,11 +1699,13 @@ namespace acslg::spec_generator {
             }
             normalPathInfo.pathState = analyzer::Path::PathState::Step;
             auto normalPred = predExpr.logicalNot();
-            normalPathInfo.pathConds.emplace(makeQuantifierOverRangeHandle(
-                factory, arrayRange, "k", ForAll, normalPred.handle()));
+            normalPathInfo.pathConds.emplace(
+                symb::QuantifierOverRangeExpr{factory, arrayRange, "k", ForAll,
+                                              normalPred.handle()}.handle());
 
-            interruptedPathInfo.pathConds.emplace(makeQuantifierOverRangeHandle(
-                factory, arrayRange, "k", Exist, predExpr.handle()));
+            interruptedPathInfo.pathConds.emplace(
+                symb::QuantifierOverRangeExpr{factory, arrayRange, "k", Exist,
+                                              predExpr.handle()}.handle());
 
             // Try to print the forall form as a concrete ACSL text. If that fails, we still return
             // post-info but do not emit an invariant clause.

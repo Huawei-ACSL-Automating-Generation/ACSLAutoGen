@@ -2050,6 +2050,49 @@ namespace acslg::test::unit::analyzer {
         EXPECT_FALSE(symbolic::SymbolValueView::tryFrom(unknown.handle()).has_value());
     }
 
+    TEST(ExprFacadeTest, AggregateFacadesBuildInternedNodes) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        auto base = symbolic::Addr::variable(var);
+        auto index = symbolic::Expr::rangeIndex("i");
+        symbolic::LiteralExpr length{3};
+        auto range = symbolic::Addr::symbol(var->getType(), base, point, index, length);
+
+        symbolic::SumOverRangeExpr sum{range, "i", point};
+        symbolic::QuantifierOverRangeExpr quantifier{
+            range, "i", symbolic::RangeQuantifier::ForAll, index};
+        symbolic::MaxMinOverRangeExpr maximum{
+            range, "i", symbolic::RangeExtremum::Max, point};
+
+        EXPECT_EQ(sum.handle(),
+                  symbolic::makeSumOverRangeHandle(factory, range.handle(), "i", point));
+        EXPECT_EQ(quantifier.handle(),
+                  symbolic::makeQuantifierOverRangeHandle(
+                      factory, range.handle(), "i", symbolic::RangeQuantifier::ForAll,
+                      index.handle()));
+        EXPECT_EQ(maximum.handle(),
+                  symbolic::makeMaxMinOverRangeHandle(
+                      factory, range.handle(), "i", symbolic::RangeExtremum::Max, point));
+        EXPECT_TRUE(sum.isOverRange());
+        EXPECT_TRUE(quantifier.isOverRange());
+        EXPECT_TRUE(maximum.isOverRange());
+    }
+
     TEST(AddrFacadeTest, ImportsCrossFactoryAddressThroughCurrentFactory) {
         ASTExtractor e;
         e.init(R"c(
