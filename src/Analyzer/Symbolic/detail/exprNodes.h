@@ -535,7 +535,7 @@ namespace acslg::analyzer::symbolic::detail {
         bool equal(const SymbolicExpr &expr) const override;
         std::size_t hash() const override;
         utils::not_null<const clang::RecordDecl *> getDefinition() const { return definition_; }
-        const AddressChild &getBaseAddr() const { return baseAddr_; }
+        AddrHandle getBaseAddr() const { return baseAddr_.handle(); }
         size_t getFieldIndex() const { return fieldIndex_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const override;
         int getDimension() const override;

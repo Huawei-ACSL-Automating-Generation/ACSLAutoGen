@@ -112,7 +112,7 @@ namespace acslg::analyzer::symbolic {
         if (auto *fieldAddr = expr.dyn_cast<const FieldAddressNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<FieldAddressNode>(
                 fieldAddr->getPointeeType(), fieldAddr->getDefinition(),
-                importAddress(fieldAddr->getBaseAddr().handle()), fieldAddr->getFieldIndex(),
+                importAddress(fieldAddr->getBaseAddr()), fieldAddr->getFieldIndex(),
                 newType));
 
         if (auto *symbolAddr = expr.dyn_cast<const SymbolAddressNode>()) {
@@ -201,7 +201,7 @@ namespace acslg::analyzer::symbolic {
                 if (auto *varAddr = expr.dyn_cast<const VariableAddressNode>())
                     return factory.variableAddress(varAddr->getFrom()).asExpr();
                 if (auto *fieldAddr = expr.dyn_cast<const FieldAddressNode>()) {
-                    auto base = requireAddress(run(fieldAddr->getBaseAddr().handle().asExpr()));
+                    auto base = requireAddress(run(fieldAddr->getBaseAddr().asExpr()));
                     return factory
                         .fieldAddress(fieldAddr->getPointeeType(),
                                       fieldAddr->getDefinition(), base,
@@ -308,7 +308,7 @@ namespace acslg::analyzer::symbolic {
                 if (auto *varAddr = expr.dyn_cast<const VariableAddressNode>())
                     return factory.variableAddress(varAddr->getFrom()).asExpr();
                 if (auto *fieldAddr = expr.dyn_cast<const FieldAddressNode>()) {
-                    auto base = requireAddress(run(fieldAddr->getBaseAddr().handle().asExpr()));
+                    auto base = requireAddress(run(fieldAddr->getBaseAddr().asExpr()));
                     return factory
                         .fieldAddress(fieldAddr->getPointeeType(),
                                       fieldAddr->getDefinition(), base,
@@ -452,7 +452,7 @@ namespace acslg::analyzer::symbolic {
                 if (auto *varAddr = expr.dyn_cast<const VariableAddressNode>())
                     return factory.variableAddress(varAddr->getFrom()).asExpr();
                 if (auto *fieldAddr = expr.dyn_cast<const FieldAddressNode>()) {
-                    auto base = requireAddress(run(fieldAddr->getBaseAddr().handle().asExpr()));
+                    auto base = requireAddress(run(fieldAddr->getBaseAddr().asExpr()));
                     return factory
                         .fieldAddress(fieldAddr->getPointeeType(),
                                       fieldAddr->getDefinition(), base,
@@ -1525,7 +1525,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     AddrHandle FieldAddressView::base() const {
-        return cast<const FieldAddressNode>(handle_.get().get())->getBaseAddr().handle();
+        return cast<const FieldAddressNode>(handle_.get().get())->getBaseAddr();
     }
 
     size_t FieldAddressView::fieldIndex() const {
@@ -2015,8 +2015,7 @@ namespace acslg::analyzer::symbolic {
                 if (fieldAddr == nullptr || fieldAddr->getFieldIndex() != index)
                     return std::nullopt;
 
-                SymbolOrigin fieldOrigin{
-                    AddrHandle{fieldAddr->getBaseAddr().get().get()}, origin->point};
+                SymbolOrigin fieldOrigin{fieldAddr->getBaseAddr(), origin->point};
                 if (!common) {
                     common = fieldOrigin;
                     continue;
