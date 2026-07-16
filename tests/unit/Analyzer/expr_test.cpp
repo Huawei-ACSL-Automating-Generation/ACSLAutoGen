@@ -1374,6 +1374,8 @@ namespace acslg::test::unit::analyzer {
         ASSERT_EQ(hashIds.size(), 2u);
         EXPECT_TRUE(usedSymbols.contains(xValue.hash()));
         EXPECT_TRUE(usedSymbols.contains(yValue.hash()));
+        EXPECT_EQ(usedSymbols.at(xValue.hash()), xValue);
+        EXPECT_EQ(usedSymbols.at(yValue.hash()), yValue);
         EXPECT_TRUE(hashIds.contains(xValue.hash()));
         EXPECT_TRUE(hashIds.contains(yValue.hash()));
     }

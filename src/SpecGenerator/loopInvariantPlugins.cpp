@@ -1559,7 +1559,7 @@ namespace acslg::spec_generator {
             // - If the symbol's address has a (init, step) pattern in patternInfo, build
             //   init + step * (k - i_init) (or the reversed form depending on step direction)
             // - Otherwise treat the value as loop-invariant and just clone it
-            auto getSubExpr = [&](const symb::Symbol &symbol)
+            auto getSubExpr = [&](symb::ExprHandle symbol)
                 -> std::optional<symb::ExprHandle> {
                 auto fromAddr = symb::getFromAddrHandle(factory, symbol);
                 if (fromAddr == std::nullopt)
@@ -1567,7 +1567,7 @@ namespace acslg::spec_generator {
                 auto it = patternInfo.normalExitPatternsMap.find(**fromAddr);
                 // The value on this address doesn't change during loop, so just copy it.
                 if (it == patternInfo.normalExitPatternsMap.end())
-                    return factory.importExpr(symb::ExprHandle{symbol.toSymbolicExpr()});
+                    return factory.importExpr(symbol);
                 if (it->second == std::nullopt)
                     return std::nullopt;
                 auto &[initValue, step] = it->second.value();
@@ -1606,7 +1606,7 @@ namespace acslg::spec_generator {
             symb::HashExprHandleMap hashExprMapForSub{};
             std::optional<symb::AddrHandle> arrayInCond;
             for (auto &[hash, symbol] : interruptedCond->collectUsedSymbols()) {
-                auto fromAddr = symb::getFromAddrHandle(factory, *symbol);
+                auto fromAddr = symb::getFromAddrHandle(factory, symbol);
                 if (fromAddr == std::nullopt)
                     return {};
                 // If the symbol's source address is a SymbolAddress (typical for array/pointer
@@ -1617,14 +1617,14 @@ namespace acslg::spec_generator {
                         arrayInCond = *fromAddr;
                     auto offset = fromSymbolAddr->offset();
                     for (auto &[hashInOff, symbolInOff] : offset->collectUsedSymbols()) {
-                        auto subedExpr = getSubExpr(*symbolInOff);
+                        auto subedExpr = getSubExpr(symbolInOff);
                         if (subedExpr == std::nullopt)
                             return std::nullopt;
                         hashExprMapForSub.insert_or_assign(hashInOff, subedExpr.value());
                     }
                     continue;
                 }
-                auto subedExpr = getSubExpr(*symbol);
+                auto subedExpr = getSubExpr(symbol);
                 if (subedExpr == std::nullopt)
                     return std::nullopt;
                 hashExprMapForSub.insert_or_assign(hash, subedExpr.value());

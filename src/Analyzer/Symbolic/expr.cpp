@@ -1099,7 +1099,6 @@ namespace acslg::analyzer::symbolic {
 
         using enum detail::BinaryOpExprNode::Operator;
         for (auto [hash, symbol] : hashPtrMap) {
-            auto expr = dyn_cast<const SymbolicExpr>(symbol.get());
             auto C = linearExpr.coefficient(Parma_Polyhedra_Library::Variable{hashIdMap.at(hash)})
                          .get_si();
             if (C == 0)
@@ -1108,16 +1107,16 @@ namespace acslg::analyzer::symbolic {
             if (result == std::nullopt) {
                 // Seed the accumulator with the first non-zero term.
                 if (C == 1)
-                    result = factory.importExpr(ExprHandle{expr});
+                    result = factory.importExpr(symbol);
                 else
                     result = factory.binary(factory.literal(static_cast<int64_t>(C)),
-                                            Multiply, factory.importExpr(ExprHandle{expr}));
+                                            Multiply, factory.importExpr(symbol));
             } else {
                 unsigned absC = std::abs(C);
-                ExprHandle varExpr = factory.importExpr(ExprHandle{expr});
+                ExprHandle varExpr = factory.importExpr(symbol);
                 if (absC != 1)
                     varExpr = factory.binary(factory.literal(static_cast<int64_t>(absC)),
-                                             Multiply, factory.importExpr(ExprHandle{expr}));
+                                             Multiply, factory.importExpr(symbol));
                 // Combine the current polynomial with the new term using the sign of the
                 // coefficient.
                 result = factory.binary(result.value(), (C > 0 ? Add : Subtract), varExpr);
@@ -2417,7 +2416,9 @@ namespace acslg::analyzer::symbolic {
                                   [](auto &lhs, auto &rhs) { return *lhs == *rhs; });
     }
 
-    SymbolicExpr::UsedMap SymbolValueNode::collectUsedSymbols() const { return {{hash(), this}}; }
+    SymbolicExpr::UsedMap SymbolValueNode::collectUsedSymbols() const {
+        return {{hash(), ExprHandle{this}}};
+    }
 
     SymbolicExpr::UsedMap detail::BinaryOpExprNode::collectUsedSymbols() const {
         auto lmap = left_->collectUsedSymbols();
@@ -2434,7 +2435,7 @@ namespace acslg::analyzer::symbolic {
         if (length_)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
-        return {{hash(), this}};
+        return {{hash(), ExprHandle{this}}};
     }
 
     SymbolAddrBaseInfo::SymbolAddrBaseInfo(const SymbolAddrBaseInfo &other)

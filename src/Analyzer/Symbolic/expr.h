@@ -376,10 +376,10 @@ namespace acslg::analyzer::symbolic {
         /// @return Simplified expression.
         virtual ExprHandle simplifiedExpr() const;
 
-        using UsedMap   = std::unordered_map<size_t, utils::not_null<const Symbol *>>;
+        using UsedMap   = std::unordered_map<size_t, ExprHandle>;
         using HashIdMap = std::unordered_map<size_t, size_t>;
         /// @brief Collect `Symbols` used in the expression.
-        /// @return usedPoints from hash to `Symbol`.
+        /// @return Map from each symbol hash to its factory-owned expression handle.
         virtual UsedMap collectUsedSymbols() const {
             return {};
         }; // todo: may use virtual inheritance to override this at the level of `Symbol`.
@@ -548,7 +548,7 @@ namespace acslg::analyzer::symbolic {
                     merged.emplace(k, v);
                 } else {
 #ifndef DEBUG_MODE
-                    const auto same = it->second.get() == v.get();
+                    const auto same = it->second == v;
                     assert(same && "collectUsedVarsAndAddrs key conflict with different targets");
 #endif
                 }

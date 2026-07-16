@@ -30,11 +30,10 @@ namespace acslg::analyzer {
     using std::literals::string_literals::operator""s;
 
     namespace {
-        std::optional<const clang::VarDecl *> getRootFromSymbol(const symbolic::Symbol &symbol) {
-            symbolic::ExprHandle symbolExpr{symbol.toSymbolicExpr()};
-            if (auto sv = symbolic::SymbolValueView::tryFrom(symbolExpr))
+        std::optional<const clang::VarDecl *> getRootFromSymbol(symbolic::ExprHandle symbol) {
+            if (auto sv = symbolic::SymbolValueView::tryFrom(symbol))
                 return sv->fromRoot();
-            if (auto sa = symbolic::SymbolAddressView::tryFrom(symbolExpr))
+            if (auto sa = symbolic::SymbolAddressView::tryFrom(symbol))
                 return sa->fromRoot();
             return std::nullopt;
         }
@@ -68,7 +67,7 @@ namespace acslg::analyzer {
             (void)unusedSymbols;
             for (const auto &entry : usedSymbols) {
                 const auto &symbol = entry.second;
-                auto root          = getRootFromSymbol(*symbol);
+                auto root          = getRootFromSymbol(symbol);
                 if (!root)
                     continue;
                 if (locals.contains(root.value()->getCanonicalDecl()))
