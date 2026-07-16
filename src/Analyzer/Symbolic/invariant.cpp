@@ -203,7 +203,7 @@ namespace acslg::analyzer::symbolic {
         using namespace Parma_Polyhedra_Library;
         Linear_Expression e(0);
 
-        auto varAddr = dyn_cast<const VariableAddressNode>(fromAddr_.get().get());
+        auto varAddr = fromAddr_.handle().dyn_cast<const VariableAddressNode>();
         if (varAddr == nullptr)
             return std::nullopt;
 

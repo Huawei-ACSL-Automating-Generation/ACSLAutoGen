@@ -640,10 +640,8 @@ namespace acslg::analyzer::symbolic {
       public:
         explicit ExprChild(ExprHandle handle) : handle_(handle) {}
 
-        utils::not_null<const SymbolicExpr *> get() const { return handle_.get(); }
-
-        const SymbolicExpr &operator*() const { return *get(); }
-        const SymbolicExpr *operator->() const { return get().get(); }
+        const SymbolicExpr &operator*() const { return *handle_; }
+        const SymbolicExpr *operator->() const { return handle_.get().get(); }
 
         ExprHandle handle() const { return handle_; }
 
@@ -911,10 +909,8 @@ namespace acslg::analyzer::symbolic {
       public:
         explicit AddressChild(AddrHandle handle) : handle_(handle) {}
 
-        utils::not_null<const Address *> get() const { return handle_.get(); }
-
-        const Address &operator*() const { return *get(); }
-        const Address *operator->() const { return get().get(); }
+        const Address &operator*() const { return *handle_; }
+        const Address *operator->() const { return handle_.get().get(); }
         AddrHandle handle() const { return handle_; }
 
       private:

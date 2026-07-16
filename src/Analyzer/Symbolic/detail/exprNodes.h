@@ -335,7 +335,7 @@ namespace acslg::analyzer::symbolic::detail {
         std::string dump() const override;
         std::size_t hash() const override;
         bool equal(const SymbolicExpr &expr) const override;
-        AddrHandle getFromAddrHandle() const { return AddrHandle{fromAddr_.get().get()}; }
+        AddrHandle getFromAddrHandle() const { return fromAddr_.handle(); }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
         std::optional<utils::not_null<const clang::VarDecl *>> getFromRoot() const;
         UsedMap collectUsedSymbols() const override;
@@ -408,7 +408,7 @@ namespace acslg::analyzer::symbolic::detail {
         std::optional<AddrHandle> getFromAddrHandle() const {
             if (!fromAddr_)
                 return std::nullopt;
-            return AddrHandle{fromAddr_->get().get()};
+            return fromAddr_->handle();
         }
         std::optional<SourcePoint> getFromPoint() const override { return fromPoint_; }
 

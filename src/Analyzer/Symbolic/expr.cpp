@@ -1476,7 +1476,7 @@ namespace acslg::analyzer::symbolic {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("FieldAddress") << " {" << key("from") << "=";
-        oss << key("field of") << ":" << baseAddr_.get()->dump() << "["
+        oss << key("field of") << ":" << baseAddr_->dump() << "["
             << utils::dump_fmt::lit(std::to_string(fieldIndex_)) << "]";
         oss << "}";
         return oss.str();
