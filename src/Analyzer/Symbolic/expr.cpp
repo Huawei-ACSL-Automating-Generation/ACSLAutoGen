@@ -98,12 +98,12 @@ namespace acslg::analyzer::symbolic {
 
         if (auto *unaryExpr = expr.dyn_cast<const detail::UnaryOpExprNode>())
             return internTyped(makeNode<detail::UnaryOpExprNode>(
-                unaryExpr->getOperator(), importExpr(ExprHandle{unaryExpr->getSub()}), newType));
+                unaryExpr->getOperator(), importExpr(unaryExpr->getSub()), newType));
 
         if (auto *binaryExpr = expr.dyn_cast<const detail::BinaryOpExprNode>())
             return internTyped(makeNode<detail::BinaryOpExprNode>(
-                importExpr(ExprHandle{binaryExpr->getLeft()}), binaryExpr->getOperator(),
-                importExpr(ExprHandle{binaryExpr->getRight()}), newType));
+                importExpr(binaryExpr->getLeft()), binaryExpr->getOperator(),
+                importExpr(binaryExpr->getRight()), newType));
 
         if (auto *variableAddr = expr.dyn_cast<const VariableAddressNode>())
             return internTyped(detail::ExprFactoryInternals::makeNode<VariableAddressNode>(
@@ -229,13 +229,13 @@ namespace acslg::analyzer::symbolic {
                         .asExpr();
                 }
                 if (auto *binary = expr.dyn_cast<const detail::BinaryOpExprNode>()) {
-                    return factory.binary(run(ExprHandle{binary->getLeft()}),
+                    return factory.binary(run(binary->getLeft()),
                                           binary->getOperator(),
-                                          run(ExprHandle{binary->getRight()}));
+                                          run(binary->getRight()));
                 }
                 if (auto *unary = expr.dyn_cast<const detail::UnaryOpExprNode>())
                     return factory.unary(unary->getOperator(),
-                                         run(ExprHandle{unary->getSub()}));
+                                         run(unary->getSub()));
                 if (auto *structure = expr.dyn_cast<const StructureNode>()) {
                     auto rebuilt = factory.importExpr(ExprHandle{structure});
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
@@ -370,13 +370,13 @@ namespace acslg::analyzer::symbolic {
                         .asExpr();
                 }
                 if (auto *binary = expr.dyn_cast<const detail::BinaryOpExprNode>()) {
-                    return factory.binary(run(ExprHandle{binary->getLeft()}),
+                    return factory.binary(run(binary->getLeft()),
                                           binary->getOperator(),
-                                          run(ExprHandle{binary->getRight()}));
+                                          run(binary->getRight()));
                 }
                 if (auto *unary = expr.dyn_cast<const detail::UnaryOpExprNode>())
                     return factory.unary(unary->getOperator(),
-                                         run(ExprHandle{unary->getSub()}));
+                                         run(unary->getSub()));
                 if (auto *structure = expr.dyn_cast<const StructureNode>()) {
                     auto rebuilt = factory.importExpr(ExprHandle{structure});
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
@@ -480,12 +480,12 @@ namespace acslg::analyzer::symbolic {
                         .asExpr();
                 }
                 if (auto *binary = expr.dyn_cast<const detail::BinaryOpExprNode>())
-                    return factory.binary(run(ExprHandle{binary->getLeft()}),
+                    return factory.binary(run(binary->getLeft()),
                                           binary->getOperator(),
-                                          run(ExprHandle{binary->getRight()}));
+                                          run(binary->getRight()));
                 if (auto *unary = expr.dyn_cast<const detail::UnaryOpExprNode>())
                     return factory.unary(unary->getOperator(),
-                                         run(ExprHandle{unary->getSub()}));
+                                         run(unary->getSub()));
                 if (auto *structure = expr.dyn_cast<const StructureNode>()) {
                     auto rebuilt = factory.importExpr(ExprHandle{structure});
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
@@ -960,8 +960,8 @@ namespace acslg::analyzer::symbolic {
             if (auto c = evaluateToLiteralNode(*binary))
                 return factory.importExpr(ExprHandle{c});
 
-            auto lhs = simplifiedExprHandle(factory, ExprHandle{binary->getLeft()});
-            auto rhs = simplifiedExprHandle(factory, ExprHandle{binary->getRight()});
+            auto lhs = simplifiedExprHandle(factory, binary->getLeft());
+            auto rhs = simplifiedExprHandle(factory, binary->getRight());
 
             using Op = detail::BinaryOpExprNode::Operator;
             if (binary->getOperator() == Op::Equal || binary->getOperator() == Op::NotEqual) {
@@ -1021,7 +1021,7 @@ namespace acslg::analyzer::symbolic {
             if (unary->isLinear())
                 return unary->simplifiedExprIfLinear();
             return factory.unary(unary->getOperator(),
-                                 simplifiedExprHandle(factory, ExprHandle{unary->getSub()}));
+                                 simplifiedExprHandle(factory, unary->getSub()));
         }
 
         if (auto *literal = expr.dyn_cast<const detail::LiteralExprNode>())
@@ -1042,8 +1042,8 @@ namespace acslg::analyzer::symbolic {
         if (!binary)
             return std::nullopt;
 
-        auto left  = ExprHandle{binary->getLeft()};
-        auto right = ExprHandle{binary->getRight()};
+        auto left  = binary->getLeft();
+        auto right = binary->getRight();
         auto lhs   = tryEvalAsSymbolAddrHandle(factory, left);
         auto rhs   = tryEvalAsSymbolAddrHandle(factory, right);
         if (lhs && rhs)
@@ -1366,8 +1366,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle UnaryExprView::operand() const {
-        return ExprHandle{
-            cast<const detail::UnaryOpExprNode>(handle_.get().get())->getSub()};
+        return cast<const detail::UnaryOpExprNode>(handle_.get().get())->getSub();
     }
 
     BinaryExprView::BinaryExprView(ExprHandle handle) : handle_(handle) {
@@ -1386,13 +1385,11 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle BinaryExprView::left() const {
-        return ExprHandle{
-            cast<const detail::BinaryOpExprNode>(handle_.get().get())->getLeft()};
+        return cast<const detail::BinaryOpExprNode>(handle_.get().get())->getLeft();
     }
 
     ExprHandle BinaryExprView::right() const {
-        return ExprHandle{
-            cast<const detail::BinaryOpExprNode>(handle_.get().get())->getRight()};
+        return cast<const detail::BinaryOpExprNode>(handle_.get().get())->getRight();
     }
 
     std::string SymbolValueNode::dump() const {

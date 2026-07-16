@@ -588,15 +588,15 @@ namespace acslg::analyzer {
                         ERROR("negateFormulas: input[" + to_string(i) + "] is not a BinaryOpExpr");
                     }
 
-                    const auto &lhs = bin->getLeft();
-                    const auto &rhs = bin->getRight();
+                    auto lhs = bin->getLeft();
+                    auto rhs = bin->getRight();
 
                     switch (bin->getOperator()) {
                         case Op::LessEqual: {
                             auto newRHS = buildBinary(
-                                internExpr(symbolic::ExprHandle{rhs}), Op::Add, buildLiteral(1));
+                                internExpr(rhs), Op::Add, buildLiteral(1));
                             current[i] = buildBinary(
-                                internExpr(symbolic::ExprHandle{lhs}), Op::GreaterEqual,
+                                internExpr(lhs), Op::GreaterEqual,
                                 std::move(newRHS));
                             worklist.push({std::move(current), i + 1});
                             expanded = true;
@@ -604,10 +604,10 @@ namespace acslg::analyzer {
                         }
                         case Op::GreaterEqual: {
                             auto newRHS = buildBinary(
-                                internExpr(symbolic::ExprHandle{rhs}), Op::Subtract,
+                                internExpr(rhs), Op::Subtract,
                                 buildLiteral(1));
                             current[i] = buildBinary(
-                                internExpr(symbolic::ExprHandle{lhs}), Op::LessEqual,
+                                internExpr(lhs), Op::LessEqual,
                                 std::move(newRHS));
                             worklist.push({std::move(current), i + 1});
                             expanded = true;
@@ -615,13 +615,13 @@ namespace acslg::analyzer {
                         }
                         case Op::Equal: {
                             auto leExpr = buildBinary(
-                                internExpr(symbolic::ExprHandle{lhs}), Op::LessEqual,
-                                buildBinary(internExpr(symbolic::ExprHandle{rhs}), Op::Subtract,
+                                internExpr(lhs), Op::LessEqual,
+                                buildBinary(internExpr(rhs), Op::Subtract,
                                             buildLiteral(1)));
 
                             auto geExpr = buildBinary(
-                                internExpr(symbolic::ExprHandle{lhs}), Op::GreaterEqual,
-                                buildBinary(internExpr(symbolic::ExprHandle{rhs}), Op::Add,
+                                internExpr(lhs), Op::GreaterEqual,
+                                buildBinary(internExpr(rhs), Op::Add,
                                             buildLiteral(1)));
 
                             Formulas branch;
@@ -661,8 +661,8 @@ namespace acslg::analyzer {
         void appendPreprocessedConjCond(symbolic::ExprHandle cond, Formulas &result) {
             if (auto bin = cond.dyn_cast<symbolic::detail::BinaryOpExprNode>()) {
                 using enum symbolic::detail::BinaryOpExprNode::Operator;
-                const auto &lhs = bin->getLeft();
-                const auto &rhs = bin->getRight();
+                auto lhs = bin->getLeft();
+                auto rhs = bin->getRight();
 
                 switch (bin->getOperator()) {
                     case NotEqual:
@@ -670,23 +670,23 @@ namespace acslg::analyzer {
                         return;
                     case GreaterThan: {
                         auto newRHS = buildBinary(
-                            internExpr(symbolic::ExprHandle{rhs}), Add, buildLiteral(1));
+                            internExpr(rhs), Add, buildLiteral(1));
                         result.push_back(buildBinary(
-                            internExpr(symbolic::ExprHandle{lhs}), GreaterEqual,
+                            internExpr(lhs), GreaterEqual,
                             std::move(newRHS)));
                         return;
                     }
                     case LessThan: {
                         auto newRHS = buildBinary(
-                            internExpr(symbolic::ExprHandle{rhs}), Subtract, buildLiteral(1));
+                            internExpr(rhs), Subtract, buildLiteral(1));
                         result.push_back(buildBinary(
-                            internExpr(symbolic::ExprHandle{lhs}), LessEqual,
+                            internExpr(lhs), LessEqual,
                             std::move(newRHS)));
                         return;
                     }
                     case LogicalAnd:
-                        appendPreprocessedConjCond(symbolic::ExprHandle{lhs}, result);
-                        appendPreprocessedConjCond(symbolic::ExprHandle{rhs}, result);
+                        appendPreprocessedConjCond(lhs, result);
+                        appendPreprocessedConjCond(rhs, result);
                         return;
                     case GreaterEqual:
                     case LessEqual:
@@ -704,7 +704,7 @@ namespace acslg::analyzer {
                 return;
 
             Formulas preprocessedSub;
-            appendPreprocessedConjCond(symbolic::ExprHandle{unary->getSub()}, preprocessedSub);
+            appendPreprocessedConjCond(unary->getSub(), preprocessedSub);
             if (preprocessedSub.size() != 1)
                 return;
 
@@ -715,19 +715,19 @@ namespace acslg::analyzer {
                 using enum symbolic::detail::BinaryOpExprNode::Operator;
                 case LessEqual: {
                     auto newRHS = buildBinary(
-                        internExpr(symbolic::ExprHandle{uneqExpr->getRight()}), Add,
+                        internExpr(uneqExpr->getRight()), Add,
                         buildLiteral(1));
                     result.push_back(buildBinary(
-                        internExpr(symbolic::ExprHandle{uneqExpr->getLeft()}),
+                        internExpr(uneqExpr->getLeft()),
                                                     GreaterEqual, std::move(newRHS)));
                     break;
                 }
                 case GreaterEqual: {
                     auto newRHS = buildBinary(
-                        internExpr(symbolic::ExprHandle{uneqExpr->getRight()}), Subtract,
+                        internExpr(uneqExpr->getRight()), Subtract,
                         buildLiteral(1));
                     result.push_back(buildBinary(
-                        internExpr(symbolic::ExprHandle{uneqExpr->getLeft()}), LessEqual,
+                        internExpr(uneqExpr->getLeft()), LessEqual,
                         std::move(newRHS)));
                     break;
                 }

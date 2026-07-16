@@ -134,8 +134,8 @@ namespace acslg::analyzer::symbolic::detail {
             return expr->getKind() == ExprKind::K_BinaryOpExpr;
         }
 
-        utils::not_null<const SymbolicExpr *> getLeft() const { return left_.get(); }
-        utils::not_null<const SymbolicExpr *> getRight() const { return right_.get(); }
+        ExprHandle getLeft() const { return left_.handle(); }
+        ExprHandle getRight() const { return right_.handle(); }
         Operator getOperator() const { return op_; }
 
         std::string dump() const override;
@@ -198,7 +198,7 @@ namespace acslg::analyzer::symbolic::detail {
             return expr->getKind() == ExprKind::K_UnaryOpExpr;
         }
 
-        utils::not_null<const SymbolicExpr *> getSub() const { return expr_.get(); }
+        ExprHandle getSub() const { return expr_.handle(); }
         Operator getOperator() const { return op_; }
 
         std::string dump() const override;
