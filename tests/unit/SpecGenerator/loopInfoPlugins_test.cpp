@@ -23,12 +23,12 @@ namespace acslg::test::unit::spec_generator {
 
     void expectIndexInfoHandlesCanonical(const LoopInfo::IndexInfo &indexInfo,
                                          ExprFactory &factory) {
-        EXPECT_EQ(indexInfo.indexSymbolicValue, factory.importExpr(*indexInfo.indexSymbolicValue));
-        EXPECT_EQ(indexInfo.indexBound, factory.importExpr(*indexInfo.indexBound));
-        EXPECT_EQ(indexInfo.preciseLoopCount, factory.importExpr(*indexInfo.preciseLoopCount));
-        EXPECT_EQ(indexInfo.maxLoopCount, factory.importExpr(*indexInfo.maxLoopCount));
-        EXPECT_EQ(indexInfo.indexRealAddr, factory.importAddress(*indexInfo.indexRealAddr));
-        EXPECT_EQ(indexInfo.indexSymbolicAddr, factory.importAddress(*indexInfo.indexSymbolicAddr));
+        EXPECT_EQ(indexInfo.indexSymbolicValue, factory.importExpr(indexInfo.indexSymbolicValue));
+        EXPECT_EQ(indexInfo.indexBound, factory.importExpr(indexInfo.indexBound));
+        EXPECT_EQ(indexInfo.preciseLoopCount, factory.importExpr(indexInfo.preciseLoopCount));
+        EXPECT_EQ(indexInfo.maxLoopCount, factory.importExpr(indexInfo.maxLoopCount));
+        EXPECT_EQ(indexInfo.indexRealAddr, factory.importAddress(indexInfo.indexRealAddr));
+        EXPECT_EQ(indexInfo.indexSymbolicAddr, factory.importAddress(indexInfo.indexSymbolicAddr));
     }
 
     void expectPatternInitialValuesCanonical(const LoopInfo::PatternInfo &patternInfo,
@@ -37,7 +37,7 @@ namespace acslg::test::unit::spec_generator {
             if (pattern == nullopt)
                 continue;
             EXPECT_EQ(pattern.value().initialValue,
-                      factory.importExpr(*pattern.value().initialValue));
+                      factory.importExpr(pattern.value().initialValue));
         }
     }
 
@@ -65,7 +65,7 @@ namespace acslg::test::unit::spec_generator {
                 DEBUG(pattern.value().initialValue->dump() +
                       ", step: " + to_string(pattern.value().step));
                 EXPECT_EQ(pattern.value().initialValue,
-                          factory.importExpr(*pattern.value().initialValue));
+                          factory.importExpr(pattern.value().initialValue));
                 EXPECT_EQ(pattern.value().step, 1);
             } else {
                 DEBUG("too complex");
@@ -254,7 +254,7 @@ namespace acslg::test::unit::spec_generator {
         for (const auto &[addr, value] : *loopInfo.sharedMemoryMap) {
             (void)addr;
             EXPECT_FALSE(value->isUnknown());
-            EXPECT_EQ(value, factory.importExpr(*value));
+            EXPECT_EQ(value, factory.importExpr(value));
         }
     }
 

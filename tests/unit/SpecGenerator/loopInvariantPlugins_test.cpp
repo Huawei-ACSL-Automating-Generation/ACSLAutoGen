@@ -687,7 +687,7 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
             }
             for (auto &pathCond : postInfo.pathConds) {
                 sawPostCondition = true;
-                auto canonical   = factory.importExpr(*pathCond);
+                auto canonical   = factory.importExpr(pathCond);
                 EXPECT_EQ(canonical.get(), pathCond.get());
                 auto expected = pathCond->simplifiedExpr()->getACSL({});
                 assert(expected);

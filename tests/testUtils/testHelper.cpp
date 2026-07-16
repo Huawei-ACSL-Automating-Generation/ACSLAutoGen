@@ -108,7 +108,7 @@ namespace acslg::test::utils {
         if (returnExpr == nullopt)
             ERROR("There is no returnExpr!");
         auto &factory = state.getExprFactory();
-        return factory.importExpr(*returnExpr.value());
+        return factory.importExpr(returnExpr.value());
     }
 
     not_null<unique_ptr<ProgramState>> getPostStateOfFirstLoop(const string_view code) {

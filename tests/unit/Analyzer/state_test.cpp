@@ -18,7 +18,7 @@ namespace acslg::test::unit::analyzer {
     using namespace utils;
 
     template <class ExprPtr> symbolic::ExprHandle internForTest(const ExprPtr &expr) {
-        return symbolic::ExprFactoryScope::current().importExpr(*expr);
+        return symbolic::ExprFactoryScope::current().importExpr(expr);
     }
 
     symbolic::ExprHandle makeLiteralHandle(uint64_t value) {
@@ -70,7 +70,7 @@ namespace acslg::test::unit::analyzer {
 
         size_t flatCount = 0;
         for (auto &&[addr, value] : postState->getPaths().front()->getMemoryState().flat()) {
-            auto interned = postState->getExprFactory().importAddress(*addr.handle());
+            auto interned = postState->getExprFactory().importAddress(addr.handle());
             EXPECT_EQ(addr.handle(), interned);
             auto readBack = postState->getPaths().front()->getMemoryState().read(addr.handle());
             ASSERT_TRUE(readBack);
@@ -261,7 +261,7 @@ namespace acslg::test::unit::analyzer {
             ASSERT_TRUE(path->getReturnExpr().has_value());
             returns.emplace(path->getReturnExpr()->get().get());
             for (auto cond : path->getPathConditions()) {
-                auto interned = context.getExprFactory().importExpr(*cond);
+                auto interned = context.getExprFactory().importExpr(cond);
                 EXPECT_EQ(cond.get().get(), interned.get().get());
             }
         }
@@ -418,7 +418,7 @@ namespace acslg::test::unit::analyzer {
         auto equalValue2 = makeSymbolValue(42);
         mm.write(makeVariableAddr(1), internForTest(equalValue1));
         mm.write(makeVariableAddr(2), internForTest(equalValue2));
-        auto expectedHandle = symbolic::ExprFactoryScope::current().importExpr(*expected);
+        auto expectedHandle = symbolic::ExprFactoryScope::current().importExpr(expected);
         mm.write(makeVariableAddr(3), expectedHandle);
 
         std::vector<const symbolic::SymbolicExpr *> flatValues;
@@ -576,8 +576,8 @@ namespace acslg::test::unit::analyzer {
         auto val0     = makeSymbolValue(10);
         auto val1     = makeSymbolValue(20);
 
-        pathA->updateMemory(addr0A, acslContext.getExprFactory().importExpr(*val0));
-        pathB->updateMemory(addr1B, acslContext.getExprFactory().importExpr(*val1));
+        pathA->updateMemory(addr0A, acslContext.getExprFactory().importExpr(val0));
+        pathB->updateMemory(addr1B, acslContext.getExprFactory().importExpr(val1));
 
         pathA->mergeWith(*pathB);
 
@@ -602,8 +602,8 @@ namespace acslg::test::unit::analyzer {
 
         auto valueA = makeSymbolValue(1);
         auto valueB = makeSymbolValue(2);
-        pathA->updateMemory(addr0A, acslContext.getExprFactory().importExpr(*valueA));
-        pathB->updateMemory(addr0B, acslContext.getExprFactory().importExpr(*valueB));
+        pathA->updateMemory(addr0A, acslContext.getExprFactory().importExpr(valueA));
+        pathB->updateMemory(addr0B, acslContext.getExprFactory().importExpr(valueB));
 
         pathA->mergeWith(*pathB);
 
@@ -616,12 +616,12 @@ namespace acslg::test::unit::analyzer {
         auto condShared = makeLiteral(1);
         auto condAOnly  = makeLiteral(2);
 
-        pathA->insertPathCondition(acslContext.getExprFactory().importExpr(*condShared));
+        pathA->insertPathCondition(acslContext.getExprFactory().importExpr(condShared));
         ASSERT_EQ(pathA->getPathConditions().size(), 1u);
         auto sharedHandle = *pathA->getPathConditions().begin();
 
-        pathA->insertPathCondition(acslContext.getExprFactory().importExpr(*condAOnly));
-        pathB->insertPathCondition(acslContext.getExprFactory().importExpr(*condShared));
+        pathA->insertPathCondition(acslContext.getExprFactory().importExpr(condAOnly));
+        pathB->insertPathCondition(acslContext.getExprFactory().importExpr(condShared));
         ASSERT_EQ(pathB->getPathConditions().size(), 1u);
         EXPECT_EQ(sharedHandle, *pathB->getPathConditions().begin());
 
@@ -645,8 +645,8 @@ namespace acslg::test::unit::analyzer {
 
         auto returnA = makeLiteral(1);
         auto returnB = makeLiteral(2);
-        pathA->setReturnExpr(acslContext.getExprFactory().importExpr(*returnA));
-        pathB->setReturnExpr(acslContext.getExprFactory().importExpr(*returnB));
+        pathA->setReturnExpr(acslContext.getExprFactory().importExpr(returnA));
+        pathB->setReturnExpr(acslContext.getExprFactory().importExpr(returnB));
 
         pathA->mergeWith(*pathB);
 
@@ -659,7 +659,7 @@ namespace acslg::test::unit::analyzer {
         pathB->setPathState(Path::PathState::Return);
 
         auto returnA = makeLiteral(7);
-        pathA->setReturnExpr(acslContext.getExprFactory().importExpr(*returnA));
+        pathA->setReturnExpr(acslContext.getExprFactory().importExpr(returnA));
         ASSERT_TRUE(pathA->getReturnExpr());
         auto returnHandle = pathA->getReturnExpr().value();
 
@@ -668,7 +668,7 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(returnHandle, cloned->getReturnExpr().value());
 
         auto returnB = makeLiteral(7);
-        pathB->setReturnExpr(acslContext.getExprFactory().importExpr(*returnB));
+        pathB->setReturnExpr(acslContext.getExprFactory().importExpr(returnB));
         ASSERT_TRUE(pathB->getReturnExpr());
         EXPECT_EQ(returnHandle, pathB->getReturnExpr().value());
 
