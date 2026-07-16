@@ -132,10 +132,12 @@ namespace acslg::analyzer::symbolic {
                                              std::string_view indexName,
                                              RangeQuantifier quantifier,
                                              ExprHandle predicate) {
+        auto importedRange = factory.importAddress(range);
+        auto importedPredicate = factory.importExpr(predicate);
         return detail::ExprFactoryInternals::intern(
             factory,
             detail::ExprFactoryInternals::makeNode<QuantifierOverRangeNode>(
-                range, indexName, quantifier, predicate));
+                importedRange, indexName, quantifier, importedPredicate));
     }
 
     ExprHandle makeMaxMinOverRangeHandle(ExprFactory &factory,
@@ -156,9 +158,12 @@ namespace acslg::analyzer::symbolic {
                                          RangeExtremum extremum,
                                          ExprHandle body,
                                          SourcePoint fromPoint) {
+        auto importedRange = factory.importAddress(range);
+        auto importedBody = factory.importExpr(body);
         return detail::ExprFactoryInternals::intern(
             factory, detail::ExprFactoryInternals::makeNode<MaxMinOverRangeNode>(
-                         range, indexName, extremum, body, std::move(fromPoint)));
+                         importedRange, indexName, extremum, importedBody,
+                         std::move(fromPoint)));
     }
 
     SumOverRangeNode::SumOverRangeNode(AddrHandle range,

@@ -2093,6 +2093,47 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(maximum.isOverRange());
     }
 
+    TEST(ExprFacadeTest, AggregateFacadesImportCrossFactoryChildren) {
+        ASTExtractor e;
+        e.init(R"c(
+            int f(void) {
+                int x = 0;
+                return x;
+            }
+        )c");
+
+        auto *func = e.findFunc("f");
+        ASSERT_NE(func, nullptr);
+        auto *var = e.findFirstDecl<VarDecl>();
+        ASSERT_NE(var, nullptr);
+        auto point =
+            symbolic::SourcePoint::fromFuncDecl(func, e.getSourceManager(), e.getLangOptions());
+
+        symbolic::ExprFactory source;
+        auto sourceRange = source.symbolAddress(
+            var->getType(), source.variableAddress(var), point, source.rangeIndex("i"),
+            source.literal(int64_t{3}));
+        auto sourcePredicate = source.binary(source.rangeIndex("i"), symbolic::BinaryOp::GreaterThan,
+                                             source.literal(0));
+        auto sourceBody = source.binary(source.rangeIndex("i"), symbolic::BinaryOp::Add,
+                                        source.literal(1));
+
+        symbolic::ExprFactory target;
+        symbolic::QuantifierOverRangeExpr quantifier{
+            target, sourceRange, "i", symbolic::RangeQuantifier::ForAll, sourcePredicate};
+        symbolic::MaxMinOverRangeExpr maximum{
+            target, sourceRange, "i", symbolic::RangeExtremum::Max, sourceBody, point};
+
+        symbolic::QuantifierOverRangeView quantifierView{quantifier.handle()};
+        symbolic::MaxMinOverRangeView maximumView{maximum.handle()};
+        EXPECT_EQ(quantifierView.range().handle(), target.importAddress(sourceRange));
+        EXPECT_EQ(quantifierView.predicate(), target.importExpr(sourcePredicate));
+        EXPECT_EQ(maximumView.range().handle(), target.importAddress(sourceRange));
+        EXPECT_EQ(maximumView.body(), target.importExpr(sourceBody));
+        EXPECT_NE(quantifierView.predicate().get().get(), sourcePredicate.get().get());
+        EXPECT_NE(maximumView.body().get().get(), sourceBody.get().get());
+    }
+
     TEST(AddrFacadeTest, ImportsCrossFactoryAddressThroughCurrentFactory) {
         ASTExtractor e;
         e.init(R"c(
