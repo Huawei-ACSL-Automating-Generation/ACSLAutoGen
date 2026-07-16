@@ -277,16 +277,14 @@ namespace acslg::analyzer::symbolic::detail {
         }
 
         size_t getNumFields() const { return info_.getNumFields(); }
-        utils::not_null<const SymbolicExpr *> getFieldValue(size_t index) const {
+        ExprHandle getFieldValue(size_t index) const {
             if (index >= fields_.size())
                 ERROR("Out-of-bounds access");
-            return fields_[index].get();
+            return fields_[index].handle();
         }
         auto fieldsValues() const {
             return fields_ | std::views::transform(
-                                 [](const ExprChild &field) -> utils::not_null<const SymbolicExpr *> {
-                                     return field.get();
-                                 });
+                                 [](const ExprChild &field) { return field.handle(); });
         }
         const StructureInfo &getInfo() const { return info_; }
 

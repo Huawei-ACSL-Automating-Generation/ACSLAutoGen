@@ -139,7 +139,7 @@ namespace acslg::analyzer::symbolic {
             std::vector<ExprHandle> fields;
             fields.reserve(structure->getNumFields());
             for (auto field : structure->fieldsValues())
-                fields.push_back(importExpr(ExprHandle{field}));
+                fields.push_back(importExpr(field));
             return internTyped(detail::ExprFactoryInternals::makeNode<StructureNode>(
                 structure->getInfo(), std::move(fields), newType));
         }
@@ -240,7 +240,7 @@ namespace acslg::analyzer::symbolic {
                     auto rebuilt = factory.importExpr(ExprHandle{structure});
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
                         rebuilt = factory.withField(
-                            rebuilt, i, run(ExprHandle{structure->getFieldValue(i)}));
+                            rebuilt, i, run(structure->getFieldValue(i)));
                     return rebuilt;
                 }
                 if (auto *sum = expr.dyn_cast<const SumOverRangeNode>()) {
@@ -381,7 +381,7 @@ namespace acslg::analyzer::symbolic {
                     auto rebuilt = factory.importExpr(ExprHandle{structure});
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
                         rebuilt = factory.withField(
-                            rebuilt, i, run(ExprHandle{structure->getFieldValue(i)}));
+                            rebuilt, i, run(structure->getFieldValue(i)));
                     return rebuilt;
                 }
                 if (auto *sum = expr.dyn_cast<const SumOverRangeNode>()) {
@@ -490,7 +490,7 @@ namespace acslg::analyzer::symbolic {
                     auto rebuilt = factory.importExpr(ExprHandle{structure});
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
                         rebuilt = factory.withField(
-                            rebuilt, i, run(ExprHandle{structure->getFieldValue(i)}));
+                            rebuilt, i, run(structure->getFieldValue(i)));
                     return rebuilt;
                 }
                 if (auto *sum = expr.dyn_cast<const SumOverRangeNode>()) {
@@ -933,7 +933,7 @@ namespace acslg::analyzer::symbolic {
         fields.reserve(structureNode.getNumFields());
         size_t currentIndex = 0;
         for (auto field : structureNode.fieldsValues()) {
-            fields.push_back(currentIndex == index ? value : importExpr(ExprHandle{field}));
+            fields.push_back(currentIndex == index ? value : importExpr(field));
             ++currentIndex;
         }
 
@@ -1617,7 +1617,7 @@ namespace acslg::analyzer::symbolic {
     }
 
     ExprHandle StructureView::field(size_t index) const {
-        return ExprHandle{cast<const StructureNode>(handle_.get().get())->getFieldValue(index)};
+        return cast<const StructureNode>(handle_.get().get())->getFieldValue(index);
     }
 
     const StructureInfo &StructureView::info() const {
@@ -2004,7 +2004,7 @@ namespace acslg::analyzer::symbolic {
         std::optional<SymbolOrigin> getStructureOrigin(const StructureNode &structure) {
             std::optional<SymbolOrigin> common;
             for (size_t index = 0; index < structure.getNumFields(); ++index) {
-                auto *symbol = dyn_cast<const Symbol>(structure.getFieldValue(index).get());
+                auto *symbol = structure.getFieldValue(index).dyn_cast<const Symbol>();
                 if (symbol == nullptr)
                     return std::nullopt;
 
