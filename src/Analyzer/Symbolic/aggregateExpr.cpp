@@ -4,167 +4,420 @@
  */
 #include "aggregateExpr.h"
 
-#include <llvm/Support/Casting.h>
 #include <memory>
 #include <optional>
 #include <strings.h>
 
 #include "expr.h"
+#include "detail/aggregateNodes.h"
+#include "detail/aggregateViews.h"
+#include "detail/facadeAccess.h"
+#include "detail/factoryInternals.h"
+#include "detail/handleInternals.h"
+#include "detail/nativeRtti.h"
 #include "macros.h"
 #include "utils.h"
 #include "stringTemplate.h"
 #include "Analyzer/state.h"
 
 namespace acslg::analyzer::symbolic {
-    SumOverRange::Init SumOverRange::makeInit(
-        utils::not_null<std::unique_ptr<const SymbolAddress>> range) {
-        return Init{deriveType(range->getPointeeType()), std::move(range)};
+    using detail::AddrHandle;
+    using detail::dyn_cast;
+    using detail::ExprHandle;
+    using detail::MaxMinOverRangeNode;
+    using detail::OverRangeExprNode;
+    using detail::QuantifierOverRangeNode;
+    using detail::RangeIndexNode;
+    using detail::SumOverRangeNode;
+
+    namespace {
+        ExprHandle makeMaxMinDefaultBody(ExprFactory &factory,
+                                         const SymbolAddress &range,
+                                         std::string_view indexName,
+                                         const SourcePoint &fromPoint) {
+            auto indexedRange = range.withOffset(Expr::rangeIndex(factory, indexName));
+            indexedRange = indexedRange.withoutLength();
+            return detail::FacadeAccess::exprHandle(
+                Expr::symbol(range.pointeeType(), indexedRange, fromPoint));
+        }
+    } // namespace
+
+    namespace detail {
+    SumOverRangeView::SumOverRangeView(ExprHandle handle) : handle_(handle) {
+        if (!handle_.isSumOverRange())
+            ERROR("SumOverRangeView requires a sum-over-range expression.");
     }
 
-    SumOverRange::SumOverRange(Init init, std::string_view indexName, SourcePoint fromPoint)
-        : OverRangeExpr(ExprKind::K_SumOverRange,
-                        init.type,
-                        std::move(init.range),
-                        indexName),
-          Symbol(Kind::K_SumOverRange),
-          fromPoint_(std::move(fromPoint)) {}
-
-    SumOverRange::SumOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
-                               std::string_view indexName,
-                               SourcePoint fromPoint)
-        : SumOverRange(makeInit(std::move(range)), indexName, std::move(fromPoint)) {}
-
-    OverRangeExpr::OverRangeExpr(const OverRangeExpr &other)
-        : SymbolicExpr(other), range_(std::make_unique<SymbolAddress>(*other.range_)),
-          indexName_(other.indexName_) {}
-
-    OverRangeExpr &OverRangeExpr::operator=(const OverRangeExpr &other) {
-        if (&other == this)
-            return *this;
-        SymbolicExpr::operator=(other);
-        range_     = std::make_unique<SymbolAddress>(*other.range_);
-        indexName_ = other.indexName_;
-        return *this;
+    std::optional<SumOverRangeView> SumOverRangeView::tryFrom(ExprHandle handle) {
+        if (!handle.isSumOverRange())
+            return std::nullopt;
+        return SumOverRangeView{handle};
     }
 
-    std::string OverRangeExpr::dump() const {
+    SymbolAddressView SumOverRangeView::range() const {
+        return detail::HandleAccess::cast<SumOverRangeNode>(handle_).getRange();
+    }
+
+    std::string_view SumOverRangeView::indexName() const {
+        return detail::HandleAccess::cast<SumOverRangeNode>(handle_).getIndexName();
+    }
+
+    SourcePoint SumOverRangeView::fromPoint() const {
+        return detail::HandleAccess::cast<SumOverRangeNode>(handle_).getFromPoint().value();
+    }
+
+    QuantifierOverRangeView::QuantifierOverRangeView(ExprHandle handle) : handle_(handle) {
+        if (!handle_.isQuantifierOverRange())
+            ERROR("QuantifierOverRangeView requires a quantified range expression.");
+    }
+
+    std::optional<QuantifierOverRangeView> QuantifierOverRangeView::tryFrom(ExprHandle handle) {
+        if (!handle.isQuantifierOverRange())
+            return std::nullopt;
+        return QuantifierOverRangeView{handle};
+    }
+
+    SymbolAddressView QuantifierOverRangeView::range() const {
+        return detail::HandleAccess::cast<QuantifierOverRangeNode>(handle_).getRange();
+    }
+
+    std::string_view QuantifierOverRangeView::indexName() const {
+        return detail::HandleAccess::cast<QuantifierOverRangeNode>(handle_).getIndexName();
+    }
+
+    RangeQuantifier QuantifierOverRangeView::quantifier() const {
+        return detail::HandleAccess::cast<QuantifierOverRangeNode>(handle_).getQuantifier();
+    }
+
+    ExprHandle QuantifierOverRangeView::predicate() const {
+        return detail::HandleAccess::cast<QuantifierOverRangeNode>(handle_).getPredicate();
+    }
+
+    MaxMinOverRangeView::MaxMinOverRangeView(ExprHandle handle) : handle_(handle) {
+        if (!handle_.isMaxMinOverRange())
+            ERROR("MaxMinOverRangeView requires a max/min-over-range expression.");
+    }
+
+    std::optional<MaxMinOverRangeView> MaxMinOverRangeView::tryFrom(ExprHandle handle) {
+        if (!handle.isMaxMinOverRange())
+            return std::nullopt;
+        return MaxMinOverRangeView{handle};
+    }
+
+    SymbolAddressView MaxMinOverRangeView::range() const {
+        return detail::HandleAccess::cast<MaxMinOverRangeNode>(handle_).getRange();
+    }
+
+    std::string_view MaxMinOverRangeView::indexName() const {
+        return detail::HandleAccess::cast<MaxMinOverRangeNode>(handle_).getIndexName();
+    }
+
+    RangeExtremum MaxMinOverRangeView::extremum() const {
+        return detail::HandleAccess::cast<MaxMinOverRangeNode>(handle_).getExtremum();
+    }
+
+    ExprHandle MaxMinOverRangeView::body() const {
+        return detail::HandleAccess::cast<MaxMinOverRangeNode>(handle_).getExpr();
+    }
+
+    SourcePoint MaxMinOverRangeView::fromPoint() const {
+        return detail::HandleAccess::cast<MaxMinOverRangeNode>(handle_).getFromPoint().value();
+    }
+    } // namespace detail
+
+    static ExprHandle buildSumOverRange(ExprFactory &factory,
+                                        AddrHandle range,
+                                        std::string_view indexName,
+                                        SourcePoint fromPoint) {
+        return detail::ExprFactoryInternals::intern(
+            factory, detail::ExprFactoryInternals::makeNode<SumOverRangeNode>(
+                         detail::ExprFactoryInternals::importAddress(factory, range), indexName,
+                         std::move(fromPoint)));
+    }
+
+    static ExprHandle buildQuantifierOverRange(ExprFactory &factory,
+                                               AddrHandle range,
+                                               std::string_view indexName,
+                                               RangeQuantifier quantifier,
+                                               ExprHandle predicate) {
+        auto importedRange     = detail::ExprFactoryInternals::importAddress(factory, range);
+        auto importedPredicate = detail::ExprFactoryInternals::importExpr(factory, predicate);
+        return detail::ExprFactoryInternals::intern(
+            factory, detail::ExprFactoryInternals::makeNode<QuantifierOverRangeNode>(
+                         importedRange, indexName, quantifier, importedPredicate));
+    }
+
+    static ExprHandle buildMaxMinOverRange(ExprFactory &factory,
+                                           AddrHandle range,
+                                           std::string_view indexName,
+                                           RangeExtremum extremum,
+                                           ExprHandle body,
+                                           SourcePoint fromPoint) {
+        auto importedRange = detail::ExprFactoryInternals::importAddress(factory, range);
+        auto importedBody  = detail::ExprFactoryInternals::importExpr(factory, body);
+        return detail::ExprFactoryInternals::intern(
+            factory, detail::ExprFactoryInternals::makeNode<MaxMinOverRangeNode>(
+                         importedRange, indexName, extremum, importedBody, std::move(fromPoint)));
+    }
+
+    static ExprHandle buildMaxMinOverRange(ExprFactory &factory,
+                                           AddrHandle range,
+                                           std::string_view indexName,
+                                           RangeExtremum extremum,
+                                           SourcePoint fromPoint) {
+        auto importedRange = detail::ExprFactoryInternals::importAddress(factory, range);
+        auto body = makeMaxMinDefaultBody(
+            factory,
+            SymbolAddress{detail::FacadeAccess::makeAddress(factory, importedRange)},
+            indexName,
+            fromPoint);
+        return buildMaxMinOverRange(factory, importedRange, indexName, extremum, body,
+                                    std::move(fromPoint));
+    }
+
+    SumOverRangeExpr::SumOverRangeExpr(const Addr &range,
+                                       std::string_view indexName,
+                                       SourcePoint fromPoint)
+        : Expr(
+              range.factory(),
+              buildSumOverRange(range.factory(),
+                                detail::FacadeAccess::addressHandle(range),
+                                indexName,
+                                std::move(fromPoint))) {
+    }
+
+    SumOverRangeExpr::SumOverRangeExpr(const Expr &expression) : Expr(expression) {
+        if (!detail::FacadeAccess::exprHandle(*this).isSumOverRange())
+            ERROR("SumOverRangeExpr requires a sum-over-range expression.");
+    }
+
+    std::optional<SumOverRangeExpr> SumOverRangeExpr::tryFrom(const Expr &expression) {
+        if (!detail::FacadeAccess::exprHandle(expression).isSumOverRange())
+            return std::nullopt;
+        return SumOverRangeExpr{expression};
+    }
+
+    SymbolAddress SumOverRangeExpr::range() const {
+        auto handle = detail::SumOverRangeView{detail::FacadeAccess::exprHandle(*this)}
+                          .range()
+                          .handle();
+        return SymbolAddress{detail::FacadeAccess::makeAddress(factory(), handle)};
+    }
+
+    std::string_view SumOverRangeExpr::indexName() const {
+        return detail::SumOverRangeView{detail::FacadeAccess::exprHandle(*this)}.indexName();
+    }
+
+    SourcePoint SumOverRangeExpr::fromPoint() const {
+        return detail::SumOverRangeView{detail::FacadeAccess::exprHandle(*this)}.fromPoint();
+    }
+
+    QuantifierOverRangeExpr::QuantifierOverRangeExpr(const Addr &range,
+                                                     std::string_view indexName,
+                                                     RangeQuantifier quantifier,
+                                                     const Expr &predicate)
+        : Expr(make(range, indexName, quantifier, predicate)) {}
+
+    QuantifierOverRangeExpr::QuantifierOverRangeExpr(const Expr &expression) : Expr(expression) {
+        if (!detail::FacadeAccess::exprHandle(*this).isQuantifierOverRange())
+            ERROR("QuantifierOverRangeExpr requires a quantified range expression.");
+    }
+
+    std::optional<QuantifierOverRangeExpr> QuantifierOverRangeExpr::tryFrom(const Expr &expression) {
+        if (!detail::FacadeAccess::exprHandle(expression).isQuantifierOverRange())
+            return std::nullopt;
+        return QuantifierOverRangeExpr{expression};
+    }
+
+    SymbolAddress QuantifierOverRangeExpr::range() const {
+        auto handle = detail::QuantifierOverRangeView{detail::FacadeAccess::exprHandle(*this)}
+                          .range()
+                          .handle();
+        return SymbolAddress{detail::FacadeAccess::makeAddress(factory(), handle)};
+    }
+
+    std::string_view QuantifierOverRangeExpr::indexName() const {
+        return detail::QuantifierOverRangeView{detail::FacadeAccess::exprHandle(*this)}.indexName();
+    }
+
+    RangeQuantifier QuantifierOverRangeExpr::quantifier() const {
+        return detail::QuantifierOverRangeView{detail::FacadeAccess::exprHandle(*this)}.quantifier();
+    }
+
+    Expr QuantifierOverRangeExpr::predicate() const {
+        auto handle = detail::QuantifierOverRangeView{detail::FacadeAccess::exprHandle(*this)}
+                          .predicate();
+        return detail::FacadeAccess::makeExpr(factory(), handle);
+    }
+
+    Expr QuantifierOverRangeExpr::make(const Addr &range,
+                                       std::string_view indexName,
+                                       RangeQuantifier quantifier,
+                                       const Expr &predicate) {
+        if (&range.factory() != &predicate.factory())
+            ERROR("Cannot build a quantifier from different factories.");
+        return detail::FacadeAccess::makeExpr(
+            range.factory(),
+            buildQuantifierOverRange(range.factory(),
+                                     detail::FacadeAccess::addressHandle(range),
+                                     indexName,
+                                     quantifier,
+                                     detail::FacadeAccess::exprHandle(predicate)));
+    }
+
+    MaxMinOverRangeExpr::MaxMinOverRangeExpr(const Addr &range,
+                                             std::string_view indexName,
+                                             RangeExtremum extremum,
+                                             SourcePoint fromPoint)
+        : Expr(range.factory(),
+               buildMaxMinOverRange(range.factory(),
+                                    detail::FacadeAccess::addressHandle(range),
+                                    indexName,
+                                    extremum,
+                                    std::move(fromPoint))) {}
+
+    MaxMinOverRangeExpr::MaxMinOverRangeExpr(const Addr &range,
+                                             std::string_view indexName,
+                                             RangeExtremum extremum,
+                                             const Expr &body,
+                                             SourcePoint fromPoint)
+        : Expr(make(range, indexName, extremum, body, std::move(fromPoint))) {}
+
+    MaxMinOverRangeExpr::MaxMinOverRangeExpr(const Expr &expression) : Expr(expression) {
+        if (!detail::FacadeAccess::exprHandle(*this).isMaxMinOverRange())
+            ERROR("MaxMinOverRangeExpr requires a max/min-over-range expression.");
+    }
+
+    std::optional<MaxMinOverRangeExpr> MaxMinOverRangeExpr::tryFrom(const Expr &expression) {
+        if (!detail::FacadeAccess::exprHandle(expression).isMaxMinOverRange())
+            return std::nullopt;
+        return MaxMinOverRangeExpr{expression};
+    }
+
+    SymbolAddress MaxMinOverRangeExpr::range() const {
+        auto handle = detail::MaxMinOverRangeView{detail::FacadeAccess::exprHandle(*this)}
+                          .range()
+                          .handle();
+        return SymbolAddress{detail::FacadeAccess::makeAddress(factory(), handle)};
+    }
+
+    std::string_view MaxMinOverRangeExpr::indexName() const {
+        return detail::MaxMinOverRangeView{detail::FacadeAccess::exprHandle(*this)}.indexName();
+    }
+
+    RangeExtremum MaxMinOverRangeExpr::extremum() const {
+        return detail::MaxMinOverRangeView{detail::FacadeAccess::exprHandle(*this)}.extremum();
+    }
+
+    Expr MaxMinOverRangeExpr::body() const {
+        auto handle =
+            detail::MaxMinOverRangeView{detail::FacadeAccess::exprHandle(*this)}.body();
+        return detail::FacadeAccess::makeExpr(factory(), handle);
+    }
+
+    SourcePoint MaxMinOverRangeExpr::fromPoint() const {
+        return detail::MaxMinOverRangeView{detail::FacadeAccess::exprHandle(*this)}.fromPoint();
+    }
+
+    Expr MaxMinOverRangeExpr::make(const Addr &range,
+                                   std::string_view indexName,
+                                   RangeExtremum extremum,
+                                   const Expr &body,
+                                   SourcePoint fromPoint) {
+        if (&range.factory() != &body.factory())
+            ERROR("Cannot build a max/min expression from different factories.");
+        return detail::FacadeAccess::makeExpr(
+            range.factory(),
+            buildMaxMinOverRange(range.factory(),
+                                 detail::FacadeAccess::addressHandle(range),
+                                 indexName,
+                                 extremum,
+                                 detail::FacadeAccess::exprHandle(body),
+                                 std::move(fromPoint)));
+    }
+
+    SumOverRangeNode::SumOverRangeNode(AddrHandle range,
+                                       std::string_view indexName,
+                                       SourcePoint fromPoint,
+                                       std::optional<ExprType> explicitType)
+        : OverRangeExprNode(ExprKind::K_SumOverRange,
+                            deriveType(detail::SymbolAddressView{range}.pointeeType()),
+                            range,
+                            indexName,
+                            explicitType),
+          Symbol(Kind::K_SumOverRange), fromPoint_(std::move(fromPoint)) {}
+
+    detail::SymbolAddressView OverRangeExprNode::range() const {
+        auto range = detail::SymbolAddressView::tryFrom(range_);
+        if (!range)
+            ERROR("Over-range expression range child must be a SymbolAddress.");
+        return range.value();
+    }
+
+    std::string OverRangeExprNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
-        oss << "{" + key("range: ") + range_->dump() + "}, ";
+        oss << "{" + key("range: ") + range().handle().dump() + "}, ";
         oss << "{" + key("index name: ") + accent(indexName_) + "}";
         return oss.str();
     }
 
-    bool OverRangeExpr::equal(const SymbolicExpr &other) const {
-        auto ORE = llvm::dyn_cast<const OverRangeExpr>(&other);
+    bool OverRangeExprNode::equal(const detail::SymbolicExprNode &other) const {
+        auto ORE = dyn_cast<const OverRangeExprNode>(&other);
         if (ORE == nullptr)
             return false;
-        if (*range_ != *ORE->range_)
+        if (getValType() != other.getValType())
+            return false;
+        if (!range().handle().structurallyEqual(ORE->range().handle()))
             return false;
         // No indexName_.
         return true;
     }
 
-    std::size_t OverRangeExpr::hash() const { return utils::hash_val(range_->hash()); }
+    std::size_t OverRangeExprNode::hash() const { return utils::hash_val(range().handle().hash()); }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::clone() const {
-        return std::make_unique<RangeIndex>(*this);
-    };
-
-    std::string SymbolAddress::RangeIndex::dump() const {
+    std::string RangeIndexNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("RangeIndex") << " {" << lit(name_) << "}";
         return oss.str();
     }
 
-    bool SymbolAddress::RangeIndex::equal(const SymbolicExpr &other) const {
-        auto index = llvm::dyn_cast<const SymbolAddress::RangeIndex>(&other);
+    bool RangeIndexNode::equal(const detail::SymbolicExprNode &other) const {
+        auto index = dyn_cast<const RangeIndexNode>(&other);
         if (!index)
+            return false;
+        if (getValType() != other.getValType())
             return false;
 
         // `name_` does not determine equality.
         return true;
     }
 
-    std::size_t SymbolAddress::RangeIndex::hash() const { return utils::hash_val(getKind()); }
+    std::size_t RangeIndexNode::hash() const { return utils::hash_val(getKind()); }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::getSubstitutedExpr(
-        const Path &,
-        const SourcePoint &) const {
-        return clone();
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::
-        getRangeIndexSubstituted(const SymbolAddrBaseInfo &, const SymbolicExpr &indexExpr) const {
-        return indexExpr.clone();
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SymbolAddress::RangeIndex::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
-        return clone();
-    }
-
-    std::string SumOverRange::dump() const {
+    std::string SumOverRangeNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("SumOverRange ");
-        oss << OverRangeExpr::dump();
+        oss << OverRangeExprNode::dump();
         return oss.str();
     }
 
-    bool SumOverRange::equal(const SymbolicExpr &other) const {
-        auto SOR = llvm::dyn_cast<const SumOverRange>(&other);
+    bool SumOverRangeNode::equal(const detail::SymbolicExprNode &other) const {
+        auto SOR = dyn_cast<const SumOverRangeNode>(&other);
         if (SOR == nullptr)
             return false;
-        return OverRangeExpr::equal(*SOR) && fromPoint_ == SOR->fromPoint_;
+        return OverRangeExprNode::equal(*SOR) && fromPoint_ == SOR->fromPoint_;
     }
 
-    std::size_t SumOverRange::hash() const {
-        return utils::hash_val(SymbolicExpr::getKind(), OverRangeExpr::hash(), fromPoint_.hash());
+    std::size_t SumOverRangeNode::hash() const {
+        return utils::hash_val(detail::SymbolicExprNode::getKind(), OverRangeExprNode::hash(),
+                               fromPoint_.hash());
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getSubstitutedExpr(
-        const Path &pathSubTo,
-        const SourcePoint &pointToSub) const {
-        if (fromPoint_ != pointToSub)
-            return clone();
-        // Substitute only when the label matches; otherwise preserve the original expression.
-        auto subedExpr  = range_->getSubstitutedExpr(pathSubTo, pointToSub);
-        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        return std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
-                                              indexName_, pathSubTo.getStartPoint());
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getRangeIndexSubstituted(
-        const SymbolAddrBaseInfo &rangeBase,
-        const SymbolicExpr &indexExpr) const {
-        auto subedExpr  = range_->getRangeIndexSubstituted(rangeBase, indexExpr);
-        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        return std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
-                                              indexName_, fromPoint_);
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> SumOverRange::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
-        auto subedExpr  = range_->getSubstitutedValueExpr(hashExprMap);
-        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        return std::make_unique<SumOverRange>(std::make_unique<const SymbolAddress>(*subedRange),
-                                              indexName_, fromPoint_);
-    }
-
-    utils::expected<std::string, SymbolicExpr::GetACSLError> SumOverRange::doGetACSL(
-        const GetACSLConfig &config,
+    utils::expected<std::string, ACSLError> SumOverRangeNode::doGetACSL(
+        const ACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
         unsigned,
@@ -173,31 +426,31 @@ namespace acslg::analyzer::symbolic {
             "\\sum(integer ${i} = ${0}; ${i} < ${n}; ${i}++, ${prefix}${a}[${i}]${suffix})"};
 
         // Lower bound of a range is always zero for now.
-        auto zeroStr = callGetACSL(*range_->getOffset(), config, usedPoints, currentPoint,
-                                   getPrecedence(Operator::Assign), true);
+        auto zeroStr = callGetACSL(detail::HandleAccess::node(range().offset()), config, usedPoints,
+                                   currentPoint, getPrecedence(Operator::Assign), true);
         if (!zeroStr)
             return zeroStr.error();
 
-        auto rightBound = range_->getRightBound();
+        auto rightBound = range().rightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
-        auto nStr = callGetACSL(*rightBound.value(), config, usedPoints, currentPoint,
-                                getPrecedence(Operator::LessThan), true);
+        auto nStr = callGetACSL(detail::HandleAccess::node(rightBound.value()), config, usedPoints,
+                                currentPoint, getPrecedence(Operator::LessThan), true);
         if (!nStr)
             return nStr.error();
 
-        auto rangeFrom = range_->getFromAddr();
+        auto rangeFrom = range().from();
         if (rangeFrom == std::nullopt)
-            return GetACSLError::HeapAddress;
+            return ACSLError::HeapAddress;
 
         auto [prefix, suffix] =
             details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
         bool hasAt = !(prefix.empty() || suffix.empty());
 
         // Build the pointer expression used inside the summation body.
-        auto aStr =
-            callGetACSLOfValueProxy(*range_->getFromAddr().value(), config, usedPoints, fromPoint_,
-                                    hasAt ? 0 : getPrecedence(Operator::Subscript), false);
+        auto aStr = callGetACSLOfValueProxy(detail::HandleAccess::node(*rangeFrom), config,
+                                            usedPoints, fromPoint_,
+                                            hasAt ? 0 : getPrecedence(Operator::Subscript), false);
         if (!aStr)
             return aStr.error();
 
@@ -209,86 +462,30 @@ namespace acslg::analyzer::symbolic {
                              {"suffix", suffix}});
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getSubstitutedExpr(
-        const Path &pathSubTo,
-        const SourcePoint &pointToSub) const {
-        auto subedExpr  = range_->getSubstitutedExpr(pathSubTo, pointToSub);
-        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-
-        // Quantifier bodies need substitution as well so predicates refer to the new path labels.
-        auto subedPred = pred_->getSubstitutedExpr(pathSubTo, pointToSub);
-
-        auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
-        newQOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newQOR->pred_  = std::move(subedPred).into_underlying();
-        return newQOR;
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getRangeIndexSubstituted(
-        const SymbolAddrBaseInfo &rangeBase,
-        const SymbolicExpr &indexExpr) const {
-        auto subedExpr  = range_->getRangeIndexSubstituted(rangeBase, indexExpr);
-        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        auto subedPred = pred_->getRangeIndexSubstituted(rangeBase, indexExpr);
-
-        auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
-        newQOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newQOR->pred_  = std::move(subedPred).into_underlying();
-        return newQOR;
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> QuantifierOverRange::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
-        auto subedExpr  = range_->getSubstitutedValueExpr(hashExprMap);
-        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        auto subedPred = pred_->getSubstitutedValueExpr(hashExprMap);
-
-        auto newQOR    = std::make_unique<QuantifierOverRange>(*this);
-        newQOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newQOR->pred_  = std::move(subedPred).into_underlying();
-        return newQOR;
-    }
-
-    QuantifierOverRange &QuantifierOverRange::operator=(const QuantifierOverRange &other) {
-        if (&other == this)
-            return *this;
-        OverRangeExpr::operator=(other);
-        quant_ = other.quant_;
-        pred_  = other.pred_->clone().into_underlying();
-        return *this;
-    }
-
-    std::string QuantifierOverRange::dump() const {
+    std::string QuantifierOverRangeNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("QuantifierOverRange ");
         switch (quant_) {
-            case Quantifier::Exist: oss << accent("Exists"); break;
-            case Quantifier::ForAll: oss << accent("ForAll"); break;
+            case RangeQuantifier::Exist: oss << accent("Exists"); break;
+            case RangeQuantifier::ForAll: oss << accent("ForAll"); break;
             default: UNREACHABLE();
         }
-        oss << OverRangeExpr::dump() << ", ";
-        oss << "{" << key("predicate: ") << pred_->dump() << "}";
+        oss << OverRangeExprNode::dump() << ", ";
+        oss << "{" << key("predicate: ") << pred_.dump() << "}";
         return oss.str();
     }
 
-    bool QuantifierOverRange::equal(const SymbolicExpr &other) const {
-        auto QOV = llvm::dyn_cast<const QuantifierOverRange>(&other);
+    bool QuantifierOverRangeNode::equal(const detail::SymbolicExprNode &other) const {
+        auto QOV = dyn_cast<const QuantifierOverRangeNode>(&other);
         if (QOV == nullptr)
             return false;
-        return OverRangeExpr::equal(*QOV) && quant_ == QOV->quant_ && *pred_ == *QOV->pred_;
+        return OverRangeExprNode::equal(*QOV) && quant_ == QOV->quant_ &&
+               pred_.structurallyEqual(QOV->pred_);
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> QuantifierOverRange::doGetACSL(
-        const GetACSLConfig &config,
+    utils::expected<std::string, ACSLError> QuantifierOverRangeNode::doGetACSL(
+        const ACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
         unsigned,
@@ -296,9 +493,10 @@ namespace acslg::analyzer::symbolic {
         auto st = spec_generator::StringTemplate{
             "\\${quant} integer ${i}; ${0} <= ${i} < ${n} ${entailOrAnd} ${pred}"};
 
+        auto &factory = ExprFactoryScope::current();
         std::string quantStr, entailOrAnd;
         switch (quant_) {
-            using enum Quantifier;
+            using enum RangeQuantifier;
             case ForAll:
                 quantStr    = "forall";
                 entailOrAnd = "==>";
@@ -310,21 +508,27 @@ namespace acslg::analyzer::symbolic {
             default: UNREACHABLE();
         }
 
-        auto zeroStr = callGetACSL(*range_->getOffset()->simplifiedExpr(), config, usedPoints,
+        auto zero = detail::FacadeAccess::exprHandle(
+            detail::FacadeAccess::makeExpr(factory, range().offset()).simplified());
+        auto zeroStr = callGetACSL(detail::HandleAccess::node(zero), config, usedPoints,
                                    currentPoint, getPrecedence(Operator::LessThan), false);
         if (!zeroStr)
             return zeroStr.error();
 
-        auto rightBound = range_->getRightBound();
+        auto rightBound = range().rightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
-        auto nStr = callGetACSL(*rightBound.value()->simplifiedExpr(), config, usedPoints,
-                                currentPoint, getPrecedence(Operator::LessThan), true);
+        auto upper = detail::FacadeAccess::exprHandle(
+            detail::FacadeAccess::makeExpr(factory, rightBound.value()).simplified());
+        auto nStr = callGetACSL(detail::HandleAccess::node(upper), config, usedPoints, currentPoint,
+                                getPrecedence(Operator::LessThan), true);
         if (!nStr)
             return nStr.error();
 
+        auto pred = detail::FacadeAccess::exprHandle(
+            detail::FacadeAccess::makeExpr(factory, pred_).simplified());
         auto predStr = callGetACSL(
-            *pred_->simplifiedExpr(), config, usedPoints, currentPoint,
+            detail::HandleAccess::node(pred), config, usedPoints, currentPoint,
             getPrecedence(entailOrAnd == "==>" ? Operator::Entailment : Operator::LogicalAnd),
             true);
         if (!predStr)
@@ -338,125 +542,30 @@ namespace acslg::analyzer::symbolic {
                              {"pred", predStr.value()}});
     }
 
-    utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getSubstitutedExpr(
-        const Path &pathSubTo,
-        const SourcePoint &pointToSub) const {
-        auto subedExpr  = range_->getSubstitutedExpr(pathSubTo, pointToSub);
-        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-
-        auto subedBody = expr_->getSubstitutedExpr(pathSubTo, pointToSub);
-
-        auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
-        newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newMMOR->expr_  = std::move(subedBody).into_underlying();
-        if (fromPoint_ == pointToSub)
-            TODO();
-        return newMMOR;
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getRangeIndexSubstituted(
-        const SymbolAddrBaseInfo &rangeBase,
-        const SymbolicExpr &indexExpr) const {
-        auto subedExpr  = range_->getRangeIndexSubstituted(rangeBase, indexExpr);
-        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        auto subedBody = expr_->getRangeIndexSubstituted(rangeBase, indexExpr);
-
-        auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
-        newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newMMOR->expr_  = std::move(subedBody).into_underlying();
-        return newMMOR;
-    }
-
-    utils::not_null<std::unique_ptr<SymbolicExpr>> MaxMinOverRange::getSubstitutedValueExpr(
-        const HashExprMap &hashExprMap) const {
-        if (auto it = hashExprMap.find(hash()); it != hashExprMap.end())
-            return it->second->clone();
-        auto subedExpr  = range_->getSubstitutedValueExpr(hashExprMap);
-        auto subedRange = llvm::dyn_cast<SymbolAddress>(subedExpr.get().get());
-        if (subedRange == nullptr || subedRange->getLength() == std::nullopt)
-            ERROR("Substituted expression should be a *range*");
-        auto subedBody = expr_->getSubstitutedValueExpr(hashExprMap);
-
-        auto newMMOR    = std::make_unique<MaxMinOverRange>(*this);
-        newMMOR->range_ = std::make_unique<const SymbolAddress>(*subedRange);
-        newMMOR->expr_  = std::move(subedBody).into_underlying();
-        return newMMOR;
-    }
-
-    MaxMinOverRange &MaxMinOverRange::operator=(const MaxMinOverRange &other) {
-        if (&other == this)
-            return *this;
-        OverRangeExpr::operator=(other);
-        Symbol::operator=(other);
-        extremum_  = other.extremum_;
-        expr_      = other.expr_->clone().into_underlying();
-        fromPoint_ = other.fromPoint_;
-        return *this;
-    }
-
-    MaxMinOverRange::Init MaxMinOverRange::makeInit(
-        utils::not_null<std::unique_ptr<const SymbolAddress>> range) {
-        return Init{deriveType(range->getPointeeType()), std::move(range)};
-    }
-
-    MaxMinOverRange::MaxMinOverRange(Init init,
-                                     std::string_view indexName,
-                                     Extremum extremum,
-                                     SourcePoint fromPoint)
-        : OverRangeExpr(ExprKind::K_MaxMinOverRange,
-                        init.type,
-                        std::move(init.range),
-                        indexName),
-          Symbol(Kind::K_MaxMinOverRange),
-          extremum_(extremum),
-          expr_(makeDefaultExpr(*range_, indexName, fromPoint).into_underlying()),
-          fromPoint_(std::move(fromPoint)) {}
-
-    MaxMinOverRange::MaxMinOverRange(utils::not_null<std::unique_ptr<const SymbolAddress>> range,
-                                     std::string_view indexName,
-                                     Extremum extremum,
-                                     SourcePoint fromPoint)
-        : MaxMinOverRange(makeInit(std::move(range)), indexName, extremum, std::move(fromPoint)) {}
-
-    utils::not_null<std::unique_ptr<const SymbolicExpr>> MaxMinOverRange::makeDefaultExpr(
-        const SymbolAddress &range,
-        std::string_view indexName,
-        const SourcePoint &fromPoint) {
-        auto indexedRange = std::make_unique<SymbolAddress>(range);
-        indexedRange->setOffset(std::make_unique<SymbolAddress::RangeIndex>(indexName));
-        indexedRange->resetLength();
-        return getSymbol(range.getPointeeType(), std::move(indexedRange), fromPoint)
-            .into_underlying();
-    }
-
-    std::string MaxMinOverRange::dump() const {
+    std::string MaxMinOverRangeNode::dump() const {
         using namespace utils::dump_fmt;
         std::ostringstream oss;
         oss << type("MaxMinOverRange ");
         switch (extremum_) {
-            case Extremum::Max: oss << accent("Max"); break;
-            case Extremum::Min: oss << accent("Min"); break;
+            case RangeExtremum::Max: oss << accent("Max"); break;
+            case RangeExtremum::Min: oss << accent("Min"); break;
             default: UNREACHABLE();
         }
-        oss << OverRangeExpr::dump() << ", ";
-        oss << "{" << key("expr: ") << expr_->dump() << "}";
+        oss << OverRangeExprNode::dump() << ", ";
+        oss << "{" << key("expr: ") << expr_.dump() << "}";
         return oss.str();
     }
 
-    bool MaxMinOverRange::equal(const SymbolicExpr &other) const {
-        auto MMOR = llvm::dyn_cast<const MaxMinOverRange>(&other);
+    bool MaxMinOverRangeNode::equal(const detail::SymbolicExprNode &other) const {
+        auto MMOR = dyn_cast<const MaxMinOverRangeNode>(&other);
         if (MMOR == nullptr)
             return false;
-        return OverRangeExpr::equal(*MMOR) && extremum_ == MMOR->extremum_ &&
-               *expr_ == *MMOR->expr_ && fromPoint_ == MMOR->fromPoint_;
+        return OverRangeExprNode::equal(*MMOR) && extremum_ == MMOR->extremum_ &&
+               expr_.structurallyEqual(MMOR->expr_) && fromPoint_ == MMOR->fromPoint_;
     }
 
-    utils::expected<std::string, SymbolicExpr::GetACSLError> MaxMinOverRange::doGetACSL(
-        const GetACSLConfig &config,
+    utils::expected<std::string, ACSLError> MaxMinOverRangeNode::doGetACSL(
+        const ACSLConfig &config,
         std::unordered_set<SourcePoint> &usedPoints,
         std::optional<SourcePoint> currentPoint,
         unsigned,
@@ -478,25 +587,32 @@ namespace acslg::analyzer::symbolic {
             "(\\forall integer ${i}; ${l} <= ${i} < ${u} ==> \\result ${cmp} ${expr}) &&\n"
             "      (\\exists integer ${i}; ${l} <= ${i} < ${u} && \\result == ${expr})"};
 
-        auto rightBound = range_->getRightBound();
+        auto rightBound = range().rightBound();
         if (rightBound == std::nullopt)
             UNREACHABLE();
 
+        auto &factory = ExprFactoryScope::current();
         auto [prefix, suffix] =
             details::getPrefixSuffixAndUpdateMap(config, usedPoints, currentPoint, fromPoint_);
 
-        auto lowerStr = callGetACSL(*range_->getOffset()->simplifiedExpr(), config, usedPoints,
+        auto lower = detail::FacadeAccess::exprHandle(
+            detail::FacadeAccess::makeExpr(factory, range().offset()).simplified());
+        auto lowerStr = callGetACSL(detail::HandleAccess::node(lower), config, usedPoints,
                                     fromPoint_, getPrecedence(Operator::LessEqual), false);
         if (!lowerStr)
             return lowerStr.error();
 
-        auto upperStr = callGetACSL(*rightBound.value()->simplifiedExpr(), config, usedPoints,
+        auto upper = detail::FacadeAccess::exprHandle(
+            detail::FacadeAccess::makeExpr(factory, rightBound.value()).simplified());
+        auto upperStr = callGetACSL(detail::HandleAccess::node(upper), config, usedPoints,
                                     fromPoint_, getPrecedence(Operator::LessThan), true);
         if (!upperStr)
             return upperStr.error();
 
-        auto cmpOp   = extremum_ == Extremum::Max ? Operator::GreaterEqual : Operator::LessEqual;
-        auto exprStr = callGetACSL(*expr_->simplifiedExpr(), config, usedPoints, fromPoint_,
+        auto cmpOp = extremum_ == RangeExtremum::Max ? Operator::GreaterEqual : Operator::LessEqual;
+        auto expr = detail::FacadeAccess::exprHandle(
+            detail::FacadeAccess::makeExpr(factory, expr_).simplified());
+        auto exprStr = callGetACSL(detail::HandleAccess::node(expr), config, usedPoints, fromPoint_,
                                    getPrecedence(cmpOp), true);
         if (!exprStr)
             return exprStr.error();
@@ -504,7 +620,7 @@ namespace acslg::analyzer::symbolic {
         auto exprVal = (!prefix.empty() || !suffix.empty()) ? prefix + exprStr.value() + suffix
                                                             : exprStr.value();
 
-        std::string cmpStr = extremum_ == Extremum::Max ? ">=" : "<=";
+        std::string cmpStr = extremum_ == RangeExtremum::Max ? ">=" : "<=";
 
         return tmpl.to_string({{"i", indexName_},
                                {"l", lowerStr.value()},

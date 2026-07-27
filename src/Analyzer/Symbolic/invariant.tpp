@@ -16,8 +16,7 @@ namespace acslg::analyzer {
         namespace ppl = Parma_Polyhedra_Library;
         ppl::C_Polyhedron buildIdentityPoly(const VarManager &vm);
         ppl::C_Polyhedron convertFormulaToPoly(const Formulas &assertions, const VarManager &vm);
-        Formulas cloneFormulas(const Formulas &input);
-        std::vector<Formulas> negateFormulas(Formulas input);
+        std::vector<Formulas> negateFormulas(const Formulas &input);
         ppl::C_Polyhedron buildPathPoly(const Path &path, const VarManager &vm, bool init = false);
         ppl::C_Polyhedron primedPolyhedron(const ppl::C_Polyhedron &poly, const VarManager &vm);
         Formulas preprocessConjConds(const Formulas &conjConds);
@@ -42,8 +41,8 @@ namespace acslg::analyzer {
             const VarManager &vm);
 
         using AddrValueAndCondsPair = std::pair<
-            symbolic::AddressBoxMap<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>,
-            std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>;
+            symbolic::AddressBoxMap<symbolic::Expr>,
+            PathConditionList>;
         AddrValueAndCondsPair buildPostState(const ppl::C_Polyhedron &poly,
                                              const Path &initPath,
                                              const VarManager &vm);
@@ -58,7 +57,7 @@ namespace acslg::analyzer {
      * @param generateBranches [in] Whether to enumerate branch-specific post-states.
      * @return Invariants and synthesized post-states for normal and interrupt exits.
      */
-    InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
+    InvsAndPostStates buildLoopInvariant(const symbolic::Expr &loopCond,
                                          const Path &entryPath,
                                          const ProgramState &loopCurrent,
                                          std::ranges::range auto &inactivePaths,
@@ -108,13 +107,14 @@ namespace acslg::analyzer {
 
         auto identityPoly = details::buildIdentityPoly(vm); // shared across all paths
 
+        auto importedLoopCond = loopCond.importedInto(entryPath.getExprFactory());
         Formulas assertions;
-        assertions.push_back(std::move(loopCond)); // Yes, there is only one.
+        assertions.push_back(importedLoopCond);
         assertions               = details::preprocessConjConds(std::move(assertions));
         auto baseConditionPoly   = details::convertFormulaToPoly(assertions, vm);
         auto primedConditionPoly = details::primedPolyhedron(baseConditionPoly, vm);
 
-        auto negatedConds = details::negateFormulas(details::cloneFormulas(assertions));
+        auto negatedConds = details::negateFormulas(assertions);
 
         // === Precompute negated polyhedra
         std::vector<Parma_Polyhedra_Library::C_Polyhedron> negatedCondPolys;
@@ -292,7 +292,7 @@ namespace acslg::analyzer {
     //         auto *baseConditionPoly    = convertFormulaToPoly(assertions, vm);
     //         auto *primedConditionPoly  = primedPolyhedron(*baseConditionPoly, vm);
 
-    //         auto negatedConds = negateFormulas(cloneFormulas(assertions));
+    //         auto negatedConds = negateFormulas(assertions);
 
     //         // === Precompute negated polyhedra
     //         std::vector<C_Polyhedron *> negatedPolys;

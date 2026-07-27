@@ -63,20 +63,10 @@ namespace acslg::spec_generator {
             }
             return plugins;
         }
-    } // namespace
 
-    /**
-     * @brief Deep-assign from another pattern by cloning its symbolic value.
-     * @param other Source pattern.
-     * @return Reference to this.
-     */
-    LoopInfo::Pattern &LoopInfo::Pattern::operator=(const Pattern &other) {
-        if (this == &other)
-            return *this;
-        initialValue = other.initialValue->clone().into_underlying();
-        step         = other.step;
-        return *this;
-    }
+        symb::Expr unknownExpr() { return symb::Expr::unknown(); }
+
+    } // namespace
 
     /**
      * @brief Render the pattern as a readable string for debugging.
@@ -89,7 +79,7 @@ namespace acslg::spec_generator {
 
         oss << type("LoopPattern") << " {\n";
         oss << "  " << key("initialValue") << ": ";
-        oss << initialValue->dump() << "\n";
+        oss << initialValue.dump() << "\n";
         oss << "  " << key("step") << ": " << lit(std::to_string(step)) << "\n";
         oss << "}";
 
@@ -125,6 +115,7 @@ namespace acslg::spec_generator {
         const analyzer::ProgramState &pre,
         const analyzer::ProgramState &post,
         std::string_view groupName) {
+        symb::ExprFactoryScope exprScope(pre.getExprFactory());
         auto plugins     = getPlugins<FunctionContractPlugin>(groupName);
         std::string spec = ACSL_HEAD.to_string();
 
@@ -156,6 +147,7 @@ namespace acslg::spec_generator {
                                             const analyzer::ProgramState &loopEntry,
                                             const clang::Stmt *loopStmt,
                                             std::string_view groupName) {
+        symb::ExprFactoryScope exprScope(preState.getExprFactory());
         auto plugins = getPlugins<LoopInfoPlugin>(groupName);
 
         LoopInfo loopInfo{loopStmt};
@@ -180,6 +172,7 @@ namespace acslg::spec_generator {
                               const analyzer::ProgramState &loopEntry,
                               LoopInfo &loopInfo,
                               std::string_view groupName) {
+        symb::ExprFactoryScope exprScope(preState.getExprFactory());
         auto plugins = getPlugins<LoopInfoPlugin>(groupName);
 
         for (auto &plugin : plugins) {
@@ -207,6 +200,7 @@ namespace acslg::spec_generator {
                                                       const LoopInfo &loopInfo,
                                                       std::string_view piGroupName,
                                                       std::string_view psGroupName) {
+        symb::ExprFactoryScope exprScope(preState.getExprFactory());
         auto piPlugins = getPlugins<PathInsensitiveLoopInvPlugin>(piGroupName);
         auto psPlugins = getPlugins<PathSensitiveLoopInvPlugin>(psGroupName);
         std::vector<std::unique_ptr<analyzer::Path>> invariants;
@@ -258,8 +252,8 @@ namespace acslg::spec_generator {
         assert(loopInfo.entryAndCurrentInfo);
         size_t interruptPathNum = loopInfo.entryAndCurrentInfo->inactivePaths.size();
 
-        auto exprEqual = [](const symb::SymbolicExpr &lhs, const symb::SymbolicExpr &rhs) {
-            return lhs.equal(rhs);
+        auto exprEqual = [](const symb::Expr &lhs, const symb::Expr &rhs) {
+            return lhs.structurallyEqual(rhs);
         };
 
         auto mergePostInfo = [&](PostPSInfo &lhs, const PostPSInfo &rhs) {
@@ -277,7 +271,7 @@ namespace acslg::spec_generator {
                 auto rhsIt = rhs.memoryMap.find(addr);
 
                 if (lhsIt != lhs.memoryMap.end() && rhsIt != rhs.memoryMap.end()) {
-                    if (exprEqual(*lhsIt->second, *rhsIt->second))
+                    if (exprEqual(lhsIt->second, rhsIt->second))
                         continue;
                 } else if (rhsIt != rhs.memoryMap.end()) {
                     // If only rhs writes the address, prefer its value to preserve available info.
@@ -287,30 +281,21 @@ namespace acslg::spec_generator {
                     continue;
                 }
 
-                lhs.memoryMap.insert_or_assign(addr,
-                                               symb::UnknownExpr::makeUnknown().into_underlying());
+                lhs.memoryMap.insert_or_assign(addr, unknownExpr());
             }
 
-            std::vector<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> intersected;
+            analyzer::PathConditions intersected;
             intersected.reserve(std::min(lhs.pathConds.size(), rhs.pathConds.size()));
-            for (auto &cond : lhs.pathConds) {
-                bool found = false;
-                for (const auto &rcond : rhs.pathConds) {
-                    if (exprEqual(*cond, *rcond)) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (found)
-                    intersected.push_back(std::move(cond));
-            }
+            for (const auto &cond : lhs.pathConds)
+                if (rhs.pathConds.find(cond) != rhs.pathConds.end())
+                    intersected.emplace(cond);
             lhs.pathConds = std::move(intersected);
 
             if (lhs.pathState == analyzer::Path::PathState::Return) {
                 if (!(lhs.returnExpr && rhs.returnExpr))
                     UNREACHABLE();
-                if (!exprEqual(*lhs.returnExpr.value(), *rhs.returnExpr.value())) {
-                    lhs.returnExpr = symb::UnknownExpr::makeUnknown().into_underlying();
+                if (!lhs.returnExpr->structurallyEqual(*rhs.returnExpr)) {
+                    lhs.returnExpr = symb::Expr::unknown();
                 }
             }
         };
@@ -335,27 +320,30 @@ namespace acslg::spec_generator {
 
         auto updateResultInfoWithInfo = [&loopEntryPoint](const analyzer::Path &currentPath,
                                                           PostPSInfo &toUpdate, auto &&info) {
-            for (auto &[addr, value] : info.memoryMap) {
-                auto subedAddrExpr = addr.get().getSubstitutedExpr(currentPath, loopEntryPoint);
-                auto subedAddr     = llvm::dyn_cast<const symb::Address>(subedAddrExpr.get().get());
-                if (subedAddr == nullptr)
+            auto &factory = symb::ExprFactoryScope::current();
+            for (const auto &[addr, value] : info.memoryMap) {
+                auto subedAddr = addr.importedInto(factory)
+                                     .asExpr()
+                                     .substitutePath(currentPath, loopEntryPoint)
+                                     .tryAsAddress();
+                if (!subedAddr)
                     UNREACHABLE();
-                auto subedValue = value->getSubstitutedExpr(currentPath, loopEntryPoint);
-                if (auto it = toUpdate.memoryMap.find(*subedAddr);
-                    it != toUpdate.memoryMap.end() && !it->second->isUnknown()) {
+                auto subedValue = value.substitutePath(currentPath, loopEntryPoint);
+                if (auto it = toUpdate.memoryMap.find(symb::AddressBox{*subedAddr});
+                    it != toUpdate.memoryMap.end() && !it->second.isUnknown()) {
                     WARN("Another plugin has already updated this address. The new value: "
                          "{" +
-                         subedValue->dump() + "} is discarded.");
+                         subedValue.dump() + "} is discarded.");
                     continue;
                 }
-                toUpdate.memoryMap.insert_or_assign(*subedAddr, std::move(subedValue));
+                toUpdate.memoryMap.insert_or_assign(symb::AddressBox{*subedAddr}, subedValue);
             }
 
-            for (auto &cond : info.pathConds) {
+            for (const auto &cond : info.pathConds) {
                 // Substitute conditions so they refer to the current path's viewpoint of the loop
                 // entry.
-                auto subedConds = cond->getSubstitutedExpr(currentPath, loopEntryPoint);
-                toUpdate.pathConds.push_back(std::move(subedConds));
+                auto subedCond = cond.substitutePath(currentPath, loopEntryPoint);
+                toUpdate.pathConds.insert(subedCond.importedInto(factory));
                 // todo: may insert for each unmodified position:
                 // Symbol(with fromPoint_ = afterLoop) == the current value.
             }
@@ -364,10 +352,11 @@ namespace acslg::spec_generator {
                 toUpdate.pathState = info.pathState;
                 if (info.pathState == analyzer::Path::PathState::Return) {
                     assert(info.returnExpr);
-                    if (info.returnExpr.value()->isUnknown())
+                    if (info.returnExpr.value().isUnknown())
                         return;
-                    toUpdate.returnExpr =
-                        info.returnExpr.value()->getSubstitutedExpr(currentPath, loopEntryPoint);
+                    auto subedReturnExpr =
+                        info.returnExpr->substitutePath(currentPath, loopEntryPoint);
+                    toUpdate.returnExpr = subedReturnExpr;
                 }
             }
         };
@@ -578,22 +567,25 @@ namespace acslg::spec_generator {
             auto appendPostPaths = [&](std::vector<PostPSInfo> &branches) {
                 for (auto &postBranchInfo : branches) {
                     auto postPath = prePath->clone();
-                    for (auto &[addr, value] : postBranchInfo.memoryMap) {
-                        auto root = addr.get().getFromRoot();
+                    for (auto [addr, value] : postBranchInfo.memoryMap) {
+                        auto root = addr.getFromRoot();
                         if (root == std::nullopt)
                             TODO();
                         // Skip writes to symbols that were not visible in the pre-path to avoid
                         // inventing new locals.
                         if (!postPath->getVarAddr().contains(root.value()))
                             continue;
-                        postPath->updateMemory(addr, std::move(value));
+                        postPath->updateMemory(addr.importedInto(postPath->getExprFactory()), value);
                     }
                     // Carry over path termination state and optional return expression.
                     postPath->setPathState(postBranchInfo.pathState);
-                    postPath->setReturnExpr(std::move(postBranchInfo.returnExpr));
+                    if (postBranchInfo.returnExpr)
+                        postPath->setReturnExpr(postBranchInfo.returnExpr.value());
+                    else
+                        postPath->setReturnExpr(std::nullopt);
                     // Reapply substituted path conditions produced by plugins.
-                    for (auto &pathCond : postBranchInfo.pathConds)
-                        postPath->insertPathCondition(std::move(pathCond));
+                    for (auto pathCond : postBranchInfo.pathConds)
+                        postPath->insertPathCondition(pathCond);
                     postState->insertPath(std::move(postPath));
                 }
             };

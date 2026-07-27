@@ -21,6 +21,27 @@
 #include "Utils/utils.h"
 
 namespace acslg::spec_generator {
+    namespace detail {
+        inline analyzer::symbolic::Expr importPostExprThroughCurrentFactory(
+            const analyzer::symbolic::Expr &expr) {
+            return expr.importedInto(analyzer::symbolic::ExprFactoryScope::current());
+        }
+
+        inline analyzer::symbolic::AddressBox importPostAddressThroughCurrentFactory(
+            const analyzer::symbolic::AddressBox &address) {
+            return analyzer::symbolic::AddressBox{
+                address.importedInto(analyzer::symbolic::ExprFactoryScope::current())};
+        }
+
+        inline analyzer::symbolic::AddressBox importPostAddressThroughCurrentFactory(
+            const analyzer::symbolic::Addr &address) {
+            return analyzer::symbolic::AddressBox{
+                address.importedInto(analyzer::symbolic::ExprFactoryScope::current())};
+        }
+    } // namespace detail
+
+    using PostMemoryMap = analyzer::symbolic::AddressBoxMap<analyzer::symbolic::Expr>;
+
     /**
      * @brief Emit an ACSL function contract using registered plugins.
      * @param pre [in] Program state before function execution.
@@ -42,20 +63,17 @@ namespace acslg::spec_generator {
      */
     struct LoopInfo {
         struct Pattern {
-            utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>> initialValue;
+            analyzer::symbolic::Expr initialValue;
             int64_t step;
             /**
              * @brief Construct a pattern with initial symbolic value and fixed step.
              * @param init [in] Initial symbolic value for the pattern.
              * @param st [in] Step amount applied each iteration.
              */
-            Pattern(utils::not_null<std::unique_ptr<const analyzer::symbolic::SymbolicExpr>> init,
-                    int64_t st)
+            Pattern(analyzer::symbolic::Expr init, int64_t st)
                 : initialValue(std::move(init)), step(st) {}
-            /// @brief Copy-construct with deep-cloned symbolic value.
-            Pattern(const Pattern &other)
-                : initialValue(other.initialValue->clone().into_underlying()), step(other.step) {}
-            Pattern &operator=(const Pattern &other);
+            Pattern(const Pattern &other)            = default;
+            Pattern &operator=(const Pattern &other) = default;
             Pattern(Pattern &&other)            = default;
             Pattern &operator=(Pattern &&other) = default;
             /**
@@ -89,18 +107,15 @@ namespace acslg::spec_generator {
         // SetIndexPlugin
         struct IndexInfo {
             utils::not_null<const clang::Expr *> indexExpr;
-            utils::not_null<std::unique_ptr<analyzer::symbolic::Address>>
-                indexRealAddr; // index's sole address on pre-state
-            utils::not_null<std::unique_ptr<analyzer::symbolic::Address>> indexSymbolicAddr;
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-                indexSymbolicValue; // Varibale or Address
+            analyzer::symbolic::Addr indexRealAddr; // index's sole address on pre-state
+            analyzer::symbolic::Addr indexSymbolicAddr;
+            analyzer::symbolic::Expr indexSymbolicValue; // Variable or address
             clang::BinaryOperator::Opcode op;
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-                indexBound; // exclusive bound
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>> preciseLoopCount;
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>
-                maxLoopCount; // The absolute value of the difference between the starting index
-                              // and the maximum/minimum possible index.
+            analyzer::symbolic::Expr indexBound; // exclusive bound
+            analyzer::symbolic::Expr preciseLoopCount;
+            analyzer::symbolic::Expr maxLoopCount; // The absolute value of the difference
+                                                   // between the starting index and the
+                                                   // maximum/minimum possible index.
             Pattern indexPattern;
             bool isLocal; // Useless, delete this.
         };
@@ -123,9 +138,7 @@ namespace acslg::spec_generator {
         std::optional<PatternInfo> patternInfo;
 
         // SetSharedStatePlugin
-        std::optional<analyzer::symbolic::AddressBoxMap<
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>>
-            sharedMemoryMap;
+        std::optional<PostMemoryMap> sharedMemoryMap;
         std::optional<analyzer::PathConditions> sharedPathConds;
 
         // TODO(more info to be added)
@@ -259,30 +272,23 @@ namespace acslg::spec_generator {
     };
 
     struct PostPIInfo {
-        analyzer::symbolic::AddressBoxMap<
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
-            memoryMap;
-        std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pathConds;
+        PostMemoryMap memoryMap;
+        analyzer::PathConditions pathConds;
 
-        PostPIInfo(
-            analyzer::symbolic::AddressBoxMap<
-                utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
-            std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pcs)
+        PostPIInfo(PostMemoryMap mem, analyzer::PathConditions pcs)
             : memoryMap(std::move(mem)), pathConds(std::move(pcs)) {}
 
         PostPIInfo(const PostPIInfo &other) {
             for (const auto &kv : other.memoryMap) {
                 const auto &addr  = kv.first;
                 const auto &exprp = kv.second;
-                auto cloned       = exprp->clone();
-                memoryMap.emplace(addr, utils::not_null{std::move(cloned)});
+                memoryMap.emplace(detail::importPostAddressThroughCurrentFactory(addr),
+                                  detail::importPostExprThroughCurrentFactory(exprp));
             }
 
             pathConds.reserve(other.pathConds.size());
-            for (const auto &exprp : other.pathConds) {
-                auto cloned = exprp->clone();
-                pathConds.push_back(utils::not_null{std::move(cloned)});
-            }
+            for (const auto &expr : other.pathConds)
+                pathConds.emplace(detail::importPostExprThroughCurrentFactory(expr));
         }
 
         PostPIInfo()                       = default;
@@ -312,19 +318,15 @@ namespace acslg::spec_generator {
     };
 
     struct PostPSInfo {
-        analyzer::symbolic::AddressBoxMap<
-            utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
-            memoryMap;
-        std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pathConds;
+        PostMemoryMap memoryMap;
+        analyzer::PathConditions pathConds;
         analyzer::Path::PathState pathState;
-        std::optional<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> returnExpr;
+        std::optional<analyzer::symbolic::Expr> returnExpr;
 
-        PostPSInfo(
-            analyzer::symbolic::AddressBoxMap<
-                utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> mem,
-            std::vector<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> pcs,
-            analyzer::Path::PathState ps,
-            std::optional<utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>> re)
+        PostPSInfo(PostMemoryMap mem,
+                   analyzer::PathConditions pcs,
+                   analyzer::Path::PathState ps,
+                   std::optional<analyzer::symbolic::Expr> re)
             : memoryMap(std::move(mem)), pathConds(std::move(pcs)), pathState(ps),
               returnExpr(std::move(re)) {}
 
@@ -332,18 +334,16 @@ namespace acslg::spec_generator {
             for (const auto &kv : other.memoryMap) {
                 const auto &addr = kv.first;
                 const auto &expr = kv.second;
-                auto cloned      = expr->clone();
-                memoryMap.emplace(addr, utils::not_null{std::move(cloned)});
+                memoryMap.emplace(detail::importPostAddressThroughCurrentFactory(addr),
+                                  detail::importPostExprThroughCurrentFactory(expr));
             }
 
             pathConds.reserve(other.pathConds.size());
-            for (const auto &expr : other.pathConds) {
-                auto cloned = expr->clone();
-                pathConds.push_back(utils::not_null{std::move(cloned)});
-            }
+            for (const auto &expr : other.pathConds)
+                pathConds.emplace(detail::importPostExprThroughCurrentFactory(expr));
 
             if (other.returnExpr)
-                returnExpr = other.returnExpr.value()->clone();
+                returnExpr.emplace(detail::importPostExprThroughCurrentFactory(*other.returnExpr));
         }
 
         PostPSInfo()                       = default;

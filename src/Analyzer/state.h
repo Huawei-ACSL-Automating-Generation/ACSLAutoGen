@@ -18,56 +18,18 @@
 #include "Context/context.h"
 
 namespace acslg::analyzer {
-    using Formulas = std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>;
-    struct SymbolicExprPtrHash {
-        using is_transparent = void;
-
-        std::size_t operator()(
-            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &ptr) const noexcept {
-            return ptr->hash();
-        }
-        std::size_t operator()(const symbolic::SymbolicExpr &expr) const noexcept {
-            return expr.hash();
-        }
-        std::size_t operator()(const symbolic::SymbolicExpr *expr) const noexcept {
-            return expr ? expr->hash() : 0;
-        }
+    using Formulas = std::vector<symbolic::Expr>;
+    struct PathConditionHash {
+        std::size_t operator()(const symbolic::Expr &expr) const noexcept { return expr.hash(); }
     };
-    struct SymbolicExprPtrEqual {
-        using is_transparent = void;
-
-        bool operator()(
-            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
-            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const noexcept {
-            return lhs->equal(*rhs);
-        }
-        bool operator()(const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
-                        const symbolic::SymbolicExpr &rhs) const noexcept {
-            return lhs->equal(rhs);
-        }
-        bool operator()(
-            const symbolic::SymbolicExpr &lhs,
-            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const noexcept {
-            return lhs.equal(*rhs);
-        }
-        bool operator()(const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &lhs,
-                        const symbolic::SymbolicExpr *rhs) const noexcept {
-            return rhs && lhs->equal(*rhs);
-        }
-        bool operator()(
-            const symbolic::SymbolicExpr *lhs,
-            const utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &rhs) const noexcept {
-            return lhs && lhs->equal(*rhs);
-        }
-        bool operator()(const symbolic::SymbolicExpr *lhs,
-                        const symbolic::SymbolicExpr *rhs) const noexcept {
-            return lhs && rhs && lhs->equal(*rhs);
+    struct PathConditionEqual {
+        bool operator()(const symbolic::Expr &lhs, const symbolic::Expr &rhs) const noexcept {
+            return lhs == rhs || lhs.structurallyEqual(rhs);
         }
     };
     using PathConditions =
-        std::unordered_set<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>,
-                           SymbolicExprPtrHash,
-                           SymbolicExprPtrEqual>;
+        std::unordered_set<symbolic::Expr, PathConditionHash, PathConditionEqual>;
+    using PathConditionList = std::vector<symbolic::Expr>;
     using TransRel = std::tuple<int, int, Parma_Polyhedra_Library::C_Polyhedron *>;
     using InitRel  = std::pair<int, Parma_Polyhedra_Library::C_Polyhedron *>;
 
@@ -97,8 +59,9 @@ namespace acslg::analyzer {
          * and its associated symbolic expression in a flattened sequence.
          */
         struct flat_view;
-        /// @brief Default construct an empty memory model.
-        MemoryModel() = default;
+        /// @brief Default construct an empty memory model bound to the active expression factory.
+        MemoryModel();
+        explicit MemoryModel(symbolic::ExprFactory &factory);
         /// @brief Copy construct, duplicating all stored symbolic ranges.
         MemoryModel(const MemoryModel &);
         /// @brief Copy-assign, replacing memory content with another model.
@@ -111,23 +74,21 @@ namespace acslg::analyzer {
          * @param addr The symbolic address to read from.
          * @return Optional containing the expression if found, otherwise empty.
          */
-        std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> read(
-            const symbolic::Address &addr) const;
+        std::optional<symbolic::Expr> read(const symbolic::Addr &addr) const;
 
         /**
          * @brief Writes a symbolic expression to the given address.
          * @param address The symbolic address to write to.
          * @param value The symbolic expression to store.
          */
-        void write(const symbolic::Address &address,
-                   utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> value);
+        void write(const symbolic::Addr &address, const symbolic::Expr &value);
 
         /**
          * @brief Checks whether a given address is contained in the memory model.
          * @param addr The address to check.
          * @return true if address exists, false otherwise.
          */
-        bool contains(const symbolic::Address &addr) const;
+        bool contains(const symbolic::Addr &addr) const;
 
         /// Clears all memory maps.
         void clear() {
@@ -218,11 +179,10 @@ namespace acslg::analyzer {
 
         /// Constant range [offset, offset+length)
         using ConstRange = std::pair<uint64_t, uint64_t>;
+        using StoredValue = symbolic::Expr;
 
         /// SymbolValue address to symbolic expression mapping
-        std::unordered_map<symbolic::VariableAddress,
-                           utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>
-            memoryMap_variableAddr_;
+        symbolic::AddressBoxMap<StoredValue> memoryMap_variableAddr_;
 
         /**
          * @brief Constant range mapping.
@@ -230,15 +190,21 @@ namespace acslg::analyzer {
          */
         std::unordered_map<
             symbolic::SymbolAddrBaseInfo,
-            std::map<ConstRange, utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>
+            std::map<ConstRange, StoredValue>>
             memoryMap_constantRange_; ///< ConstRanges must be non-overlapping and non-zero-length.
 
         /// Symbolic range mapping
         std::unordered_map<
             symbolic::SymbolAddrBaseInfo,
-            std::unordered_map<symbolic::SymbolAddress,
-                               utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>
+            symbolic::AddressBoxMap<StoredValue>>
             memoryMap_symbolicRange_;
+
+        symbolic::ExprFactory &factory() const { return *factory_; }
+        StoredValue copyStoredValueFrom(const MemoryModel &other, StoredValue value);
+        void copyEntriesFrom(const MemoryModel &other);
+        void writeCanonical(const symbolic::Addr &address, const StoredValue &value);
+
+        symbolic::ExprFactory *factory_;
     };
 
     /**
@@ -255,23 +221,36 @@ namespace acslg::analyzer {
          * @param base Base info for the symbol address.
          * @param off Offset within the base.
          * @param len Length of the range.
-         * @return A unique_ptr to the composed Address.
+         * @return Factory-owned address facade.
          * @note Length must be non-zero.
          */
-        static std::unique_ptr<symbolic::Address> compose_address(symbolic::SymbolAddrBaseInfo base,
-                                                                  uint64_t off,
-                                                                  uint64_t len) {
+        template <class Owner>
+        static symbolic::Addr compose_address(Owner &owner,
+                                              symbolic::SymbolAddrBaseInfo base,
+                                              uint64_t off,
+                                              uint64_t len) {
             if (len == 0)
                 ERROR("Length should not be 0, something goes wrong.");
-            else if (len == 1)
-                return std::make_unique<symbolic::SymbolAddress>(
-                    base.pointeeType_, std::move(base.fromAddr_), base.fromPoint_,
-                    std::make_unique<symbolic::LiteralExpr>(off));
-            else
-                return make_unique<symbolic::SymbolAddress>(
-                    base.pointeeType_, std::move(base.fromAddr_), base.fromPoint_,
-                    std::make_unique<symbolic::LiteralExpr>(off),
-                    std::make_unique<symbolic::LiteralExpr>(len));
+
+            auto &factory = owner.factory();
+            auto from     = base.fromAddress(factory);
+
+            symbolic::LiteralExpr offset{factory, off};
+            auto addr = [&]() {
+                if (len == 1) {
+                    if (from)
+                        return symbolic::Addr::symbol(base.pointeeType(), *from, base.fromPoint(),
+                                                      offset);
+                    return symbolic::Addr::symbol(base.pointeeType(), base.fromPoint(), offset);
+                }
+
+                symbolic::LiteralExpr length{factory, len};
+                if (from)
+                    return symbolic::Addr::symbol(base.pointeeType(), *from, base.fromPoint(),
+                                                  offset, length);
+                return symbolic::Addr::symbol(base.pointeeType(), base.fromPoint(), offset, length);
+            }();
+            return addr;
         }
 
         /// Helper to access variable address map from owner
@@ -294,7 +273,7 @@ namespace acslg::analyzer {
          *
          * Iterates over all memory entries (variable addresses, constant ranges,
          * symbolic ranges, and fields of Structure objects). Produces pairs of
-         * (Address, SymbolicExpr).
+         * (Address, factory-owning expression facade).
          *
          * @tparam IsConst true for const_iterator, false for iterator
          */
@@ -308,11 +287,7 @@ namespace acslg::analyzer {
             using SInner =
                 decltype(symb_range_map(std::declval<Owner &>()).begin()->second.begin());
 
-            using UPtrRef =
-                std::conditional_t<IsConst,
-                                   utils::not_null<const symbolic::SymbolicExpr *>,
-                                   utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> &>;
-            using R = std::pair<symbolic::AddressBox, UPtrRef>;
+            using R = std::pair<symbolic::Addr, symbolic::Expr>;
 
           public:
             /// Default constructor
@@ -341,7 +316,7 @@ namespace acslg::analyzer {
 
             /**
              * @brief Dereference operator
-             * @return A pair of (AddressBox, SymbolicExpr reference)
+             * @return A pair of factory-owning address and expression facades.
              *
              * Depending on phase, extracts variable's address, constant range, symbolic range,
              * or Structure field as address and associated value.
@@ -349,47 +324,31 @@ namespace acslg::analyzer {
             R operator*() const {
                 switch (phase_) {
                     case Phase::VarAddr: {
-                        const symbolic::Address &addr = var_outer_->first;
-                        if constexpr (IsConst)
-                            return R{addr, var_outer_->second.get().get()};
-                        else
-                            return R{addr, var_outer_->second};
+                        return R{var_outer_->first.importedInto(owner_.factory()),
+                                 var_outer_->second};
                     }
                     case Phase::Const: {
                         const symbolic::SymbolAddrBaseInfo &base = c_outer_->first;
                         const auto [off, offPlusLen]             = c_inner_->first;
-                        auto addr = compose_address(base, off, offPlusLen - off);
-                        if constexpr (IsConst)
-                            return R{std::move(addr), c_inner_->second.get().get()};
-                        else
-                            return R{std::move(addr), c_inner_->second};
+                        auto addr = compose_address(owner_, base, off, offPlusLen - off);
+                        return R{std::move(addr), c_inner_->second};
                     }
                     case Phase::Symb: {
-                        const symbolic::Address &addr = s_inner_->first;
-                        if constexpr (IsConst)
-                            return R{addr, s_inner_->second.get().get()};
-                        else
-                            return R{addr, s_inner_->second};
+                        return R{s_inner_->first.importedInto(owner_.factory()),
+                                 s_inner_->second};
                     }
                     case Phase::Field: {
                         // Handle Structure fields
                         assert(!state_saver_.empty());
                         auto &current_state = state_saver_.top();
-                        assert(current_state.st_ != nullptr);
                         auto &baseAddr = current_state.base_addr_;
-                        auto &st       = *current_state.st_;
+                        auto &st       = current_state.structure_;
                         auto &index    = current_state.index_;
                         auto fieldType =
-                            std::ranges::next(st.getInfo().definition_->field_begin(), index)
+                            std::ranges::next(st.info().definition_->field_begin(), index)
                                 ->getType();
-                        auto addr = make_unique<symbolic::FieldAddress>(
-                            fieldType, st.getInfo().definition_,
-                            baseAddr.get().addressClone().into_underlying(), index);
-                        auto &fieldValue = st.getFieldValue(index);
-                        if constexpr (IsConst)
-                            return R{std::move(addr), fieldValue.get().get()};
-                        else
-                            return R{std::move(addr), fieldValue};
+                        auto addr = baseAddr.field(fieldType, st.info().definition_, index);
+                        return R{std::move(addr), st.field(index)};
                     }
                     default: break;
                 }
@@ -430,7 +389,8 @@ namespace acslg::analyzer {
                     case Phase::Field: {
                         assert(!a.state_saver_.empty());
                         assert(!b.state_saver_.empty());
-                        return a.state_saver_.top().st_ == b.state_saver_.top().st_ &&
+                        return a.state_saver_.top().structure_ ==
+                                   b.state_saver_.top().structure_ &&
                                a.state_saver_.top().index_ == b.state_saver_.top().index_;
                     }
                     default: UNREACHABLE();
@@ -460,10 +420,10 @@ namespace acslg::analyzer {
 
             /// State for traversing fields inside a Structure
             struct FieldState {
-                const symbolic::AddressBox base_addr_; ///< Base address of the structure
-                symbolic::Structure *st_;              ///< Pointer to Structure
-                size_t index_;                         ///< Current field index
-                Phase pre_phase_;                      ///< Previous phase before entering fields
+                symbolic::Addr base_addr_; ///< Factory-owning address of the structure
+                symbolic::StructureExpr structure_; ///< Factory-owning structure expression
+                size_t index_;             ///< Current field index
+                Phase pre_phase_;          ///< Previous phase before entering fields
             };
             std::stack<FieldState> state_saver_; ///< Stack of Structure traversal states
 
@@ -553,8 +513,7 @@ namespace acslg::analyzer {
                         assert(!state_saver_.empty());
                         auto &current_state = state_saver_.top();
                         ++current_state.index_;
-                        assert(current_state.st_ != nullptr);
-                        if (current_state.index_ < current_state.st_->getNumFields())
+                        if (current_state.index_ < current_state.structure_.size())
                             return;
                         // End of fields -> return to previous phase
                         phase_ = current_state.pre_phase_;
@@ -569,15 +528,14 @@ namespace acslg::analyzer {
             /// Advance iterator, diving into Structure fields if needed
             void advance() {
                 auto &&[addr, value] = (*this).operator*();
-                auto st              = llvm::dyn_cast<const symbolic::Structure>(value.get());
-                if (st == nullptr) {
+                auto st              = symbolic::StructureExpr::tryFrom(value);
+                if (!st) {
                     advance_without_check();
                     return;
                 }
 
                 // Dive into Structure's fields
-                auto state =
-                    FieldState{std::move(addr), const_cast<symbolic::Structure *>(st), 0, phase_};
+                auto state = FieldState{std::move(addr), std::move(*st), 0, phase_};
                 state_saver_.push(std::move(state));
                 phase_ = Phase::Field;
             }
@@ -614,7 +572,8 @@ namespace acslg::analyzer {
      */
     class Path {
       public:
-        using EvalResult = std::pair<std::vector<utils::not_null<std::unique_ptr<Path>>>, Formulas>;
+        using EvalResult = std::pair<std::vector<utils::not_null<std::unique_ptr<Path>>>,
+                                     std::vector<symbolic::Expr>>;
 
         /**
          * @brief Construct a path with an initial source point.
@@ -622,7 +581,7 @@ namespace acslg::analyzer {
          * @param startPoint [in] Source location representing where symbolic execution begins.
          */
         Path(context::ACSLGContext &context, symbolic::SourcePoint startPoint)
-            : context_(context), startPoint_(startPoint) {};
+            : memoryState_(context.getExprFactory()), context_(context), startPoint_(startPoint) {};
         ~Path() = default;
         /**
          * @brief Copy constructor supporting shallow or deep semantics depending on usage.
@@ -652,17 +611,16 @@ namespace acslg::analyzer {
         /**
          * @brief Derive the symbolic l-value address from a left-hand side expression.
          * @param lhs [in] Expression used as an assignment target.
-         * @return Address pointing to the storage referenced by the expression.
+         * @return Factory-owning facade pointing to the referenced storage.
          */
-        utils::not_null<std::unique_ptr<symbolic::Address>> extractLValue(const clang::Expr *lhs);
+        symbolic::Addr extractLValue(const clang::Expr *lhs);
 
         /**
-         * @brief Retrieve the symbolic value of a variable within the path.
+         * @brief Retrieve the factory-owned symbolic value of a variable.
          * @param var [in] Variable declaration to query.
-         * @return A clone of the stored symbolic expression.
+         * @return Factory-owning facade for the stored symbolic expression.
          */
-        utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> getVarState(
-            const clang::VarDecl *var) const;
+        symbolic::Expr getVarState(const clang::VarDecl *var) const;
         /**
          * @brief Access accumulated path conditions.
          * @return Const reference to path condition set.
@@ -673,39 +631,33 @@ namespace acslg::analyzer {
          * @brief Allocate symbolic memory for a variable if not already allocated.
          * @param var [in] Variable declaration to allocate.
          * @param initSymbolic [in] When true, initialize with a symbolic value for the variable type.
-         * @return Pointer to the symbolic variable address.
+         * @return Interned handle to the symbolic variable address.
          */
-        utils::not_null<symbolic::VariableAddress *> allocMemory(const clang::VarDecl *,
-                                                                 bool initSymbolic = false);
+        symbolic::Addr allocMemory(const clang::VarDecl *, bool initSymbolic = false);
 
         /**
          * @brief Write a symbolic value to the specified address in memory.
          * @param addr [in] Target address.
          * @param expr [in] Symbolic expression to store.
          */
-        void updateMemory(const symbolic::Address &addr,
-                          utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr);
+        void updateMemory(const symbolic::Addr &addr, const symbolic::Expr &expr);
         /**
          * @brief Update the symbolic state of a variable.
          * @param var [in] Variable declaration being updated.
          * @param expr [in] New symbolic value.
          */
         void updateVarState(utils::not_null<const clang::VarDecl *> var,
-                            utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr);
+                            const symbolic::Expr &expr);
         /**
          * @brief Add a new constraint to the path condition set.
          * @param cond [in] Constraint expression to insert.
          */
-        void insertPathCondition(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> cond);
+        void insertPathCondition(const symbolic::Expr &cond);
 
-        void setReturnExpr(
-            std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> expr) {
-            if (expr == std::nullopt) {
-                returnExpr_ = std::nullopt;
-                return;
-            }
-            returnExpr_.emplace(std::move(expr).value().into_underlying());
-        };
+        void setReturnExpr(std::nullopt_t) { returnExpr_.reset(); }
+        void setReturnExpr(const symbolic::Expr &expr) {
+            returnExpr_.emplace(expr.importedInto(context_.getExprFactory()));
+        }
         /// @brief Update the control-flow marker for this path.
         void setPathState(PathState state) { currentState_ = state; }
 
@@ -717,13 +669,13 @@ namespace acslg::analyzer {
          * @param since [in] Reference path providing the baseline state.
          * @return True if the address holds the same symbolic value.
          */
-        bool isUnchanged(const symbolic::Address &addr, const Path &since) const;
+        bool isUnchanged(const symbolic::Addr &addr, const Path &since) const;
         /**
          * @brief Test if the address refers to a structure object.
          * @param addr [in] Address to inspect.
          * @return True if the address resolves to a structure.
          */
-        bool is_point_to_structure(const symbolic::Address &addr) const;
+        bool is_point_to_structure(const symbolic::Addr &addr) const;
         /**
          * @brief Merge another compatible path into this one, reconciling memory and conditions.
          * @param other [in] Path to merge.
@@ -743,7 +695,7 @@ namespace acslg::analyzer {
         /**
          * @brief Evaluate a clang expression symbolically.
          * @param expr [in] Expression to evaluate.
-         * @return Pair of forked paths (if branching occurs) and resulting symbolic values.
+         * @return Pair of forked paths and factory-owned symbolic expression facades.
          */
         EvalResult evalExpr(const clang::Expr *expr);
         friend class ProgramState;
@@ -753,14 +705,14 @@ namespace acslg::analyzer {
         auto getMutMemoryState() -> auto & { return memoryState_; }
         auto getReturnExpr() const -> const auto & { return returnExpr_; }
         auto getPathState() const -> const auto & { return currentState_; }
+        auto getContext() -> auto & { return context_; }
         auto getContext() const -> const auto & { return context_; }
+        auto getExprFactory() const -> auto & { return context_.getExprFactory(); }
         auto getStartPoint() const -> const auto & { return startPoint_; }
 
       private:
         // Map: variable record definition ID -> corresponding symbolic address.
-        std::unordered_map<const clang::VarDecl *,
-                           utils::not_null<std::unique_ptr<symbolic::VariableAddress>>>
-            varAddr_;
+        std::unordered_map<const clang::VarDecl *, symbolic::Addr> varAddr_;
 
         MemoryModel memoryState_;
 
@@ -771,8 +723,7 @@ namespace acslg::analyzer {
         // Holds the current path state. Default is set to Step
         PathState currentState_ = PathState::Step;
 
-        std::optional<utils::not_null<std::unique_ptr<const symbolic::SymbolicExpr>>> returnExpr_ =
-            std::nullopt;
+        std::optional<symbolic::Expr> returnExpr_ = std::nullopt;
 
         context::ACSLGContext &context_;
 
@@ -900,6 +851,8 @@ namespace acslg::analyzer {
         auto getFunction() const -> const auto & { return func_; }
         /// @brief Access the shared context.
         auto getContext() const -> const auto & { return context_; }
+        /// @brief Access the expression factory owned by the shared context.
+        auto getExprFactory() const -> auto & { return context_.getExprFactory(); }
         /// @brief Access the starting source point.
         auto getStartPoint() const -> const auto & { return startPoint_; }
 
@@ -919,7 +872,7 @@ namespace acslg::analyzer {
         void setStmtCtx(const clang::Stmt *stmtCtx);
         // TODO: remove from private member. [a local helper function.]
         // Only be used in step when processing SwitchStmt, just for a cleaner code.
-        std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<symbolic::SymbolicExpr>>> splitStateBySwitchCond(
+        std::vector<std::pair<std::unique_ptr<ProgramState>, symbolic::Expr>> splitStateBySwitchCond(
             const clang::Expr *switchCond);
         void stepSimpleSwitch(const clang::SwitchStmt *switchstmt);
 
@@ -1009,25 +962,11 @@ namespace acslg::analyzer {
      */
     struct InvsAndPostStates {
         std::optional<std::string> invs;
-        using MemoryMapAndPathConds = std::pair<
-            symbolic::AddressBoxMap<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>,
-            std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>>;
+        using MemoryMapAndPathConds =
+            std::pair<symbolic::AddressBoxMap<symbolic::Expr>, PathConditionList>;
         std::vector<MemoryMapAndPathConds> normalPostStates;
         std::vector<std::vector<MemoryMapAndPathConds>> interruptPostStates;
     };
-
-    /**
-     * @brief Build loop invariants from the condition and explored paths.
-     * @param loopCond [in] Symbolic loop condition.
-     * @param paths [in] Active execution paths to analyze.
-     * @param initState [in] Initial program state before the loop.
-     * @param generateBranches [in] Whether to enumerate branch-specific invariants.
-     * @return Invariants and post-states captured for the loop.
-     */
-    InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
-                                         const std::vector<std::unique_ptr<Path>> &paths,
-                                         const ProgramState &initState,
-                                         bool generateBranches = true);
 
     /**
      * @brief Build loop invariants from a single entry path and potential inactive paths.
@@ -1038,7 +977,7 @@ namespace acslg::analyzer {
      * @param generateBranches [in] Whether to enumerate branch-specific invariants.
      * @return Invariants and post-states captured for the loop.
      */
-    InvsAndPostStates buildLoopInvariant(std::unique_ptr<symbolic::SymbolicExpr> loopCond,
+    InvsAndPostStates buildLoopInvariant(const symbolic::Expr &loopCond,
                                          const Path &entryPath,
                                          const ProgramState &loopCurrent,
                                          std::ranges::range auto &inactivePaths,

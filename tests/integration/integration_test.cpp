@@ -174,8 +174,10 @@ namespace acslg::test::integration {
             },
             ::testing::ExitedWithCode(0), "");
         auto postState = execOnFirstFunc(code);
-        ASSERT_EQ(*getReturnExprOfFirstPath(*postState)->simplifiedExpr(),
-                  *analyzer::symbolic::LiteralExpr{0}.simplifiedExpr());
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
+        auto result =
+            simplifyForTest(postState->getExprFactory(), getReturnExprOfFirstPath(*postState));
+        ASSERT_TRUE(result.structurallyEqual(literalHandle(postState->getExprFactory(), int64_t{0})));
     }
 
     TEST(IntegrationTest, CorrectPostStateOfLoop_1) {
@@ -196,13 +198,17 @@ namespace acslg::test::integration {
             },
             ::testing::ExitedWithCode(0), "");
         auto postState = getPostStateOfFirstLoop(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
         auto &paths    = postState->getPaths();
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+                facadeHandle(addr).getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
+                simplifyForTest(analyzer::symbolic::ExprFactoryScope::current(),
+                                facadeHandle(value))
+                    .getACSL({.noStateLabelFunctionAt = true}),
+                valueStr);
             if (addrStr == "x") {
                 EXPECT_EQ(valueStr, "n");
             } else if (addrStr == "y") {
@@ -235,16 +241,18 @@ namespace acslg::test::integration {
             },
             ::testing::ExitedWithCode(0), "");
         auto postState = getPostStateOfFirstLoop(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
         auto &paths    = postState->getPaths();
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                facadeHandle(addr).getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                value.get()->simplifiedExpr()->getACSL(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                simplifyForTest(analyzer::symbolic::ExprFactoryScope::current(),
+                                facadeHandle(value))
+                    .getACSL({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 valueStr);
             if (addrStr == "p") {
                 EXPECT_EQ(valueStr, "p");
@@ -254,7 +262,7 @@ namespace acslg::test::integration {
                 EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
                                             AnyOf(StartsWith("n"), HasSubstr("+ n"))));
             } else if (addrStr == "p[0 .. n - 1]") {
-                EXPECT_TRUE(value->isUnknown());
+                EXPECT_TRUE(value.isUnknown());
             } else {
                 FAIL() << addrStr << ": " << valueStr;
             }
@@ -278,16 +286,18 @@ namespace acslg::test::integration {
             },
             ::testing::ExitedWithCode(0), "");
         auto postState = getPostStateOfFirstLoop(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
         auto &paths    = postState->getPaths();
         ASSERT_EQ(paths.size(), 1);
         for (auto &&[addr, value] : paths.at(0)->getMemoryState().flat()) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                facadeHandle(addr).getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                value.get()->simplifiedExpr()->getACSL(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                simplifyForTest(analyzer::symbolic::ExprFactoryScope::current(),
+                                facadeHandle(value))
+                    .getACSL({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 valueStr);
             if (addrStr == "p") {
                 EXPECT_EQ(valueStr, "p");
@@ -298,7 +308,7 @@ namespace acslg::test::integration {
                                             AnyOf(StartsWith("1"), HasSubstr("+ 1")),
                                             AnyOf(StartsWith("n"), HasSubstr("+ n"))));
             } else if (addrStr == "p[1 .. n]") {
-                EXPECT_TRUE(value->isUnknown());
+                EXPECT_TRUE(value.isUnknown());
             } else {
                 FAIL() << addrStr << ": " << valueStr;
             }
@@ -491,9 +501,11 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-        ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
-                                       resultStr);
+        auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
+        auto result =
+            simplifyForTest(postState->getExprFactory(), getReturnExprOfFirstPath(*postState));
+        ASSERT_OK_AND_GET_FIRST_TO_VAR(result.getACSL({.noStateLabelFunctionAt = true}), resultStr);
         EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
                                      AnyOf(StartsWith("-1 * x.y"), HasSubstr("- x.y")),
                                      AnyOf(StartsWith("n"), HasSubstr("+ n")),
@@ -522,9 +534,11 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-        ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
-                                       resultStr);
+        auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
+        auto result =
+            simplifyForTest(postState->getExprFactory(), getReturnExprOfFirstPath(*postState));
+        ASSERT_OK_AND_GET_FIRST_TO_VAR(result.getACSL({.noStateLabelFunctionAt = true}), resultStr);
         EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
                                      AnyOf(StartsWith("-1 * 99"), HasSubstr("- 99")),
                                      AnyOf(StartsWith("n"), HasSubstr("+ n"))));
@@ -551,9 +565,11 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-        ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
-                                       resultStr);
+        auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
+        auto result =
+            simplifyForTest(postState->getExprFactory(), getReturnExprOfFirstPath(*postState));
+        ASSERT_OK_AND_GET_FIRST_TO_VAR(result.getACSL({.noStateLabelFunctionAt = true}), resultStr);
         EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("*x.x"), HasSubstr("+ *x.x")),
                                      AnyOf(StartsWith("-1 * 98"), HasSubstr("- 98")),
                                      AnyOf(StartsWith("n"), HasSubstr("+ n"))));
@@ -581,9 +597,11 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
                 std::_Exit(0);
             },
             ::testing::ExitedWithCode(0), "");
-        auto result = getReturnExprOfFirstPath(*execOnFirstFunc(code))->simplifiedExpr();
-        ASSERT_OK_AND_GET_FIRST_TO_VAR(result->getACSL({.noStateLabelFunctionAt = true}),
-                                       resultStr);
+        auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
+        auto result =
+            simplifyForTest(postState->getExprFactory(), getReturnExprOfFirstPath(*postState));
+        ASSERT_OK_AND_GET_FIRST_TO_VAR(result.getACSL({.noStateLabelFunctionAt = true}), resultStr);
         EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("*a.x"), HasSubstr("+ *a.x")),
                                      AnyOf(StartsWith("*b.x"), HasSubstr("+ *b.x")),
                                      AnyOf(StartsWith("b.y"), HasSubstr("+ b.y")),
@@ -632,16 +650,18 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
 }
     )";
         auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
 
         for (auto &path : postState->getPaths()) {
             string symbolAddrs;
             unsigned count{0};
             for (auto &&[addr, value] : path->getMemoryState().flat()) {
-                auto symbolAddr = llvm::dyn_cast<analyzer::symbolic::SymbolAddress>(&addr.get());
-                if (symbolAddr == nullptr)
+                auto symbolAddr = analyzer::symbolic::SymbolAddress::tryFrom(addr);
+                if (!symbolAddr)
                     continue;
                 ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                    symbolAddr->getACSLOfValue({.noStateLabelFunctionAt = true}), rangeStr);
+                    symbolAddr->getACSLOfValue({.noStateLabelFunctionAt = true}),
+                    rangeStr);
                 if (rangeStr == "r[0 .. n - 1]")
                     ++count;
                 symbolAddrs += rangeStr + "\n";

@@ -4,25 +4,31 @@
  *        expressions.
  */
 #include <iterator>
-#include <llvm/Support/Casting.h>
 #include <queue>
 #include <regex>
 #include "ppl.hh"
 
 #include "Symbolic/aggregateExpr.h"
+#include "detail/aggregateNodes.h"
+#include "detail/exprNodes.h"
+#include "detail/handleInternals.h"
 #include "expr.h"
 #include "Analyzer/state.h"
 #include "Stingx/LinTS.h"
 
 namespace acslg::analyzer::symbolic {
+    using detail::SymbolAddressNode;
+    using detail::VariableAddressNode;
+    using detail::SumOverRangeNode;
+
     /**
      * @brief Determine whether the unary operation preserves linearity.
      * @return True for + or - over a linear operand; false otherwise.
      */
-    bool UnaryOpExpr::isLinear() const {
+    bool detail::UnaryOpExprNode::isLinear() const {
         switch (op_) {
             case Operator::Plus:
-            case Operator::Minus: return expr_->isLinear();
+            case Operator::Minus: return expr_.isLinear();
             default: return false;
         }
     }
@@ -31,10 +37,10 @@ namespace acslg::analyzer::symbolic {
      * @brief Compute the algebraic degree of the unary expression.
      * @return Degree of operand for +/-; -1 when undefined.
      */
-    int UnaryOpExpr::getMaxDegree() const {
+    int detail::UnaryOpExprNode::getMaxDegree() const {
         switch (op_) {
             case Operator::Plus:
-            case Operator::Minus: return expr_->getMaxDegree();
+            case Operator::Minus: return expr_.getMaxDegree();
             default: return -1; // undefined / invalid
         }
     }
@@ -45,12 +51,12 @@ namespace acslg::analyzer::symbolic {
      * Multiplication is considered linear only when exactly one side is constant; shifts are
      * treated as multiplication by powers of two when the shift amount is constant.
      */
-    bool BinaryOpExpr::isLinear() const {
+    bool detail::BinaryOpExprNode::isLinear() const {
         // Algebraic summaries of both sides.
-        const int ldeg  = left_->getMaxDegree();
-        const int rdeg  = right_->getMaxDegree();
-        const bool linL = left_->isLinear();
-        const bool linR = right_->isLinear();
+        const int ldeg  = left_.getMaxDegree();
+        const int rdeg  = right_.getMaxDegree();
+        const bool linL = left_.isLinear();
+        const bool linR = right_.isLinear();
 
         // A “constant” is defined as degree-0 and linear in this abstraction.
         const bool isConstL = (ldeg == 0) && linL;
@@ -80,9 +86,9 @@ namespace acslg::analyzer::symbolic {
      * @brief Compute algebraic degree assuming operands have known degrees.
      * @return Non-negative degree or -1 if the operator/operands make it invalid.
      */
-    int BinaryOpExpr::getMaxDegree() const {
-        const int ldeg = left_->getMaxDegree();
-        const int rdeg = right_->getMaxDegree();
+    int detail::BinaryOpExprNode::getMaxDegree() const {
+        const int ldeg = left_.getMaxDegree();
+        const int rdeg = right_.getMaxDegree();
 
         switch (op_) {
             case Operator::Add:
@@ -111,7 +117,7 @@ namespace acslg::analyzer::symbolic {
      * @brief Convert literal to a PPL linear expression when possible.
      * @return Linear expression or nullopt if unsupported type.
      */
-    std::optional<Parma_Polyhedra_Library::Linear_Expression> LiteralExpr::toLinearExpr(
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> detail::LiteralExprNode::toLinearExpr(
         const std::unordered_map<std::string, size_t> &) const {
         using namespace Parma_Polyhedra_Library;
         switch (type_) {
@@ -126,7 +132,7 @@ namespace acslg::analyzer::symbolic {
                 return Linear_Expression(static_cast<Coefficient>(data_.int64Value));
             case LiteralType::UInt64:
                 return Linear_Expression(static_cast<Coefficient>(data_.uint64Value));
-            default: throw runtime_error("Unsupported LiteralExpr type_ in toLinearExpr");
+            default: throw runtime_error("Unsupported detail::LiteralExprNode type_ in toLinearExpr");
         }
     }
 
@@ -134,10 +140,10 @@ namespace acslg::analyzer::symbolic {
      * @brief Convert a binary expression to a PPL linear expression if affine.
      * @return Linear expression or nullopt when non-affine.
      */
-    std::optional<Parma_Polyhedra_Library::Linear_Expression> BinaryOpExpr::toLinearExpr(
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> detail::BinaryOpExprNode::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
-        auto L = left_->toLinearExpr(varIndexMap);
-        auto R = right_->toLinearExpr(varIndexMap);
+        auto L = left_.toLinearExpr(varIndexMap);
+        auto R = right_.toLinearExpr(varIndexMap);
         if (L == std::nullopt || R == std::nullopt)
             return std::nullopt;
 
@@ -145,13 +151,13 @@ namespace acslg::analyzer::symbolic {
             case Operator::Add: return L.value() + R.value();
             case Operator::Subtract: return L.value() - R.value();
             case Operator::Multiply:
-                if (right_->getMaxDegree() == 0)
+                if (right_.getMaxDegree() == 0)
                     return L.value() * R.value().inhomogeneous_term();
-                if (left_->getMaxDegree() == 0)
+                if (left_.getMaxDegree() == 0)
                     return R.value() * L.value().inhomogeneous_term();
                 break;
             case Operator::Divide:
-                if (right_->getMaxDegree() == 0) {
+                if (right_.getMaxDegree() == 0) {
                     auto denom = R.value().inhomogeneous_term();
                     if (denom != 0) {
                         Parma_Polyhedra_Library::Linear_Expression result(0);
@@ -176,9 +182,9 @@ namespace acslg::analyzer::symbolic {
     /**
      * @brief Convert unary expression to linear form when operator is +/-.
      */
-    std::optional<Parma_Polyhedra_Library::Linear_Expression> UnaryOpExpr::toLinearExpr(
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> detail::UnaryOpExprNode::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
-        auto E = expr_->toLinearExpr(varIndexMap);
+        auto E = expr_.toLinearExpr(varIndexMap);
         if (E == std::nullopt)
             return std::nullopt;
 
@@ -192,12 +198,13 @@ namespace acslg::analyzer::symbolic {
     /**
      * @brief Convert variable-backed symbol to a linear expression using a variable index map.
      */
-    std::optional<Parma_Polyhedra_Library::Linear_Expression> symbolic::SymbolValue::toLinearExpr(
+    std::optional<Parma_Polyhedra_Library::Linear_Expression>
+    detail::SymbolValueNode::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
         using namespace Parma_Polyhedra_Library;
         Linear_Expression e(0);
 
-        auto varAddr = llvm::dyn_cast<const VariableAddress>(fromAddr_.get().get());
+        auto varAddr = detail::HandleAccess::dynCast<const VariableAddressNode>(fromAddr_);
         if (varAddr == nullptr)
             return std::nullopt;
 
@@ -213,8 +220,8 @@ namespace acslg::analyzer::symbolic {
     /**
      * @brief Convert literal to linear expression using hashed-variable map variant.
      */
-    Parma_Polyhedra_Library::Linear_Expression LiteralExpr::toLinearExpr(
-        const std::unordered_map<size_t, size_t> &) const {
+    Parma_Polyhedra_Library::Linear_Expression detail::LiteralExprNode::toLinearExpr(
+        const detail::ExprHandleIndexMap &) const {
         switch (type_) {
             case LiteralType::Boolean:
                 return Parma_Polyhedra_Library::Linear_Expression(data_.boolValue ? 1 : 0);
@@ -235,26 +242,26 @@ namespace acslg::analyzer::symbolic {
             case LiteralType::UInt64:
                 return Parma_Polyhedra_Library::Linear_Expression(
                     static_cast<Parma_Polyhedra_Library::Coefficient>(data_.uint64Value));
-            default: throw runtime_error("Unsupported LiteralExpr type_ in toLinearExpr");
+            default: throw runtime_error("Unsupported detail::LiteralExprNode type_ in toLinearExpr");
         }
     }
 
-    Parma_Polyhedra_Library::Linear_Expression BinaryOpExpr::toLinearExpr(
-        const std::unordered_map<size_t, size_t> &hashIdMap) const {
-        auto L = left_->toLinearExpr(hashIdMap);
-        auto R = right_->toLinearExpr(hashIdMap);
+    Parma_Polyhedra_Library::Linear_Expression detail::BinaryOpExprNode::toLinearExpr(
+        const detail::ExprHandleIndexMap &expressionIndexMap) const {
+        auto L = left_.toLinearExpr(expressionIndexMap);
+        auto R = right_.toLinearExpr(expressionIndexMap);
 
         switch (op_) {
             case Operator::Add: return L + R;
             case Operator::Subtract: return L - R;
             case Operator::Multiply:
-                if (right_->getMaxDegree() == 0)
+                if (right_.getMaxDegree() == 0)
                     return L * R.inhomogeneous_term();
-                if (left_->getMaxDegree() == 0)
+                if (left_.getMaxDegree() == 0)
                     return R * L.inhomogeneous_term();
                 break;
             case Operator::Divide:
-                if (right_->getMaxDegree() == 0) {
+                if (right_.getMaxDegree() == 0) {
                     auto denom = R.inhomogeneous_term();
                     if (denom != 0) {
                         Parma_Polyhedra_Library::Linear_Expression result(0);
@@ -271,8 +278,8 @@ namespace acslg::analyzer::symbolic {
                 }
                 break;
             case Operator::ShiftLeft:
-                if (right_->getMaxDegree() == 0) {
-                    if (auto k = right_->tryEvalAsConstant(); k && *k >= 0) {
+                if (right_.getMaxDegree() == 0) {
+                    if (auto k = right_.tryEvalAsConstant(); k && *k >= 0) {
                         Parma_Polyhedra_Library::Coefficient factor(1);
                         factor <<= static_cast<unsigned>(*k);
                         return L * factor;
@@ -284,7 +291,7 @@ namespace acslg::analyzer::symbolic {
         ERROR("non-affine or unsupported op");
     }
 
-    std::optional<Parma_Polyhedra_Library::Linear_Expression> SymbolAddress::toLinearExpr(
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> SymbolAddressNode::toLinearExpr(
         const std::unordered_map<std::string, size_t> &varIndexMap) const {
         if (length_ != std::nullopt)
             ERROR("Address range is solely for address representation and should not be "
@@ -305,9 +312,9 @@ namespace acslg::analyzer::symbolic {
         return e;
     }
 
-    Parma_Polyhedra_Library::Linear_Expression UnaryOpExpr::toLinearExpr(
-        const std::unordered_map<size_t, size_t> &hashIdMap) const {
-        auto E = expr_->toLinearExpr(hashIdMap);
+    Parma_Polyhedra_Library::Linear_Expression detail::UnaryOpExprNode::toLinearExpr(
+        const detail::ExprHandleIndexMap &expressionIndexMap) const {
+        auto E = expr_.toLinearExpr(expressionIndexMap);
 
         switch (op_) {
             case Operator::Plus: return E;
@@ -318,45 +325,45 @@ namespace acslg::analyzer::symbolic {
         ERROR("non-affine or unsupported op");
     }
 
-    Parma_Polyhedra_Library::Linear_Expression symbolic::SymbolValue::toLinearExpr(
-        const std::unordered_map<size_t, size_t> &hashIdMap) const {
+    Parma_Polyhedra_Library::Linear_Expression detail::SymbolValueNode::toLinearExpr(
+        const detail::ExprHandleIndexMap &expressionIndexMap) const {
         Parma_Polyhedra_Library::Linear_Expression e(0);
-        if (auto it = hashIdMap.find(hash()); it != hashIdMap.end()) {
+        if (auto it = expressionIndexMap.find(selfHandle()); it != expressionIndexMap.end()) {
             auto id  = it->second;
             auto var = Parma_Polyhedra_Library::Variable(id);
             e += var;
             return e;
         } else {
-            ERROR("Hash of Variable: {" + dump() + "} can't be found.");
+            ERROR("Variable: {" + dump() + "} can't be found in the expression index map.");
         }
     }
 
-    Parma_Polyhedra_Library::Linear_Expression SymbolAddress::toLinearExpr(
-        const std::unordered_map<size_t, size_t> &hashIdMap) const {
+    Parma_Polyhedra_Library::Linear_Expression SymbolAddressNode::toLinearExpr(
+        const detail::ExprHandleIndexMap &expressionIndexMap) const {
         if (length_ != std::nullopt)
             ERROR("Address range is solely for address representation and should not be "
                   "used as an expression.");
         Parma_Polyhedra_Library::Linear_Expression e(0);
-        if (auto it = hashIdMap.find(hash()); it != hashIdMap.end()) {
+        if (auto it = expressionIndexMap.find(selfHandle()); it != expressionIndexMap.end()) {
             auto id  = it->second;
             auto var = Parma_Polyhedra_Library::Variable(id);
             e += var;
             return e;
         } else {
-            ERROR("Hash of Variable: {" + dump() + "} can't be found.");
+            ERROR("Variable: {" + dump() + "} can't be found in the expression index map.");
         }
     }
 
-    Parma_Polyhedra_Library::Linear_Expression SumOverRange::toLinearExpr(
-        const std::unordered_map<size_t, size_t> &hashIdMap) const {
+    Parma_Polyhedra_Library::Linear_Expression SumOverRangeNode::toLinearExpr(
+        const detail::ExprHandleIndexMap &expressionIndexMap) const {
         Parma_Polyhedra_Library::Linear_Expression e(0);
-        if (auto it = hashIdMap.find(hash()); it != hashIdMap.end()) {
+        if (auto it = expressionIndexMap.find(selfHandle()); it != expressionIndexMap.end()) {
             auto id  = it->second;
             auto var = Parma_Polyhedra_Library::Variable(id);
             e += var;
             return e;
         } else {
-            ERROR("Hash of Variable: {" + dump() + "} can't be found.");
+            ERROR("Variable: {" + dump() + "} can't be found in the expression index map.");
         }
     }
 
@@ -540,9 +547,7 @@ namespace acslg::analyzer {
             return poly;
         }
 
-        std::vector<Formulas> negateFormulas(Formulas input) {
-            using Op = symbolic::BinaryOpExpr::Operator;
-
+        std::vector<Formulas> negateFormulaFacades(Formulas input) {
             std::vector<Formulas> result;
             std::queue<pair<Formulas, const size_t>> worklist;
             worklist.push({std::move(input), 0});
@@ -554,58 +559,43 @@ namespace acslg::analyzer {
                 bool expanded = false;
 
                 for (size_t i = startIdx; i < current.size(); ++i) {
-                    auto *bin = llvm::dyn_cast<symbolic::BinaryOpExpr>(current[i].get().get());
+                    auto bin = symbolic::BinaryExpr::tryFrom(current[i]);
                     if (!bin) {
                         ERROR("negateFormulas: input[" + to_string(i) + "] is not a BinaryOpExpr");
                     }
 
-                    const auto &lhs = bin->getLeft();
-                    const auto &rhs = bin->getRight();
+                    auto &factory = current[i].factory();
+                    auto lhs      = bin->left();
+                    auto rhs      = bin->right();
+                    auto one      = symbolic::LiteralExpr{factory, int64_t{1}};
 
-                    // @WindOctober: try to optimize clone.
-                    switch (bin->getOperator()) {
-                        case Op::LessEqual: {
-                            auto newRHS = std::make_unique<symbolic::BinaryOpExpr>(
-                                rhs->clone(), Op::Add, std::make_unique<symbolic::LiteralExpr>(1));
-                            current[i] = std::make_unique<symbolic::BinaryOpExpr>(
-                                lhs->clone(), Op::GreaterEqual, std::move(newRHS));
+                    switch (bin->operation()) {
+                        case symbolic::BinaryOp::LessEqual: {
+                            current[i] = lhs.greaterEqual(rhs + one);
                             worklist.push({std::move(current), i + 1});
                             expanded = true;
                             break;
                         }
-                        case Op::GreaterEqual: {
-                            auto newRHS = std::make_unique<symbolic::BinaryOpExpr>(
-                                rhs->clone(), Op::Subtract,
-                                std::make_unique<symbolic::LiteralExpr>(1));
-                            current[i] = std::make_unique<symbolic::BinaryOpExpr>(
-                                lhs->clone(), Op::LessEqual, std::move(newRHS));
+                        case symbolic::BinaryOp::GreaterEqual: {
+                            current[i] = lhs.lessEqual(rhs - one);
                             worklist.push({std::move(current), i + 1});
                             expanded = true;
                             break;
                         }
-                        case Op::Equal: {
-                            auto leExpr = std::make_unique<symbolic::BinaryOpExpr>(
-                                lhs->clone(), Op::LessEqual,
-                                std::make_unique<symbolic::BinaryOpExpr>(
-                                    rhs->clone(), Op::Subtract,
-                                    std::make_unique<symbolic::LiteralExpr>(1)));
-
-                            auto geExpr = std::make_unique<symbolic::BinaryOpExpr>(
-                                lhs->clone(), Op::GreaterEqual,
-                                std::make_unique<symbolic::BinaryOpExpr>(
-                                    rhs->clone(), Op::Add,
-                                    std::make_unique<symbolic::LiteralExpr>(1)));
+                        case symbolic::BinaryOp::Equal: {
+                            auto leExpr = lhs.lessEqual(rhs - one);
+                            auto geExpr = lhs.greaterEqual(rhs + one);
 
                             Formulas branch;
                             branch.reserve(current.size());
                             for (size_t j = 0; j < current.size(); ++j) {
                                 if (j == i)
-                                    branch.push_back(std::move(leExpr));
+                                    branch.push_back(leExpr);
                                 else
-                                    branch.push_back(current[j]->clone());
+                                    branch.push_back(current[j]);
                             }
 
-                            current[i] = std::move(geExpr);
+                            current[i] = geExpr;
 
                             worklist.push({std::move(current), i + 1});
                             worklist.push({std::move(branch), i + 1});
@@ -626,94 +616,79 @@ namespace acslg::analyzer {
             return result;
         }
 
-        Formulas preprocessConjConds(const PathConditions &conjConds) {
-            Formulas copied;
-            copied.reserve(conjConds.size());
-            for (const auto &cond : conjConds) {
-                copied.push_back(cond->clone());
+        std::vector<Formulas> negateFormulas(const Formulas &input) {
+            return negateFormulaFacades(input);
+        }
+
+        void appendPreprocessedConjCond(const symbolic::Expr &cond, Formulas &result) {
+            if (auto bin = symbolic::BinaryExpr::tryFrom(cond)) {
+                using enum symbolic::BinaryOp;
+                auto lhs = bin->left();
+                auto rhs = bin->right();
+                auto one = symbolic::LiteralExpr{cond.factory(), int64_t{1}};
+
+                switch (bin->operation()) {
+                    case NotEqual:
+                        // Create disjunctive conds, just skip this now.
+                        return;
+                    case GreaterThan: {
+                        result.push_back(lhs.greaterEqual(rhs + one));
+                        return;
+                    }
+                    case LessThan: {
+                        result.push_back(lhs.lessEqual(rhs - one));
+                        return;
+                    }
+                    case LogicalAnd:
+                        appendPreprocessedConjCond(lhs, result);
+                        appendPreprocessedConjCond(rhs, result);
+                        return;
+                    case GreaterEqual:
+                    case LessEqual:
+                    case Equal: result.push_back(cond); return;
+                    default: return;
+                }
             }
-            return preprocessConjConds(copied);
+
+            auto unary = symbolic::UnaryExpr::tryFrom(cond);
+            if (!unary || unary->operation() != symbolic::UnaryOp::LogicalNot)
+                return;
+
+            Formulas preprocessedSub;
+            appendPreprocessedConjCond(unary->operand(), preprocessedSub);
+            if (preprocessedSub.size() != 1)
+                return;
+
+            auto uneqExpr = symbolic::BinaryExpr::tryFrom(preprocessedSub.front());
+            assert(uneqExpr);
+            auto lhs = uneqExpr->left();
+            auto rhs = uneqExpr->right();
+            auto one = symbolic::LiteralExpr{cond.factory(), int64_t{1}};
+            switch (uneqExpr->operation()) {
+                using enum symbolic::BinaryOp;
+                case LessEqual: {
+                    result.push_back(lhs.greaterEqual(rhs + one));
+                    break;
+                }
+                case GreaterEqual: {
+                    result.push_back(lhs.lessEqual(rhs - one));
+                    break;
+                }
+                default: break;
+            }
+        }
+
+        Formulas preprocessConjConds(const PathConditions &conjConds) {
+            Formulas result;
+            for (const auto &cond : conjConds)
+                appendPreprocessedConjCond(cond, result);
+            return result;
         }
 
         Formulas preprocessConjConds(const Formulas &conjConds) {
             Formulas result;
-            for (auto &cond : conjConds) {
-                if (auto bin = llvm::dyn_cast<symbolic::BinaryOpExpr>(cond.get().get())) {
-                    using enum symbolic::BinaryOpExpr::Operator;
-                    const auto &lhs = bin->getLeft();
-                    const auto &rhs = bin->getRight();
-
-                    switch (bin->getOperator()) {
-                        case NotEqual: {
-                            // Create disjunctive conds, just skip this now.
-                            continue;
-                        }
-                        case GreaterThan: {
-                            auto newRHS = std::make_unique<symbolic::BinaryOpExpr>(
-                                rhs->clone(), Add, std::make_unique<symbolic::LiteralExpr>(1));
-                            result.push_back(std::make_unique<symbolic::BinaryOpExpr>(
-                                lhs->clone(), GreaterEqual, std::move(newRHS)));
-                            break;
-                        }
-                        case LessThan: {
-                            auto newRHS = std::make_unique<symbolic::BinaryOpExpr>(
-                                rhs->clone(), Subtract, std::make_unique<symbolic::LiteralExpr>(1));
-                            result.push_back(std::make_unique<symbolic::BinaryOpExpr>(
-                                lhs->clone(), LessEqual, std::move(newRHS)));
-                            break;
-                        }
-                        case LogicalAnd: {
-                            Formulas twoConds;
-                            twoConds.reserve(2);
-                            twoConds.push_back(lhs->clone());
-                            twoConds.push_back(rhs->clone());
-                            auto reTwoConds = preprocessConjConds(twoConds);
-                            result.insert(result.end(), std::make_move_iterator(reTwoConds.begin()),
-                                          std::make_move_iterator(reTwoConds.end()));
-                            break;
-                        }
-                        case GreaterEqual:
-                        case LessEqual:
-                        case Equal: {
-                            result.push_back(cond->clone());
-                            break;
-                        }
-                        default: continue;
-                    }
-                } else if (auto unary = llvm::dyn_cast<symbolic::UnaryOpExpr>(cond.get().get())) {
-                    if (unary->getOperator() != symbolic::UnaryOpExpr::Operator::LogicalNot)
-                        continue;
-                    Formulas oneExpr;
-                    oneExpr.push_back(unary->getSub()->clone());
-                    auto reOneExpr = preprocessConjConds(oneExpr);
-                    if (reOneExpr.size() != 1)
-                        continue;
-                    auto uneqExpr =
-                        llvm::dyn_cast<const symbolic::BinaryOpExpr>(reOneExpr.front().get().get());
-                    assert(uneqExpr);
-                    switch (uneqExpr->getOperator()) {
-                        using enum symbolic::BinaryOpExpr::Operator;
-                        case LessEqual: {
-                            auto newRHS = std::make_unique<symbolic::BinaryOpExpr>(
-                                uneqExpr->getRight()->clone(), Add,
-                                std::make_unique<symbolic::LiteralExpr>(1));
-                            result.push_back(std::make_unique<symbolic::BinaryOpExpr>(
-                                uneqExpr->getLeft()->clone(), GreaterEqual, std::move(newRHS)));
-                            break;
-                        }
-                        case GreaterEqual: {
-                            auto newRHS = std::make_unique<symbolic::BinaryOpExpr>(
-                                uneqExpr->getRight()->clone(), Subtract,
-                                std::make_unique<symbolic::LiteralExpr>(1));
-                            result.push_back(std::make_unique<symbolic::BinaryOpExpr>(
-                                uneqExpr->getLeft()->clone(), LessEqual, std::move(newRHS)));
-                            break;
-                        }
-                        default: continue;
-                    }
-                }
-            }
-
+            for (const auto &cond : conjConds)
+                appendPreprocessedConjCond(cond, result);
             return result;
         }
 
@@ -748,7 +723,7 @@ namespace acslg::analyzer {
                 }
                 Linear_Expression lhs = Parma_Polyhedra_Library::Variable(idx);
 
-                auto rhs = expr->toLinearExpr(vm.varIndexMap);
+                auto rhs = expr.toLinearExpr(vm.varIndexMap);
                 if (rhs == std::nullopt)
                     continue; // Ignore this variable.
 
@@ -793,31 +768,31 @@ namespace acslg::analyzer {
             return result;
         }
 
-        // todo: should be a virtual function of `SymbolicExpr`
-        std::optional<Parma_Polyhedra_Library::Constraint> toConstraint(
-            const symbolic::SymbolicExpr *expr,
-            const VarManager &vm) {
-            auto bin = llvm::dyn_cast_if_present<const symbolic::BinaryOpExpr>(expr);
-            if (bin == nullptr) {
+        // todo: should be a virtual function of the internal expression node base.
+        std::optional<Parma_Polyhedra_Library::Constraint> toConstraint(const symbolic::Expr &expr,
+                                                                        const VarManager &vm) {
+            auto bin = symbolic::BinaryExpr::tryFrom(expr);
+            if (!bin) {
                 WARN("toConstraint: expression must be a BinaryOpExpr.");
                 return std::nullopt;
             }
 
-            const auto &op = bin->getOperator();
+            auto op      = bin->operation();
+            auto lhsExpr = bin->left();
+            auto rhsExpr = bin->right();
 
-            auto lhs = bin->getLeft()->toLinearExpr(vm.varIndexMap);
-            auto rhs = bin->getRight()->toLinearExpr(vm.varIndexMap);
+            auto lhs = lhsExpr.toLinearExpr(vm.varIndexMap);
+            auto rhs = rhsExpr.toLinearExpr(vm.varIndexMap);
             if (lhs == std::nullopt || rhs == std::nullopt)
                 return std::nullopt;
             auto le = lhs.value() - rhs.value();
 
             switch (op) {
-                case symbolic::BinaryOpExpr::Operator::LessEqual:
+                case symbolic::BinaryOp::LessEqual:
                     return Parma_Polyhedra_Library::Constraint(le <= 0);
-                case symbolic::BinaryOpExpr::Operator::GreaterEqual:
+                case symbolic::BinaryOp::GreaterEqual:
                     return Parma_Polyhedra_Library::Constraint(le >= 0);
-                case symbolic::BinaryOpExpr::Operator::Equal:
-                    return Parma_Polyhedra_Library::Constraint(le == 0);
+                case symbolic::BinaryOp::Equal: return Parma_Polyhedra_Library::Constraint(le == 0);
                 default:
                     WARN("toConstraint: unsupported binary operator in assertion (must be <=, >=, "
                          "==).");
@@ -836,8 +811,7 @@ namespace acslg::analyzer {
                 Parma_Polyhedra_Library::C_Polyhedron{dimension, Parma_Polyhedra_Library::UNIVERSE};
 
             for (const auto &assertion : assertions) {
-                const symbolic::SymbolicExpr *rawExpr = assertion.get().get();
-                auto constraint                       = toConstraint(rawExpr, vm);
+                auto constraint = toConstraint(assertion, vm);
                 if (constraint == std::nullopt)
                     continue;
                 poly.add_constraint(constraint.value());
@@ -967,15 +941,6 @@ namespace acslg::analyzer {
             return result;
         }
 
-        Formulas cloneFormulas(const Formulas &input) {
-            Formulas result;
-            result.reserve(input.size());
-            for (const auto &expr : input) {
-                result.push_back(expr->clone());
-            }
-            return result;
-        }
-
         /******************************************************************************\
          *                           Invariant-to-Path Extraction                     *
          *  This section converts computed invariants into symbolic execution paths,  *
@@ -1101,14 +1066,14 @@ namespace acslg::analyzer {
                                              const Path &initPath,
                                              const VarManager &vm) {
             using namespace Parma_Polyhedra_Library;
-            using R = std::pair<
-                symbolic::AddressBoxMap<utils::not_null<unique_ptr<symbolic::SymbolicExpr>>>,
-                std::vector<utils::not_null<unique_ptr<symbolic::SymbolicExpr>>>>;
+            auto &factory = initPath.getExprFactory();
+            auto literal  = [&factory](int64_t value) -> symbolic::Expr {
+                return symbolic::LiteralExpr{factory, value};
+            };
             auto n    = vm.numVars;
             auto half = n / 2;
 
-            std::unordered_map<int, utils::not_null<unique_ptr<symbolic::SymbolicExpr>>>
-                resolvedExprs;
+            std::unordered_map<size_t, symbolic::Expr> resolvedExprs;
             for (size_t i = half; i < n; ++i) {
                 auto trueDecl = vm.varDecls.at(i - half);
                 resolvedExprs.emplace(i, initPath.getVarState(trueDecl));
@@ -1150,38 +1115,26 @@ namespace acslg::analyzer {
                         continue;
                     }
 
-                    std::unique_ptr<symbolic::SymbolicExpr> rhs =
-                        std::make_unique<symbolic::LiteralExpr>(-constant.get_si());
+                    auto rhs = literal(-constant.get_si());
 
                     for (const auto &[idx, coeff] : coeffs) {
                         if (idx == target)
                             continue;
 
-                        symbolic::SymbolicExpr *base = resolvedExprs.at(idx).get().get();
+                        auto term = resolvedExprs.at(idx);
+                        if (coeff != 1)
+                            term = literal(coeff.get_si()) * term;
 
-                        auto term = base->clone();
-                        if (coeff != 1) {
-                            term = std::make_unique<symbolic::BinaryOpExpr>(
-
-                                std::make_unique<symbolic::LiteralExpr>(coeff.get_si()),
-                                symbolic::BinaryOpExpr::Operator::Multiply, std::move(term));
-                        }
-
-                        rhs = std::make_unique<symbolic::BinaryOpExpr>(
-                            std::move(rhs), symbolic::BinaryOpExpr::Operator::Subtract,
-                            std::move(term));
+                        rhs = rhs - term;
                     }
 
                     if (coeffs[target] == -1) {
-                        rhs = std::make_unique<symbolic::UnaryOpExpr>(
-                            symbolic::UnaryOpExpr::Operator::Minus, std::move(rhs));
+                        rhs = -rhs;
                     } else if (coeffs[target] != 1) {
-                        rhs = std::make_unique<symbolic::BinaryOpExpr>(
-                            std::move(rhs), symbolic::BinaryOpExpr::Operator::Divide,
-                            std::make_unique<symbolic::LiteralExpr>(coeffs[target].get_si()));
+                        rhs = rhs / literal(coeffs[target].get_si());
                     }
 
-                    auto [_, ok] = resolvedExprs.emplace(target, std::move(rhs));
+                    auto [_, ok] = resolvedExprs.emplace(target, rhs);
                     if (!ok)
                         UNREACHABLE();
 
@@ -1189,50 +1142,43 @@ namespace acslg::analyzer {
                 }
             }
 
-            symbolic::AddressBoxMap<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>
-                newVars;
-            std::vector<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> conds;
+            symbolic::AddressBoxMap<symbolic::Expr> newVars;
+            PathConditionList conds;
 
             for (size_t i = 0; i < half; ++i) {
                 auto varDecl = vm.varDecls.at(i);
                 auto &addr   = initPath.getVarAddr().at(varDecl);
                 if (resolvedExprs.contains(i)) {
-                    auto [_, ok] = newVars.emplace(*addr, resolvedExprs.at(i)->clone());
+                    auto [_, ok] =
+                        newVars.emplace(symbolic::AddressBox{addr.importedInto(factory)},
+                                        resolvedExprs.at(i));
                     if (!ok)
                         UNREACHABLE();
                 }
             }
 
             for (auto &constraint : cs) {
-                std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> lhs{};
+                std::optional<symbolic::Expr> lhs;
                 auto maxIdx = constraint.space_dimension();
                 for (size_t i = 0; i < maxIdx; ++i) {
                     Coefficient c = constraint.coefficient(Parma_Polyhedra_Library::Variable(i));
                     if (c == 0)
                         continue;
 
-                    symbolic::SymbolicExpr *base = nullptr;
-                    if (resolvedExprs.contains(i))
-                        base = resolvedExprs.at(i).get().get();
-                    else {
+                    if (!resolvedExprs.contains(i)) {
                         // Unresolved expression is too complex (because of non-linear or pointer),
                         // just ignore it.
                         continue;
                     }
 
-                    auto term = base->clone();
-                    if (c != 1) {
-                        term = std::make_unique<symbolic::BinaryOpExpr>(
-                            std::make_unique<symbolic::LiteralExpr>(c.get_si()),
-                            symbolic::BinaryOpExpr::Operator::Multiply, std::move(term));
-                    }
+                    auto term = resolvedExprs.at(i);
+                    if (c != 1)
+                        term = literal(c.get_si()) * term;
 
                     if (!lhs) {
-                        lhs = std::move(term);
+                        lhs = term;
                     } else {
-                        lhs = std::make_unique<symbolic::BinaryOpExpr>(
-                            std::move(lhs.value()), symbolic::BinaryOpExpr::Operator::Add,
-                            std::move(term));
+                        lhs = *lhs + term;
                     }
                 }
 
@@ -1240,33 +1186,27 @@ namespace acslg::analyzer {
                     continue;
                 }
 
-                if (lhs.value()->tryEvalAsConstant())
+                if (lhs.value().tryEvalAsConstant())
                     continue;
 
                 Coefficient c0 = constraint.inhomogeneous_term();
-                if (c0 != 0) {
-                    lhs = std::make_unique<symbolic::BinaryOpExpr>(
-                        std::move(lhs.value()), symbolic::BinaryOpExpr::Operator::Add,
-                        std::make_unique<symbolic::LiteralExpr>(c0.get_si()));
-                }
+                if (c0 != 0)
+                    lhs = *lhs + literal(c0.get_si());
 
-                symbolic::BinaryOpExpr::Operator op;
+                symbolic::BinaryOp op;
                 if (constraint.is_equality()) {
-                    op = symbolic::BinaryOpExpr::Operator::Equal;
+                    op = symbolic::BinaryOp::Equal;
                 } else if (constraint.is_strict_inequality()) {
-                    op = symbolic::BinaryOpExpr::Operator::GreaterEqual;
+                    op = symbolic::BinaryOp::GreaterEqual;
                 } else if (constraint.is_inequality()) {
-                    op = symbolic::BinaryOpExpr::Operator::GreaterThan;
+                    op = symbolic::BinaryOp::GreaterThan;
                 } else {
                     continue;
                 }
 
-                auto cond = std::make_unique<symbolic::BinaryOpExpr>(
-                    std::move(lhs.value()), op, std::make_unique<symbolic::LiteralExpr>(0));
-
-                conds.push_back(std::move(cond));
+                conds.push_back(lhs->binary(op, literal(0)));
             }
-            return R{std::move(newVars), std::move(conds)};
+            return AddrValueAndCondsPair{std::move(newVars), std::move(conds)};
         }
     } // namespace details
 } // namespace acslg::analyzer

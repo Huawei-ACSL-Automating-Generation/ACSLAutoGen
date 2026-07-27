@@ -22,6 +22,7 @@ namespace acslg::analyzer {
      */
     void ACSLAnalyzer::analyzeFunctions() {
         PROCESS("Running analysis functions...");
+        symbolic::ExprFactoryScope exprScope(context_.getExprFactory());
         static int count = 0;
         for (auto *func : this->context_.getFunctions()) {
             // Skip forward declarations to avoid generating specs for functions without code.

@@ -77,7 +77,6 @@ separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 target_compile_definitions(ACSLG_compiler_flags
                            INTERFACE ${LLVM_DEFINITIONS_LIST})
 add_subdirectory(src)
-add_subdirectory(tools)
 
 option(BUILD_TESTS "Build tests" OFF)
 

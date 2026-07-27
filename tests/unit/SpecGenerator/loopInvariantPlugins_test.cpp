@@ -36,10 +36,11 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("mx"));
         ASSERT_EQ(normalPostInfo.memoryMap.size(), 1);
-        EXPECT_TRUE(llvm::isa<UnknownExpr>(*normalPostInfo.memoryMap.begin()->second));
+        EXPECT_TRUE(normalPostInfo.memoryMap.begin()->second.isUnknown());
         ASSERT_TRUE(interruptPostInfos.empty());
     }
 
@@ -55,6 +56,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("cnt"));
         // EXPECT_THAT(*spec, ContainsRegex(R"(\\at\(p, [^)]+\)\[0 \.\. \\at\(n, [^)]+\) - 1\])"));
@@ -62,15 +64,15 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                value.get()->simplifiedExpr()->getACSL(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
+                    .getACSL({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 valueStr);
             if (addrStr == "p[i .. n - 1]") { // Too lazy to write the matching logic.
-                EXPECT_TRUE(value->isUnknown()) << valueStr;
+                EXPECT_TRUE(value.isUnknown()) << valueStr;
             } else if (addrStr == "cnt") {
                 EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("cnt"), HasSubstr("+ cnt")),
                                             AnyOf(StartsWith("-1 * n"), HasSubstr("- n")),
@@ -95,6 +97,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("i"));
         EXPECT_THAT(*spec, HasSubstr("cnt"));
@@ -103,15 +106,15 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                value.get()->simplifiedExpr()->getACSL(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
+                    .getACSL({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 valueStr);
             if (addrStr == "p[i .. n - 1]") {
-                EXPECT_TRUE(value->isUnknown()) << valueStr;
+                EXPECT_TRUE(value.isUnknown()) << valueStr;
             } else if (addrStr == "cnt") {
                 EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("cnt"), HasSubstr("+ cnt")),
                                             AnyOf(StartsWith("-1 * n"), HasSubstr("- n")),
@@ -139,6 +142,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("i"));
         EXPECT_THAT(*spec, HasSubstr("cnt"));
@@ -147,19 +151,19 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                value.get()->simplifiedExpr()->getACSL(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
+                    .getACSL({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 valueStr);
             if (addrStr == "p") {
                 EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("p"), HasSubstr("+ p")),
                                             AnyOf(StartsWith("n"), HasSubstr("+ n"))));
             } else if (addrStr ==
                        "p[0 .. -1 * i + n - 1]") { // Too lazy to write the matching logic.
-                EXPECT_TRUE(value->isUnknown()) << valueStr;
+                EXPECT_TRUE(value.isUnknown()) << valueStr;
             } else if (addrStr == "cnt") {
                 EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("cnt"), HasSubstr("+ cnt")),
                                             AnyOf(StartsWith("-1 * n"), HasSubstr("- n")),
@@ -205,6 +209,7 @@ namespace acslg::test::unit::spec_generator {
 }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("aa"));
         EXPECT_THAT(*spec, HasSubstr("bb"));
@@ -216,12 +221,12 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                value.get()->simplifiedExpr()->getACSL(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
+                    .getACSL({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 valueStr);
             if (addrStr == "aa") {
                 EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("a"), HasSubstr("+ a")),
@@ -235,9 +240,9 @@ namespace acslg::test::unit::spec_generator {
             } else if (addrStr == "nn") {
                 EXPECT_EQ(valueStr, "0");
             } else if (addrStr == "rr[0 .. nn - 1]") {
-                EXPECT_TRUE(value->isUnknown());
+                EXPECT_TRUE(value.isUnknown());
             } else if (addrStr == "carry") {
-                EXPECT_TRUE(value->isUnknown());
+                EXPECT_TRUE(value.isUnknown());
             } else {
                 FAIL() << addrStr << valueStr;
             }
@@ -256,11 +261,12 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("mx"));
         ASSERT_EQ(normalPostInfo.memoryMap.size(), 1);
         ASSERT_TRUE(interruptPostInfos.empty());
-        EXPECT_TRUE(llvm::isa<UnknownExpr>(*normalPostInfo.memoryMap.begin()->second));
+        EXPECT_TRUE(normalPostInfo.memoryMap.begin()->second.isUnknown());
     }
 
     // TEST(ComplexLoopAssignsPluginTest, ArrayAndScalar) {
@@ -281,13 +287,13 @@ namespace acslg::test::unit::spec_generator {
     //     EXPECT_EQ(postInfo.memoryMap.size(), 2);
     //     for (auto &[addr, value] : postInfo.memoryMap) {
     //         ASSERT_OK_AND_GET_FIRST_TO_VAR(
-    //             addr.get().getACSLOfValue(
+    //             addr.getACSLOfValue(
     //                 {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
     //             addrStr);
     //         if (addrStr == "p[i .. n - 1]") {
-    //             EXPECT_TRUE(value->isUnknown());
+    //             EXPECT_TRUE(value.isUnknown());
     //         } else if (addrStr == "cnt") {
-    //             EXPECT_TRUE(value->isUnknown());
+    //             EXPECT_TRUE(value.isUnknown());
     //         } else {
     //             FAIL() << addrStr;
     //         }
@@ -311,17 +317,18 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto [spec, _, normalPostInfo, interruptPostInfos] = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(spec, nullopt);
         EXPECT_THAT(*spec, HasSubstr("i"));
         ASSERT_EQ(normalPostInfo.memoryMap.size(), 1);
         EXPECT_TRUE(normalPostInfo.memoryMap.size() == 1);
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             if (addrStr == "i") {
-                EXPECT_TRUE(value->isUnknown());
+                EXPECT_TRUE(value.isUnknown());
             } else {
                 FAIL() << addrStr;
             }
@@ -330,13 +337,13 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_TRUE(interruptPostInfos.front().memoryMap.size() == 2);
         for (auto &[addr, value] : interruptPostInfos.front().memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue(
+                addr.getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             if (addrStr == "i") {
-                EXPECT_TRUE(value->isUnknown());
+                EXPECT_TRUE(value.isUnknown());
             } else if (addrStr == "found") {
-                EXPECT_TRUE(value->isUnknown());
+                EXPECT_TRUE(value.isUnknown());
             } else {
                 FAIL() << addrStr;
             }
@@ -355,6 +362,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -370,6 +378,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -385,6 +394,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -406,6 +416,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -423,6 +434,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -441,6 +453,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_EQ(res.acsl, nullopt);
     }
 
@@ -461,6 +474,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPIPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         EXPECT_NE(res.acsl, nullopt);
     }
 
@@ -477,6 +491,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -486,9 +501,11 @@ namespace acslg::test::unit::spec_generator {
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+                addr.getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
+                    .getACSL({.noStateLabelFunctionAt = true}),
+                valueStr);
             if (addrStr == "x") {
                 EXPECT_THAT(valueStr, "n");
             } else if (addrStr == "y") {
@@ -515,6 +532,7 @@ namespace acslg::test::unit::spec_generator {
         }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -524,9 +542,11 @@ namespace acslg::test::unit::spec_generator {
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+                addr.getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
+                    .getACSL({.noStateLabelFunctionAt = true}),
+                valueStr);
             if (addrStr == "x") {
                 EXPECT_THAT(valueStr, "n");
             } else if (addrStr != "i" && addrStr != "n") {
@@ -550,6 +570,7 @@ namespace acslg::test::unit::spec_generator {
     }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -558,9 +579,11 @@ namespace acslg::test::unit::spec_generator {
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+                addr.getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
+                    .getACSL({.noStateLabelFunctionAt = true}),
+                valueStr);
             if (addrStr == "i") {
                 EXPECT_THAT(valueStr, "43");
             } else if (addrStr == "j") {
@@ -583,6 +606,7 @@ namespace acslg::test::unit::spec_generator {
     }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -591,9 +615,11 @@ namespace acslg::test::unit::spec_generator {
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.get().getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+                addr.getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                value.get()->simplifiedExpr()->getACSL({.noStateLabelFunctionAt = true}), valueStr);
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
+                    .getACSL({.noStateLabelFunctionAt = true}),
+                valueStr);
             if (addrStr == "pt") {
                 EXPECT_THAT(valueStr, AllOf(AnyOf(StartsWith("n"), HasSubstr("+ n")),
                                             AnyOf(StartsWith("p"), HasSubstr("+ p"))));
@@ -617,6 +643,7 @@ namespace acslg::test::unit::spec_generator {
     }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -651,24 +678,32 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
 }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
         DEBUG(spec.value());
         DEBUG(normalPostInfos.size());
         ASSERT_FALSE(interruptPostInfos.empty());
+        bool sawPostCondition = false;
+        auto &factory         = getLastExprFactory();
         for (auto &postInfo : normalPostInfos) {
             DEBUG("");
             for (auto &[addr, value] : postInfo.memoryMap) {
-                DEBUG(addr.get().dump());
-                DEBUG(value->dump());
+                DEBUG(addr.dump());
+                DEBUG(value.dump());
             }
             for (auto &pathCond : postInfo.pathConds) {
-                auto expected = pathCond->simplifiedExpr()->getACSL({});
+                sawPostCondition = true;
+                auto canonical   = importExprHandle(factory, facadeHandle(pathCond));
+                EXPECT_EQ(canonical, facadeHandle(pathCond));
+                auto expected =
+                    simplifyForTest(ExprFactoryScope::current(), facadeHandle(pathCond)).getACSL({});
                 assert(expected);
                 DEBUG(expected.value().first);
             }
         }
+        EXPECT_TRUE(sawPostCondition);
     }
 
     // TEST(LinearInvariantPluginTest, Simple_6) {
@@ -710,6 +745,7 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
 }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -719,13 +755,24 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
         ASSERT_EQ(interruptPostInfos.front().size(), 1);
         auto &normalPath      = normalPostInfos.at(0);
         auto &interruptedPath = interruptPostInfos.front().at(0);
+        auto &factory              = getLastExprFactory();
+        auto expectOwnedQuantifier = [&](const Expr &condition) {
+            EXPECT_EQ(&condition.factory(), &factory);
+            auto quantifier = QuantifierOverRangeExpr::tryFrom(condition);
+            ASSERT_TRUE(quantifier);
+            EXPECT_EQ(&quantifier->range().factory(), &factory);
+        };
         for (auto &pathCond : normalPath.pathConds) {
-            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            expectOwnedQuantifier(pathCond);
+            auto expected =
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(pathCond)).getACSL({});
             assert(expected);
             DEBUG(expected.value().first);
         }
         for (auto &pathCond : interruptedPath.pathConds) {
-            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            expectOwnedQuantifier(pathCond);
+            auto expected =
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(pathCond)).getACSL({});
             assert(expected);
             DEBUG(expected.value().first);
         }
@@ -747,6 +794,7 @@ int arraySearch(int *a, int x, int n) {
     }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -756,16 +804,27 @@ int arraySearch(int *a, int x, int n) {
         ASSERT_EQ(interruptPostInfos.front().size(), 1);
         auto &normalPath      = normalPostInfos.at(0);
         auto &interruptedPath = interruptPostInfos.front().at(0);
+        auto &factory              = getLastExprFactory();
+        auto expectOwnedQuantifier = [&](const Expr &condition) {
+            EXPECT_EQ(&condition.factory(), &factory);
+            auto quantifier = QuantifierOverRangeExpr::tryFrom(condition);
+            ASSERT_TRUE(quantifier);
+            EXPECT_EQ(&quantifier->range().factory(), &factory);
+        };
         for (auto &pathCond : normalPath.pathConds) {
-            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            expectOwnedQuantifier(pathCond);
+            auto expected =
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(pathCond)).getACSL({});
             assert(expected);
             DEBUG(expected.value().first);
         }
         EXPECT_TRUE(interruptedPath.pathState == analyzer::Path::PathState::Return);
         EXPECT_TRUE(interruptedPath.returnExpr);
-        DEBUG(interruptedPath.returnExpr.value()->dump());
+        DEBUG(interruptedPath.returnExpr.value().dump());
         for (auto &pathCond : interruptedPath.pathConds) {
-            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            expectOwnedQuantifier(pathCond);
+            auto expected =
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(pathCond)).getACSL({});
             assert(expected);
             DEBUG(expected.value().first);
         }
@@ -797,6 +856,7 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
 }
     )";
         auto res      = doPSPluginOnFirstLoop(code, pluginId);
+        ExprFactoryScope scope(getLastExprFactory());
         ASSERT_TRUE(res);
         auto &[spec, _, normalPostInfos, interruptPostInfos] = res.value();
         EXPECT_NE(spec, nullopt);
@@ -807,13 +867,15 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
         auto &normalPath      = normalPostInfos.at(0);
         auto &interruptedPath = interruptPostInfos.front().at(0);
         for (auto &pathCond : normalPath.pathConds) {
-            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            auto expected =
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(pathCond)).getACSL({});
             assert(expected);
             DEBUG(expected.value().first);
         }
         EXPECT_TRUE(interruptedPath.pathState == analyzer::Path::PathState::Break);
         for (auto &pathCond : interruptedPath.pathConds) {
-            auto expected = pathCond->simplifiedExpr()->getACSL({});
+            auto expected =
+                simplifyForTest(ExprFactoryScope::current(), facadeHandle(pathCond)).getACSL({});
             assert(expected);
             DEBUG(expected.value().first);
         }

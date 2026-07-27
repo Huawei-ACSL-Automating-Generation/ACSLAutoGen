@@ -16,12 +16,28 @@ namespace acslg::test::utils {
     using namespace spec_generator;
     using namespace ::acslg::utils;
 
+    namespace {
+        symbolic::ExprFactory *lastExprFactory = nullptr;
+
+        void rememberExprFactory(ACSLGContext &context) {
+            lastExprFactory = &context.getExprFactory();
+        }
+    } // namespace
+
+    symbolic::ExprFactory &getLastExprFactory() {
+        if (lastExprFactory == nullptr)
+            ERROR("No test ExprFactory has been initialized.");
+        return *lastExprFactory;
+    }
+
     optional<string> doPluginOnFirstFunc(const string &code, const string &pid) {
         static ASTExtractor e;
         static optional<ACSLGContext> context{};
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         preState->init();
@@ -49,6 +65,8 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         ACSLAnalyzer analyzer(context.value());
         analyzer.analyzeFunctions();
         for (auto &str : context.value().getInsertedStrings()) {
@@ -63,6 +81,8 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         preState->init();
@@ -76,15 +96,14 @@ namespace acslg::test::utils {
         return postState;
     }
 
-    not_null<unique_ptr<symbolic::SymbolicExpr>> getReturnExprOfFirstPath(
-        const ProgramState &state) {
+    symbolic::detail::ExprHandle getReturnExprOfFirstPath(const ProgramState &state) {
         if (state.getPaths().empty())
             ERROR("Empty paths_!");
         auto &firstPath  = state.getPaths()[0];
         auto &returnExpr = firstPath->getReturnExpr();
         if (returnExpr == nullopt)
             ERROR("There is no returnExpr!");
-        return returnExpr.value()->clone();
+        return facadeHandle(*returnExpr);
     }
 
     not_null<unique_ptr<ProgramState>> getPostStateOfFirstLoop(const string_view code) {
@@ -93,6 +112,8 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func = e.findFirstDecl<FunctionDecl>();
         auto symbolicState =
             make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
@@ -114,6 +135,8 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         Stmt *loopStmt;
@@ -164,6 +187,8 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         Stmt *loopStmt;
@@ -206,6 +231,8 @@ namespace acslg::test::utils {
 
         e.init(code);
         context.emplace(e.getASTContext());
+        rememberExprFactory(context.value());
+        symbolic::ExprFactoryScope exprScope(context->getExprFactory());
         auto func     = e.findFirstDecl<FunctionDecl>();
         auto preState = make_unique<ProgramState>(make_unique<ACSLFunction>(func), context.value());
         Stmt *loopStmt;
@@ -243,7 +270,8 @@ namespace acslg::test::utils {
     FixtureWithCode::FixtureWithCode()
         : e(code), defaultPoint(symbolic::SourcePoint::fromFuncDecl(e.findFirstDecl<FunctionDecl>(),
                                                                     e.getSourceManager(),
-                                                                    e.getLangOptions())) {
+                                                                    e.getLangOptions())),
+          exprScope_(exprFactory_) {
         for (auto d : e.getASTContext().getTranslationUnitDecl()->decls()) {
             if (auto vd = dyn_cast<VarDecl>(d))
                 varDecls.push_back(vd);
@@ -273,61 +301,56 @@ namespace acslg::test::utils {
         return funcDecls.at(funcIdCountMap.at(id));
     }
 
-    symbolic::VariableAddress FixtureWithCode::makeVariableAddr(unsigned int id) {
-        return symbolic::VariableAddress{getVarDecl(id)};
+    symbolic::detail::AddrHandle FixtureWithCode::makeVariableAddr(unsigned int id) {
+        return variableAddressHandle(exprFactory_, getVarDecl(id));
     }
 
-    symbolic::SymbolAddress FixtureWithCode::makeRangeAddr(
+    symbolic::detail::AddrHandle FixtureWithCode::makeRangeAddr(
         unsigned int id,
-        unique_ptr<const symbolic::SymbolicExpr> offset,
-        unique_ptr<const symbolic::SymbolicExpr> len,
+        symbolic::detail::ExprHandle offset,
+        optional<symbolic::detail::ExprHandle> len,
         optional<symbolic::SourcePoint> fromPoint) {
-        auto baseAddr = makeVariableAddr(id);
-        if (len != nullptr)
-            return symbolic::SymbolAddress{QualType{}, baseAddr.addressClone().into_underlying(),
-                                           fromPoint.value_or(defaultPoint), std::move(offset),
-                                           std::move(len)};
-        return symbolic::SymbolAddress{QualType{}, baseAddr.addressClone().into_underlying(),
-                                       fromPoint.value_or(defaultPoint), std::move(offset),
-                                       nullopt};
+        return symbolAddressHandle(exprFactory_, QualType{},
+                                   variableAddressHandle(exprFactory_, getVarDecl(id)),
+                                   fromPoint.value_or(defaultPoint), offset, len);
     }
 
-    unique_ptr<symbolic::SymbolValue> FixtureWithCode::makeSymbolValue(
+    symbolic::detail::ExprHandle FixtureWithCode::makeSymbolValue(
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
-        return make_unique<symbolic::SymbolValue>(
-            symbolic::SymbolicExpr::Type{symbolic::SymbolicExpr::ScalarKind::UInt, id},
-            make_unique<symbolic::VariableAddress>(getVarDecl(id)),
-            fromPoint.value_or(defaultPoint));
+        auto value = symbolValueHandle(
+            exprFactory_,
+            symbolic::ExprType{symbolic::ExprScalarKind::UInt, id},
+            variableAddressHandle(exprFactory_, getVarDecl(id)), fromPoint.value_or(defaultPoint));
+        return value;
     }
 
-    symbolic::SymbolAddress FixtureWithCode::makeSimpleSymbolAddr(
+    symbolic::detail::AddrHandle FixtureWithCode::makeSimpleSymbolAddr(
         unsigned int id,
         optional<symbolic::SourcePoint> fromPoint) {
-        auto baseAddr = makeVariableAddr(id);
-        return symbolic::SymbolAddress{QualType{}, baseAddr.addressClone().into_underlying(),
-                                       fromPoint.value_or(defaultPoint), nullopt, nullopt};
+        return symbolAddressHandle(exprFactory_, QualType{},
+                                   variableAddressHandle(exprFactory_, getVarDecl(id)),
+                                   fromPoint.value_or(defaultPoint));
     }
 
-    symbolic::SymbolAddress FixtureWithCode::makePointAddr(unsigned int id, uint64_t off) {
-        return makeRangeAddr(id, make_unique<symbolic::LiteralExpr>(static_cast<uint64_t>(off)),
-                             nullptr);
+    symbolic::detail::AddrHandle FixtureWithCode::makePointAddr(unsigned int id, uint64_t off) {
+        return makeRangeAddr(id, literalHandle(exprFactory_, off), std::nullopt);
     }
 
     ::testing::AssertionResult FixtureWithCode::ExpectReadEqAt(
         MemoryModel &mm,
         unsigned id,
         uint64_t off,
-        const symbolic::SymbolicExpr &expected) {
+        symbolic::detail::ExprHandle expected) {
         auto addr = makePointAddr(id, off);
-        auto got  = mm.read(addr);
+        auto got  = mm.read(facadeAddr(addr));
         if (!got) {
             return ::testing::AssertionFailure() << "read returned null at off=" << off;
         }
-        if (*got.value() != expected) {
+        if (!facadeHandle(*got).structurallyEqual(expected)) {
             return ::testing::AssertionFailure()
-                   << "mismatch at off=" << off << "\n  got:      " << *got.value()
-                   << "\n  expected: " << expected;
+                   << "mismatch at off=" << off << "\n  got:      " << got.value().dump()
+                   << "\n  expected: " << expected.dump();
         }
         return ::testing::AssertionSuccess();
     }
@@ -336,7 +359,7 @@ namespace acslg::test::utils {
                                                                  unsigned id,
                                                                  uint64_t off) {
         auto addr = makePointAddr(id, off);
-        if (mm.read(addr) != std::nullopt) {
+        if (mm.read(facadeAddr(addr)) != std::nullopt) {
             return ::testing::AssertionFailure() << "expected null at off=" << off;
         }
         return ::testing::AssertionSuccess();

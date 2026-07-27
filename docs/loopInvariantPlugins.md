@@ -202,7 +202,7 @@
 3. **尝试把“随索引移动的地址”提升为 Range（SymbolAddress）**  
    通过 `tryGetAsRange` 检测：
    - base 地址本身在 normalExitPatternsMap 中有 pattern（表示指针基址在移动）
-   - 或 offset 是一个有 pattern 的 SymbolValue（典型：i 在变）
+   - 或 offset 是一个有 pattern 的 `SymbolValueExpr`（典型：i 在变）
    
    如果可提升，则构造一个 `SymbolAddress`，并把 length 设置为 loopCount（preciseLoopCount 或 maxLoopCount）。
 
@@ -324,7 +324,7 @@
 2. 将 `cond(i)` 转换成 `pred(k)`：
    - 找到 `cond` 中用到的每个 Symbol
    - 如果该 Symbol 对应的地址有 pattern（init, step），则替换为 `init + step * (k - i_init)`（或反向）
-   - 若 Symbol 不随循环变化，则直接 clone
+   - 若 Symbol 不随循环变化，则直接复用原 facade；发生替换时由 factory 重建受影响路径
    - 若 Symbol 的来源地址是 SymbolAddress（数组/指针访问），还会对子 offset 的 Symbol 做替换，并记录该数组基底
 3. 由 `pred(k)` 构造两类量词条件：
    - 正常退出路径：`forall k in range. !pred(k)`
@@ -355,4 +355,3 @@
 可以参考：
 - `src/SpecGenerator/loopInfoPlugins.cpp`：如何填充 LoopInfo（pattern/index/shared）
 - `src/SpecGenerator/specGenerator.cpp`：插件结果如何被 substitute、合并、并最终写回 post-state
-

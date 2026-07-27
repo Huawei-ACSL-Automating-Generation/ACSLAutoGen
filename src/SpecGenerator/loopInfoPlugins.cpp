@@ -10,6 +10,23 @@
 namespace acslg::spec_generator {
     namespace symb = acslg::analyzer::symbolic;
 
+    namespace {
+        symb::Expr buildMaxLoopCountExpr(const LoopInfo::Pattern &pattern,
+                                         const symb::Expr &boundValue,
+                                         bool includeClosedBound) {
+            auto &factory = symb::ExprFactoryScope::current();
+
+            auto result = pattern.step > 0
+                              ? (boundValue + symb::LiteralExpr{factory, pattern.step - 1}) -
+                                    pattern.initialValue
+                              : pattern.initialValue -
+                                    (boundValue + symb::LiteralExpr{factory, pattern.step + 1});
+            if (includeClosedBound)
+                result = result + symb::LiteralExpr{factory, 1};
+            return result;
+        }
+    } // namespace
+
     /**
      * @class SetEntryAndCurrentPlugin
      * @brief Computes symbolic loop entry/current states and inactive paths.
@@ -92,57 +109,54 @@ namespace acslg::spec_generator {
                 auto &preVA = symbolicLoopEntry->getPaths().at(0)->getVarAddr();
                 auto &preMS = symbolicLoopEntry->getPaths().at(0)->getMemoryState();
                 for (auto &&[addr, currentExpr] : currentEntry.getMemoryState().flat()) {
-                    if (auto rootDecl = addr.get().getFromRoot();
+                    if (auto rootDecl = addr.getFromRoot();
                         rootDecl == std::nullopt || !preVA.contains(rootDecl.value()))
                         continue; // skip locals that do not appear at loop entry
                     if (auto preValue = preMS.read(addr)) {
-                        if (*preValue.value() == *currentExpr)
+                        if (preValue->structurallyEqual(currentExpr))
                             continue; // unchanged relative to entry snapshot
                     } else {
-                        if (currentEntry.isUnchanged(addr, *symbolicLoopEntry->getPaths().front()))
+                        if (currentEntry.isUnchanged(addr,
+                                                     *symbolicLoopEntry->getPaths().front()))
                             continue; // unchanged relative to entry snapshot
                     }
-                    std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> entryExpr;
+                    std::optional<symb::Expr> entryExpr;
                     if (auto preValue = preMS.read(addr)) {
-                        entryExpr = preValue.value()->clone();
+                        entryExpr = *preValue;
                     } else {
-                        auto [hashAddrMap, _] =
-                            symb::SymbolicExpr::collectUsedSymbols(*currentExpr);
-                        if (hashAddrMap.size() != 1) {
-                            patterns.emplace(addr, std::nullopt);
+                        auto [usedSymbols, _] = symb::collectUsedSymbols(currentExpr);
+                        if (usedSymbols.size() != 1) {
+                            patterns.emplace(symb::AddressBox{addr}, std::nullopt);
                             continue;
                         }
                         // If the value is derived from the same address at loop entry, accept it as
                         // the baseline; otherwise mark as too complex.
-                        if (isFrom(*hashAddrMap.begin()->second->toSymbolicExpr(),
-                                   addr,
-                                   symbolicLoopEntry->getStartPoint())) {
-                            entryExpr = hashAddrMap.begin()->second->toSymbolicExpr()->clone();
+                        auto symbolExpr = *usedSymbols.begin();
+                        if (symbolExpr.isFrom(addr, symbolicLoopEntry->getStartPoint())) {
+                            entryExpr = symbolExpr;
                         } else {
-                            patterns.emplace(addr, std::nullopt);
+                            patterns.emplace(symb::AddressBox{addr}, std::nullopt);
                             continue;
                         }
                     }
 
                     if (entryExpr == std::nullopt)
                         UNREACHABLE();
-                    auto [_, hashIdMap] =
-                        symb::SymbolicExpr::collectUsedSymbols(*currentExpr, *entryExpr.value());
-                    if (currentExpr->getMaxDegree() < 0 ||
-                        entryExpr.value()->getMaxDegree() < 0) {
-                        patterns.emplace(addr, std::nullopt);
+                    auto [_, expressionIndexMap] =
+                        symb::collectUsedSymbols(currentExpr, *entryExpr);
+                    if (currentExpr.getMaxDegree() < 0 || entryExpr->getMaxDegree() < 0) {
+                        patterns.emplace(symb::AddressBox{addr}, std::nullopt);
                         continue;
                     }
                     // Compute current - entry; if only a constant difference remains, we treat it as
                     // a linear step (entry + k).
-                    if (auto diff = currentExpr->toLinearExpr(hashIdMap) -
-                                    entryExpr.value()->toLinearExpr(hashIdMap);
+                    if (auto diff = currentExpr.toLinearExpr(expressionIndexMap) -
+                                    entryExpr->toLinearExpr(expressionIndexMap);
                         diff.all_homogeneous_terms_are_zero()) {
                         auto step = diff.inhomogeneous_term().get_si();
-                        patterns.emplace(
-                            addr, Pattern{entryExpr.value()->clone().into_underlying(), step});
+                        patterns.emplace(symb::AddressBox{addr}, Pattern{*entryExpr, step});
                     } else {
-                        patterns.emplace(addr, std::nullopt);
+                        patterns.emplace(symb::AddressBox{addr}, std::nullopt);
                     }
                 }
                 return patterns;
@@ -153,7 +167,7 @@ namespace acslg::spec_generator {
                 if (LHS == std::nullopt && RHS == std::nullopt)
                     return true;
                 if (LHS && RHS) {
-                    if (*(*LHS).initialValue != *(*RHS).initialValue)
+                    if (!(*LHS).initialValue.structurallyEqual((*RHS).initialValue))
                         UNREACHABLE();
                     if ((*LHS).step == (*RHS).step)
                         return true;
@@ -252,18 +266,17 @@ namespace acslg::spec_generator {
             for (size_t i = 1; i < activePaths.size(); ++i)
                 merged->mergeWith(*activePaths[i]);
 
-            analyzer::symbolic::AddressBoxMap<
-                utils::not_null<std::unique_ptr<analyzer::symbolic::SymbolicExpr>>>
-                sharedMemory;
+            PostMemoryMap sharedMemory;
             for (auto &&[addr, value] : merged->getMemoryState().flat()) {
-                if (llvm::isa<analyzer::symbolic::UnknownExpr>(value.get()))
+                if (value.isUnknown())
                     continue;
-                sharedMemory.emplace(addr, value->clone());
+                sharedMemory.emplace(detail::importPostAddressThroughCurrentFactory(addr),
+                                     detail::importPostExprThroughCurrentFactory(value));
             }
 
             analyzer::PathConditions sharedConds;
             for (const auto &cond : merged->getPathConditions())
-                sharedConds.emplace(cond->clone());
+                sharedConds.emplace(cond);
 
             loopInfo.sharedMemoryMap = std::move(sharedMemory);
             loopInfo.sharedPathConds = std::move(sharedConds);
@@ -298,9 +311,9 @@ namespace acslg::spec_generator {
             }
             auto &entryPath = entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0);
 
-            auto sameAddressBetweenEveryPaths = [&](const clang::Expr *expr)
-                -> std::optional<utils::not_null<std::unique_ptr<symb::Address>>> {
-                auto lValue = std::optional<utils::not_null<std::unique_ptr<symb::Address>>>{};
+            auto sameAddressBetweenEveryPaths =
+                [&](const clang::Expr *expr) -> std::optional<symb::Addr> {
+                auto lValue = std::optional<symb::Addr>{};
                 for (auto &path : loopEntry.getPaths()) {
                     if (lValue == std::nullopt) {
                         lValue.emplace(path->extractLValue(expr));
@@ -308,9 +321,7 @@ namespace acslg::spec_generator {
                     }
 
                     auto nowLValue = path->extractLValue(expr);
-                    if (*lValue.value() != *nowLValue) {
-                        // lValue and nowLValue are both std::unique_ptr<Address> and not
-                        // equal.
+                    if (!lValue.value().structurallyEqual(nowLValue)) {
                         return std::nullopt;
                     }
                 }
@@ -320,8 +331,9 @@ namespace acslg::spec_generator {
             }; // sameAddressBetweenEveryPaths end
 
             auto hasPattern =
-                [&](const symb::Address &addr) -> std::optional<const LoopInfo::Pattern> {
-                if (auto it = patternInfo.normalExitPatternsMap.find(addr);
+                [&](const symb::Addr &addr) -> std::optional<const LoopInfo::Pattern> {
+                if (auto it =
+                        patternInfo.normalExitPatternsMap.find(symb::AddressBox{addr});
                     it != patternInfo.normalExitPatternsMap.end())
                     return it->second;
                 return std::nullopt;
@@ -340,7 +352,7 @@ namespace acslg::spec_generator {
                         ERROR("Do not support branch at here");
                     auto currentValue = std::move(valueVector[0]);
                     // If the expression changes after one iteration, it is not a stable index.
-                    if (*preValue != *currentValue)
+                    if (!preValue.structurallyEqual(currentValue))
                         return false;
                 }
                 return true;
@@ -445,13 +457,14 @@ namespace acslg::spec_generator {
             }
 
             std::optional<utils::not_null<const clang::Expr *>> indexExpr;
-            std::optional<utils::not_null<std::unique_ptr<symb::Address>>> indexRealAddr;
-            std::optional<utils::not_null<std::unique_ptr<symb::Address>>> indexSymbolicAddr;
-            std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> indexValue;
+            std::optional<symb::Addr> indexRealAddr;
+            std::optional<symb::Addr> indexSymbolicAddr;
+            std::optional<symb::Expr> indexValue;
             std::optional<clang::BinaryOperator::Opcode> opCode;
-            std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> boundValue;
-            std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> preciseLoopCount;
-            std::optional<utils::not_null<std::unique_ptr<symb::SymbolicExpr>>> maxLoopCount;
+            auto &factory = symb::ExprFactoryScope::current();
+            std::optional<symb::Expr> boundValue;
+            std::optional<symb::Expr> preciseLoopCount;
+            std::optional<symb::Expr> maxLoopCount;
             std::optional<LoopInfo::Pattern> indexPattern;
             std::optional<bool> isLocal;
 
@@ -466,7 +479,7 @@ namespace acslg::spec_generator {
                 using enum clang::BinaryOperator::Opcode;
 
                 if (auto addr = sameAddressBetweenEveryPaths(index)) {
-                    if (auto pattern = hasPattern(**addr); pattern == std::nullopt) {
+                    if (auto pattern = hasPattern(*addr); pattern == std::nullopt) {
                         INFO("Index has no parseable pattern.");
                         return false;
                     } else {
@@ -474,7 +487,7 @@ namespace acslg::spec_generator {
 
                         for (auto &prePath : preState.getPaths()) {
                             if (prePath->isActive()) {
-                                if (prePath->getMemoryState().contains(*addr.value()))
+                                if (prePath->getMemoryState().contains(addr.value()))
                                     isLocal = false;
                                 else
                                     isLocal = true;
@@ -485,7 +498,7 @@ namespace acslg::spec_generator {
                         if (isLocal == std::nullopt)
                             UNREACHABLE();
                     }
-                    indexRealAddr = std::move(*addr);
+                    indexRealAddr.emplace(*addr);
                 } else {
                     INFO("Same expr in different analyzer::Path points to different location!");
                     return false;
@@ -495,16 +508,16 @@ namespace acslg::spec_generator {
                     entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExpr(index);
                 if (values.size() != 1)
                     UNREACHABLE();
-                indexValue = std::move(values.at(0));
+                indexValue.emplace(values.at(0));
 
-                indexSymbolicAddr =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(index);
+                indexSymbolicAddr.emplace(
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(index));
 
                 if (unchangedAfterOneRound(bound)) {
                     auto evalResult = entryPath->evalExpr(bound);
                     if (evalResult.second.size() != 1)
                         ERROR("This location does not support control flow branches.");
-                    boundValue = std::move(evalResult.second.front());
+                    boundValue.emplace(evalResult.second.front());
                 } else {
                     INFO("Bound expr is changed after one round.");
                     return false;
@@ -524,35 +537,19 @@ namespace acslg::spec_generator {
                         return false;
                 }
 
-                using enum symb::BinaryOpExpr::Operator;
                 if (indexPattern == std::nullopt || boundValue == std::nullopt ||
                     opCode == std::nullopt)
                     UNREACHABLE();
 
-                // abs(n - i + step - 1)
-                maxLoopCount = indexPattern.value().step > 0
-                                   ? std::make_unique<symb::BinaryOpExpr>(
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
-                                                 indexPattern.value().step - 1)),
-                                         Subtract, indexPattern.value().initialValue->clone())
-                                   : std::make_unique<symb::BinaryOpExpr>(
-                                         indexPattern.value().initialValue->clone(), Subtract,
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
-                                                 indexPattern.value().step + 1)));
-                if (opCode.value() == BO_LE || opCode.value() == BO_GE)
-                    maxLoopCount = std::make_unique<symb::BinaryOpExpr>(
-                        std::move(maxLoopCount.value()), Add,
-                        std::make_unique<symb::LiteralExpr>(1));
+                maxLoopCount =
+                    buildMaxLoopCountExpr(indexPattern.value(), boundValue.value(),
+                                          opCode.value() == BO_LE || opCode.value() == BO_GE);
 
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
-                    preciseLoopCount = maxLoopCount.value()->clone();
+                    preciseLoopCount = maxLoopCount.value();
                 } else {
-                    preciseLoopCount = symb::UnknownExpr::makeUnknown().into_underlying();
+                    preciseLoopCount = symb::Expr::unknown();
                 }
             } else if (auto unaryExpr =
                            dyn_cast<clang::UnaryOperator>(indexCond->IgnoreParenImpCasts())) {
@@ -565,7 +562,7 @@ namespace acslg::spec_generator {
 
                 indexExpr = unaryExpr;
                 if (auto addr = sameAddressBetweenEveryPaths(unaryExpr)) {
-                    if (auto pattern = hasPattern(**addr); pattern == std::nullopt) {
+                    if (auto pattern = hasPattern(*addr); pattern == std::nullopt) {
                         INFO("Index has no parseable pattern.");
                         return false;
                     } else {
@@ -573,7 +570,7 @@ namespace acslg::spec_generator {
 
                         for (auto &prePath : preState.getPaths()) {
                             if (prePath->isActive()) {
-                                if (prePath->getMemoryState().contains(*addr.value()))
+                                if (prePath->getMemoryState().contains(addr.value()))
                                     isLocal = false;
                                 else
                                     isLocal = true;
@@ -584,48 +581,36 @@ namespace acslg::spec_generator {
                         if (isLocal == std::nullopt)
                             UNREACHABLE();
                     }
-                    indexRealAddr = std::move(*addr);
+                    indexRealAddr.emplace(*addr);
                 } else {
                     INFO("Same expr in different analyzer::Path points to different location!");
                     return false;
                 }
 
                 auto [_, values] =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExpr(unaryExpr);
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExpr(
+                        unaryExpr);
                 if (values.size() != 1)
                     UNREACHABLE();
-                indexValue = std::move(values.at(0));
+                indexValue.emplace(values.at(0));
 
-                indexSymbolicAddr =
+                indexSymbolicAddr.emplace(
                     entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(
-                        unaryExpr);
+                        unaryExpr));
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
-                boundValue = std::make_unique<symb::LiteralExpr>((int64_t)0);
+                boundValue = symb::LiteralExpr{factory, 0};
 
-                using enum symb::BinaryOpExpr::Operator;
                 if (indexPattern == std::nullopt || boundValue == std::nullopt)
                     UNREACHABLE();
 
-                // abs(n - i + step - 1)
-                maxLoopCount = indexPattern.value().step > 0
-                                   ? std::make_unique<symb::BinaryOpExpr>(
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
-                                                 indexPattern.value().step - 1)),
-                                         Subtract, indexPattern.value().initialValue->clone())
-                                   : std::make_unique<symb::BinaryOpExpr>(
-                                         indexPattern.value().initialValue->clone(), Subtract,
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
-                                                 indexPattern.value().step + 1)));
+                maxLoopCount =
+                    buildMaxLoopCountExpr(indexPattern.value(), boundValue.value(), false);
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
-                    preciseLoopCount = maxLoopCount.value()->clone();
+                    preciseLoopCount = maxLoopCount.value();
                 } else {
-                    preciseLoopCount = symb::UnknownExpr::makeUnknown().into_underlying();
+                    preciseLoopCount = symb::Expr::unknown();
                 }
             } else if (auto refExpr =
                            dyn_cast<clang::DeclRefExpr>(indexCond->IgnoreParenImpCasts())) {
@@ -649,7 +634,7 @@ namespace acslg::spec_generator {
 
                 if (auto it = loopEntry.getPaths()[0]->getVarAddr().find(varDecl);
                     it != loopEntry.getPaths()[0]->getVarAddr().end()) {
-                    if (auto pattern = hasPattern(*it->second); pattern == std::nullopt) {
+                    if (auto pattern = hasPattern(it->second); pattern == std::nullopt) {
                         INFO("Index has no parseable pattern.");
                         return false;
                     } else {
@@ -657,7 +642,7 @@ namespace acslg::spec_generator {
 
                         for (auto &prePath : preState.getPaths()) {
                             if (prePath->isActive()) {
-                                if (prePath->getMemoryState().contains(*it->second))
+                                if (prePath->getMemoryState().contains(it->second))
                                     isLocal = false;
                                 else
                                     isLocal = true;
@@ -668,46 +653,35 @@ namespace acslg::spec_generator {
                         if (isLocal == std::nullopt)
                             UNREACHABLE();
                     }
-                    indexRealAddr = it->second->addressClone();
+                    indexRealAddr = it->second;
                 } else {
                     ERROR("A varDecl* has no Address mapped, something must goes wrong.");
                 }
 
                 auto [_, values] =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExpr(refExpr);
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->evalExpr(
+                        refExpr);
                 if (values.size() != 1)
                     UNREACHABLE();
-                indexValue = std::move(values.at(0));
+                indexValue.emplace(values.at(0));
 
-                indexSymbolicAddr =
-                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(refExpr);
+                indexSymbolicAddr.emplace(
+                    entryAndCurrentInfo.symbolicLoopEntry->getPaths().at(0)->extractLValue(
+                        refExpr));
 
                 opCode     = clang::BinaryOperatorKind::BO_NE;
-                boundValue = std::make_unique<symb::LiteralExpr>((int64_t)0);
+                boundValue = symb::LiteralExpr{factory, 0};
 
-                using enum symb::BinaryOpExpr::Operator;
                 if (indexPattern == std::nullopt || boundValue == std::nullopt)
                     UNREACHABLE();
 
-                // abs(n - i + step - 1)
-                maxLoopCount = indexPattern.value().step > 0
-                                   ? std::make_unique<symb::BinaryOpExpr>(
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
-                                                 indexPattern.value().step - 1)),
-                                         Subtract, indexPattern.value().initialValue->clone())
-                                   : std::make_unique<symb::BinaryOpExpr>(
-                                         indexPattern.value().initialValue->clone(), Subtract,
-                                         std::make_unique<symb::BinaryOpExpr>(
-                                             boundValue.value()->clone(), Add,
-                                             std::make_unique<symb::LiteralExpr>(
-                                                 indexPattern.value().step + 1)));
+                maxLoopCount =
+                    buildMaxLoopCountExpr(indexPattern.value(), boundValue.value(), false);
                 if (std::abs(indexPattern.value().step) == 1 && extraConds.empty() &&
                     entryAndCurrentInfo.inactivePaths.empty()) {
-                    preciseLoopCount = maxLoopCount.value()->clone();
+                    preciseLoopCount = maxLoopCount.value();
                 } else {
-                    preciseLoopCount = symb::UnknownExpr::makeUnknown().into_underlying();
+                    preciseLoopCount = symb::Expr::unknown();
                 }
             } else {
                 INFO("Loop's condition expr is too complex.");
@@ -723,13 +697,13 @@ namespace acslg::spec_generator {
                 UNREACHABLE();
             loopInfo.indexInfo =
                 LoopInfo::IndexInfo{.indexExpr          = std::move(indexExpr.value()),
-                                    .indexRealAddr      = std::move(indexRealAddr.value()),
-                                    .indexSymbolicAddr  = std::move(indexSymbolicAddr.value()),
-                                    .indexSymbolicValue = std::move(indexValue.value()),
+                                    .indexRealAddr      = indexRealAddr.value(),
+                                    .indexSymbolicAddr = indexSymbolicAddr.value(),
+                                    .indexSymbolicValue = indexValue.value(),
                                     .op                 = std::move(opCode.value()),
-                                    .indexBound         = std::move(boundValue.value()),
-                                    .preciseLoopCount   = std::move(preciseLoopCount.value()),
-                                    .maxLoopCount       = std::move(maxLoopCount.value()),
+                                    .indexBound         = boundValue.value(),
+                                    .preciseLoopCount   = preciseLoopCount.value(),
+                                    .maxLoopCount       = maxLoopCount.value(),
                                     .indexPattern       = std::move(indexPattern.value()),
                                     .isLocal            = std::move(isLocal.value())};
             loopInfo.extraCondConjuncts = std::move(extraConds);

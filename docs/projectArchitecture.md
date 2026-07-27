@@ -101,6 +101,7 @@ ACSLGen 基于 Clang 做静态分析与重写，核心目标是：
 - **文件**：`src/Context/context.h` / `src/Context/context.cpp`
 - **职责**：
   - 管理 `ASTContext` / `SourceManager` / `Rewriter`
+  - 持有当前分析使用的 `ExprFactory`，统一管理符号 DAG 的生命周期
   - 收集目标函数与插入点
   - 统一写入策略与标签管理
 
@@ -125,28 +126,32 @@ ACSLGen 基于 Clang 做静态分析与重写，核心目标是：
   - 提供表达式等价、简化、哈希等操作
   - 为不变式/归纳提供表达式语义基础
 
-Symbolic 以 `SymbolicExpr` 为统一基类，整体层次可以按“基类 → 具体子类”展开理解：
+Symbolic 对外提供普通值语义的 facade，对内使用不可变、可复用的 node DAG：
 
-- **`SymbolicExpr`（表达式总基类）**  
-  提供克隆、相等性、简化与 ACSL 输出接口，所有表达式与地址节点都继承自它。
+```cpp
+ExprFactoryScope scope(context.getExprFactory());
+LiteralExpr x{10};
+LiteralExpr y{20};
+Expr sum = x + y;
+```
 
-- **表达式分支（直接继承 `SymbolicExpr`）**  
-  - `LiteralExpr`：字面量与常量。  
-  - `SymbolValue`：具备溯源信息的符号值。  
-  - `BinaryOpExpr` / `UnaryOpExpr`：算术、比较与逻辑运算节点。  
-  - `UnknownExpr`：能力范围外或保守占位的表达式。  
-  - `Structure`：结构体值容器，内部维护字段值集合并提供聚合查询。
+- **公开 facade**
+  - `Expr` / `Addr` 是通用表达式和地址值；每个值记录所属 factory 与非空只读 node 指针。
+  - `LiteralExpr`、`UnaryExpr`、`BinaryExpr`、`SymbolValueExpr`、`StructureExpr` 提供类型化构造与只读访问。
+  - `VariableAddress`、`FieldAddress`、`SymbolAddress` 提供类型化地址访问；offset/length 以 `Expr` facade 暴露。
+  - `withType`、`withField`、`withOffset` 等更新操作返回新 facade，不修改原节点。
 
-- **地址分支（继承 `Address` → `SymbolicExpr`）**  
-  - `VariableAddress`：变量级地址。  
-  - `FieldAddress`：结构体字段地址。  
-  - `SymbolAddress`：带 offset/length 的符号地址，可作为范围或指针基址使用。offset/length 本身是 `SymbolicExpr`，常见由 `SymbolValue`、`LiteralExpr`、`BinaryOpExpr` 组合（如 `i`、`i + k`、`n - i`），用于后续范围与聚合表达式的边界推导。
+- **内部 node DAG**
+  具体 node、handle、原生 RTTI 与结构相等实现位于 `src/Analyzer/Symbolic/detail/`，不属于外部 API。`ExprFactory` 按“hash bucket + 结构相等”驻留节点，相同结构复用同一节点，hash 冲突不会错误复用。factory 由 `ACSLGContext` 持有，跨 factory 的值必须通过 `importedInto(...)` 显式导入。
 
-- **溯源信息（`Symbol` mix-in）**  
-  `Symbol` 通过 `getFromAddr/getFromPoint` 追踪地址与源位置，当前由 `Structure`、`SymbolAddress`、`SymbolValue`、`SumOverRange`、`MaxMinOverRange` 等承载。
+- **溯源信息**
+  符号值、结构体和符号地址的内部节点记录来源地址与 `SourcePoint`；公开代码通过 facade 的 `sourceAddress()`、`from()`、`fromPoint()` 等只读接口访问。
 
-- **范围与聚合表达式（`OverRangeExpr` 家族）**  
-  由 `SymbolAddress::RangeIndex` 提供索引占位，在 `SumOverRange`、`QuantifierOverRange`、`MaxMinOverRange` 等范围表达式中被用作区间遍历的逻辑索引。它们主要在循环不变式生成阶段被构造（`src/SpecGenerator/loopInvariantPlugins.cpp`），并在不变式推导与线性化处理中被使用（如 `src/Analyzer/Symbolic/invariant.cpp`）。
+- **范围与聚合表达式 facade**
+  `Expr::rangeIndex(...)` 提供索引占位，`SumOverRangeExpr`、`QuantifierOverRangeExpr`、`MaxMinOverRangeExpr` facade 描述区间聚合。替换操作递归重建受影响路径，并复用其余节点。它们主要在循环不变式生成阶段构造（`src/SpecGenerator/loopInvariantPlugins.cpp`）。
+
+- **线性化与多面体算法**
+  `Expr::toLinearExpr(...)` 把可线性化的 facade 转成 PPL 输入。多面体引擎只消费转换结果，不拥有或修改符号 DAG。
 
 - **源点绑定（`SourcePoint`）**  
   负责把语义节点绑定到稳定的源代码标签，供 ACSL 输出与替换使用。

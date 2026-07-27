@@ -30,21 +30,30 @@ namespace acslg::analyzer {
     using std::literals::string_literals::operator""s;
 
     namespace {
-        std::optional<const clang::VarDecl *> getRootFromSymbol(const symbolic::Symbol &symbol) {
-            if (auto *sv = llvm::dyn_cast<const symbolic::SymbolValue>(&symbol))
-                return sv->getFromRoot();
-            if (auto *sa = llvm::dyn_cast<const symbolic::SymbolAddress>(&symbol))
-                return sa->getFromRoot();
+        std::optional<const clang::VarDecl *> getRootFromSymbol(const symbolic::Expr &symbol) {
+            if (auto sourceAddress = symbol.sourceAddress())
+                return sourceAddress->getFromRoot();
             return std::nullopt;
         }
 
-        bool containsLocalVar(const symbolic::SymbolicExpr &expr,
+        symbolic::Expr makeStructureForRecord(const clang::RecordDecl *record,
+                                              const symbolic::Addr &base,
+                                              symbolic::SourcePoint point) {
+            return symbolic::Expr::structure(record, base, point);
+        }
+
+        symbolic::Expr makeStructureForBase(clang::QualType type,
+                                            const symbolic::Addr &base,
+                                            symbolic::SourcePoint point) {
+            return makeStructureForRecord(type->getAsRecordDecl(), base, point);
+        }
+
+        bool containsLocalVar(const symbolic::Expr &expr,
                               const std::unordered_set<const clang::VarDecl *> &locals) {
-            auto [usedSymbols, unusedSymbols] = symbolic::SymbolicExpr::collectUsedSymbols(expr);
+            auto [usedSymbols, unusedSymbols] = symbolic::collectUsedSymbols(expr);
             (void)unusedSymbols;
-            for (const auto &entry : usedSymbols) {
-                const auto &symbol = entry.second;
-                auto root          = getRootFromSymbol(*symbol);
+            for (const auto &symbol : usedSymbols) {
+                auto root          = getRootFromSymbol(symbol);
                 if (!root)
                     continue;
                 if (locals.contains(root.value()->getCanonicalDecl()))
@@ -53,29 +62,27 @@ namespace acslg::analyzer {
             return false;
         }
 
-        std::unique_ptr<symbolic::SymbolicExpr> dropLocalConjuncts(
-            const symbolic::SymbolicExpr &expr,
+        std::optional<symbolic::Expr> dropLocalConjuncts(
+            const symbolic::Expr &expr,
             const std::unordered_set<const clang::VarDecl *> &locals) {
-            if (const auto *bin = llvm::dyn_cast<symbolic::BinaryOpExpr>(&expr);
-                bin && bin->getOperator() == symbolic::BinaryOpExpr::Operator::LogicalAnd) {
-                auto lhs = dropLocalConjuncts(*bin->getLeft(), locals);
-                auto rhs = dropLocalConjuncts(*bin->getRight(), locals);
+            if (const auto bin = symbolic::BinaryExpr::tryFrom(expr);
+                bin && bin->operation() == symbolic::BinaryOp::LogicalAnd) {
+                auto lhs = dropLocalConjuncts(bin->left(), locals);
+                auto rhs = dropLocalConjuncts(bin->right(), locals);
                 if (!lhs && !rhs)
-                    return nullptr;
+                    return std::nullopt;
                 if (!lhs)
                     return rhs;
                 if (!rhs)
                     return lhs;
-                return std::make_unique<symbolic::BinaryOpExpr>(
-                    utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>(std::move(lhs)),
-                    symbolic::BinaryOpExpr::Operator::LogicalAnd,
-                    utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>(std::move(rhs)));
+                return lhs->logicalAnd(*rhs);
             }
 
             if (containsLocalVar(expr, locals))
-                return nullptr;
-            return expr.clone().into_underlying();
+                return std::nullopt;
+            return expr;
         }
+
     } // namespace
 
     /**
@@ -84,14 +91,15 @@ namespace acslg::analyzer {
      * @param shallowCopy When true, reuse symbolic objects to avoid deep duplication.
      */
     Path::Path(const Path &other, bool shallowCopy)
-        : context_(other.context_), startPoint_(other.startPoint_) {
+        : memoryState_(other.context_.getExprFactory()), context_(other.context_),
+          startPoint_(other.startPoint_) {
         if (shallowCopy) {
             for (const auto &cond : other.pathConditions_) {
-                pathConditions_.emplace(cond->clone());
+                pathConditions_.emplace(cond);
             }
             currentState_ = other.currentState_;
             if (other.returnExpr_)
-                returnExpr_.emplace(other.returnExpr_.value()->clone().into_underlying());
+                returnExpr_.emplace(other.returnExpr_.value());
             else
                 returnExpr_ = std::nullopt;
         } else {
@@ -130,62 +138,62 @@ namespace acslg::analyzer {
 
         // Union variable addresses so that both paths agree on storage locations.
         for (const auto &[var, addr] : other.varAddr_)
-            varAddr_.emplace(var, std::make_unique<symbolic::VariableAddress>(*addr));
+            varAddr_.emplace(var, addr.importedInto(context_.getExprFactory()));
 
         // Collect all addresses touched by either path to merge differing symbolic values.
         MemoryModel::KeySet addresses;
         for (auto &&[addr, value] : memoryState_.flat())
-            addresses.insert(addr);
+            addresses.insert(symbolic::AddressBox{addr});
         for (auto &&[addr, value] : other.memoryState_.flat())
-            addresses.insert(addr);
+            addresses.insert(symbolic::AddressBox{addr});
 
         for (const auto &addrBox : addresses) {
-            auto lhsVal = memoryState_.read(addrBox);
-            auto rhsVal = other.memoryState_.read(addrBox);
+            auto &factory = context_.getExprFactory();
+            auto address = addrBox.importedInto(factory);
+            auto lhsVal        = memoryState_.read(address);
+            auto rhsVal        = other.memoryState_.read(address);
+            auto isFromAddress = [&](const symbolic::Expr &value,
+                                     const symbolic::SourcePoint &point) {
+                return value.isFrom(address, point);
+            };
 
-            if (auto *fieldAddr = llvm::dyn_cast<symbolic::FieldAddress>(&addrBox.get())) {
-                if (fieldAddr->getDefinition() &&
-                    fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
-                    fieldAddr->getFieldIndex() == 4) {
-                    DEBUG(
-                        "mergeWith BigNum->data: lhs="
-                        << (lhsVal ? lhsVal.value()->dump() : "<none>")
-                        << " rhs=" << (rhsVal ? rhsVal.value()->dump() : "<none>") << " lhsFrom="
-                        << (lhsVal && symbolic::isFrom(*lhsVal.value(), addrBox, startPoint_)
-                                ? "yes"
-                                : "no")
-                        << " rhsFrom="
-                        << (rhsVal && symbolic::isFrom(*rhsVal.value(), addrBox, other.startPoint_)
-                                ? "yes"
-                                : "no"));
+            if (auto fieldAddr = symbolic::FieldAddress::tryFrom(address)) {
+                if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
+                    fieldAddr->fieldIndex() == 4) {
+                    DEBUG("mergeWith BigNum->data: lhs="
+                          << (lhsVal ? lhsVal.value().dump() : "<none>")
+                          << " rhs=" << (rhsVal ? rhsVal.value().dump() : "<none>") << " lhsFrom="
+                          << (lhsVal && isFromAddress(lhsVal.value(), startPoint_) ? "yes" : "no")
+                          << " rhsFrom="
+                          << (rhsVal && isFromAddress(rhsVal.value(), other.startPoint_) ? "yes"
+                                                                                         : "no"));
                 }
             }
 
-            if (lhsVal && llvm::isa<symbolic::Structure>(lhsVal.value().get().get()))
+            if (lhsVal && lhsVal.value().isStructure())
                 continue;
-            if (rhsVal && llvm::isa<symbolic::Structure>(rhsVal.value().get().get()))
+            if (rhsVal && rhsVal.value().isStructure())
                 continue;
 
             if (lhsVal && rhsVal) {
-                if (*lhsVal.value() == *rhsVal.value())
+                if (lhsVal.value().structurallyEqual(rhsVal.value()))
                     continue;
             } else if (rhsVal) {
-                if (symbolic::isFrom(*rhsVal.value(), addrBox, other.startPoint_))
+                if (isFromAddress(rhsVal.value(), other.startPoint_))
                     continue;
             } else if (lhsVal) {
-                if (symbolic::isFrom(*lhsVal.value(), addrBox, startPoint_))
+                if (isFromAddress(lhsVal.value(), startPoint_))
                     continue;
             } else {
                 UNREACHABLE();
             }
-            if (auto *fieldAddr = llvm::dyn_cast<symbolic::FieldAddress>(&addrBox.get())) {
-                if (fieldAddr->getDefinition() &&
-                    fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
-                    fieldAddr->getFieldIndex() == 4) {
+            if (auto fieldAddr = symbolic::FieldAddress::tryFrom(address)) {
+                if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
+                    fieldAddr->fieldIndex() == 4) {
                     DEBUG("mergeWith BigNum->data: writing Unknown due to mismatch");
                 }
             }
-            memoryState_.write(addrBox, symbolic::UnknownExpr::makeUnknown().into_underlying());
+            memoryState_.write(address, symbolic::Expr::unknown());
         }
 
         // Intersect path conditions; a merged path must satisfy constraints from both sides.
@@ -193,7 +201,7 @@ namespace acslg::analyzer {
         intersected.reserve(std::min(pathConditions_.size(), other.pathConditions_.size()));
         for (const auto &cond : pathConditions_) {
             if (other.pathConditions_.find(cond) != other.pathConditions_.end())
-                intersected.emplace(cond->clone());
+                intersected.emplace(cond);
         }
         pathConditions_ = std::move(intersected);
 
@@ -201,9 +209,9 @@ namespace acslg::analyzer {
         if (currentState_ == PathState::Return) {
             if (!returnExpr_ || !other.returnExpr_)
                 ERROR("mergeWith: Return state without return expression.");
-            if (*returnExpr_.value() == *other.returnExpr_.value())
+            if (returnExpr_.value().structurallyEqual(other.returnExpr_.value()))
                 return;
-            returnExpr_.emplace(symbolic::UnknownExpr::makeUnknown().into_underlying());
+            returnExpr_ = symbolic::Expr::unknown(context_.getExprFactory());
         }
     }
 
@@ -222,8 +230,8 @@ namespace acslg::analyzer {
         for (auto &[varDecl, addr] : varAddr_) {
             clang::QualType ty = varDecl->getType();
 
-            auto symbol = getSymbol(ty, addr->addressClone().into_underlying(), startPoint_);
-            updateMemory(*addr, std::move(symbol));
+            auto symbol = symbolic::Expr::symbol(ty, addr, startPoint_);
+            updateMemory(addr, symbol);
         }
     }
 
@@ -235,12 +243,12 @@ namespace acslg::analyzer {
      * The routine walks through decl references, array subscripts, pointer dereferences, and member
      * accesses, allocating unknown symbols on demand when the memory model lacks entries.
      */
-    utils::not_null<std::unique_ptr<symbolic::Address>> Path::extractLValue(const clang::Expr *lhs) {
+    symbolic::Addr Path::extractLValue(const clang::Expr *lhs) {
         auto lexpr = lhs->IgnoreParenImpCasts();
         if (auto declRef = dyn_cast<clang::DeclRefExpr>(lexpr)) {
             if (auto varDecl = llvm::dyn_cast<clang::VarDecl>(declRef->getDecl())) {
                 if (auto it = varAddr_.find(varDecl->getCanonicalDecl()); it != varAddr_.end()) {
-                    return std::make_unique<symbolic::VariableAddress>(*it->second);
+                    return it->second;
                 } else {
                     ERROR("varState has no `VarDecl*` of `DeclRefExpr`, undefined variable?");
                 }
@@ -250,23 +258,22 @@ namespace acslg::analyzer {
 
         if (auto *arr = dyn_cast<clang::ArraySubscriptExpr>(lexpr)) {
             auto baseAddr = extractLValue(arr->getBase());
-            if (const auto symbol = memoryState_.read(*baseAddr)) {
-                auto symbolAddr =
-                    llvm::dyn_cast<const symbolic::SymbolAddress>(symbol.value().get().get());
-                if (symbolAddr == nullptr)
+            if (const auto symbol = memoryState_.read(baseAddr)) {
+                auto address    = symbol->tryAsAddress();
+                auto symbolAddr = address ? symbolic::SymbolAddress::tryFrom(*address)
+                                          : std::nullopt;
+                if (!symbolAddr)
                     ERROR("Value of ArraySubscriptExpr's base is not 'symbolic::SymbolAddress', "
                           "base is "
                           "neither pointer nor std::array?");
-                auto resultAddr = std::make_unique<symbolic::SymbolAddress>(*symbolAddr);
                 auto idxEval    = evalExpr(arr->getIdx());
                 if (idxEval.second.size() != 1)
                     ERROR("This location does not support control flow branches.");
-                auto idxExpr = std::move(idxEval.second[0]);
-                resultAddr->addOffset(std::move(idxExpr));
-                if (!memoryState_.contains(*resultAddr)) {
-                    auto newSymbol = getSymbol(
-                        arr->getType(), resultAddr->addressClone().into_underlying(), startPoint_);
-                    memoryState_.write(*resultAddr, std::move(newSymbol));
+                auto resultAddr = symbolAddr->withAddedOffset(idxEval.second[0]);
+                if (!memoryState_.contains(resultAddr)) {
+                    auto newSymbol =
+                        symbolic::Expr::symbol(arr->getType(), resultAddr, startPoint_);
+                    memoryState_.write(resultAddr, newSymbol);
                 }
                 return resultAddr;
             } else {
@@ -281,17 +288,15 @@ namespace acslg::analyzer {
                 if (addrEval.second.size() != 1)
                     TODO();
 
-                auto addrExpr = std::move(addrEval.second[0]);
-                if (auto addr = addrExpr->tryEvalAsSymbolAddr()) {
-                    if (!memoryState_.contains(*addr.value())) {
-                        auto symbol =
-                            getSymbol(uop->getType(),
-                                      addr.value()->addressClone().into_underlying(), startPoint_);
-                        memoryState_.write(*addr.value(), std::move(symbol));
+                auto addrExpr = addrEval.second[0];
+                if (auto addr = addrExpr.evaluatedAddress()) {
+                    if (!memoryState_.contains(*addr)) {
+                        auto symbol = symbolic::Expr::symbol(uop->getType(), *addr, startPoint_);
+                        memoryState_.write(*addr, symbol);
                     }
-                    return std::move(addr).value().into_underlying();
+                    return *addr;
                 } else {
-                    ERROR("Expected symbolic::Address in deref, got: " << addrExpr->dump());
+                    ERROR("Expected symbolic address in deref, got: " << addrExpr.dump());
                 }
             }
         }
@@ -306,36 +311,29 @@ namespace acslg::analyzer {
 
             auto fieldType = FD->getType();
             auto RD        = FD->getParent();
-            auto &layout   = RD->getASTContext().getASTRecordLayout(RD);
 
             if (mem->isArrow()) {
                 auto addrEval = evalExpr(base);
                 if (addrEval.second.size() != 1)
                     ERROR("This location does not support control flow branches.");
-                auto baseExpr = std::move(addrEval.second[0]);
-                auto baseAddr = baseExpr->tryEvalAsSymbolAddr();
+                auto baseExpr = addrEval.second[0];
+                auto baseAddr = baseExpr.evaluatedAddress();
                 if (baseAddr == std::nullopt)
-                    ERROR("Expected symbolic::Address for '->' base, got: " << baseExpr->dump());
+                    ERROR("Expected symbolic address for '->' base, got: " << baseExpr.dump());
 
-                if (!memoryState_.contains(*baseAddr.value())) {
-                    auto st = std::make_unique<symbolic::Structure>(
-                        RD, layout, baseAddr.value()->addressClone().into_underlying(),
-                        startPoint_);
-                    memoryState_.write(*baseAddr.value(), std::move(st));
+                if (!memoryState_.contains(*baseAddr)) {
+                    auto st = makeStructureForRecord(RD, *baseAddr, startPoint_);
+                    memoryState_.write(*baseAddr, st);
                 }
-                return std::make_unique<symbolic::FieldAddress>(
-                    fieldType, RD, baseAddr.value()->addressClone().into_underlying(),
-                    FD->getFieldIndex());
+                return baseAddr->field(fieldType, RD, FD->getFieldIndex());
             } else {
                 auto baseAddr = extractLValue(base);
 
-                if (!memoryState_.contains(*baseAddr)) {
-                    auto st = std::make_unique<symbolic::Structure>(
-                        RD, layout, baseAddr->addressClone().into_underlying(), startPoint_);
-                    memoryState_.write(*baseAddr, std::move(st));
+                if (!memoryState_.contains(baseAddr)) {
+                    auto st = makeStructureForRecord(RD, baseAddr, startPoint_);
+                    memoryState_.write(baseAddr, st);
                 }
-                return std::make_unique<symbolic::FieldAddress>(
-                    fieldType, RD, baseAddr->addressClone().into_underlying(), FD->getFieldIndex());
+                return baseAddr.field(fieldType, RD, FD->getFieldIndex());
             }
         }
 
@@ -345,10 +343,9 @@ namespace acslg::analyzer {
     /**
      * @brief Fetch the symbolic value currently stored for a variable.
      * @param var Variable declaration to query.
-     * @return Newly cloned symbolic expression representing the variable's value.
+     * @return Factory-owning symbolic expression representing the variable's value.
      */
-    utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> Path::getVarState(
-        const clang::VarDecl *var) const {
+    symbolic::Expr Path::getVarState(const clang::VarDecl *var) const {
         auto canonicalVar = var->getCanonicalDecl();
         auto varIt        = varAddr_.find(canonicalVar);
         if (varIt == varAddr_.end()) {
@@ -356,44 +353,42 @@ namespace acslg::analyzer {
             // different VarDecl instances). Do not allocate new memory here.
             for (const auto &[vd, addrPtr] : varAddr_) {
                 if (vd && vd->getName() == canonicalVar->getName()) {
-                    if (auto val = memoryState_.read(*addrPtr))
-                        return val.value()->clone();
+                    if (auto val = memoryState_.read(addrPtr))
+                        return *val;
                 }
             }
             ERROR("SymbolValue '" + canonicalVar->getNameAsString() + "' has no allocated address");
         }
-        auto addr  = varIt->second.get().get();
-        auto value = memoryState_.read(*addr);
+        auto addr  = varIt->second;
+        auto value = memoryState_.read(addr);
         if (value == std::nullopt)
             ERROR("SymbolValue '" + canonicalVar->getNameAsString() +
                   "' has no memory state entry for allocated address");
-        return value.value()->clone();
+        return *value;
     }
 
     /// @brief Return a const reference to accumulated path conditions.
     const PathConditions &Path::getPathConditions() const { return pathConditions_; }
 
-    utils::not_null<symbolic::VariableAddress *> Path::allocMemory(const clang::VarDecl *var,
-                                                                   bool initSymbolic) {
+    symbolic::Addr Path::allocMemory(const clang::VarDecl *var, bool initSymbolic) {
         auto canonicalVar = var->getCanonicalDecl();
         if (varAddr_.contains(canonicalVar)) {
             // All `symbolic::VariableAddress` built from same canonicalVar are same.
-            return varAddr_.at(canonicalVar).get().get();
+            return varAddr_.at(canonicalVar);
         }
-        auto newAddr = std::make_unique<symbolic::VariableAddress>(var);
-        auto rawPtr  = newAddr.get();
-        varAddr_.emplace(canonicalVar, std::move(newAddr));
+        auto &factory = context_.getExprFactory();
+        auto newAddr  = symbolic::Addr::variable(factory, var);
+        varAddr_.emplace(canonicalVar, newAddr);
 
         if (initSymbolic) {
             // Initialize with a symbolic value corresponding to the variable type.
-            auto initSym =
-                getSymbol(var->getType(), rawPtr->addressClone().into_underlying(), startPoint_);
-            memoryState_.write(*rawPtr, std::move(initSym));
+            auto initSym = symbolic::Expr::symbol(var->getType(), newAddr, startPoint_);
+            memoryState_.write(newAddr, initSym);
         } else {
             // Prevent uninitialized variables.
-            memoryState_.write(*rawPtr, symbolic::UnknownExpr::makeUnknown().into_underlying());
+            memoryState_.write(newAddr, symbolic::Expr::unknown());
         }
-        return rawPtr;
+        return newAddr;
     }
 
     /**
@@ -401,13 +396,14 @@ namespace acslg::analyzer {
      * @param addr Target address for the write.
      * @param expr Symbolic value to store.
      */
-    void Path::updateMemory(const symbolic::Address &addr,
-                            utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr) {
-        if (expr->isUnknown()) {
-            if (auto *fieldAddr = llvm::dyn_cast<symbolic::FieldAddress>(&addr)) {
-                if (fieldAddr->getDefinition() &&
-                    fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
-                    fieldAddr->getFieldIndex() == 4) {
+    void Path::updateMemory(const symbolic::Addr &addr, const symbolic::Expr &expr) {
+        auto &factory     = context_.getExprFactory();
+        auto importedAddr = addr.importedInto(factory);
+        auto importedExpr = expr.importedInto(factory);
+        if (importedExpr.isUnknown()) {
+            if (auto fieldAddr = symbolic::FieldAddress::tryFrom(importedAddr)) {
+                if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
+                    fieldAddr->fieldIndex() == 4) {
                     if (stmtCtx_) {
                         auto loc      = stmtCtx_->getBeginLoc();
                         auto &SM      = context_.getSourceManager();
@@ -423,7 +419,7 @@ namespace acslg::analyzer {
                 }
             }
         }
-        memoryState_.write(addr, std::move(expr).into_underlying());
+        memoryState_.write(importedAddr, importedExpr);
     }
 
     /**
@@ -432,22 +428,22 @@ namespace acslg::analyzer {
      * @param expr New symbolic value.
      */
     void Path::updateVarState(utils::not_null<const clang::VarDecl *> var,
-                              utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> expr) {
+                              const symbolic::Expr &expr) {
         auto canonicalVar = var->getCanonicalDecl();
         auto addrIt       = varAddr_.find(canonicalVar);
         if (addrIt == varAddr_.end())
             ERROR("SymbolValue has no allocated address");
 
         auto &addr = addrIt->second;
-        memoryState_.write(*addr, std::move(expr).into_underlying());
+        memoryState_.write(addr, expr);
     }
 
     /**
      * @brief Insert a new predicate into the path condition set.
      * @param cond Condition to add.
      */
-    void Path::insertPathCondition(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> cond) {
-        pathConditions_.emplace(std::move(cond));
+    void Path::insertPathCondition(const symbolic::Expr &cond) {
+        pathConditions_.insert(cond.importedInto(context_.getExprFactory()));
     }
 
     /**
@@ -458,13 +454,12 @@ namespace acslg::analyzer {
         auto cloned           = std::make_unique<Path>(context_, startPoint_);
         cloned->currentState_ = currentState_;
         for (const auto &entry : varAddr_)
-            cloned->varAddr_.emplace(entry.first,
-                                     std::make_unique<symbolic::VariableAddress>(*entry.second));
+            cloned->varAddr_.emplace(entry.first, entry.second);
         cloned->memoryState_ = memoryState_;
         for (const auto &cond : pathConditions_)
-            cloned->pathConditions_.emplace(cond->clone());
+            cloned->pathConditions_.emplace(cond);
         if (returnExpr_)
-            cloned->returnExpr_.emplace(returnExpr_.value()->clone().into_underlying());
+            cloned->returnExpr_.emplace(returnExpr_.value());
         else
             cloned->returnExpr_ = std::nullopt;
         cloned->stmtCtx_ = stmtCtx_;
@@ -473,7 +468,7 @@ namespace acslg::analyzer {
 
     struct CallArgs {
         std::unique_ptr<Path> path;
-        std::vector<std::unique_ptr<symbolic::SymbolicExpr>> args;
+        std::vector<symbolic::Expr> args;
     };
 
     /**
@@ -484,7 +479,7 @@ namespace acslg::analyzer {
      */
     void bindParams(Path *calleePath,
                     const clang::FunctionDecl *FD,
-                    const std::vector<std::unique_ptr<symbolic::SymbolicExpr>> &args) {
+                    const std::vector<symbolic::Expr> &args) {
         const unsigned n = FD->getNumParams();
         assert(args.size() == n);
 
@@ -495,7 +490,7 @@ namespace acslg::analyzer {
             auto slot = calleePath->allocMemory(param, /*initSymbolic*/ true);
 
             if (T->isPointerType()) {
-                auto m = args[i]->tryEvalAsSymbolAddr();
+                auto m = args[i].evaluatedAddress();
                 if (!m) {
                     auto &SM     = FD->getASTContext().getSourceManager();
                     auto locStr  = FD->getLocation().isValid() ? FD->getLocation().printToString(SM)
@@ -504,15 +499,15 @@ namespace acslg::analyzer {
                     auto paramStr = param->getNameAsString();
                     ERROR("pointer parameter expects address-like argument: func="
                           << funcStr << " param=" << paramStr << " index=" << i << " type="
-                          << T.getAsString() << " loc=" << locStr << " arg=" << args[i]->dump());
+                          << T.getAsString() << " loc=" << locStr << " arg=" << args[i].dump());
                 }
-                calleePath->updateMemory(*slot, m.value()->addressClone().into_underlying());
+                calleePath->updateMemory(slot, m->asExpr());
             } else if (T->isStructureType()) {
-                calleePath->updateMemory(*slot, args[i]->clone());
+                calleePath->updateMemory(slot, args[i]);
             } else if (T->isArrayType()) {
                 UNIMPLEMENT("array parameter");
             } else {
-                calleePath->updateMemory(*slot, args[i]->clone());
+                calleePath->updateMemory(slot, args[i]);
             }
         }
     }
@@ -542,9 +537,9 @@ namespace acslg::analyzer {
                     else
                         nc.path = std::move(newPaths[j - 1]).into_underlying();
                     nc.args.reserve(evalArg.args.size() + 1);
-                    for (auto &a : evalArg.args)
-                        nc.args.emplace_back(a->clone().into_underlying());
-                    nc.args.emplace_back(std::move(values[j]).into_underlying());
+                    for (auto a : evalArg.args)
+                        nc.args.emplace_back(a);
+                    nc.args.emplace_back(values[j]);
                     next.emplace_back(std::move(nc));
                 }
             }
@@ -572,52 +567,54 @@ namespace acslg::analyzer {
 
         EvalResult eval_result =
             llvm::TypeSwitch<const clang::Expr *, EvalResult>(expr)
-                .Case<clang::IntegerLiteral>([](const clang::IntegerLiteral *lit) -> EvalResult {
+                .Case<clang::IntegerLiteral>([this](
+                                                 const clang::IntegerLiteral *lit) -> EvalResult {
                     DEBUG("evaluating IntegerLiteral...");
                     llvm::APInt ap          = lit->getValue();
                     clang::QualType litType = lit->getType();
-                    std::unique_ptr<symbolic::SymbolicExpr> result;
+                    auto &factory           = context_.getExprFactory();
+                    symbolic::Expr result = symbolic::LiteralExpr{factory, 0};
 
                     if (litType->isBooleanType()) {
-                        result = std::make_unique<symbolic::LiteralExpr>(
-                            static_cast<bool>(ap.getZExtValue()));
+                        result = symbolic::LiteralExpr{factory,
+                                                       static_cast<bool>(ap.getZExtValue())};
                     } else if (litType->isUnsignedIntegerType()) {
                         if (ap.getBitWidth() <= 8)
-                            result = std::make_unique<symbolic::LiteralExpr>(
-                                static_cast<unsigned char>(ap.getZExtValue()));
+                            result = symbolic::LiteralExpr{
+                                factory, static_cast<unsigned char>(ap.getZExtValue())};
                         else if (ap.getBitWidth() <= 16)
-                            result = std::make_unique<symbolic::LiteralExpr>(
-                                static_cast<unsigned short>(ap.getZExtValue()));
+                            result = symbolic::LiteralExpr{
+                                factory, static_cast<unsigned short>(ap.getZExtValue())};
                         else if (ap.getBitWidth() <= 32)
-                            result = std::make_unique<symbolic::LiteralExpr>(
-                                static_cast<unsigned int>(ap.getZExtValue()));
+                            result = symbolic::LiteralExpr{
+                                factory, static_cast<unsigned int>(ap.getZExtValue())};
                         else if (ap.getBitWidth() <= 64)
-                            result = std::make_unique<symbolic::LiteralExpr>(
-                                static_cast<uint64_t>(ap.getZExtValue()));
+                            result = symbolic::LiteralExpr{
+                                factory, static_cast<uint64_t>(ap.getZExtValue())};
                         else
                             UNIMPLEMENT("Unsupported unsigned integer literal with bit width > 64: "
                                         << ap.getBitWidth());
                     } else {
                         if (ap.getBitWidth() <= 8)
-                            result = std::make_unique<symbolic::LiteralExpr>(
-                                static_cast<char>(ap.getSExtValue()));
+                            result = symbolic::LiteralExpr{factory,
+                                                           static_cast<char>(ap.getSExtValue())};
                         else if (ap.getBitWidth() <= 16)
-                            result = std::make_unique<symbolic::LiteralExpr>(
-                                static_cast<short>(ap.getSExtValue()));
+                            result = symbolic::LiteralExpr{factory,
+                                                           static_cast<short>(ap.getSExtValue())};
                         else if (ap.getBitWidth() <= 32)
-                            result = std::make_unique<symbolic::LiteralExpr>(
-                                static_cast<int>(ap.getSExtValue()));
+                            result = symbolic::LiteralExpr{factory,
+                                                           static_cast<int>(ap.getSExtValue())};
                         else if (ap.getBitWidth() <= 64)
-                            result = std::make_unique<symbolic::LiteralExpr>(
-                                static_cast<int64_t>(ap.getSExtValue()));
+                            result = symbolic::LiteralExpr{factory,
+                                                           static_cast<int64_t>(ap.getSExtValue())};
                         else
                             UNIMPLEMENT("Unsupported signed integer literal with bit width > 64: "
                                         << ap.getBitWidth());
                     }
 
-                    Formulas exprs;
+                    std::vector<symbolic::Expr> exprs;
                     exprs.reserve(1);
-                    exprs.push_back(std::move(result));
+                    exprs.push_back(result);
 
                     return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
                             std::move(exprs)};
@@ -627,23 +624,23 @@ namespace acslg::analyzer {
                     DEBUG("evaluating BinaryOperator...");
                     // TODO: maybe pack the logic in BO, ArraySub into a function?
                     EvalResult lhs                      = evalExpr(binOp->getLHS());
-                    symbolic::BinaryOpExpr::Operator op = symbolic::getBinaryOp(binOp->getOpcode());
+                    symbolic::BinaryOp op               = symbolic::getBinaryOp(binOp->getOpcode());
 
                     std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
-                    Formulas outExprs;
+                    std::vector<symbolic::Expr> outExprs;
 
                     size_t lhsCount = lhs.second.size();
                     for (size_t i = 0; i < lhsCount; ++i) {
-                        auto lhsExpr    = std::move(lhs.second[i]);
+                        auto lhsExpr    = lhs.second[i];
                         Path *path      = (i == 0) ? this : lhs.first[i - 1].get().get();
                         EvalResult rhs  = path->evalExpr(binOp->getRHS());
                         size_t rhsCount = rhs.second.size();
 
                         for (size_t j = 0; j < rhsCount; ++j) {
-                            auto rhsExpr = std::move(rhs.second[j]);
+                            auto rhsExpr = rhs.second[j];
 
-                            outExprs.emplace_back(std::make_unique<symbolic::BinaryOpExpr>(
-                                lhsExpr->clone(), op, std::move(rhsExpr)));
+                            auto resultExpr = lhsExpr.binary(op, rhsExpr);
+                            outExprs.emplace_back(resultExpr);
 
                             if (i == 0 && j == 0)
                                 continue;
@@ -674,28 +671,28 @@ namespace acslg::analyzer {
                     if (const auto *varDecl = dyn_cast<clang::VarDecl>(declRef->getDecl())) {
                         auto varExpr = getVarState(varDecl);
                         if (varDecl->getType()->isPointerType()) {
-                            DEBUG("DeclRefExpr pointer value: " << varExpr->dump());
+                            DEBUG("DeclRefExpr pointer value: " << varExpr.dump());
                         }
                         // Ensure pointer-typed variables are represented as addresses, except for
                         // the null pointer constant 0.
-                        if (varDecl->getType()->isPointerType() &&
-                            !varExpr->tryEvalAsSymbolAddr()) {
-                            if (auto *lit =
-                                    llvm::dyn_cast<symbolic::LiteralExpr>(varExpr.get().get());
-                                lit && lit->getLiteralValue() == 0) {
+                        auto &factory = context_.getExprFactory();
+                        if (varDecl->getType()->isPointerType() && !varExpr.evaluatedAddress()) {
+                            if (auto lit = symbolic::LiteralExpr::tryFrom(varExpr);
+                                lit && lit->value() == 0) {
                                 // Keep NULL as Int(0) rather than fabricating a pointer.
                             } else {
                                 WARN("DeclRefExpr to pointer '"
                                      << varDecl->getNameAsString()
                                      << "' has non-address value; fabricating symbolic address.");
-                                auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                    varDecl->getType()->getPointeeType(), std::nullopt,
-                                    startPoint_);
-                                varExpr = std::move(addr);
+                                auto addr =
+                                    symbolic::Addr::symbol(factory,
+                                                           varDecl->getType()->getPointeeType(),
+                                                           startPoint_);
+                                varExpr = addr.asExpr();
                             }
                         }
-                        Formulas exprs;
-                        exprs.push_back(std::move(varExpr));
+                        std::vector<symbolic::Expr> exprs;
+                        exprs.emplace_back(varExpr);
                         return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
                                 std::move(exprs)};
                     }
@@ -703,10 +700,10 @@ namespace acslg::analyzer {
                     if (const auto *enumDecl =
                             dyn_cast<clang::EnumConstantDecl>(declRef->getDecl())) {
                         llvm::APSInt value = enumDecl->getInitVal();
-                        auto litExpr       = std::make_unique<symbolic::LiteralExpr>(
-                            static_cast<int>(value.getSExtValue()));
-                        Formulas exprs;
-                        exprs.push_back(std::move(litExpr));
+                        symbolic::LiteralExpr litExpr{context_.getExprFactory(),
+                                                      static_cast<int>(value.getSExtValue())};
+                        std::vector<symbolic::Expr> exprs;
+                        exprs.push_back(litExpr);
                         return {std::vector<utils::not_null<std::unique_ptr<Path>>>{},
                                 std::move(exprs)};
                     }
@@ -719,18 +716,19 @@ namespace acslg::analyzer {
                     [this](const clang::ArraySubscriptExpr *arrSub) -> EvalResult {
                         DEBUG("evaluating ArraySubscriptExpr...");
                         auto variableAddr = extractLValue(arrSub->getBase());
-                        std::unique_ptr<symbolic::SymbolAddress> addr;
-                        if (const auto symbol = memoryState_.read(*variableAddr)) {
-                            auto ptr = llvm::dyn_cast<const symbolic::SymbolAddress>(
-                                symbol.value().get().get());
-                            if (ptr == nullptr)
+                        std::optional<symbolic::Addr> addr;
+                        if (const auto symbol = memoryState_.read(variableAddr)) {
+                            auto address = symbol->tryAsAddress();
+                            auto ptr     = address ? symbolic::SymbolAddress::tryFrom(*address)
+                                                   : std::nullopt;
+                            if (!ptr)
                                 ERROR("Value of ArraySubscriptExpr's base is not "
                                       "'symbolic::SymbolAddress', base "
                                       "is "
                                       "neither "
                                       "pointer nor "
                                       "array?");
-                            addr = std::make_unique<symbolic::SymbolAddress>(*ptr);
+                            addr.emplace(*ptr);
                         } else {
                             ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither "
                                   "pointer "
@@ -740,22 +738,18 @@ namespace acslg::analyzer {
                         EvalResult idx = evalExpr(arrSub->getIdx());
 
                         std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
-                        Formulas outExprs;
+                        std::vector<symbolic::Expr> outExprs;
 
                         for (size_t i = 0; i < idx.second.size(); ++i) {
-                            auto idxExpr        = std::move(idx.second[i]);
-                            std::string idxDump = idxExpr->dump();
-                            auto newAddr        = std::make_unique<symbolic::SymbolAddress>(*addr);
-                            newAddr->setOffset(std::move(idxExpr));
-                            if (auto value = memoryState_.read(*newAddr); value == std::nullopt) {
+                            auto newAddr = addr->withOffset(idx.second[i]);
+                            if (auto value = memoryState_.read(newAddr); value == std::nullopt) {
                                 auto elemType = arrSub->getType();
                                 auto symbol =
-                                    getSymbol(elemType, newAddr->addressClone().into_underlying(),
-                                              startPoint_);
-                                memoryState_.write(*newAddr, symbol->clone());
-                                outExprs.emplace_back(std::move(symbol));
+                                    symbolic::Expr::symbol(elemType, newAddr, startPoint_);
+                                memoryState_.write(newAddr, symbol);
+                                outExprs.push_back(symbol);
                             } else {
-                                outExprs.emplace_back(value.value()->clone());
+                                outExprs.emplace_back(*value);
                             }
                             if (i > 0)
                                 outPaths.emplace_back(std::move(idx.first[i - 1]));
@@ -767,8 +761,9 @@ namespace acslg::analyzer {
                     DEBUG("evaluating clang::CallExpr...");
                     const clang::FunctionDecl *callee = call->getDirectCallee();
                     if (!callee) {
-                        Formulas exprs;
-                        exprs.emplace_back(symbolic::UnknownExpr::makeUnknown().into_underlying());
+                        auto &factory = context_.getExprFactory();
+                        std::vector<symbolic::Expr> exprs;
+                        exprs.emplace_back(symbolic::Expr::unknown(factory));
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
@@ -784,8 +779,9 @@ namespace acslg::analyzer {
                     if (ignoreNames.contains(name) ||
                         lowerName.find("assert") != std::string::npos ||
                         lowerName.find("print") != std::string::npos) {
-                        Formulas exprs;
-                        exprs.emplace_back(symbolic::UnknownExpr::makeUnknown().into_underlying());
+                        auto &factory = context_.getExprFactory();
+                        std::vector<symbolic::Expr> exprs;
+                        exprs.emplace_back(symbolic::Expr::unknown(factory));
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
@@ -793,14 +789,13 @@ namespace acslg::analyzer {
                     if (name == "__builtin_expect") {
                         if (call->getNumArgs() < 1)
                             UNIMPLEMENT("__builtin_expect expects at least one argument.");
-                        auto evalNoBranch = [this](const clang::Expr *e)
-                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                        auto evalNoBranch = [this](const clang::Expr *e) -> symbolic::Expr {
                             auto ER = this->evalExpr(e);
                             if (ER.second.size() != 1 || !ER.first.empty())
                                 ERROR("__builtin_expect argument must not branch or fork.");
-                            return ER.second[0]->clone();
+                            return ER.second[0];
                         };
-                        Formulas exprs;
+                        std::vector<symbolic::Expr> exprs;
                         exprs.emplace_back(evalNoBranch(call->getArg(0)));
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -811,15 +806,14 @@ namespace acslg::analyzer {
                         // Treat like memset: returns the destination pointer.
                         if (call->getNumArgs() < 3)
                             UNIMPLEMENT("__builtin___memset_chk expects at least 3 arguments.");
-                        auto evalNoBranch = [this](const clang::Expr *e)
-                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                        auto evalNoBranch = [this](const clang::Expr *e) -> symbolic::Expr {
                             auto ER = this->evalExpr(e);
                             if (ER.second.size() != 1 || !ER.first.empty())
                                 ERROR("__builtin___memset_chk arguments must not branch or fork.");
                             return ER.second[0]->clone();
                         };
                         auto destExpr = evalNoBranch(call->getArg(0));
-                        Formulas exprs;
+                        std::vector<symbolic::Expr> exprs;
                         exprs.emplace_back(std::move(destExpr));
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -832,39 +826,38 @@ namespace acslg::analyzer {
                         if (call->getNumArgs() != 1)
                             UNIMPLEMENT("BSL_SAL_Malloc expects exactly one size argument.");
 
-                        auto evalNoBranch = [this](const clang::Expr *e)
-                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                        auto evalNoBranch = [this](const clang::Expr *e) -> symbolic::Expr {
                             auto ER = this->evalExpr(e);
                             if (ER.second.size() != 1 || !ER.first.empty())
                                 ERROR("BSL_SAL_Malloc argument must not branch or fork.");
-                            return ER.second[0]->clone();
+                            return ER.second[0];
                         };
 
                         auto sizeExpr = evalNoBranch(call->getArg(0));
-                        if (auto c = sizeExpr->tryEvalAsConstant(); c && *c == 0) {
-                            Formulas exprs;
-                            exprs.emplace_back(std::make_unique<symbolic::LiteralExpr>(0));
+                        if (auto c = sizeExpr.tryEvalAsConstant(); c && *c == 0) {
+                            std::vector<symbolic::Expr> exprs;
+                            symbolic::LiteralExpr zero{context_.getExprFactory(), 0};
+                            exprs.emplace_back(zero);
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
 
                         auto retTy = call->getType();
                         if (!retTy->isPointerType()) {
-                            Formulas exprs;
-                            exprs.emplace_back(
-                                symbolic::UnknownExpr::makeUnknown().into_underlying());
+                            auto &factory = context_.getExprFactory();
+                            std::vector<symbolic::Expr> exprs;
+                            exprs.emplace_back(symbolic::Expr::unknown(factory));
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
-
                         auto pointAfterCall = symbolic::SourcePoint::fromStmtAfter(
                             call, context_.getSourceManager(), context_.getLangOptions());
                         auto pointeeTy = retTy->getPointeeType();
-                        auto addr = std::make_unique<symbolic::SymbolAddress>(
-                            pointeeTy, std::nullopt, pointAfterCall);
+                        auto &factory  = context_.getExprFactory();
+                        auto addr      = symbolic::Addr::symbol(factory, pointeeTy, pointAfterCall);
 
-                        Formulas exprs;
-                        exprs.emplace_back(std::move(addr));
+                        std::vector<symbolic::Expr> exprs;
+                        exprs.emplace_back(addr.asExpr());
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
@@ -908,36 +901,31 @@ namespace acslg::analyzer {
                             // @WindOctober: TODO consider make this lambda function external.
                             // Evaluate both call arguments under the assumption of purity and
                             // single-result semantics.
-                            auto evalNoBranch = [this](const clang::Expr *e)
-                                -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                            auto evalNoBranch = [this](const clang::Expr *e) -> symbolic::Expr {
                                 auto ER = this->evalExpr(e);
                                 if (ER.second.size() != 1 || !ER.first.empty())
                                     ERROR("BSL_SAL_Calloc arguments must not branch or fork.");
-                                return ER.second[0]->clone();
+                                return ER.second[0];
                             };
                             auto a0 = evalNoBranch(call->getArg(0));
                             auto a1 = evalNoBranch(call->getArg(1));
-                            DEBUG("BSL_SAL_Calloc: arg0=" << a0->dump());
-                            DEBUG("BSL_SAL_Calloc: arg1=" << a1->dump());
+                            DEBUG("BSL_SAL_Calloc: arg0=" << a0.dump());
+                            DEBUG("BSL_SAL_Calloc: arg1=" << a1.dump());
 
                             // Form the total-size expression by multiplying the two arguments.
-                            using Op = symbolic::BinaryOpExpr::Operator;
-                            auto totalSizeBytes =
-                                utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>{
-                                    std::make_unique<symbolic::BinaryOpExpr>(
-                                        a0->clone(), Op::Multiply, a1->clone())};
-
+                            using Op = symbolic::BinaryOp;
+                            auto &factory = context_.getExprFactory();
+                            auto totalSizeExpr = a0.binary(Op::Multiply, a1);
                             // Remove exactly one multiplicative factor equal to sizeof(T) to obtain
                             // the element count. This corresponds to interpreting the product as
                             // "bytes = elems * sizeof(T)".
                             auto lengthInElems = acslg::analyzer::symbolic::strip_sizeof_factor(
-                                std::move(totalSizeBytes), sz);
-                            DEBUG("BSL_SAL_Calloc: lengthInElems=" << lengthInElems->dump());
+                                totalSizeExpr, sz);
+                            DEBUG("BSL_SAL_Calloc: lengthInElems=" << lengthInElems.dump());
 
                             // Allocate a fresh symbolic address anchored at the current allocation
                             // site.
-                            auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                elemTy, std::nullopt, pointAfterCall);
+                            auto addr = symbolic::Addr::symbol(factory, elemTy, pointAfterCall);
 
                             // Note: The length is temporarily omitted since it conceptually
                             // represents the legal bound of accessible memory, rather than a
@@ -945,14 +933,13 @@ namespace acslg::analyzer {
                             // explicit range tracking, this statement can be uncommented to
                             // re-enable length assignment.
 
-                            // addr->setLength(std::move(lengthInElems));
+                            // addr = addr.withLength(lengthInElems);
 
                             // Materialize the first element symbol at the allocated base address.
-                            auto elemSym = symbolic::UnknownExpr::makeUnknown();
-                            memoryState_.write(*addr, elemSym->clone());
+                            memoryState_.write(addr, symbolic::Expr::unknown());
 
-                            Formulas exprs;
-                            exprs.emplace_back(std::move(addr));
+                            std::vector<symbolic::Expr> exprs;
+                            exprs.emplace_back(addr.asExpr());
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             DEBUG("BSL_SAL_Calloc: return (builtin scalar)");
                             return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -962,18 +949,17 @@ namespace acslg::analyzer {
                         // layout.
                         if (elemTy->isStructureType()) {
                             DEBUG("BSL_SAL_Calloc: structure type");
-                            auto addr = std::make_unique<symbolic::SymbolAddress>(
-                                elemTy, std::nullopt, pointAfterCall,
-                                std::make_unique<symbolic::LiteralExpr>(0));
+                            auto &factory = context_.getExprFactory();
+                            auto zero     = symbolic::LiteralExpr{factory, 0};
+                            auto addr     = symbolic::Addr::symbol(elemTy, pointAfterCall, zero);
 
                             // Build a Structure whose fields (and nested structs) are Unknown, then
                             // write it.
-                            auto structVal = symbolic::makeUnknownStructure(
-                                elemTy, addr->addressClone().into_underlying(), pointAfterCall);
-                            memoryState_.write(*addr, std::move(structVal));
+                            auto structVal = makeStructureForBase(elemTy, addr, pointAfterCall);
+                            memoryState_.write(addr, structVal);
 
-                            Formulas exprs;
-                            exprs.emplace_back(std::move(addr));
+                            std::vector<symbolic::Expr> exprs;
+                            exprs.emplace_back(addr.asExpr());
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             DEBUG("BSL_SAL_Calloc: return (structure)");
                             return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -990,12 +976,11 @@ namespace acslg::analyzer {
                             call, context_.getSourceManager(), context_.getLangOptions());
 
                         // TODO: @WindOctober use a
-                        auto evalNoBranch = [this](const clang::Expr *e)
-                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                        auto evalNoBranch = [this](const clang::Expr *e) -> symbolic::Expr {
                             auto ER = this->evalExpr(e);
                             if (ER.second.size() != 1 || !ER.first.empty())
                                 ERROR("BSL_SAL_Free argument must not branch or fork.");
-                            return ER.second[0]->clone();
+                            return ER.second[0];
                         };
 
                         // Expect exactly one argument: the pointer to free.
@@ -1004,29 +989,31 @@ namespace acslg::analyzer {
                         auto p = evalNoBranch(call->getArg(0));
 
                         // free(NULL) → no-op.
-                        if (auto c = p->tryEvalAsConstant(); c && *c == 0) {
+                        if (auto c = p.tryEvalAsConstant(); c && *c == 0) {
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
-                            Formulas exprs;
+                            std::vector<symbolic::Expr> exprs;
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
 
                         // The argument must be a symbolic address.
-                        auto maybeAddr = p->tryEvalAsSymbolAddr();
+                        auto &factory  = context_.getExprFactory();
+                        auto maybeAddr = p.evaluatedAddress();
                         if (!maybeAddr)
                             UNIMPLEMENT("BSL_SAL_Free argument must be a valid pointer value.");
 
                         // Normalize to base address (offset = 0) for consistent memory handling.
-                        auto freedAddr = std::move(*maybeAddr);
-                        freedAddr->resetOffset();
+                        symbolic::Addr normalizedFreedAddr = *maybeAddr;
+                        normalizedFreedAddr = normalizedFreedAddr.withOffset(symbolic::LiteralExpr{
+                            factory,
+                            static_cast<int64_t>(symbolic::SymbolAddress::ZERO_OFFSET)});
 
                         // Overwrite freed memory with an UnknownExpr (symbolic tombstone).
                         // This prevents later reads from reusing stale symbolic values.
-                        auto tomb = symbolic::UnknownExpr::makeUnknown();
-                        memoryState_.write(*freedAddr, tomb->clone());
+                        memoryState_.write(normalizedFreedAddr, symbolic::Expr::unknown());
 
                         // Record the freed address as a formula result (optional, for tracking).
-                        Formulas exprs;
-                        exprs.emplace_back(std::move(freedAddr).into_underlying());
+                        std::vector<symbolic::Expr> exprs;
+                        exprs.emplace_back(normalizedFreedAddr.asExpr());
 
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         return Path::EvalResult(std::move(empty), std::move(exprs));
@@ -1034,26 +1021,26 @@ namespace acslg::analyzer {
 
                     auto modelMemcpy = [&](const clang::Expr *destArg, const clang::Expr *srcArg,
                                            const clang::Expr *countArg) -> EvalResult {
-                        auto evalNoBranch = [this](const clang::Expr *e)
-                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                        auto evalNoBranch = [this](const clang::Expr *e) -> symbolic::Expr {
                             auto ER = this->evalExpr(e);
                             if (ER.second.size() != 1 || !ER.first.empty())
                                 ERROR("memcpy arguments must not branch or fork.");
-                            return ER.second[0]->clone();
+                            return ER.second[0];
                         };
 
                         auto destExpr  = evalNoBranch(destArg);
                         auto srcExpr   = evalNoBranch(srcArg);
                         auto countExpr = evalNoBranch(countArg);
 
-                        DEBUG("memcpy dest expr: " << destExpr->dump());
+                        DEBUG("memcpy dest expr: " << destExpr.dump());
 
-                        auto destAddr = destExpr->tryEvalAsSymbolAddr();
-                        auto srcAddr  = srcExpr->tryEvalAsSymbolAddr();
+                        auto &factory = context_.getExprFactory();
+                        auto destAddr = destExpr.evaluatedAddress();
+                        auto srcAddr  = srcExpr.evaluatedAddress();
                         if (!srcAddr)
                             UNIMPLEMENT("memcpy expects a pointer source argument.");
 
-                        clang::QualType elemTy = srcAddr.value()->getPointeeType();
+                        clang::QualType elemTy = srcAddr->pointeeType();
                         if (elemTy->isVoidType() || elemTy->isIncompleteType())
                             UNIMPLEMENT("memcpy requires a non-void pointee type for modeling.");
 
@@ -1066,42 +1053,40 @@ namespace acslg::analyzer {
                         if (sz == 0)
                             UNIMPLEMENT("memcpy requires a non-zero element size.");
 
-                        auto lengthExpr = countExpr->clone();
+                        auto lengthExpr = countExpr;
                         bool noCopy     = false;
-                        if (auto *lit =
-                                llvm::dyn_cast<symbolic::LiteralExpr>(lengthExpr.get().get())) {
-                            const auto raw = static_cast<uint64_t>(lit->getLiteralValue());
+                        if (auto lit = symbolic::LiteralExpr::tryFrom(lengthExpr)) {
+                            const auto raw = static_cast<uint64_t>(lit->value());
                             if (raw == 0) {
                                 noCopy = true;
                             } else if (sz > 1) {
                                 if (raw % sz != 0)
                                     UNIMPLEMENT("memcpy size is not a multiple of element size.");
-                                lengthExpr = std::make_unique<symbolic::LiteralExpr>(raw / sz);
+                                symbolic::LiteralExpr lengthLiteral{
+                                    context_.getExprFactory(), raw / sz};
+                                lengthExpr = lengthLiteral;
                             }
                         } else if (sz > 1) {
                             lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
-                                std::move(lengthExpr), sz);
+                                lengthExpr, sz);
                         }
 
-                        Formulas exprs;
-                        exprs.emplace_back(destExpr->clone());
+                        std::vector<symbolic::Expr> exprs;
+                        exprs.emplace_back(destExpr);
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         if (noCopy)
                             return Path::EvalResult(std::move(empty), std::move(exprs));
 
-                        auto destRange =
-                            std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
-                        destRange->setLength(std::move(lengthExpr));
+                        symbolic::Addr destBase = *destAddr;
+                        auto destRange          = destBase.withLength(lengthExpr);
 
-                        auto srcIndexed =
-                            std::make_unique<symbolic::SymbolAddress>(*srcAddr.value());
-                        srcIndexed->resetLength();
-                        srcIndexed->addOffset(
-                            std::make_unique<symbolic::SymbolAddress::RangeIndex>("i"));
+                        symbolic::Addr srcBase    = *srcAddr;
+                        auto srcBaseWithoutLength = srcBase.withoutLength();
+                        auto rangeIndexExpr = symbolic::Expr::rangeIndex(factory, "i");
+                        auto srcIndexed = srcBaseWithoutLength.withAddedOffset(rangeIndexExpr);
 
-                        auto valueExpr = symbolic::getSymbol(
-                            elemTy, srcIndexed->addressClone().into_underlying(), startPoint_);
-                        memoryState_.write(*destRange, std::move(valueExpr));
+                        auto valueExpr = symbolic::Expr::symbol(elemTy, srcIndexed, startPoint_);
+                        memoryState_.write(destRange, valueExpr);
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     };
 
@@ -1120,12 +1105,11 @@ namespace acslg::analyzer {
                     if (name == "memset_s") {
                         if (call->getNumArgs() < 4)
                             UNIMPLEMENT("memset_s expects four arguments.");
-                        auto evalNoBranch = [this](const clang::Expr *e)
-                            -> utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> {
+                        auto evalNoBranch = [this](const clang::Expr *e) -> symbolic::Expr {
                             auto ER = this->evalExpr(e);
                             if (ER.second.size() != 1 || !ER.first.empty())
                                 ERROR("memset_s arguments must not branch or fork.");
-                            return ER.second[0]->clone();
+                            return ER.second[0];
                         };
 
                         auto destExpr  = evalNoBranch(call->getArg(0));
@@ -1134,18 +1118,18 @@ namespace acslg::analyzer {
                             call, context_.getSourceManager(), context_.getLangOptions());
 
                         // If dest is NULL or count is 0, just return dest.
-                        if (auto c = destExpr->tryEvalAsConstant(); c && *c == 0) {
-                            Formulas exprs;
-                            exprs.emplace_back(std::move(destExpr));
+                        if (auto c = destExpr.tryEvalAsConstant(); c && *c == 0) {
+                            std::vector<symbolic::Expr> exprs;
+                            exprs.emplace_back(destExpr);
                             std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
 
-                        auto destAddr = destExpr->tryEvalAsSymbolAddr();
+                        auto destAddr = destExpr.evaluatedAddress();
                         if (!destAddr)
                             UNIMPLEMENT("memset_s expects a pointer destination argument.");
 
-                        clang::QualType elemTy = destAddr.value()->getPointeeType();
+                        clang::QualType elemTy = destAddr->pointeeType();
                         if (auto argTy = call->getArg(0)->IgnoreParenImpCasts()->getType();
                             argTy->isPointerType()) {
                             elemTy = argTy->getPointeeType();
@@ -1159,49 +1143,45 @@ namespace acslg::analyzer {
                         if (sz == 0)
                             UNIMPLEMENT("memset_s requires a non-zero element size.");
 
-                        auto lengthExpr = countExpr->clone();
+                        auto lengthExpr = countExpr;
                         bool noSet      = false;
-                        if (auto *lit =
-                                llvm::dyn_cast<symbolic::LiteralExpr>(lengthExpr.get().get())) {
-                            const auto raw = static_cast<uint64_t>(lit->getLiteralValue());
+                        if (auto lit = symbolic::LiteralExpr::tryFrom(lengthExpr)) {
+                            const auto raw = static_cast<uint64_t>(lit->value());
                             if (raw == 0) {
                                 noSet = true;
                             } else if (sz > 1) {
                                 if (raw % sz != 0)
                                     UNIMPLEMENT("memset_s size is not a multiple of element size.");
-                                lengthExpr = std::make_unique<symbolic::LiteralExpr>(raw / sz);
+                                symbolic::LiteralExpr lengthLiteral{
+                                    context_.getExprFactory(), raw / sz};
+                                lengthExpr = lengthLiteral;
                             }
                         } else if (sz > 1) {
                             lengthExpr = acslg::analyzer::symbolic::strip_sizeof_factor(
-                                std::move(lengthExpr), sz);
+                                lengthExpr, sz);
                         }
 
-                        Formulas exprs;
-                        exprs.emplace_back(destExpr->clone());
+                        std::vector<symbolic::Expr> exprs;
+                        exprs.emplace_back(destExpr);
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
                         if (noSet)
                             return Path::EvalResult(std::move(empty), std::move(exprs));
 
                         if (elemTy->isStructureType()) {
-                            auto destBase =
-                                std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
-                            destBase->resetLength();
-                            auto structVal = symbolic::makeUnknownStructure(
-                                elemTy, destBase->addressClone().into_underlying(), pointAfterCall);
-                            memoryState_.write(*destBase, std::move(structVal));
+                            auto destBase  = destAddr->withoutLength();
+                            auto structVal = makeStructureForBase(elemTy, destBase, pointAfterCall);
+                            memoryState_.write(destBase, structVal);
                             return Path::EvalResult(std::move(empty), std::move(exprs));
                         }
 
-                        auto destRange =
-                            std::make_unique<symbolic::SymbolAddress>(*destAddr.value());
-                        destRange->setLength(std::move(lengthExpr));
-                        memoryState_.write(
-                            *destRange, symbolic::UnknownExpr::makeUnknown().into_underlying());
+                        symbolic::Addr destBase = *destAddr;
+                        auto destRange          = destBase.withLength(lengthExpr);
+                        memoryState_.write(destRange, symbolic::Expr::unknown());
                         return Path::EvalResult(std::move(empty), std::move(exprs));
                     }
 
                     std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
-                    Formulas outExprs;
+                    std::vector<symbolic::Expr> outExprs;
 
                     const clang::FunctionDecl *calleeWithBody = callee;
                     if (!calleeWithBody->hasBody()) {
@@ -1217,8 +1197,8 @@ namespace acslg::analyzer {
 
                     if (!calleeWithBody->hasBody()) {
                         if (calleeWithBody->getNumParams() == 0) {
-                            outExprs.push_back(
-                                symbolic::UnknownExpr::makeUnknown().into_underlying());
+                            auto &factory = context_.getExprFactory();
+                            outExprs.emplace_back(symbolic::Expr::unknown(factory));
                             return {std::move(outPaths), std::move(outExprs)};
                         }
                         UNIMPLEMENT("Calling a function \"" + calleeWithBody->getNameAsString() +
@@ -1245,35 +1225,33 @@ namespace acslg::analyzer {
                             for (const auto &[vd, addrPtr] : callerSnapshot->varAddr_) {
                                 if (!p->varAddr_.contains(vd)) {
                                     p->varAddr_.emplace(
-                                        vd, std::make_unique<symbolic::VariableAddress>(*addrPtr));
+                                        vd, addrPtr.importedInto(p->context_.getExprFactory()));
                                 }
-                                if (auto val = callerSnapshot->memoryState_.read(*addrPtr)) {
+                                if (auto val = callerSnapshot->memoryState_.read(addrPtr)) {
                                     auto &dstAddr = p->varAddr_.at(vd);
-                                    p->memoryState_.write(*dstAddr, val.value()->clone());
+                                    p->memoryState_.write(dstAddr, val.value());
                                 }
                             }
                             // Restore statement context back to the caller.
                             // Do not merge with callerSnapshot here; keep callee state as-is.
                             p->stmtCtx_ = callerSnapshot->stmtCtx_;
-                            auto ret =
-                                (p->getReturnExpr()
-                                     ? p->getReturnExpr().value()->clone()
-                                     : symbolic::UnknownExpr::makeUnknown().into_underlying());
+                            auto ret = p->getReturnExpr().value_or(
+                                symbolic::Expr::unknown(p->context_.getExprFactory()));
 
                             if (!firstTaken) {
                                 this->swap(*p);
-                                outExprs.emplace_back(std::move(ret));
+                                outExprs.emplace_back(ret);
                                 firstTaken = true;
                             } else {
-                                outExprs.emplace_back(std::move(ret));
+                                outExprs.emplace_back(ret);
                                 outPaths.emplace_back(std::move(p));
                             }
                         }
                     }
 
                     if (!firstTaken) {
-                        outExprs.emplace_back(
-                            symbolic::UnknownExpr::makeUnknown().into_underlying());
+                        auto &factory = context_.getExprFactory();
+                        outExprs.emplace_back(symbolic::Expr::unknown(factory));
                     }
 
                     return {std::move(outPaths), std::move(outExprs)};
@@ -1284,23 +1262,22 @@ namespace acslg::analyzer {
                         EvalResult cond = evalExpr(condOp->getCond());
 
                         std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
-                        Formulas outExprs;
+                        std::vector<symbolic::Expr> outExprs;
 
                         for (size_t i = 0; i < cond.second.size(); ++i) {
                             Path *condPath = (i == 0) ? this : cond.first[i - 1].get().get();
-                            auto condExpr  = std::move(cond.second[i]);
+                            auto condExpr  = cond.second[i];
 
                             // false branch
                             auto falsePath   = condPath->clone();
-                            auto negatedCond = std::make_unique<symbolic::UnaryOpExpr>(
-                                symbolic::UnaryOpExpr::Operator::LogicalNot, condExpr->clone());
-                            falsePath->insertPathCondition(std::move(negatedCond));
+                            auto negatedExpr = condExpr.logicalNot();
+                            falsePath->insertPathCondition(negatedExpr);
 
                             EvalResult falseVal = falsePath->evalExpr(condOp->getFalseExpr());
 
                             // true branch
                             auto truePath = condPath;
-                            truePath->insertPathCondition(std::move(condExpr));
+                            truePath->insertPathCondition(condExpr);
 
                             EvalResult trueVal = truePath->evalExpr(condOp->getTrueExpr());
 
@@ -1325,12 +1302,12 @@ namespace acslg::analyzer {
                     DEBUG("evaluating UnaryOperator...");
                     auto operand = evalExpr(uop->getSubExpr());
                     std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
-                    Formulas outExprs;
+                    std::vector<symbolic::Expr> outExprs;
 
-                    symbolic::UnaryOpExpr::Operator op;
+                    symbolic::UnaryOp op;
                     switch (uop->getOpcode()) {
                         using enum clang::UnaryOperatorKind;
-                        using enum symbolic::UnaryOpExpr::Operator;
+                        using enum symbolic::UnaryOp;
                         case UO_Plus: op = Plus; break;
                         case UO_Minus: op = Minus; break;
                         case UO_LNot: op = LogicalNot; break;
@@ -1348,57 +1325,54 @@ namespace acslg::analyzer {
 
                     for (size_t i = 0; i < operand.second.size(); ++i) {
                         Path *path  = (i == 0 ? this : operand.first[i - 1].get().get());
-                        auto unExpr = std::move(operand.second[i]);
+                        auto unExpr = operand.second[i];
 
                         // Prevent misuse by not capturing this and operand.
                         [this, &path, &unExpr, &op, &outExprs, &uop]() {
-                            using enum symbolic::UnaryOpExpr::Operator;
+                            using enum symbolic::UnaryOp;
                             if (op == PreInc || op == PostInc || op == PreDec || op == PostDec) {
                                 // ++x / x++ / --x / x--
                                 auto addr = path->extractLValue(uop->getSubExpr());
                                 // old value
-                                auto oldVal = path->memoryState_.read(*addr);
+                                auto oldVal = path->memoryState_.read(addr);
                                 if (oldVal == std::nullopt)
                                     ERROR("memoryState_ doesn't contain addr.");
                                 // compute new = old +/- 1
-                                auto one    = std::make_unique<symbolic::LiteralExpr>(1);
+                                auto &factory = context_.getExprFactory();
+                                symbolic::LiteralExpr one{factory, 1};
                                 auto binOp  = (op == PreInc || op == PostInc)
-                                                  ? symbolic::BinaryOpExpr::Operator::Add
-                                                  : symbolic::BinaryOpExpr::Operator::Subtract;
-                                auto newVal = std::make_unique<symbolic::BinaryOpExpr>(
-                                    oldVal.value()->clone(), binOp, std::move(one));
+                                                  ? symbolic::BinaryOp::Add
+                                                  : symbolic::BinaryOp::Subtract;
+                                auto oldValExpr = oldVal.value();
+                                auto newValExpr = oldValExpr.binary(binOp, one);
                                 // return pre vs post
                                 if (op == PreInc || op == PreDec)
-                                    outExprs.emplace_back(newVal->clone());
-                                else {
-                                    outExprs.emplace_back(oldVal.value()->clone());
-                                }
-                                // Writing back first will cause oldVal to become dangling.
-                                // write back
-                                path->memoryState_.write(*addr, std::move(newVal));
+                                    outExprs.emplace_back(newValExpr);
+                                else
+                                    outExprs.emplace_back(*oldVal);
+                                path->memoryState_.write(addr, newValExpr);
                             } else if (op == Dereference) {
                                 // *x
-                                auto addr = unExpr->tryEvalAsSymbolAddr();
+                                auto addr = unExpr.evaluatedAddress();
                                 if (addr == std::nullopt)
-                                    ERROR("Expected symbolic::Address, got: " << unExpr->dump());
-                                if (auto value = path->memoryState_.read(*addr.value());
+                                    ERROR("Expected symbolic address, got: " << unExpr.dump());
+                                if (auto value = path->memoryState_.read(*addr);
                                     value == std::nullopt) {
                                     auto symbol =
-                                        getSymbol(uop->getType(),
-                                                  addr.value()->addressClone().into_underlying(),
-                                                  startPoint_);
-                                    path->memoryState_.write(*addr.value(), symbol->clone());
-                                    outExprs.emplace_back(std::move(symbol));
+                                        symbolic::Expr::symbol(uop->getType(), *addr, startPoint_);
+                                    path->memoryState_.write(*addr, symbol);
+                                    outExprs.push_back(symbol);
                                 } else {
-                                    outExprs.emplace_back(value.value()->clone());
+                                    outExprs.emplace_back(*value);
                                 }
                             } else if (op == AddrOf) {
                                 // &x
                                 auto addr = path->extractLValue(uop->getSubExpr());
-                                outExprs.emplace_back(addr->addressClone().into_underlying());
-                            } else
-                                outExprs.emplace_back(
-                                    std::make_unique<symbolic::UnaryOpExpr>(op, std::move(unExpr)));
+                                outExprs.emplace_back(addr.asExpr());
+                            } else {
+                                auto resultExpr = unExpr.unary(op);
+                                outExprs.emplace_back(resultExpr);
+                            }
                         }();
                         if (i > 0)
                             outPaths.emplace_back(std::move(operand.first[i - 1]));
@@ -1414,8 +1388,9 @@ namespace acslg::analyzer {
 
                     auto targetType = symbolic::deriveType(castExpr->getType());
 
-                    for (auto &subExpr : sub.second)
-                        subExpr->setValType(targetType);
+                    for (auto &subExpr : sub.second) {
+                        subExpr = subExpr.withType(targetType);
+                    }
 
                     return {std::move(sub.first), std::move(sub.second)};
                 })
@@ -1427,57 +1402,52 @@ namespace acslg::analyzer {
                     if (!FD->getParent())
                         UNREACHABLE();
                     auto RD         = FD->getParent();
-                    auto &layout    = RD->getASTContext().getASTRecordLayout(RD);
                     EvalResult base = evalExpr(memberExpr->getBase());
                     if (base.second.size() != 1)
                         ERROR("No control flow branching permitted within a pointer-to-member "
                               "expression.");
                     if (memberExpr->isArrow()) {
-                        DEBUG("MemberExpr base value: " << base.second[0]->dump());
+                        DEBUG("MemberExpr base value: " << base.second[0].dump());
                     }
 
-                    std::unique_ptr<symbolic::Structure> st;
-                    auto baseExpr = std::move(base.second[0]).into_underlying();
+                    std::optional<symbolic::Expr> st;
+                    auto baseExpr = base.second[0];
                     if (memberExpr->isArrow()) {
-                        auto baseAddr = baseExpr->tryEvalAsSymbolAddr();
+                        auto &factory = context_.getExprFactory();
+                        auto baseAddr = baseExpr.evaluatedAddress();
                         if (baseAddr == std::nullopt) {
                             WARN("LHS of '->' is not an address; fabricating symbolic pointer to "
                                  "continue.");
-                            auto newAddr = std::make_unique<symbolic::SymbolAddress>(
-                                memberExpr->getBase()->getType()->getPointeeType(), std::nullopt,
+                            baseAddr = symbolic::Addr::symbol(
+                                factory, memberExpr->getBase()->getType()->getPointeeType(),
                                 startPoint_);
-                            baseAddr = utils::not_null<std::unique_ptr<symbolic::SymbolAddress>>{
-                                std::move(newAddr)};
                         }
-                        auto val = memoryState_.read(*baseAddr.value());
+                        auto val = memoryState_.read(*baseAddr);
                         DEBUG("MemberExpr base in memory: " << (val ? "yes" : "no"));
                         if (val == std::nullopt) {
-                            st = std::make_unique<symbolic::Structure>(
-                                RD, layout, baseAddr.value()->addressClone().into_underlying(),
-                                startPoint_);
-                            memoryState_.write(*baseAddr.value(), st->clone());
-                        } else if (auto stVal = llvm::dyn_cast<const symbolic::Structure>(
-                                       val.value().get().get())) {
-                            st = std::make_unique<symbolic::Structure>(*stVal);
+                            st = makeStructureForRecord(RD, *baseAddr, startPoint_);
+                            memoryState_.write(*baseAddr, *st);
+                        } else if (auto stVal = symbolic::StructureExpr::tryFrom(*val)) {
+                            st = *stVal;
                         } else {
                             ERROR("Dereferenced value is not a structure");
                         }
                     } else {
-                        if (auto stExpr = llvm::dyn_cast<symbolic::Structure>(baseExpr))
-                            st = std::move(stExpr);
+                        if (baseExpr.isStructure())
+                            st = baseExpr;
                         else
                             ERROR("LHS of '.' is not a structure");
                     }
 
                     size_t idx = FD->getFieldIndex();
-                    auto slots = st->fieldsValues();
-                    if (idx >= slots.size())
+                    const symbolic::StructureExpr structure{*st};
+                    if (idx >= structure.size())
                         UNREACHABLE();
-                    auto fieldValue = slots[idx]->clone();
+                    auto fieldValue = structure.field(idx);
                     DEBUG("MemberExpr field " << FD->getNameAsString() << " idx=" << idx
-                                              << " value: " << fieldValue->dump());
+                                              << " value: " << fieldValue.dump());
                     EvalResult result{};
-                    result.second.push_back(std::move(fieldValue));
+                    result.second.push_back(fieldValue);
                     return result;
                 })
 
@@ -1494,16 +1464,20 @@ namespace acslg::analyzer {
                         if (sub.second.size() != 1)
                             ERROR("ConstantExpr subExpr produced multiple results");
                         auto resultTy = symbolic::deriveType(ce->getType());
-                        sub.second[0]->setValType(resultTy);
+                        sub.second[0] = sub.second[0].withType(resultTy);
                         return {std::move(sub.first), std::move(sub.second)};
                     }
                     auto resultTy = symbolic::deriveType(ce->getType());
-                    auto lit      = std::make_unique<symbolic::LiteralExpr>(
-                        v.isSigned() ? static_cast<int64_t>(v.getSExtValue())
-                                     : static_cast<uint64_t>(v.getZExtValue()));
-                    lit->setValType(resultTy);
+                    auto &factory = context_.getExprFactory();
+                    auto lit =
+                        v.isSigned()
+                            ? symbolic::LiteralExpr{factory,
+                                                    static_cast<int64_t>(v.getSExtValue())}
+                            : symbolic::LiteralExpr{factory,
+                                                    static_cast<uint64_t>(v.getZExtValue())};
                     EvalResult r;
-                    r.second.emplace_back(std::move(lit));
+                    auto typedLit = lit.withType(resultTy);
+                    r.second.emplace_back(typedLit);
                     return r;
                 })
                 .Case<clang::UnaryExprOrTypeTraitExpr>(
@@ -1540,11 +1514,12 @@ namespace acslg::analyzer {
 
                         // Materialize a literal of the expression’s result type (typically size_t).
                         auto resultTy = symbolic::deriveType(uett->getType());
-                        auto lit      = std::make_unique<symbolic::LiteralExpr>(value);
-                        lit->setValType(resultTy);
+                        auto &factory = context_.getExprFactory();
+                        auto lit      = symbolic::LiteralExpr{factory, value};
 
                         EvalResult r;
-                        r.second.emplace_back(std::move(lit));
+                        auto typedLit = lit.withType(resultTy);
+                        r.second.emplace_back(typedLit);
                         return r;
                     })
 
@@ -1554,7 +1529,6 @@ namespace acslg::analyzer {
                 });
         return eval_result;
     }
-
     std::string Path::dump() const {
         using namespace utils::dump_fmt;
 
@@ -1574,7 +1548,7 @@ namespace acslg::analyzer {
         // ---- Return Expression ---------------------------------------------------
         oss << "  " << key("return") << ": ";
         if (returnExpr_) {
-            oss << returnExpr_.value()->dump() << "\n";
+            oss << returnExpr_.value().dump() << "\n";
         } else {
             oss << hint("null") << "\n";
         }
@@ -1584,7 +1558,7 @@ namespace acslg::analyzer {
         size_t condIdx = 0;
         for (const auto &cond : pathConditions_) {
             oss << "    "
-                << "[" << lit(std::to_string(condIdx++)) << "] " << cond->dump() << "\n";
+                << "[" << lit(std::to_string(condIdx++)) << "] " << cond.dump() << "\n";
         }
         if (pathConditions_.empty()) {
             oss << "    " << hint("<empty>") << "\n";
@@ -1599,10 +1573,10 @@ namespace acslg::analyzer {
             }
 
             oss << "    @" << (name.empty() ? hint("<unnamed>") : path(name)) << " " << op("->")
-                << " " << addr->dump();
+                << " " << addr.dump();
 
-            if (auto value = memoryState_.read(*addr)) {
-                oss << " " << op("->") << " " << value.value()->dump();
+            if (auto value = memoryState_.read(addr)) {
+                oss << " " << op("->") << " " << value.value().dump();
             } else {
                 oss << " " << op("->") << " " << hint("null");
             }
@@ -1618,8 +1592,7 @@ namespace acslg::analyzer {
             bool any = false;
             for (auto &&[addr, value] : memoryState_.flat()) {
                 any = true;
-                oss << "    " << addr.get().dump() << " " << op("->") << " " << value->dump()
-                    << "\n";
+                oss << "    " << addr.dump() << " " << op("->") << " " << value.dump() << "\n";
             }
             if (!any) {
                 oss << "    " << hint("<empty>") << "\n";
@@ -1667,51 +1640,56 @@ namespace acslg::analyzer {
         return oss.str();
     }
 
-    bool Path::isUnchanged(const symbolic::Address &addr, const Path &since) const {
-        if (auto symbolAddr = llvm::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
-            if (symbolAddr->getLength())
+    bool Path::isUnchanged(const symbolic::Addr &addr, const Path &since) const {
+        auto importedAddr = addr.importedInto(context_.getExprFactory());
+        if (auto symbolAddr = symbolic::SymbolAddress::tryFrom(importedAddr)) {
+            if (symbolAddr->length())
                 return false;
         }
-        auto value = memoryState_.read(addr);
+        auto value = memoryState_.read(importedAddr);
         if (value == std::nullopt)
             return true; // Assume it has not been accessed yet.
 
-        auto oldValue = since.getMemoryState().read(addr);
+        auto oldValue = since.getMemoryState().read(importedAddr);
         if (oldValue)
-            return *value.value() == *oldValue.value();
-        return isFrom(*value.value(), addr, since.getStartPoint());
+            return value.value().structurallyEqual(oldValue.value());
+        return value->isFrom(importedAddr, since.getStartPoint());
     }
 
-    bool Path::is_point_to_structure(const symbolic::Address &addr) const {
-        if (auto symbolAddr = llvm::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
-            if (symbolAddr->getLength())
+    bool Path::is_point_to_structure(const symbolic::Addr &addr) const {
+        auto importedAddr = addr.importedInto(context_.getExprFactory());
+        if (auto symbolAddr = symbolic::SymbolAddress::tryFrom(importedAddr)) {
+            if (symbolAddr->length())
                 return false;
         }
-        auto opt = memoryState_.read(addr);
+        auto opt = memoryState_.read(importedAddr);
         if (!opt)
             return false;
 
-        const symbolic::SymbolicExpr *expr = opt.value().get().get();
-        return llvm::isa<symbolic::Structure>(expr);
+        return opt.value().isStructure();
     }
 
-    MemoryModel::MemoryModel(const MemoryModel &other) {
-        for (auto &[addr, value] : other.memoryMap_variableAddr_) {
-            memoryMap_variableAddr_.emplace(addr, value->clone());
-        }
-        for (auto &[baseInfo, rangeValueMap] : other.memoryMap_constantRange_) {
-            auto &mapToFill = memoryMap_constantRange_[baseInfo];
-            for (auto &[range, value] : rangeValueMap) {
-                mapToFill.emplace(range, value->clone());
-            }
-        }
+    MemoryModel::MemoryModel() {
+        factory_ = &symbolic::ExprFactoryScope::current();
+    }
 
-        for (auto &[baseHash, addrValueMap] : other.memoryMap_symbolicRange_) {
-            auto &mapToFill = memoryMap_symbolicRange_[baseHash];
-            for (auto &[addr, value] : addrValueMap) {
-                mapToFill.emplace(addr, value->clone());
-            }
+    MemoryModel::MemoryModel(symbolic::ExprFactory &factory) : factory_(&factory) {}
+
+    auto MemoryModel::copyStoredValueFrom(const MemoryModel &other, StoredValue value)
+        -> StoredValue {
+        if (&factory() == &other.factory())
+            return value;
+        return value.importedInto(factory());
+    }
+
+    void MemoryModel::copyEntriesFrom(const MemoryModel &other) {
+        for (const auto &[address, value] : other.flat()) {
+            write(address.importedInto(factory()), copyStoredValueFrom(other, value));
         }
+    }
+
+    MemoryModel::MemoryModel(const MemoryModel &other) : MemoryModel(other.factory()) {
+        copyEntriesFrom(other);
     }
 
     MemoryModel &MemoryModel::operator=(const MemoryModel &other) {
@@ -1719,43 +1697,26 @@ namespace acslg::analyzer {
             return *this;
 
         clear();
-
-        for (auto &[addr, value] : other.memoryMap_variableAddr_) {
-            memoryMap_variableAddr_.emplace(addr, value->clone());
-        }
-        for (auto &[baseInfo, rangeValueMap] : other.memoryMap_constantRange_) {
-            auto &mapToFill = memoryMap_constantRange_[baseInfo];
-            for (auto &[range, value] : rangeValueMap) {
-                mapToFill.emplace(range, value->clone());
-            }
-        }
-
-        for (auto &[baseHash, addrValueMap] : other.memoryMap_symbolicRange_) {
-            auto &mapToFill = memoryMap_symbolicRange_[baseHash];
-            for (auto &[addr, value] : addrValueMap) {
-                mapToFill.emplace(addr, value->clone());
-            }
-        }
-
+        copyEntriesFrom(other);
         return *this;
     }
 
-    std::optional<utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>> MemoryModel::read(
-        const symbolic::Address &addr) const {
-        if (auto varAddr = llvm::dyn_cast<const symbolic::VariableAddress>(&addr)) {
-            if (memoryMap_variableAddr_.contains(*varAddr))
-                return memoryMap_variableAddr_.at(*varAddr)->clone();
+    std::optional<symbolic::Expr> MemoryModel::read(const symbolic::Addr &address) const {
+        auto addr = address.importedInto(factory());
+        if (addr.isVariableAddress()) {
+            if (auto it = memoryMap_variableAddr_.find(symbolic::AddressBox{addr});
+                it != memoryMap_variableAddr_.end())
+                return it->second;
             return std::nullopt;
-        } else if (auto symbolAddr = llvm::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
-            auto baseInfo = symbolAddr->getBaseInfo();
+        } else if (auto symbolAddr = symbolic::SymbolAddress::tryFrom(addr)) {
+            auto baseInfo = symbolAddr->baseInfo();
+            auto offset   = symbolAddr->offset();
+            auto length   = symbolAddr->length();
 
             if (memoryMap_constantRange_.contains(baseInfo)) {
-                auto offset = symbolAddr->getOffset();
-                if (auto constOffset = offset->tryEvalAsConstant();
-                    constOffset &&
-                    (!symbolAddr->getLength() ||
-                     (symbolAddr->getLength().value()->tryEvalAsConstant() &&
-                      symbolAddr->getLength().value()->tryEvalAsConstant().value() == 1))) {
+                if (auto constOffset = offset.tryEvalAsConstant();
+                    constOffset && (!length || (length.value().tryEvalAsConstant() &&
+                                                length.value().tryEvalAsConstant().value() == 1))) {
                     if (constOffset.value() < 0)
                         ERROR("Negetive offset.");
                     auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
@@ -1768,9 +1729,8 @@ namespace acslg::analyzer {
                     if (firstLEIt == rangeExprMap.end() ||
                         firstLEIt->first.second <= unsignedOffset)
                         return std::nullopt;
-                    return firstLEIt->second->getRangeIndexSubstituted(baseInfo, *offset);
-                } else if (auto &len = symbolAddr->getLength();
-                           constOffset && len && len.value()->tryEvalAsConstant()) {
+                    return firstLEIt->second.substituteRangeIndex(baseInfo, offset);
+                } else if (constOffset && length && length.value().tryEvalAsConstant()) {
                     UNIMPLEMENT(
                         "There doesn't appear to be a need for constant-range range queries at "
                         "this time.");
@@ -1780,46 +1740,50 @@ namespace acslg::analyzer {
             if (!memoryMap_symbolicRange_.contains(baseInfo))
                 return std::nullopt;
             auto &addrValueMap = memoryMap_symbolicRange_.at(baseInfo);
-            if (symbolAddr->getLength() && symbolAddr->getLength().value()->tryEvalAsConstant() &&
-                symbolAddr->getLength().value()->tryEvalAsConstant().value() == 1) {
-                auto fakeRange = std::make_unique<symbolic::SymbolAddress>(*symbolAddr);
-                fakeRange->resetLength();
-                auto it = addrValueMap.find(*fakeRange);
+            if (length && length.value().tryEvalAsConstant() &&
+                length.value().tryEvalAsConstant().value() == 1) {
+                auto it = addrValueMap.find(symbolic::AddressBox{addr.withoutLength()});
                 if (it == addrValueMap.end())
                     return std::nullopt;
-                return it->second->clone();
+                return it->second;
             }
-            auto it = addrValueMap.find(*symbolAddr);
+            auto it = addrValueMap.find(symbolic::AddressBox{addr});
             if (it == addrValueMap.end())
                 return std::nullopt;
-            return it->second->clone();
-        } else if (auto fieldAddr = llvm::dyn_cast<const symbolic::FieldAddress>(&addr)) {
-            auto &baseAddr = fieldAddr->getBaseAddr();
-            auto &index    = fieldAddr->getFieldIndex();
-            auto baseValue = read(*baseAddr);
+            return it->second;
+        } else if (auto fieldAddr = symbolic::FieldAddress::tryFrom(addr)) {
+            auto baseAddr  = fieldAddr->base();
+            auto index     = fieldAddr->fieldIndex();
+            auto baseValue = read(baseAddr);
             if (baseValue == std::nullopt)
                 return std::nullopt;
-            auto baseSt = llvm::dyn_cast<const symbolic::Structure>(baseValue.value().get().get());
-            if (baseSt == nullptr)
+            auto baseSt = symbolic::StructureExpr::tryFrom(*baseValue);
+            if (!baseSt)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
-            return baseSt->getFieldValue(index)->clone();
+            return baseSt->field(index);
         }
         UNREACHABLE();
     }
 
-    void MemoryModel::write(const symbolic::Address &addr,
-                            utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>> value) {
-        if (auto varAddr = llvm::dyn_cast<const symbolic::VariableAddress>(&addr)) {
-            memoryMap_variableAddr_.insert_or_assign(*varAddr, std::move(value));
+    void MemoryModel::write(const symbolic::Addr &address, const symbolic::Expr &value) {
+        auto addr          = address.importedInto(factory());
+        auto importedValue = value.importedInto(factory());
+        writeCanonical(addr, importedValue);
+    }
+
+    void MemoryModel::writeCanonical(const symbolic::Addr &addr, const StoredValue &value) {
+        if (addr.isVariableAddress()) {
+            memoryMap_variableAddr_.insert_or_assign(symbolic::AddressBox{addr}, value);
             return;
-        } else if (auto symbolAddr = llvm::dyn_cast<const symbolic::SymbolAddress>(&addr)) {
-            auto baseInfo = symbolAddr->getBaseInfo();
+        } else if (auto symbolAddr = symbolic::SymbolAddress::tryFrom(addr)) {
+            auto baseInfo = symbolAddr->baseInfo();
+            auto offset   = symbolAddr->offset();
+            auto length   = symbolAddr->length();
 
-            auto constOffset = symbolAddr->getOffset()->tryEvalAsConstant();
-            auto &len        = symbolAddr->getLength();
-            auto constLen    = len ? len.value()->tryEvalAsConstant() : std::nullopt;
+            auto constOffset = offset.tryEvalAsConstant();
+            auto constLen    = length ? length.value().tryEvalAsConstant() : std::nullopt;
 
-            if (constOffset && (!len || constLen)) {
+            if (constOffset && (!length || constLen)) {
                 if (constOffset.value() < 0 || (constLen && constLen.value() <= 0))
                     ERROR("Constant offset must be greater or equal to zero and length must be "
                           "greater than zero.");
@@ -1827,8 +1791,7 @@ namespace acslg::analyzer {
                 auto unsignedOffset = static_cast<uint64_t>(constOffset.value());
                 auto unsignedLen = constLen ? static_cast<uint64_t>(constLen.value()) : uint64_t{1};
                 memoryMap_constantRange_.try_emplace(
-                    baseInfo, std::map<ConstRange,
-                                       utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>>{});
+                    baseInfo, std::map<ConstRange, StoredValue>{});
                 auto &rangeValueMap = memoryMap_constantRange_.at(baseInfo);
                 auto range          = std::pair{unsignedOffset, unsignedOffset + unsignedLen};
                 auto rangeForSearch =
@@ -1843,11 +1806,11 @@ namespace acslg::analyzer {
                     auto &firstLE_value                           = firstLEIt->second;
                     if (firstLE_leftBound < range_leftBound) {
                         auto leftRange = std::pair{firstLE_leftBound, range_leftBound};
-                        rangeValueMap.insert_or_assign(leftRange, firstLE_value->clone());
+                        rangeValueMap.insert_or_assign(leftRange, firstLE_value);
                     }
                     if (firstLE_rightBound > range_rightBound) {
                         auto rightRange = std::pair{range_rightBound, firstLE_rightBound};
-                        rangeValueMap.insert_or_assign(rightRange, firstLE_value->clone());
+                        rangeValueMap.insert_or_assign(rightRange, firstLE_value);
                     }
                     rangeValueMap.erase(firstLEIt);
                 }
@@ -1856,47 +1819,41 @@ namespace acslg::analyzer {
                     auto &upperBound_value                              = upperBoundIt->second;
                     if (upperBound_rightBound > range_rightBound) {
                         auto rightRange = std::pair{range_rightBound, upperBound_rightBound};
-                        rangeValueMap.insert_or_assign(rightRange, upperBound_value->clone());
+                        rangeValueMap.insert_or_assign(rightRange, upperBound_value);
                     }
                     rangeValueMap.erase(upperBoundIt);
                 }
-                rangeValueMap.insert_or_assign(range, std::move(value));
+                rangeValueMap.insert_or_assign(range, value);
                 return;
             }
             // symbolic range
             auto &addrValueMap = memoryMap_symbolicRange_[baseInfo];
-            if (symbolAddr->getLength() && symbolAddr->getLength().value()->tryEvalAsConstant() &&
-                symbolAddr->getLength().value()->tryEvalAsConstant() == 1) {
-                auto fakeRange = std::make_unique<symbolic::SymbolAddress>(*symbolAddr);
-                fakeRange->resetLength();
-                addrValueMap.insert_or_assign(*fakeRange, std::move(value));
+            if (length && length.value().tryEvalAsConstant() &&
+                length.value().tryEvalAsConstant() == 1) {
+                addrValueMap.insert_or_assign(symbolic::AddressBox{addr.withoutLength()}, value);
                 return;
             }
-            addrValueMap.insert_or_assign(*symbolAddr, std::move(value));
+            addrValueMap.insert_or_assign(symbolic::AddressBox{addr}, value);
             return;
-        } else if (auto fieldAddr = llvm::dyn_cast<const symbolic::FieldAddress>(&addr)) {
-            auto &baseAddr = fieldAddr->getBaseAddr();
-            auto &index    = fieldAddr->getFieldIndex();
-            if (fieldAddr->getDefinition() &&
-                fieldAddr->getDefinition()->getNameAsString() == "BigNum" && index == 4) {
-                DEBUG("write BigNum->data with: " << value->dump());
+        } else if (auto fieldAddr = symbolic::FieldAddress::tryFrom(addr)) {
+            auto baseAddr = fieldAddr->base();
+            auto index    = fieldAddr->fieldIndex();
+            if (fieldAddr->definition()->getNameAsString() == "BigNum" && index == 4) {
+                DEBUG("write BigNum->data with: " << value.dump());
             }
-            auto baseValue = read(*baseAddr);
+            auto baseValue = read(baseAddr);
             if (baseValue == std::nullopt)
                 ERROR("Structure isn't existed in MemoryModel, insert it first.");
-            auto baseSt = llvm::dyn_cast<symbolic::Structure>(baseValue.value().get().get());
-            if (baseSt == nullptr)
+            auto baseSt = symbolic::StructureExpr::tryFrom(*baseValue);
+            if (!baseSt)
                 ERROR("Value of address from a `fieldAddress` is not a structure.");
-            baseSt->setFieldValue(index, std::move(value));
-            write(*baseAddr, std::move(baseValue.value()));
+            write(baseAddr, baseValue->withField(index, value));
             return;
         }
         UNREACHABLE();
     }
 
-    bool MemoryModel::contains(const symbolic::Address &addr) const {
-        return read(addr) ? true : false;
-    }
+    bool MemoryModel::contains(const symbolic::Addr &addr) const { return read(addr).has_value(); }
 
     // MemoryModel::flat_view MemoryModel::flat() { return MemoryModel::flat_view{*this}; }
     const MemoryModel::flat_view MemoryModel::flat() const {
@@ -1930,17 +1887,15 @@ namespace acslg::analyzer {
     }
 
     void MemoryModel::mergeConstantRanges() {
-        using ExprUP = utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>;
-
         for (auto &[base, cmap] : memoryMap_constantRange_) {
             if (cmap.empty())
                 continue;
 
             // 1) Move to a vector to allow reordering and in-place merging
-            std::vector<std::pair<ConstRange, ExprUP>> v;
+            std::vector<std::pair<ConstRange, StoredValue>> v;
             v.reserve(cmap.size());
             for (auto &kv : cmap)
-                v.emplace_back(kv.first, std::move(kv.second));
+                v.emplace_back(kv.first, kv.second);
             cmap.clear();
 
             // Sort by offset (ascending)
@@ -1950,10 +1905,10 @@ namespace acslg::analyzer {
             std::sort(v.begin(), v.end(), byOffset);
 
             // 2) Single-pass merge
-            std::vector<std::pair<ConstRange, ExprUP>> merged;
+            std::vector<std::pair<ConstRange, StoredValue>> merged;
             merged.reserve(v.size());
 
-            auto pushOrMerge = [&](std::pair<ConstRange, ExprUP> &&cur) {
+            auto pushOrMerge = [&](std::pair<ConstRange, StoredValue> &&cur) {
                 if (merged.empty()) {
                     merged.push_back(std::move(cur));
                     return;
@@ -1965,7 +1920,9 @@ namespace acslg::analyzer {
                 uint64_t cLeft = cr.first, cRight = cr.second;
 
                 // Adjacent endpoints and equal values → coalesce by extending the length
-                if (pRight == cLeft && *pexpr->simplifiedExpr() == *cexpr->simplifiedExpr()) {
+                auto pSimplified = pexpr.simplified();
+                auto cSimplified = cexpr.simplified();
+                if (pRight == cLeft && pSimplified.structurallyEqual(cSimplified)) {
                     pr.second = cRight;
                 } else {
                     merged.push_back(std::move(cur));
@@ -1983,20 +1940,13 @@ namespace acslg::analyzer {
     }
 
     void MemoryModel::mergeSymbolicRanges() {
-        using SA     = symbolic::SymbolAddress;
-        using Expr   = symbolic::SymbolicExpr;
-        using ExprUP = utils::not_null<std::unique_ptr<Expr>>;
-
-        auto valueEquivalent = [](const ExprUP &a, const ExprUP &b) -> bool {
-            return *a->simplifiedExpr() == *b->simplifiedExpr();
+        auto valueEquivalent = [](const StoredValue &a, const StoredValue &b) -> bool {
+            return a.simplified().structurallyEqual(b.simplified());
         };
 
-        // Compute hash of (a + b) by constructing a BinaryOp(Add), simplifying, then hashing.
-        auto addedHash = [](const Expr &a, const Expr &b) {
-            return std::make_unique<symbolic::BinaryOpExpr>(
-                       a.clone(), symbolic::BinaryOpExpr::Operator::Add, b.clone())
-                ->simplifiedExpr()
-                ->hash();
+        // Compute hash of a simplified right endpoint.
+        auto addedHash = [](const symbolic::Expr &a, const symbolic::Expr &b) {
+            return (a + b).simplified().hash();
         };
 
         for (auto &[base, umap] : memoryMap_symbolicRange_) {
@@ -2004,8 +1954,8 @@ namespace acslg::analyzer {
                 continue;
 
             struct Item {
-                SA key;                             ///< Symbolic address (offset[/length])
-                ExprUP val;                         ///< Stored value expression
+                symbolic::Addr key;                 ///< Symbolic address (offset[/length])
+                StoredValue val;                    ///< Stored value expression
                 std::optional<uint64_t> constOff{}; ///< If offset folds to constant
                 std::optional<uint64_t> constLen{}; ///< If length folds to constant
                 size_t offHash{0};                  ///< hash(offset.simplified)
@@ -2014,6 +1964,10 @@ namespace acslg::analyzer {
                     0}; ///< hash((offset+length).simplified) or hash(offset+1) for non-range
                 size_t valHash{0}; ///< hash(val.simplified) for coarse grouping
                 bool used{false};  ///< Whether this edge is already merged into a chain
+
+                symbolic::SymbolAddress address() const {
+                    return symbolic::SymbolAddress{key};
+                }
             };
 
             std::vector<Item> items;
@@ -2021,11 +1975,13 @@ namespace acslg::analyzer {
 
             // (1) Move entries to items and precompute hashes/constants
             for (auto &[addr, expr] : umap) {
-                Item it{addr, std::move(expr)};
+                Item it{addr.importedInto(*factory_), std::move(expr)};
+                auto key = it.address();
+                auto offset = key.offset();
 
-                it.constOff = it.key.getOffset()->tryEvalAsConstant();
-                if (auto &len = it.key.getLength()) {
-                    it.constLen = len.value()->tryEvalAsConstant();
+                it.constOff = offset.tryEvalAsConstant();
+                if (auto len = key.length()) {
+                    it.constLen = len->tryEvalAsConstant();
                 }
 
                 // Both offset and length constant → should have been inserted into constant map.
@@ -2034,18 +1990,18 @@ namespace acslg::analyzer {
                           "memoryMap_constantRange_ instead.");
 
                 // Precompute endpoint/value hashes (using simplified forms)
-                it.offHash = it.key.getOffset()->simplifiedExpr()->hash();
-                it.valHash = it.val->simplifiedExpr()->hash();
-                if (auto &len = it.key.getLength())
-                    it.lenHash = len.value()->simplifiedExpr()->hash();
+                it.offHash = offset.simplified().hash();
+                it.valHash = it.val.simplified().hash();
+                if (auto len = key.length())
+                    it.lenHash = len->simplified().hash();
 
                 // Right endpoint hash:
                 // - range: hash(offset + length)
                 // - non-range: hash(offset + 1) → single-address treated as [off, off+1)
-                if (auto &len = it.key.getLength()) {
-                    it.rightHash = addedHash(*it.key.getOffset(), *len.value());
+                if (auto len = key.length()) {
+                    it.rightHash = addedHash(offset, *len);
                 } else {
-                    it.rightHash = addedHash(*it.key.getOffset(), symbolic::LiteralExpr{1});
+                    it.rightHash = addedHash(offset, symbolic::LiteralExpr{*factory_, int64_t{1}});
                 }
 
                 items.emplace_back(std::move(it));
@@ -2060,7 +2016,7 @@ namespace acslg::analyzer {
             }
 
             // Result map being rebuilt for this BaseInfo
-            std::unordered_map<SA, ExprUP> newMap;
+            symbolic::AddressBoxMap<StoredValue> newMap;
             newMap.reserve(items.size());
 
             // (3) For each value group, build adjacency and emit chains
@@ -2081,7 +2037,7 @@ namespace acslg::analyzer {
                         return;
 
                     // Seed the merged key from the first segment
-                    SA mergedKey     = items[startIdx].key;
+                    auto mergedKey   = items[startIdx].key;
                     size_t cur       = startIdx;
                     size_t rightHash = items[cur].rightHash;
                     items[cur].used  = true;
@@ -2115,10 +2071,12 @@ namespace acslg::analyzer {
                         // Append the successor's length:
                         // - If successor is range: add its length expression
                         // - If successor is non-range: add 1
-                        if (auto &len = itemToBeMerged.key.getLength()) {
-                            mergedKey.addLength(len.value()->clone());
+                        auto addressToBeMerged = itemToBeMerged.address();
+                        if (auto len = addressToBeMerged.length()) {
+                            mergedKey = mergedKey.withAddedLength(*len);
                         } else {
-                            mergedKey.addLength(std::make_unique<symbolic::LiteralExpr>(1));
+                            mergedKey =
+                                mergedKey.withAddedLength(symbolic::LiteralExpr{factory(), 1});
                         }
 
                         // Advance to successor
@@ -2128,7 +2086,7 @@ namespace acslg::analyzer {
                     }
 
                     // Emit the merged interval with the value from the starting edge
-                    newMap.emplace(std::move(mergedKey), std::move(items[startIdx].val));
+                    newMap.emplace(symbolic::AddressBox{mergedKey}, std::move(items[startIdx].val));
                 };
 
                 // Prefer starting at "obvious starts": Lh with zero in-degree
@@ -2258,10 +2216,7 @@ namespace acslg::analyzer {
                 DEBUG("stepping clang::Expr...");
                 stepExpr(expr);
             })
-            .Case<clang::ImplicitCastExpr>(
-                [](const clang::ImplicitCastExpr *) -> std::unique_ptr<symbolic::SymbolicExpr> {
-                    UNREACHABLE();
-                })
+            .Case<clang::ImplicitCastExpr>([](const clang::ImplicitCastExpr *) { UNREACHABLE(); })
             .Case<clang::CaseStmt>([this](const clang::CaseStmt *caseStmt) {
                 DEBUG("stepping CaseStmt...");
                 // Can only be met during step(SwitchStmt), just ignore it.
@@ -2351,11 +2306,10 @@ namespace acslg::analyzer {
                 PathConditions filtered;
                 filtered.reserve(path->pathConditions_.size());
                 for (auto &cond : path->pathConditions_) {
-                    auto stripped = dropLocalConjuncts(*cond, localVars);
+                    auto stripped = dropLocalConjuncts(cond, localVars);
                     if (!stripped)
                         continue;
-                    filtered.emplace(utils::not_null<std::unique_ptr<symbolic::SymbolicExpr>>(
-                        std::move(stripped)));
+                    filtered.emplace(*stripped);
                 }
                 path->pathConditions_ = std::move(filtered);
             }
@@ -2405,9 +2359,9 @@ namespace acslg::analyzer {
                 size_t m = eval.second.size();
                 for (size_t j = 0; j < m; ++j) {
                     auto newPath = (j == 0) ? std::move(path) : std::move(eval.first[j - 1]);
-                    auto cond    = std::move(eval.second[j]);
-                    if (auto lit = cond->evalToConstExpr()) {
-                        const bool isTrue = (lit->getLiteralValue() != 0);
+                    auto cond    = eval.second[j];
+                    if (auto value = cond.tryEvalAsConstant()) {
+                        const bool isTrue = (value.value() != 0);
 
                         if (!isTrue) {
                             continue;
@@ -2417,7 +2371,7 @@ namespace acslg::analyzer {
                         }
                     }
 
-                    newPath->insertPathCondition(std::move(cond));
+                    newPath->insertPathCondition(cond);
                     updatedPaths.push_back(std::move(newPath));
                 }
             }
@@ -2450,10 +2404,10 @@ namespace acslg::analyzer {
 
             for (size_t j = 0; j < eval.second.size(); ++j) {
                 auto newPath = (j == 0) ? std::move(path) : std::move(eval.first[j - 1]);
-                auto cond    = std::move(eval.second[j]);
+                auto cond    = eval.second[j];
 
-                if (auto lit = cond->evalToConstExpr()) {
-                    const bool isTrue = (lit->getLiteralValue() != 0);
+                if (auto value = cond.tryEvalAsConstant()) {
+                    const bool isTrue = (value.value() != 0);
                     if (isTrue) {
                         continue;
                     } else {
@@ -2462,7 +2416,7 @@ namespace acslg::analyzer {
                     }
                 }
 
-                newPath->insertPathCondition(createLNotExpr(std::move(cond)));
+                newPath->insertPathCondition(cond.logicalNot());
                 worklist.emplace(std::move(newPath), idx + 1);
             }
         }
@@ -2550,14 +2504,14 @@ namespace acslg::analyzer {
 
             Path::EvalResult eval = pathPtr->evalExpr(expr);
             auto &generatedPaths  = eval.first;
-            Formulas &results     = eval.second;
+            auto &results         = eval.second;
 
             size_t n = results.size();
             for (size_t i = 0; i < n; ++i) {
                 auto newPath = i == 0 ? std::move(pathPtr) : std::move(generatedPaths[i - 1]);
 
-                DEBUG("ReturnStmt value: " << results[i]->dump());
-                newPath->setReturnExpr(std::move(results[i]));
+                DEBUG("ReturnStmt value: " << results[i].dump());
+                newPath->setReturnExpr(results[i]);
                 updatedPaths.emplace_back(std::move(newPath));
             }
         }
@@ -2577,13 +2531,11 @@ namespace acslg::analyzer {
             Path::EvalResult eval;
 
             if (binOp->isCompoundAssignmentOp()) {
-                symbolic::BinaryOpExpr::Operator op =
-                    symbolic::getCompoundAssignOp(binOp->getOpcode());
-
+                symbolic::BinaryOp op = symbolic::getCompoundAssignOp(binOp->getOpcode());
                 Path::EvalResult lhs = path->evalExpr(binOp->getLHS());
 
                 std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
-                Formulas outExprs;
+                std::vector<symbolic::Expr> outExprs;
 
                 for (size_t i = 0; i < lhs.second.size(); ++i) {
                     auto &lhsPath = (i == 0) ? *path : *lhs.first[i - 1];
@@ -2591,8 +2543,7 @@ namespace acslg::analyzer {
                     Path::EvalResult rhs = lhsPath.evalExpr(binOp->getRHS());
 
                     for (size_t j = 0; j < rhs.second.size(); ++j) {
-                        outExprs.emplace_back(std::make_unique<symbolic::BinaryOpExpr>(
-                            lhs.second[i]->clone(), op, std::move(rhs.second[j])));
+                        outExprs.emplace_back(lhs.second[i].binary(op, rhs.second[j]));
 
                         if (i != 0 || j != 0)
                             outPaths.emplace_back(std::move(rhs.first[j - 1]));
@@ -2606,7 +2557,7 @@ namespace acslg::analyzer {
             size_t n = eval.second.size();
             for (size_t i = 0; i < n; ++i) {
                 auto newPath  = (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
-                auto newValue = std::move(eval.second.at(i));
+                auto newValue = eval.second.at(i);
                 auto dstAddr  = newPath->extractLValue(binOp->getLHS());
                 if (auto *mem =
                         llvm::dyn_cast<clang::MemberExpr>(binOp->getLHS()->IgnoreParenImpCasts())) {
@@ -2618,17 +2569,15 @@ namespace acslg::analyzer {
                             if (presumed.isValid()) {
                                 DEBUG("assign to *.data at "
                                       << presumed.getFilename() << ":" << presumed.getLine() << ":"
-                                      << presumed.getColumn() << " value=" << newValue->dump());
+                                      << presumed.getColumn() << " value=" << newValue.dump());
                             }
                         }
                     }
                 }
-                if (newValue->isUnknown()) {
-                    if (auto *fieldAddr =
-                            llvm::dyn_cast<symbolic::FieldAddress>(dstAddr.get().get())) {
-                        if (fieldAddr->getDefinition() &&
-                            fieldAddr->getDefinition()->getNameAsString() == "BigNum" &&
-                            fieldAddr->getFieldIndex() == 4) {
+                if (newValue.isUnknown()) {
+                    if (auto fieldAddr = symbolic::FieldAddress::tryFrom(dstAddr)) {
+                        if (fieldAddr->definition()->getNameAsString() == "BigNum" &&
+                            fieldAddr->fieldIndex() == 4) {
                             auto loc      = binOp->getExprLoc();
                             auto &SM      = context_.getSourceManager();
                             auto presumed = SM.getPresumedLoc(loc);
@@ -2640,7 +2589,7 @@ namespace acslg::analyzer {
                         }
                     }
                 }
-                newPath->updateMemory(*dstAddr, std::move(newValue));
+                newPath->updateMemory(dstAddr, newValue);
                 updatedPaths.push_back(std::move(newPath));
             }
         }
@@ -2671,7 +2620,7 @@ namespace acslg::analyzer {
                     continue;
                 }
 
-                auto varAddr = path->allocMemory(varDecl);
+                auto varAddrHandle = path->allocMemory(varDecl);
 
                 if (initExpr == nullptr) {
                     // TODO: add default initialization for basic types.
@@ -2681,10 +2630,8 @@ namespace acslg::analyzer {
                         declStmt, context_.getSourceManager(), context_.getLangOptions());
 
                     auto varType = varDecl->getType();
-                    path->updateVarState(
-                        varDecl,
-                        symbolic::getSymbol(varType, varAddr->addressClone().into_underlying(),
-                                            pointAfterDecl));
+                    auto symbol  = symbolic::Expr::symbol(varType, varAddrHandle, pointAfterDecl);
+                    path->updateVarState(varDecl, symbol);
 
                     updatedPaths.push_back(std::move(path));
                     continue;
@@ -2701,14 +2648,12 @@ namespace acslg::analyzer {
 
                         RD = RD->getDefinition();
 
-                        auto st = std::make_unique<symbolic::Structure>(
-                            RD, RD->getASTContext().getASTRecordLayout(RD),
-                            varAddr->addressClone().into_underlying(), startPoint_);
-                        if (initListExpr->getNumInits() != st->getNumFields())
+                        auto st = makeStructureForRecord(RD, varAddrHandle, startPoint_);
+                        const auto fieldCount = symbolic::StructureExpr{st}.size();
+                        if (initListExpr->getNumInits() != fieldCount)
                             ERROR("Initializer std::list size mismatches the struct's field "
                                   "count.");
-                        auto slots = st->fieldsValues();
-                        for (size_t i = 0; i < slots.size(); ++i) {
+                        for (size_t i = 0; i < fieldCount; ++i) {
                             const clang::Expr *init = initListExpr->getInit(i);
 
                             Path::EvalResult eval = path->evalExpr(init);
@@ -2716,10 +2661,10 @@ namespace acslg::analyzer {
                                 UNIMPLEMENT(
                                     "No control flow branching permitted within an initializer "
                                     "list now.");
-                            slots[i] = std::move(eval.second[0]);
+                            st = st.withField(i, eval.second[0]);
                         }
 
-                        path->updateVarState(varDecl, std::move(st));
+                        path->updateVarState(varDecl, st);
                         updatedPaths.push_back(std::move(path));
                         continue;
                     } else {
@@ -2734,18 +2679,18 @@ namespace acslg::analyzer {
                     size_t n = eval.second.size();
                     for (size_t i = 0; i < n; ++i) {
                         auto newPath  = (i == 0) ? std::move(path) : std::move(eval.first[i - 1]);
-                        auto newValue = std::move(eval.second[i]);
+                        auto newValue = eval.second[i];
 
-                        if (newValue->isUnknown()) {
+                        if (newValue.isUnknown()) {
                             auto pointAfterDecl = symbolic::SourcePoint::fromStmtAfter(
                                 declStmt, context_.getSourceManager(), context_.getLangOptions());
 
                             auto varType = varDecl->getType();
-                            newValue     = symbolic::getSymbol(
-                                varType, varAddr->addressClone().into_underlying(), pointAfterDecl);
+                            newValue =
+                                symbolic::Expr::symbol(varType, varAddrHandle, pointAfterDecl);
                         }
 
-                        newPath->updateVarState(varDecl, std::move(newValue));
+                        newPath->updateVarState(varDecl, newValue);
                         updatedPaths.push_back(std::move(newPath));
                     }
                     continue;
@@ -2893,13 +2838,12 @@ namespace acslg::analyzer {
         }
     }
 
-    std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<symbolic::SymbolicExpr>>> ProgramState::
+    std::vector<std::pair<std::unique_ptr<ProgramState>, symbolic::Expr>> ProgramState::
         splitStateBySwitchCond(const clang::Expr *switchCond) {
         if (!switchCond) {
             TODO();
         }
-        std::vector<std::pair<std::unique_ptr<ProgramState>, std::unique_ptr<symbolic::SymbolicExpr>>>
-            result;
+        std::vector<std::pair<std::unique_ptr<ProgramState>, symbolic::Expr>> result;
 
         for (auto &path : paths_) {
             auto evalResult = path->evalExpr(switchCond);
@@ -2912,8 +2856,7 @@ namespace acslg::analyzer {
             onePath.push_back(std::move(path).into_underlying());
             auto stateClone = cloneWithPaths(onePath);
 
-            result.emplace_back(std::move(stateClone),
-                                std::move(evalResult.second[0]).into_underlying());
+            result.emplace_back(std::move(stateClone), evalResult.second[0]);
         }
 
         return result;
@@ -2929,7 +2872,7 @@ namespace acslg::analyzer {
         std::vector<std::unique_ptr<ProgramState>> finalStates;
         for (auto &pr : partitions) {
             auto current  = std::move(pr.first);
-            auto symValue = std::move(pr.second);
+            auto symValue = pr.second;
             for (size_t i = 0; i < blocks.size(); ++i) {
                 auto &stmts    = blocks[i];
                 auto *caseCond = conds[i];
@@ -2946,23 +2889,19 @@ namespace acslg::analyzer {
                 auto caseCondEval = tmpPath.evalExpr(caseCond);
                 assert(caseCondEval.second.size() == 1);
 
-                auto caseSymExpr = std::move(caseCondEval.second[0]);
+                auto caseSymExpr = caseCondEval.second[0];
                 auto eqState     = current->clone();
 
-                auto condExprEq = std::make_unique<symbolic::BinaryOpExpr>(
-                    symValue->clone(), symbolic::BinaryOpExpr::Operator::Equal,
-                    caseSymExpr->clone());
+                auto condExprEq = symValue.equalTo(caseSymExpr);
                 for (auto &p : eqState->paths_)
-                    p->insertPathCondition(condExprEq->clone());
+                    p->insertPathCondition(condExprEq);
 
                 for (auto *s : stmts)
                     eqState->step(s);
 
-                auto condExprNe = std::make_unique<symbolic::BinaryOpExpr>(
-                    symValue->clone(), symbolic::BinaryOpExpr::Operator::NotEqual,
-                    std::move(caseSymExpr));
+                auto condExprNe = symValue.notEqualTo(caseSymExpr);
                 for (auto &p : current->paths_)
-                    p->insertPathCondition(condExprNe->clone());
+                    p->insertPathCondition(condExprNe);
 
                 if (eqState->isInactive()) {
                     finalStates.push_back(std::move(eqState));

@@ -60,8 +60,13 @@ build/src/ACSLG -p "$COMP_DB_DIR" openHiTLS/.../file.c --func TargetFunc --out-d
 - `VariableAddress`：变量地址（形参/局部/可见符号的抽象地址）
 - `FieldAddress`：结构体字段地址（形如 `p->field`）
 - `SymbolAddress`：带 offset/length 的符号地址（用于表达范围写入、数组区间等）
-- `Structure`：结构体值容器（字段值集合）
-- `SymbolValue` / `LiteralExpr` / `UnknownExpr`：符号值、常量与保守占位
+- `StructureExpr`：结构体值 facade（字段值集合）
+- `SymbolValueExpr` / `LiteralExpr` / `Expr::unknown()`：符号值、常量与保守占位
+
+这些名称在分析器代码中表示轻量 facade，而不是可独立修改的树节点。facade 指向
+`ACSLGContext` 所有的 `ExprFactory` 中驻留的不可变节点；表达式运算和字段、类型、
+地址范围更新都会返回新的 facade，并复用结构相同的既有节点。具体 node 与 handle
+位于 Symbolic 的 `detail` 实现层，不作为插件或 Analyzer 调用接口。
 
 在 SpecGenerator 中，生成逻辑采用插件体系：函数级 contract 插件负责输出 `requires/ensures/assigns` 与行为分解（behavior），循环级插件负责输出 `loop invariant/assigns/variant` 并返回用于后续合成 post-state 的辅助信息。最终输出时，生成的 ACSL 注释会被插入到函数定义前并写入 `*_acsl.c`。
 

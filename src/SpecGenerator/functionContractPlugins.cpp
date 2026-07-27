@@ -3,7 +3,6 @@
  * @brief Implements function-level ACSL contract plugins (assigns, behaviors, poststate).
  */
 #include <iterator>
-#include <memory>
 #include <optional>
 #include <unordered_set>
 
@@ -23,6 +22,8 @@ namespace acslg::spec_generator {
         const std::string IND1 = "  ";
         const std::string IND2 = "    ";
 
+        symb::Expr simplifyExpr(const symb::Expr &expr) { return expr.simplified(); }
+
         // Frama-C does not resolve ACSL logic labels derived from internal C labels
         // (e.g. `After_CompoundStmt_xxxx`) inside function contracts. Such terms lead to
         // `annot-error: logic label ... not found` and abort WP. We conservatively drop them
@@ -36,49 +37,42 @@ namespace acslg::spec_generator {
             return acsl.find("After_CompoundStmt_") != std::string_view::npos;
         }
 
-        void collectReferencedVarDecls(const symb::SymbolicExpr &expr,
+        void collectReferencedVarDecls(const symb::Expr &expr,
                                        std::unordered_set<const clang::VarDecl *> &out) {
-            using symb::BinaryOpExpr;
-            using symb::FieldAddress;
-            using symb::LiteralExpr;
-            using symb::SymbolAddress;
-            using symb::SymbolValue;
-            using symb::UnaryOpExpr;
-            using symb::VariableAddress;
-
-            if (auto *lit = llvm::dyn_cast<LiteralExpr>(&expr)) {
-                (void)lit;
+            if (symb::LiteralExpr::tryFrom(expr)) {
                 return;
             }
-            if (auto *sv = llvm::dyn_cast<SymbolValue>(&expr)) {
-                if (auto from = sv->getFromRoot())
+            if (auto sv = symb::SymbolValueExpr::tryFrom(expr)) {
+                if (auto from = sv->fromRoot())
                     out.insert(from.value().get());
                 return;
             }
-            if (auto *va = llvm::dyn_cast<VariableAddress>(&expr)) {
-                out.insert(va->getFrom().get());
+            if (auto address = expr.tryAsAddress()) {
+                if (auto va = symb::VariableAddress::tryFrom(*address)) {
+                    out.insert(va->declaration().get());
+                    return;
+                }
+                if (auto sa = symb::SymbolAddress::tryFrom(*address)) {
+                    if (auto from = sa->getFromRoot())
+                        out.insert(from.value().get());
+                    collectReferencedVarDecls(sa->offset(), out);
+                    if (auto length = sa->length())
+                        collectReferencedVarDecls(*length, out);
+                    return;
+                }
+                if (auto fa = symb::FieldAddress::tryFrom(*address)) {
+                    if (auto from = fa->getFromRoot())
+                        out.insert(from.value().get());
+                    return;
+                }
+            }
+            if (auto bin = symb::BinaryExpr::tryFrom(expr)) {
+                collectReferencedVarDecls(bin->left(), out);
+                collectReferencedVarDecls(bin->right(), out);
                 return;
             }
-            if (auto *sa = llvm::dyn_cast<SymbolAddress>(&expr)) {
-                if (auto from = sa->getFromRoot())
-                    out.insert(from.value().get());
-                collectReferencedVarDecls(*sa->getOffset(), out);
-                if (sa->getLength())
-                    collectReferencedVarDecls(*sa->getLength().value(), out);
-                return;
-            }
-            if (auto *fa = llvm::dyn_cast<FieldAddress>(&expr)) {
-                if (auto from = fa->getFromRoot())
-                    out.insert(from.value().get());
-                return;
-            }
-            if (auto *bin = llvm::dyn_cast<BinaryOpExpr>(&expr)) {
-                collectReferencedVarDecls(*bin->getLeft(), out);
-                collectReferencedVarDecls(*bin->getRight(), out);
-                return;
-            }
-            if (auto *un = llvm::dyn_cast<UnaryOpExpr>(&expr)) {
-                collectReferencedVarDecls(*un->getSub(), out);
+            if (auto unary = symb::UnaryExpr::tryFrom(expr)) {
+                collectReferencedVarDecls(unary->operand(), out);
                 return;
             }
 
@@ -86,7 +80,7 @@ namespace acslg::spec_generator {
             // conservatively treat failures elsewhere as dropped).
         }
 
-        bool referencesNonContractVisibleLocals(const symb::SymbolicExpr &expr,
+        bool referencesNonContractVisibleLocals(const symb::Expr &expr,
                                                 const clang::FunctionDecl *fd) {
             (void)fd; // currently unused, but kept for future global/param policy tuning.
             std::unordered_set<const clang::VarDecl *> decls;
@@ -127,14 +121,14 @@ namespace acslg::spec_generator {
                 for (auto &postPath : post.getPaths()) {
                     // INFO("path");
                     for (auto &&[addr, value] : postPath->getMemoryState().flat()) {
-                        auto fromRoot = addr.get().getFromRoot();
+                        auto fromRoot = addr.getFromRoot();
                         if (fromRoot == std::nullopt)
                             continue;
                         if (!prePath->getVarAddr().contains(fromRoot.value()))
                             continue;
-                        if (!is_symbol_addr(addr))
+                        if (!addr.isSymbolAddress())
                             continue;
-                        // INFO(addr.get().dump());
+                        // INFO(addr.dump());
                         // INFO(value->dump());
 
                         // If the current address corresponds to a pointer targeting a
@@ -142,30 +136,32 @@ namespace acslg::spec_generator {
                         // omission is justified by the design of the flat() traversal: the
                         // fields of the structure are enumerated and processed individually.
                         // Thus, treating the pointer itself would introduce redundancy.
-                        if (is_symbol_addr(addr) && postPath->is_point_to_structure(addr))
+                        if (addr.isSymbolAddress() && postPath->is_point_to_structure(addr))
                             continue;
 
                         // Track the address only if the value differs between pre/post states.
                         if (!postPath->isUnchanged(addr, *pre.getPaths().front()))
-                            auto [_, ok] = assignedAddrs.try_emplace(addr.hash(), std::move(addr));
+                            auto [_, ok] = assignedAddrs.try_emplace(
+                                addr.hash(), symb::AddressBox{std::move(addr)});
                     }
                 }
             }
 
             auto oldPoint = pre.getStartPoint();
-            auto *FD = pre.getFunction()->getFunctionDecl();
+            auto *FD      = pre.getFunction()->getFunctionDecl();
             std::unordered_set<symb::SourcePoint> allUsedPoints;
             bool droppedOrFailed = false;
             for (auto &[_, addr] : assignedAddrs) {
-                if (referencesNonContractVisibleLocals(addr.get(), FD)) {
+                if (referencesNonContractVisibleLocals(
+                        addr.importedInto(symb::ExprFactoryScope::current()).asExpr(), FD)) {
                     droppedOrFailed = true;
                     continue;
                 }
-                auto acslExpected = addr.get().getACSLOfValue(
+                auto acslExpected = addr.getACSLOfValue(
                     {.noStateLabelFunctionAt = true, .predefinedLabels = {{oldPoint, "Old"}}},
                     oldPoint);
                 if (!acslExpected) {
-                    WARN("Value of {" + addr.get().dump() + "} getACSL failed.");
+                    WARN("Value of {" + addr.dump() + "} getACSL failed.");
                     droppedOrFailed = true;
                     continue;
                 }
@@ -180,11 +176,10 @@ namespace acslg::spec_generator {
             }
 
             if (spec.empty())
-                return std::pair{
-                    IND1 +
-                        std::string(assignedAddrs.empty() && !droppedOrFailed ? "assigns \\nothing;\n"
-                                                                              : "assigns \\everything;\n"),
-                    std::unordered_set<symb::SourcePoint>{}};
+                return std::pair{IND1 + std::string(assignedAddrs.empty() && !droppedOrFailed
+                                                        ? "assigns \\nothing;\n"
+                                                        : "assigns \\everything;\n"),
+                                 std::unordered_set<symb::SourcePoint>{}};
             else
                 return std::pair{IND1 + std::string("assigns ") +
                                      spec.substr(0, spec.length() - 2) + ";\n",
@@ -222,41 +217,43 @@ namespace acslg::spec_generator {
 
                 std::optional<symb::SymbolAddrBaseInfo> retBase;
                 if (auto &ret = path.getReturnExpr()) {
-                    if (auto *retAddr =
-                            llvm::dyn_cast<symb::SymbolAddress>(ret.value().get().get())) {
-                        retBase = retAddr->getBaseInfo();
+                    if (auto address = ret->tryAsAddress()) {
+                        if (auto retAddr = symb::SymbolAddress::tryFrom(*address))
+                            retBase = retAddr->baseInfo();
                     }
                 }
 
-                auto isRetBaseAddr = [&](const symb::AddressBox &addr) -> bool {
+                auto isRetBaseAddr = [&](const auto &addr) -> bool {
                     if (!retBase)
                         return false;
-                    auto *sa = dynamic_cast<const symb::SymbolAddress *>(&addr.get());
+                    auto address = addr.importedInto(path.getExprFactory());
+                    auto sa      = symb::SymbolAddress::tryFrom(address);
                     if (!sa)
                         return false;
-                    return sa->getBaseInfo() == retBase.value();
+                    return sa->baseInfo() == retBase.value();
                 };
 
-                auto getResultBaseACSL =
-                    [&](const symb::AddressBox &addr,
-                        const symb::SymbolicExpr::GetACSLConfig &config,
-                        std::optional<symb::SourcePoint> currentPoint)
+                auto getResultBaseACSL = [&](const auto &addr,
+                                             const symb::ACSLConfig &config,
+                                             std::optional<symb::SourcePoint> currentPoint)
                     -> std::optional<std::pair<std::string, std::unordered_set<symb::SourcePoint>>> {
                     if (!isRetBaseAddr(addr))
                         return std::nullopt;
-                    auto *sa = dynamic_cast<const symb::SymbolAddress *>(&addr.get());
+                    auto address = addr.importedInto(path.getExprFactory());
+                    auto sa      = symb::SymbolAddress::tryFrom(address);
                     if (!sa)
                         return std::nullopt;
 
                     std::unordered_set<symb::SourcePoint> usedPoints;
-                    auto offsetExpected = sa->getOffset()->getACSL(config, currentPoint);
+                    auto offsetExpected = sa->offset().getACSL(config, currentPoint);
                     if (!offsetExpected)
                         return std::nullopt;
                     auto [offsetStr, offsetPts] = offsetExpected.value();
                     usedPoints.insert(std::make_move_iterator(offsetPts.begin()),
                                       std::make_move_iterator(offsetPts.end()));
 
-                    if (sa->getLength() == std::nullopt) {
+                    auto length = sa->length();
+                    if (!length) {
                         std::string addrStr;
                         if (offsetStr == "0" && config.useDerefWithZeroOffset)
                             addrStr = "*\\result";
@@ -265,8 +262,7 @@ namespace acslg::spec_generator {
                         return std::pair{std::move(addrStr), std::move(usedPoints)};
                     }
 
-                    auto lenExpected =
-                        sa->getLength().value()->getACSL(config, currentPoint);
+                    auto lenExpected = length->getACSL(config, currentPoint);
                     if (!lenExpected)
                         return std::nullopt;
                     auto [lenStr, lenPts] = lenExpected.value();
@@ -274,42 +270,43 @@ namespace acslg::spec_generator {
                                       std::make_move_iterator(lenPts.end()));
 
                     std::string rightBound = "(" + offsetStr + " + " + lenStr + " - 1)";
-                    std::string addrStr = "\\result[" + offsetStr + " .. " + rightBound + "]";
+                    std::string addrStr    = "\\result[" + offsetStr + " .. " + rightBound + "]";
                     return std::pair{std::move(addrStr), std::move(usedPoints)};
                 };
 
                 std::unordered_map<size_t, const symb::AddressBox> assignedAddrs;
                 for (auto &&[a, v] : path.getMemoryState().flat()) {
-                    auto fromRoot = a.get().getFromRoot();
+                    auto fromRoot = a.getFromRoot();
                     if (fromRoot != std::nullopt) {
                         if (!prePath->getVarAddr().contains(fromRoot.value()))
                             continue;
-                        if (!is_symbol_addr(a))
+                        if (!a.isSymbolAddress())
                             continue;
                     } else if (!isRetBaseAddr(a)) {
                         continue;
                     }
-                    if (is_symbol_addr(a) && path.is_point_to_structure(a))
+                    if (a.isSymbolAddress() && path.is_point_to_structure(a))
                         continue;
                     if (!path.isUnchanged(a, *pre.getPaths().front()))
                         // The address was modified on this path; record it for the assigns
                         // clause of this behavior.
-                        (void)assignedAddrs.try_emplace(a.hash(), std::move(a));
+                        (void)assignedAddrs.try_emplace(a.hash(), symb::AddressBox{std::move(a)});
                 }
 
                 std::string assignsSpec;
                 bool droppedOrFailed = false;
-                auto *FD = pre.getFunction()->getFunctionDecl();
+                auto *FD             = pre.getFunction()->getFunctionDecl();
                 for (auto &[_, a] : assignedAddrs) {
-                    if (referencesNonContractVisibleLocals(a.get(), FD)) {
+                    if (referencesNonContractVisibleLocals(
+                            a.importedInto(symb::ExprFactoryScope::current()).asExpr(), FD)) {
                         droppedOrFailed = true;
                         continue;
                     }
-                    symb::SymbolicExpr::GetACSLConfig cfg{
-                        .noStateLabelFunctionAt = true, .predefinedLabels = {{oldPoint, "Old"}}};
-                    auto acslExpected = a.get().getACSLOfValue(cfg, oldPoint);
+                    symb::ACSLConfig cfg{.noStateLabelFunctionAt = true,
+                                                          .predefinedLabels = {{oldPoint, "Old"}}};
+                    auto acslExpected = a.getACSLOfValue(cfg, oldPoint);
                     if (!acslExpected) {
-                        if (acslExpected.error() == symb::SymbolicExpr::GetACSLError::HeapAddress) {
+                        if (acslExpected.error() == symb::ACSLError::HeapAddress) {
                             if (auto fallback = getResultBaseACSL(a, cfg, oldPoint)) {
                                 if (hasDisallowedFunctionContractLabel(fallback.value().first)) {
                                     droppedOrFailed = true;
@@ -322,7 +319,7 @@ namespace acslg::spec_generator {
                                 continue;
                             }
                         }
-                        WARN("Value of {" + a.get().dump() + "} getACSL failed.");
+                        WARN("Value of {" + a.dump() + "} getACSL failed.");
                         droppedOrFailed = true;
                         continue;
                     }
@@ -345,62 +342,62 @@ namespace acslg::spec_generator {
 
                 // result
                 if (auto &ret = path.getReturnExpr()) {
-                    auto simplifiedRet = ret.value()->simplifiedExpr();
-                    if (!referencesNonContractVisibleLocals(*simplifiedRet, FD))
-                    if (auto expected = simplifiedRet->getACSL(
-                            {.noStateLabelFunctionAt = true,
-                             .predefinedLabels = {{oldPoint, "Old"}}})) {
-                        auto &[spec, usedPoints] = expected.value();
-                        if (usedPoints.empty())
-                            if (!llvm::isa<symb::OverRangeExpr>(*ret.value()))
-                                ensures.push_back("\\result == (" + spec + ")");
-                            else
-                                ensures.push_back(spec);
-                        else {
-                            // todo: maintain the write information, so can we know two source
-                            // point are *same*. no way to do it right now :)
-                            auto wrongExpected =
-                                simplifiedRet->getACSL({.noStateLabelFunctionAt = true});
-                            assert(wrongExpected);
-                            if (!llvm::isa<symb::OverRangeExpr>(*ret.value()))
-                                ensures.push_back("\\result == (" + wrongExpected.value().first +
-                                                  ")");
-                            else
-                                ensures.push_back(wrongExpected.value().first);
+                    auto simplifiedRet = simplifyExpr(*ret);
+                    if (!referencesNonContractVisibleLocals(simplifiedRet, FD))
+                        if (auto expected =
+                                simplifiedRet.getACSL({.noStateLabelFunctionAt = true,
+                                                       .predefinedLabels = {{oldPoint, "Old"}}})) {
+                            auto &[spec, usedPoints] = expected.value();
+                            if (usedPoints.empty())
+                                if (!ret.value().isOverRange())
+                                    ensures.push_back("\\result == (" + spec + ")");
+                                else
+                                    ensures.push_back(spec);
+                            else {
+                                // todo: maintain the write information, so can we know two source
+                                // point are *same*. no way to do it right now :)
+                                auto wrongExpected =
+                                    simplifiedRet.getACSL({.noStateLabelFunctionAt = true});
+                                assert(wrongExpected);
+                                if (!ret.value().isOverRange())
+                                    ensures.push_back("\\result == (" +
+                                                      wrongExpected.value().first + ")");
+                                else
+                                    ensures.push_back(wrongExpected.value().first);
+                            }
                         }
-                    }
                 }
 
                 // Memory equations
                 for (auto &&[addr, value] : path.getMemoryState().flat()) {
-                    auto fromRoot = addr.get().getFromRoot();
+                    auto fromRoot = addr.getFromRoot();
                     if (fromRoot != std::nullopt) {
                         if (!prePath->getVarAddr().contains(fromRoot.value()))
                             continue;
-                        if (!is_symbol_addr(addr))
+                        if (!addr.isSymbolAddress())
                             continue;
                     } else if (!isRetBaseAddr(addr)) {
                         continue;
                     }
-                    if (is_symbol_addr(addr) && llvm::isa<symb::Structure>(value.get())) {
+                    if (addr.isSymbolAddress() && value.isStructure()) {
                         if (isRetBaseAddr(addr)) {
-                            auto *st = llvm::dyn_cast<symb::Structure>(value.get());
-                            auto &info = st->getInfo();
+                            symb::StructureExpr st{value};
+                            auto &info      = st.info();
                             size_t idxField = 0;
                             for (auto field : info.definition_->fields()) {
                                 std::string fieldName = field->getNameAsString();
-                                auto fieldExpr = st->getFieldValue(idxField)->clone();
+                                auto simplifiedField =
+                                    simplifyExpr(st.field(idxField));
                                 ++idxField;
                                 if (fieldName.empty())
                                     continue;
 
-                                auto simplifiedField = fieldExpr->simplifiedExpr();
-                                if (referencesNonContractVisibleLocals(*simplifiedField, FD))
+                                if (referencesNonContractVisibleLocals(simplifiedField, FD))
                                     continue;
-                                symb::SymbolicExpr::GetACSLConfig cfg{
+                                symb::ACSLConfig cfg{
                                     .noStateLabelFunctionAt = true,
-                                    .predefinedLabels = {{oldPoint, "Old"}}};
-                                auto rhsOpt = simplifiedField->getACSL(cfg);
+                                    .predefinedLabels       = {{oldPoint, "Old"}}};
+                                auto rhsOpt = simplifiedField.getACSL(cfg);
                                 if (!rhsOpt)
                                     continue;
                                 ensures.push_back("\\result->" + fieldName + " == (" +
@@ -413,18 +410,19 @@ namespace acslg::spec_generator {
                         continue;
                     }
 
-                    symb::SymbolicExpr::GetACSLConfig cfg{
-                        .noStateLabelFunctionAt = true, .predefinedLabels = {{oldPoint, "Old"}}};
-                    if (referencesNonContractVisibleLocals(addr.get(), FD))
+                    symb::ACSLConfig cfg{.noStateLabelFunctionAt = true,
+                                                          .predefinedLabels = {{oldPoint, "Old"}}};
+                    if (referencesNonContractVisibleLocals(
+                            addr.importedInto(symb::ExprFactoryScope::current()).asExpr(), FD))
                         continue;
-                    auto simplifiedRhs = value->simplifiedExpr();
-                    if (referencesNonContractVisibleLocals(*simplifiedRhs, FD))
+                    auto simplifiedRhs = simplifyExpr(value);
+                    if (referencesNonContractVisibleLocals(simplifiedRhs, FD))
                         continue;
-                    auto lhsOpt = addr.get().getACSLOfValue(cfg);
+                    auto lhsOpt = addr.getACSLOfValue(cfg);
                     if (!lhsOpt) {
-                        if (lhsOpt.error() == symb::SymbolicExpr::GetACSLError::HeapAddress) {
+                        if (lhsOpt.error() == symb::ACSLError::HeapAddress) {
                             if (auto fallback = getResultBaseACSL(addr, cfg, oldPoint)) {
-                                auto rhsOpt = simplifiedRhs->getACSL(cfg);
+                                    auto rhsOpt = simplifiedRhs.getACSL(cfg);
                                 if (!rhsOpt)
                                     continue;
                                 ensures.push_back(fallback.value().first + " == (" +
@@ -441,7 +439,7 @@ namespace acslg::spec_generator {
                         continue;
                     }
 
-                    auto rhsOpt = simplifiedRhs->getACSL(cfg);
+                    auto rhsOpt = simplifiedRhs.getACSL(cfg);
                     if (!rhsOpt)
                         continue;
 
@@ -454,8 +452,8 @@ namespace acslg::spec_generator {
                 }
 
                 if (auto &ret = path.getReturnExpr()) {
-                    if (auto *retSt = llvm::dyn_cast<symb::Structure>(ret.value().get().get())) {
-                        auto &info = retSt->getInfo();
+                    if (auto retSt = symb::StructureExpr::tryFrom(*ret)) {
+                        auto &info      = retSt->info();
                         size_t idxField = 0;
                         for (auto field : info.definition_->fields()) {
                             std::string fieldName = field->getNameAsString();
@@ -463,13 +461,12 @@ namespace acslg::spec_generator {
                                 ++idxField;
                                 continue;
                             }
-                            auto fieldExpr = retSt->getFieldValue(idxField)->clone();
-                            auto simplifiedField = fieldExpr->simplifiedExpr();
-                            if (referencesNonContractVisibleLocals(*simplifiedField, FD)) {
+                            auto simplifiedField = simplifyExpr(retSt->field(idxField));
+                            if (referencesNonContractVisibleLocals(simplifiedField, FD)) {
                                 ++idxField;
                                 continue;
                             }
-                            auto fieldExpected = simplifiedField->getACSL(
+                            auto fieldExpected = simplifiedField.getACSL(
                                 {.noStateLabelFunctionAt = true, .predefinedLabels = {}});
                             if (!fieldExpected) {
                                 ++idxField;
@@ -531,20 +528,19 @@ namespace acslg::spec_generator {
             std::string assumeStr;
             std::string requireStr;
             for (auto &cond : conds) {
-                if (cond->isUnknown())
+                if (cond.isUnknown())
                     continue;
-                auto simplified = cond->simplifiedExpr();
-                if (referencesNonContractVisibleLocals(*simplified, FD))
+                auto simplified = simplifyExpr(cond);
+                if (referencesNonContractVisibleLocals(simplified, FD))
                     continue;
-                auto rf = simplified->getACSL({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
+                auto rf = simplified.getACSL({.predefinedLabels = {{oldPoint, "Old"}}}, oldPoint);
                 if (!rf || rf.value().first.empty())
                     continue;
                 // TODO: Conditions involving heap-allocated pointers may require SourcePoint
                 // labels; we currently drop them because we cannot express usedPoints in requires.
                 if (!rf.value().second.empty())
                     continue;
-                auto &target =
-                    llvm::isa<symb::OverRangeExpr>(simplified.get()) ? assumeStr : requireStr;
+                auto &target = simplified.isOverRange() ? assumeStr : requireStr;
                 if (!target.empty())
                     target += " && ";
                 target += rf.value().first;
