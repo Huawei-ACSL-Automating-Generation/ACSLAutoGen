@@ -180,6 +180,38 @@ namespace acslg::test::integration {
         ASSERT_TRUE(result.structurallyEqual(literalHandle(postState->getExprFactory(), int64_t{0})));
     }
 
+    TEST(IntegrationTest, ArrayReadAddsIndexToExistingPointerOffset) {
+        auto code = R"(
+    int func(int *items) {
+        items++;
+        items[1] = 7;
+        return items[1];
+    }
+    )"s;
+        auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
+        auto result =
+            simplifyForTest(postState->getExprFactory(), getReturnExprOfFirstPath(*postState));
+        EXPECT_TRUE(
+            result.structurallyEqual(literalHandle(postState->getExprFactory(), int64_t{7})));
+    }
+
+    TEST(IntegrationTest, NegativeArrayIndexCanReturnToObjectBase) {
+        auto code = R"(
+    int func(int *items) {
+        items[0] = 9;
+        items++;
+        return items[-1];
+    }
+    )"s;
+        auto postState = execOnFirstFunc(code);
+        analyzer::symbolic::ExprFactoryScope scope(postState->getExprFactory());
+        auto result =
+            simplifyForTest(postState->getExprFactory(), getReturnExprOfFirstPath(*postState));
+        EXPECT_TRUE(
+            result.structurallyEqual(literalHandle(postState->getExprFactory(), int64_t{9})));
+    }
+
     TEST(IntegrationTest, CorrectPostStateOfLoop_1) {
         auto code = R"(
         void func(int n){
@@ -506,10 +538,10 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
         auto result =
             simplifyForTest(postState->getExprFactory(), getReturnExprOfFirstPath(*postState));
         ASSERT_OK_AND_GET_FIRST_TO_VAR(result.getACSL({.noStateLabelFunctionAt = true}), resultStr);
-        EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
-                                     AnyOf(StartsWith("-1 * x.y"), HasSubstr("- x.y")),
-                                     AnyOf(StartsWith("n"), HasSubstr("+ n")),
-                                     AnyOf(StartsWith("-1 * 100"), HasSubstr("- 100"))));
+        EXPECT_THAT(resultStr, AllOf(HasSubstr("(unsigned long long)(x.x)"),
+                                     HasSubstr("- x.y"),
+                                     HasSubstr("(unsigned long long)(n)"),
+                                     HasSubstr("- 100")));
     }
 
     TEST(ResultTest, WithStructure_2) {
@@ -539,9 +571,8 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
         auto result =
             simplifyForTest(postState->getExprFactory(), getReturnExprOfFirstPath(*postState));
         ASSERT_OK_AND_GET_FIRST_TO_VAR(result.getACSL({.noStateLabelFunctionAt = true}), resultStr);
-        EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("x.x"), HasSubstr("+ x.x")),
-                                     AnyOf(StartsWith("-1 * 99"), HasSubstr("- 99")),
-                                     AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        EXPECT_THAT(resultStr,
+                    AllOf(HasSubstr("(unsigned long long)(x.x + n)"), HasSubstr("- 99")));
     }
 
     TEST(ResultTest, WithStructure_3) {
@@ -570,9 +601,9 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
         auto result =
             simplifyForTest(postState->getExprFactory(), getReturnExprOfFirstPath(*postState));
         ASSERT_OK_AND_GET_FIRST_TO_VAR(result.getACSL({.noStateLabelFunctionAt = true}), resultStr);
-        EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("*x.x"), HasSubstr("+ *x.x")),
-                                     AnyOf(StartsWith("-1 * 98"), HasSubstr("- 98")),
-                                     AnyOf(StartsWith("n"), HasSubstr("+ n"))));
+        EXPECT_THAT(resultStr,
+                    AllOf(HasSubstr("(unsigned long long)(*x.x + 1 + n)"),
+                          HasSubstr("- 99")));
     }
 
     TEST(ResultTest, WithStructure_4) {
@@ -602,10 +633,10 @@ BN_UINT BinSub(BN_UINT *r, const BN_UINT *a, const BN_UINT *b, uint32_t n) {
         auto result =
             simplifyForTest(postState->getExprFactory(), getReturnExprOfFirstPath(*postState));
         ASSERT_OK_AND_GET_FIRST_TO_VAR(result.getACSL({.noStateLabelFunctionAt = true}), resultStr);
-        EXPECT_THAT(resultStr, AllOf(AnyOf(StartsWith("*a.x"), HasSubstr("+ *a.x")),
-                                     AnyOf(StartsWith("*b.x"), HasSubstr("+ *b.x")),
-                                     AnyOf(StartsWith("b.y"), HasSubstr("+ b.y")),
-                                     AnyOf(StartsWith("142"), HasSubstr("+ 142"))));
+        EXPECT_THAT(resultStr,
+                    AllOf(HasSubstr("(unsigned long long)(*a.x + 1)"),
+                          HasSubstr("(unsigned long long)(*b.x - 1)"),
+                          HasSubstr("+ 42"), HasSubstr("(b.y + 100)")));
     }
 
     TEST(StateTest, openHiTLS_BinSub_RightMergedAddress) {

@@ -445,11 +445,30 @@ namespace acslg::test::unit::analyzer {
         symbolic::ExprFactory factory;
         symbolic::ExprFactoryScope scope(factory);
 
-        auto point = getSourcePoint(0);
+        auto point   = getSourcePoint(0);
         auto varNode = makeSymbolValue(0, point);
         auto result  = FacadeExprForTest{factory, varNode}.substitutePath(*path, point);
 
         EXPECT_EQ(handle(result), literalHandle(factory, uint64_t{42}));
+    }
+
+    TEST_F(SubstituteTest, PathSubstitutionRebuildsCastOperand) {
+        auto var0Addr = makeVariableAddr(0);
+        mm.write(FacadeAddrForTest{var0Addr}, FacadeExprForTest{internForTest(makeConstU64(42))});
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        const auto targetType = symbolic::ExprType{symbolic::ExprScalarKind::UInt, 32};
+        const auto point      = getSourcePoint(0);
+        const auto varNode    = makeSymbolValue(0, point);
+        const auto casted     = FacadeExprForTest{factory, varNode}.castTo(targetType);
+
+        EXPECT_EQ(casted.collectUsedSymbols().size(), 1U);
+        const auto result   = casted.substitutePath(*path, point);
+        const auto expected = symbolic::LiteralExpr{factory, uint64_t{42}}.castTo(targetType);
+
+        EXPECT_EQ(result, expected);
+        ASSERT_TRUE(symbolic::CastExpr::tryFrom(result).has_value());
     }
 
     TEST_F(SubstituteTest, VarWithDifferentFromIsKeptUnchanged) {
@@ -916,15 +935,157 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(&stripped.factory(), &factory);
     }
 
+    TEST(ExprFacadeTest, CastFacadeBuildsInternedImmutableNodes) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        const auto signedType    = symbolic::ExprType{symbolic::ExprScalarKind::Int, 32};
+        const auto unsignedType  = symbolic::ExprType{symbolic::ExprScalarKind::UInt, 32};
+        const symbolic::Expr one = symbolic::LiteralExpr{1};
+
+        const auto casted   = one.castTo(unsignedType);
+        const auto repeated = one.castTo(unsignedType);
+
+        EXPECT_EQ(casted, repeated);
+        EXPECT_NE(casted, one);
+        EXPECT_NE(casted, one.castTo({symbolic::ExprScalarKind::UInt, 64}));
+        EXPECT_TRUE(casted.isCast());
+        EXPECT_FALSE(one.isCast());
+        EXPECT_EQ(one.castTo(signedType), one);
+
+        const auto view = symbolic::CastExpr::tryFrom(casted);
+        ASSERT_TRUE(view.has_value());
+        EXPECT_EQ(view->operand(), one);
+        EXPECT_EQ(view->targetType(), unsignedType);
+        EXPECT_FALSE(symbolic::CastExpr::tryFrom(one).has_value());
+
+        symbolic::ACSLConfig config;
+        const auto acsl = casted.getACSL(config);
+        ASSERT_TRUE(acsl);
+        EXPECT_EQ(acsl.value().first, "(unsigned int)(1)");
+        EXPECT_DEATH((void)one.castTo({symbolic::ExprScalarKind::Void, 0}), "");
+    }
+
+    TEST(ExprFacadeTest, CastLinearizationRequiresValuePreservingIntegerConversion) {
+        ASTExtractor extractor;
+        extractor.init(R"c(
+            long long f(int x, unsigned int y) {
+                return 0;
+            }
+        )c");
+        const auto *function = extractor.findFunc("f");
+        ASSERT_NE(function, nullptr);
+        const auto point = symbolic::SourcePoint::fromFuncDecl(
+            function, extractor.getSourceManager(), extractor.getLangOptions());
+
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        const auto *xDecl = function->getParamDecl(0);
+        const auto *yDecl = function->getParamDecl(1);
+        const auto x = symbolic::Expr::symbolValue(
+            symbolic::deriveType(xDecl->getType()), symbolic::Addr::variable(xDecl), point);
+        const auto y = symbolic::Expr::symbolValue(
+            symbolic::deriveType(yDecl->getType()), symbolic::Addr::variable(yDecl), point);
+
+        const auto signedWidened =
+            x.castTo({symbolic::ExprScalarKind::Int, 64});
+        const auto unsignedToSignedWidened =
+            y.castTo({symbolic::ExprScalarKind::Int, 64});
+        const auto signedToUnsigned =
+            x.castTo({symbolic::ExprScalarKind::UInt, 64});
+        const auto signedNarrowed =
+            x.castTo({symbolic::ExprScalarKind::Int, 16});
+        const auto unsignedToSignedSameWidth =
+            y.castTo({symbolic::ExprScalarKind::Int, 32});
+
+        auto [symbols, indexes] =
+            symbolic::collectUsedSymbols(signedWidened, unsignedToSignedWidened);
+        ASSERT_EQ(symbols.size(), 2u);
+        ASSERT_EQ(indexes.size(), 2u);
+        EXPECT_EQ(signedWidened.getMaxDegree(), 1);
+        EXPECT_EQ(unsignedToSignedWidened.getMaxDegree(), 1);
+
+        const auto signedLinear = signedWidened.toLinearExpr(indexes);
+        const auto unsignedLinear = unsignedToSignedWidened.toLinearExpr(indexes);
+        EXPECT_EQ(signedLinear.coefficient(
+                      Parma_Polyhedra_Library::Variable(indexes.at(x))),
+                  1);
+        EXPECT_EQ(unsignedLinear.coefficient(
+                      Parma_Polyhedra_Library::Variable(indexes.at(y))),
+                  1);
+
+        const std::unordered_map<std::string, size_t> variableIndexes{
+            {"x", 0},
+            {"y", 1},
+        };
+        EXPECT_TRUE(signedWidened.toLinearExpr(variableIndexes).has_value());
+        EXPECT_TRUE(unsignedToSignedWidened.toLinearExpr(variableIndexes).has_value());
+
+        const auto maxUInt32 = symbolic::LiteralExpr{std::numeric_limits<unsigned int>::max()}
+                                   .castTo({symbolic::ExprScalarKind::Int, 64});
+        const symbolic::ExprIndexMap noSymbols;
+        const auto maxUInt32Linear = maxUInt32.toLinearExpr(noSymbols);
+        EXPECT_EQ(maxUInt32Linear.inhomogeneous_term(),
+                  Parma_Polyhedra_Library::Coefficient{"4294967295"});
+
+        EXPECT_EQ(signedToUnsigned.getMaxDegree(), -1);
+        EXPECT_EQ(signedNarrowed.getMaxDegree(), -1);
+        EXPECT_EQ(unsignedToSignedSameWidth.getMaxDegree(), -1);
+        EXPECT_FALSE(signedToUnsigned.toLinearExpr(variableIndexes).has_value());
+        EXPECT_FALSE(signedNarrowed.toLinearExpr(variableIndexes).has_value());
+        EXPECT_FALSE(unsignedToSignedSameWidth.toLinearExpr(variableIndexes).has_value());
+
+        const auto widenedSum =
+            signedWidened + symbolic::LiteralExpr{std::int64_t{1}};
+        const auto simplifiedSum = widenedSum.simplified();
+        EXPECT_EQ(simplifiedSum.getValType(),
+                  (symbolic::ExprType{symbolic::ExprScalarKind::Int, 64}));
+        const auto simplifiedBinary = symbolic::BinaryExpr::tryFrom(simplifiedSum);
+        ASSERT_TRUE(simplifiedBinary.has_value());
+        EXPECT_TRUE(simplifiedBinary->left().isCast());
+    }
+
+    TEST(ExprFactoryTest, CastImportAndSubstitutionPreserveTargetType) {
+        ASTExtractor extractor;
+        extractor.init("int f(int x) { return x; }");
+        const auto *function = extractor.findFunc("f");
+        ASSERT_NE(function, nullptr);
+        const auto point = symbolic::SourcePoint::fromFuncDecl(
+            function, extractor.getSourceManager(), extractor.getLangOptions());
+
+        const auto targetType = symbolic::ExprType{symbolic::ExprScalarKind::UInt, 32};
+        symbolic::ExprFactory source;
+        symbolic::ExprFactoryScope sourceScope(source);
+        const symbolic::Expr sourceOne = symbolic::LiteralExpr{1};
+        const auto sourceCast          = sourceOne.castTo(targetType);
+
+        symbolic::ExprFactory target;
+        const auto imported = sourceCast.importedInto(target);
+        const auto expected = symbolic::LiteralExpr{target, 1}.castTo(targetType);
+        EXPECT_EQ(imported, expected);
+        EXPECT_NE(imported, sourceCast);
+
+        const symbolic::Expr two = symbolic::LiteralExpr{target, uint64_t{2}};
+        symbolic::ExprSubstitutions substitutions;
+        substitutions.insertOrAssign(symbolic::CastExpr{imported}.operand(), two);
+        const auto substituted = imported.substituteValues(substitutions);
+        EXPECT_EQ(substituted, two.castTo(targetType));
+
+        const auto index     = symbolic::Expr::rangeIndex(target, "i");
+        const auto castIndex = index.castTo({symbolic::ExprScalarKind::Int, 32});
+        const auto replaced  = castIndex.substituteRangeIndex(
+             symbolic::SymbolAddrBaseInfo{point, function->getParamDecl(0)->getType()}, two);
+        EXPECT_EQ(replaced, two.castTo({symbolic::ExprScalarKind::Int, 32}));
+    }
+
     TEST(ExprFactoryTest, ReusesEqualNodesButSeparatesHashCollisions) {
         symbolic::ExprFactory factory;
 
-        auto a = symbolic::detail::ExprFactoryInternals::intern(
-            factory, std::make_unique<CollisionExpr>(1));
-        auto b = symbolic::detail::ExprFactoryInternals::intern(
-            factory, std::make_unique<CollisionExpr>(1));
-        auto c = symbolic::detail::ExprFactoryInternals::intern(
-            factory, std::make_unique<CollisionExpr>(2));
+        auto a = symbolic::detail::ExprFactoryInternals::intern(factory,
+                                                                std::make_unique<CollisionExpr>(1));
+        auto b = symbolic::detail::ExprFactoryInternals::intern(factory,
+                                                                std::make_unique<CollisionExpr>(1));
+        auto c = symbolic::detail::ExprFactoryInternals::intern(factory,
+                                                                std::make_unique<CollisionExpr>(2));
 
         EXPECT_EQ(a, b);
         EXPECT_NE(a, c);
@@ -1528,6 +1689,30 @@ namespace acslg::test::unit::analyzer {
                                          symbolic::BinaryOp::Divide,
                                          literalHandle(factory, int64_t{0})))
                          .has_value());
+        EXPECT_FALSE(
+            eval(binaryHandle(factory, literalHandle(factory, std::numeric_limits<int64_t>::max()),
+                              symbolic::BinaryOp::Add, literalHandle(factory, int64_t{1})))
+                .has_value());
+        EXPECT_FALSE(eval(unaryHandle(factory, symbolic::UnaryOp::Minus,
+                                      literalHandle(factory,
+                                                    std::numeric_limits<int64_t>::min())))
+                         .has_value());
+        EXPECT_FALSE(
+            eval(binaryHandle(factory, literalHandle(factory, std::numeric_limits<int64_t>::min()),
+                              symbolic::BinaryOp::Divide, literalHandle(factory, int64_t{-1})))
+                .has_value());
+        EXPECT_EQ(eval(binaryHandle(factory, literalHandle(factory, uint32_t{0}),
+                                    symbolic::BinaryOp::Subtract,
+                                    literalHandle(factory, uint32_t{1}))),
+                  std::numeric_limits<uint32_t>::max());
+        EXPECT_FALSE(
+            eval(binaryHandle(factory, literalHandle(factory, int32_t{1} << 30),
+                              symbolic::BinaryOp::ShiftLeft, literalHandle(factory, int32_t{1})))
+                .has_value());
+        EXPECT_FALSE(
+            eval(binaryHandle(factory, literalHandle(factory, int32_t{-1}),
+                              symbolic::BinaryOp::ShiftLeft, literalHandle(factory, int32_t{1})))
+                .has_value());
 
         auto unknown = unknownHandle(factory);
         EXPECT_EQ(eval(binaryHandle(factory, literalHandle(factory, false),
@@ -1641,6 +1826,24 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(imported.isLiteralExpr());
         EXPECT_EQ(imported.getValType().kind, symbolic::ExprScalarKind::UInt);
         EXPECT_EQ(imported.getValType().bitWidth, 64);
+    }
+
+    TEST(ExprFacadeTest, ExposesExactSignedAndUnsignedLiteralValues) {
+        symbolic::ExprFactory factory;
+        symbolic::ExprFactoryScope scope(factory);
+        const auto minimum = std::numeric_limits<std::int64_t>::min();
+        const auto maximum = std::numeric_limits<std::uint64_t>::max();
+
+        const symbolic::LiteralExpr signedLiteral{factory, minimum};
+        const symbolic::LiteralExpr unsignedLiteral{factory, maximum};
+        const symbolic::LiteralExpr repeatedUnsigned{factory, maximum};
+
+        EXPECT_EQ(signedLiteral.integerValue(),
+                  (std::variant<std::int64_t, std::uint64_t>{minimum}));
+        EXPECT_EQ(unsignedLiteral.integerValue(),
+                  (std::variant<std::int64_t, std::uint64_t>{maximum}));
+        EXPECT_EQ(unsignedLiteral, repeatedUnsigned);
+        EXPECT_EQ(&unsignedLiteral.factory(), &factory);
     }
 
     TEST(ExprFactoryTest, UnknownBuilderReusesUnknownNode) {

@@ -12,6 +12,7 @@ namespace acslg::analyzer::symbolic::detail {
 
         ExprHandle handle() const { return handle_; }
         int64_t value() const;
+        std::variant<std::int64_t, std::uint64_t> integerValue() const;
 
       private:
         ExprHandle handle_;
@@ -26,6 +27,20 @@ namespace acslg::analyzer::symbolic::detail {
         ExprHandle handle() const { return handle_; }
         UnaryOp operation() const;
         ExprHandle operand() const;
+
+      private:
+        ExprHandle handle_;
+    };
+
+    class CastExprView {
+      public:
+        explicit CastExprView(ExprHandle handle);
+
+        static std::optional<CastExprView> tryFrom(ExprHandle handle);
+
+        ExprHandle handle() const { return handle_; }
+        ExprHandle operand() const;
+        ExprType targetType() const;
 
       private:
         ExprHandle handle_;

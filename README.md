@@ -46,6 +46,13 @@
   - Output is written alongside the source, named like `source_acsl.c`.
   - `-ast-only`: print the full AST for debugging instead of generating ACSL.
 - Existing ACSL comments that are not top-level `requires` clauses are removed during rewrite to avoid conflicts with generated specs.
+- Enable locally discovered and SMT-verified numerical invariants without network access:
+  ```bash
+  ACSLG_NUMERICAL_INVARIANTS=local ./build/src/ACSLG path/to/source.c
+  ```
+- Set `ACSLG_NUMERICAL_INVARIANTS=llm` to additionally enable the configured
+  OpenAI-compatible Clause2Inv provider. This mode requires `ACSLG_LLM_API_KEY`;
+  the default and `local` modes never access the network.
 - Build and preview API docs:
   ```bash
   doxygen Doxyfile
@@ -55,6 +62,10 @@
 ## Project Structure & Architecture
 The detailed architecture and dataflow are documented in `docs/projectArchitecture.md`.
 For loop-specific invariants and plugin behavior, see `docs/loopInvariantPlugins.md`.
+For the C-finite and Clause2Inv numerical-invariant prototypes, including opt-in usage and
+soundness limits, see `docs/numericalInvariantPrototypeGuide.md`.
+For reproducible benchmark inputs, generated invariants, and Frama-C/WP results, see
+`docs/numericalInvariantBenchmarkReport.md`.
 
 ## Citation & Credits
 To be added.

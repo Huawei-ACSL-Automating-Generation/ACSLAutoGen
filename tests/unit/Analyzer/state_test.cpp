@@ -88,6 +88,28 @@ namespace acslg::test::unit::analyzer {
         ASSERT_DEATH(pathA->mergeWith(otherPath), "");
     }
 
+    TEST_F(MemoryModelTest, ObjectExtentFollowsBaseAcrossOffsetsCopyAndClear) {
+        MemoryModel memory;
+        auto base = FacadeAddrForTest{
+            makeRangeAddr(31, makeLiteralHandle(0U), std::nullopt)};
+        symbolic::LiteralExpr extent{std::uint64_t{8}};
+        memory.setObjectExtent(base, extent);
+
+        auto shifted = base.withAddedOffset(symbolic::LiteralExpr{std::uint64_t{3}});
+        auto shiftedExtent = memory.objectExtent(shifted);
+        ASSERT_TRUE(shiftedExtent.has_value());
+        EXPECT_EQ(*shiftedExtent, extent);
+
+        MemoryModel copied{memory};
+        auto copiedExtent = copied.objectExtent(shifted);
+        ASSERT_TRUE(copiedExtent.has_value());
+        EXPECT_EQ(*copiedExtent, extent);
+
+        copied.clear();
+        EXPECT_FALSE(copied.objectExtent(base).has_value());
+        EXPECT_TRUE(memory.objectExtent(base).has_value());
+    }
+
     TEST(ProgramStateTest, StructInitializerListRebuildsFields) {
         auto postState = execOnFirstFunc(R"c(
             struct S {
@@ -359,6 +381,50 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(actual, expected);
     }
 
+    TEST(ProgramStateTest, NarrowCompoundAssignmentPreservesPromotionAndWriteBack) {
+        ASTExtractor extractor(R"c(
+            short func(short x, short y) {
+                x += y;
+                return x;
+            }
+        )c");
+        auto *func   = extractor.findFirstDecl<FunctionDecl>();
+        auto *assign = extractor.findFirstStmt<CompoundAssignOperator>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(assign, nullptr);
+        ASSERT_EQ(func->getNumParams(), 2u);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        ASSERT_EQ(state.getPaths().size(), 1u);
+
+        const auto oldX = state.getPaths().front()->getVarState(func->getParamDecl(0));
+        const auto oldY = state.getPaths().front()->getVarState(func->getParamDecl(1));
+        const auto shortType =
+            symbolic::ExprType{symbolic::ExprScalarKind::Int, 16};
+        const auto intType = symbolic::ExprType{symbolic::ExprScalarKind::Int, 32};
+        const auto expected =
+            oldX.castTo(intType)
+                .binary(symbolic::BinaryOp::Add, oldY.castTo(intType))
+                .castTo(shortType);
+
+        state.step(assign);
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        const auto actual =
+            state.getPaths().front()->getVarState(func->getParamDecl(0));
+        EXPECT_EQ(actual, expected);
+        const auto writeBack = symbolic::CastExpr::tryFrom(actual);
+        ASSERT_TRUE(writeBack.has_value());
+        EXPECT_EQ(writeBack->targetType(), shortType);
+        const auto addition = symbolic::BinaryExpr::tryFrom(writeBack->operand());
+        ASSERT_TRUE(addition.has_value());
+        EXPECT_TRUE(symbolic::CastExpr::tryFrom(addition->left()).has_value());
+        EXPECT_TRUE(symbolic::CastExpr::tryFrom(addition->right()).has_value());
+    }
+
     TEST(ProgramStateTest, DeclarationInitializerStoresFactoryHandle) {
         auto postState = execOnFirstFunc(R"c(
             int func(void) {
@@ -376,6 +442,213 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(handle(*value), expected);
         ASSERT_TRUE(path.getReturnExpr().has_value());
         EXPECT_EQ(handle(*path.getReturnExpr()), expected);
+    }
+
+    TEST(ProgramStateTest, FixedArrayDeclarationTracksAndExpiresObjectExtent) {
+        ASTExtractor extractor(R"c(
+            void func(void) {
+                int items[5];
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        auto *declStmt = extractor.findFirstStmt<DeclStmt>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(declStmt, nullptr);
+        auto *items = dyn_cast<VarDecl>(declStmt->getSingleDecl());
+        ASSERT_NE(items, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(declStmt);
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        auto &path = *state.getPaths().front();
+        auto arrayAddress = path.getVarState(items).evaluatedAddress();
+        ASSERT_TRUE(arrayAddress.has_value());
+        auto shifted = arrayAddress->withAddedOffset(
+            symbolic::LiteralExpr{context.getExprFactory(), std::uint64_t{4}});
+        auto extent = path.getMemoryState().objectExtent(shifted);
+        ASSERT_TRUE(extent.has_value());
+        EXPECT_EQ(extent->tryEvalAsConstant(), 5);
+
+        path.getMutMemoryState().eraseExpiredLocals({items});
+        EXPECT_FALSE(path.getMemoryState().objectExtent(*arrayAddress).has_value());
+    }
+
+    TEST(ProgramStateTest, CallocTracksSymbolicScalarObjectExtent) {
+        ASTExtractor extractor(R"c(
+            typedef __SIZE_TYPE__ size_t;
+            int *BSL_SAL_Calloc(size_t count, size_t size);
+
+            void func(size_t count) {
+                int *items = BSL_SAL_Calloc(count, sizeof(int));
+            }
+        )c");
+        auto *func = extractor.findFunc("func");
+        auto *declStmt = extractor.findFirstStmt<DeclStmt>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(declStmt, nullptr);
+        auto *items = dyn_cast<VarDecl>(declStmt->getSingleDecl());
+        ASSERT_NE(items, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        auto expectedExtent = state.getPaths().front()->getVarState(func->getParamDecl(0));
+
+        state.step(declStmt);
+
+        auto &path = *state.getPaths().front();
+        auto allocated = path.getVarState(items).evaluatedAddress();
+        ASSERT_TRUE(allocated.has_value());
+        auto extent = path.getMemoryState().objectExtent(*allocated);
+        ASSERT_TRUE(extent.has_value());
+        EXPECT_EQ(*extent, expectedExtent);
+    }
+
+    TEST(ProgramStateTest, CallocTracksStructureObjectExtent) {
+        ASTExtractor extractor(R"c(
+            typedef __SIZE_TYPE__ size_t;
+            struct Item { int value; };
+            struct Item *BSL_SAL_Calloc(size_t count, size_t size);
+
+            void func(void) {
+                struct Item *items = BSL_SAL_Calloc(3, sizeof(struct Item));
+            }
+        )c");
+        auto *func = extractor.findFunc("func");
+        auto *declStmt = extractor.findFirstStmt<DeclStmt>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(declStmt, nullptr);
+        auto *items = dyn_cast<VarDecl>(declStmt->getSingleDecl());
+        ASSERT_NE(items, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(declStmt);
+
+        auto &path = *state.getPaths().front();
+        auto allocated = path.getVarState(items).evaluatedAddress();
+        ASSERT_TRUE(allocated.has_value());
+        auto extent = path.getMemoryState().objectExtent(*allocated);
+        ASSERT_TRUE(extent.has_value());
+        EXPECT_EQ(extent->tryEvalAsConstant(), 3);
+    }
+
+    TEST(ProgramStateTest, MallocTracksExactSymbolicObjectExtent) {
+        ASTExtractor extractor(R"c(
+            typedef __SIZE_TYPE__ size_t;
+            int *BSL_SAL_Malloc(size_t size);
+
+            void func(size_t count) {
+                int *items = BSL_SAL_Malloc(count * sizeof(int));
+            }
+        )c");
+        auto *func = extractor.findFunc("func");
+        auto *declStmt = extractor.findFirstStmt<DeclStmt>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(declStmt, nullptr);
+        auto *items = dyn_cast<VarDecl>(declStmt->getSingleDecl());
+        ASSERT_NE(items, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        auto expectedExtent = state.getPaths().front()->getVarState(func->getParamDecl(0));
+
+        state.step(declStmt);
+
+        auto &path = *state.getPaths().front();
+        auto allocated = path.getVarState(items).evaluatedAddress();
+        ASSERT_TRUE(allocated.has_value());
+        auto extent = path.getMemoryState().objectExtent(*allocated);
+        ASSERT_TRUE(extent.has_value());
+        EXPECT_EQ(*extent, expectedExtent);
+    }
+
+    TEST(ProgramStateTest, MallocLeavesInexactByteCountExtentUnknown) {
+        ASTExtractor extractor(R"c(
+            typedef __SIZE_TYPE__ size_t;
+            int *BSL_SAL_Malloc(size_t size);
+
+            void func(size_t count) {
+                int *items = BSL_SAL_Malloc(count * sizeof(int) + 1);
+            }
+        )c");
+        auto *func = extractor.findFunc("func");
+        auto *declStmt = extractor.findFirstStmt<DeclStmt>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(declStmt, nullptr);
+        auto *items = dyn_cast<VarDecl>(declStmt->getSingleDecl());
+        ASSERT_NE(items, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(declStmt);
+
+        auto &path = *state.getPaths().front();
+        auto allocated = path.getVarState(items).evaluatedAddress();
+        ASSERT_TRUE(allocated.has_value());
+        EXPECT_FALSE(path.getMemoryState().objectExtent(*allocated).has_value());
+    }
+
+    TEST(ProgramStateTest, FreeInvalidatesExtentAndFlagsUseAfterFree) {
+        ASTExtractor extractor(R"c(
+            typedef __SIZE_TYPE__ size_t;
+            int *BSL_SAL_Malloc(size_t size);
+            void BSL_SAL_Free(int *pointer);
+
+            int func(void) {
+                int *items = BSL_SAL_Malloc(sizeof(int));
+                BSL_SAL_Free(items);
+                return items[0];
+            }
+        )c");
+        auto *func = extractor.findFunc("func");
+        ASSERT_NE(func, nullptr);
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(func->getBody());
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        const auto &path = *state.getPaths().front();
+        EXPECT_TRUE(path.hasUnknownMemoryAccess());
+        ASSERT_TRUE(path.getReturnExpr().has_value());
+        EXPECT_TRUE(path.getReturnExpr()->isUnknown());
+    }
+
+    TEST(ProgramStateTest, DoubleFreeIsMarkedUnsupported) {
+        ASTExtractor extractor(R"c(
+            typedef __SIZE_TYPE__ size_t;
+            int *BSL_SAL_Malloc(size_t size);
+            void BSL_SAL_Free(int *pointer);
+
+            void func(void) {
+                int *items = BSL_SAL_Malloc(sizeof(int));
+                BSL_SAL_Free(items);
+                BSL_SAL_Free(items);
+            }
+        )c");
+        auto *func = extractor.findFunc("func");
+        ASSERT_NE(func, nullptr);
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(func->getBody());
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        EXPECT_TRUE(state.getPaths().front()->hasUnknownMemoryAccess());
     }
 
     TEST(ProgramStateTest, InlineCallPreservesArgumentHandle) {
@@ -529,6 +802,369 @@ namespace acslg::test::unit::analyzer {
         EXPECT_EQ(indexed, path.extractLValue(arraySub));
     }
 
+    TEST(ProgramStateTest, FixedArrayAccessRecordsBoundsObligation) {
+        ASTExtractor extractor(R"c(
+            void func(int index) {
+                int items[5];
+                items[index];
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        auto *declStmt = extractor.findFirstStmt<DeclStmt>();
+        auto *arraySubscript = extractor.findFirstStmt<ArraySubscriptExpr>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(declStmt, nullptr);
+        ASSERT_NE(arraySubscript, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(declStmt);
+        auto &path = *state.getPaths().front();
+
+        auto result = path.evalExpr(arraySubscript);
+
+        ASSERT_EQ(result.second.size(), 1u);
+        ASSERT_TRUE(result.first.empty());
+        EXPECT_FALSE(path.hasUnknownMemoryAccess());
+        ASSERT_EQ(path.getMemoryAccessConditions().size(), 1u);
+        const auto &condition = *path.getMemoryAccessConditions().begin();
+        EXPECT_EQ(condition.getValType().kind, symbolic::ExprScalarKind::Bool);
+        auto indexValue = path.getVarState(func->getParamDecl(0));
+        auto usedSymbols = condition.collectUsedSymbols();
+        EXPECT_TRUE(std::any_of(usedSymbols.begin(), usedSymbols.end(), [&](const auto &symbol) {
+            return symbol.structurallyEqual(indexValue);
+        }));
+
+        auto cloned = path.clone();
+        EXPECT_FALSE(cloned->hasUnknownMemoryAccess());
+        EXPECT_EQ(cloned->getMemoryAccessConditions(), path.getMemoryAccessConditions());
+    }
+
+    TEST(ProgramStateTest, OnePastPointerCanFormButCannotBeDereferenced) {
+        ASTExtractor extractor(R"c(
+            int func(void) {
+                int items[5];
+                int *end = items + 5;
+                return *end;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        ASSERT_NE(func, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(func->getBody());
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        const auto &path = *state.getPaths().front();
+        EXPECT_FALSE(path.hasUnknownMemoryAccess());
+        EXPECT_EQ(path.getMemoryAccessConditions().size(), 2u);
+        std::vector<symbolic::BinaryOp> upperBoundOperations;
+        for (const auto &condition : path.getMemoryAccessConditions()) {
+            const auto bounds = symbolic::BinaryExpr::tryFrom(condition);
+            ASSERT_TRUE(bounds.has_value());
+            ASSERT_EQ(bounds->operation(), symbolic::BinaryOp::LogicalAnd);
+            const auto upperBound = symbolic::BinaryExpr::tryFrom(bounds->right());
+            ASSERT_TRUE(upperBound.has_value());
+            upperBoundOperations.emplace_back(upperBound->operation());
+        }
+        EXPECT_EQ(std::ranges::count(upperBoundOperations, symbolic::BinaryOp::LessEqual), 1);
+        EXPECT_EQ(std::ranges::count(upperBoundOperations, symbolic::BinaryOp::LessThan), 1);
+    }
+
+    TEST(ProgramStateTest, CompoundPointerAssignmentRecordsOnePastFormation) {
+        ASTExtractor extractor(R"c(
+            int func(void) {
+                int items[5];
+                int *end = items;
+                end += 5;
+                return *end;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        ASSERT_NE(func, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(func->getBody());
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        const auto &path = *state.getPaths().front();
+        EXPECT_FALSE(path.hasUnknownMemoryAccess());
+        ASSERT_EQ(path.getMemoryAccessConditions().size(), 2u);
+        std::vector<symbolic::BinaryOp> upperBoundOperations;
+        for (const auto &condition : path.getMemoryAccessConditions()) {
+            const auto bounds = symbolic::BinaryExpr::tryFrom(condition);
+            ASSERT_TRUE(bounds.has_value());
+            const auto upperBound = symbolic::BinaryExpr::tryFrom(bounds->right());
+            ASSERT_TRUE(upperBound.has_value());
+            upperBoundOperations.emplace_back(upperBound->operation());
+        }
+        EXPECT_EQ(std::ranges::count(upperBoundOperations, symbolic::BinaryOp::LessEqual), 1);
+        EXPECT_EQ(std::ranges::count(upperBoundOperations, symbolic::BinaryOp::LessThan), 1);
+    }
+
+    TEST(ProgramStateTest, PointerIncrementRecordsOnePastFormation) {
+        ASTExtractor extractor(R"c(
+            int func(void) {
+                int items[5];
+                int *end = items + 4;
+                ++end;
+                return *end;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        ASSERT_NE(func, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(func->getBody());
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        const auto &path = *state.getPaths().front();
+        EXPECT_FALSE(path.hasUnknownMemoryAccess());
+        ASSERT_EQ(path.getMemoryAccessConditions().size(), 3u);
+        std::vector<symbolic::BinaryOp> upperBoundOperations;
+        for (const auto &condition : path.getMemoryAccessConditions()) {
+            const auto bounds = symbolic::BinaryExpr::tryFrom(condition);
+            ASSERT_TRUE(bounds.has_value());
+            const auto upperBound = symbolic::BinaryExpr::tryFrom(bounds->right());
+            ASSERT_TRUE(upperBound.has_value());
+            upperBoundOperations.emplace_back(upperBound->operation());
+        }
+        EXPECT_EQ(std::ranges::count(upperBoundOperations, symbolic::BinaryOp::LessEqual), 2);
+        EXPECT_EQ(std::ranges::count(upperBoundOperations, symbolic::BinaryOp::LessThan), 1);
+    }
+
+    TEST(ProgramStateTest, NullPointerDereferenceReturnsUnknownWithoutAborting) {
+        ASTExtractor extractor(R"c(
+            int func(void) {
+                int *pointer = 0;
+                return *pointer;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        ASSERT_NE(func, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(func->getBody());
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        const auto &path = *state.getPaths().front();
+        EXPECT_TRUE(path.hasUnknownMemoryAccess());
+        ASSERT_TRUE(path.getReturnExpr().has_value());
+        EXPECT_TRUE(path.getReturnExpr()->isUnknown());
+    }
+
+    TEST(ProgramStateTest, NullPointerSubscriptReturnsUnknownWithoutAborting) {
+        ASTExtractor extractor(R"c(
+            int func(void) {
+                int *pointer = 0;
+                return pointer[0];
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        ASSERT_NE(func, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(func->getBody());
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        const auto &path = *state.getPaths().front();
+        EXPECT_TRUE(path.hasUnknownMemoryAccess());
+        ASSERT_TRUE(path.getReturnExpr().has_value());
+        EXPECT_TRUE(path.getReturnExpr()->isUnknown());
+    }
+
+    TEST(ProgramStateTest, NullPointerArrowReturnsUnknownWithoutAborting) {
+        ASTExtractor extractor(R"c(
+            struct Item {
+                int value;
+            };
+
+            int func(void) {
+                struct Item *pointer = 0;
+                return pointer->value;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        ASSERT_NE(func, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(func->getBody());
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        const auto &path = *state.getPaths().front();
+        EXPECT_TRUE(path.hasUnknownMemoryAccess());
+        ASSERT_TRUE(path.getReturnExpr().has_value());
+        EXPECT_TRUE(path.getReturnExpr()->isUnknown());
+    }
+
+    TEST(ProgramStateTest, NullPointerScalarWritesAreMarkedUnsupportedWithoutAborting) {
+        ASTExtractor extractor(R"c(
+            void func(void) {
+                int *pointer = 0;
+                *pointer = 1;
+                pointer[0] = 2;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        ASSERT_NE(func, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(func->getBody());
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        EXPECT_TRUE(state.getPaths().front()->hasUnknownMemoryAccess());
+    }
+
+    TEST(ProgramStateTest, NullPointerArrowWriteIsMarkedUnsupportedWithoutAborting) {
+        ASTExtractor extractor(R"c(
+            struct Item {
+                int value;
+            };
+
+            void func(void) {
+                struct Item *pointer = 0;
+                pointer->value = 1;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        ASSERT_NE(func, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState state(std::make_unique<ACSLFunction>(func), context);
+        state.init();
+        state.step(func->getBody());
+
+        ASSERT_EQ(state.getPaths().size(), 1u);
+        EXPECT_TRUE(state.getPaths().front()->hasUnknownMemoryAccess());
+    }
+
+    TEST(ProgramStateTest, PointerDifferenceRequiresSameBoundedObject) {
+        ASTExtractor extractor(R"c(
+            long valid(void) {
+                int items[5];
+                return (items + 5) - items;
+            }
+
+            long invalid(void) {
+                int lhs[5];
+                int rhs[5];
+                return lhs - rhs;
+            }
+        )c");
+        auto *valid = extractor.findFunc("valid");
+        auto *invalid = extractor.findFunc("invalid");
+        ASSERT_NE(valid, nullptr);
+        ASSERT_NE(invalid, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState validState(std::make_unique<ACSLFunction>(valid), context);
+        validState.init();
+        validState.step(valid->getBody());
+        ASSERT_EQ(validState.getPaths().size(), 1u);
+        EXPECT_FALSE(validState.getPaths().front()->hasUnknownMemoryAccess());
+        EXPECT_FALSE(validState.getPaths().front()->getMemoryAccessConditions().empty());
+
+        ProgramState invalidState(std::make_unique<ACSLFunction>(invalid), context);
+        invalidState.init();
+        invalidState.step(invalid->getBody());
+        ASSERT_EQ(invalidState.getPaths().size(), 1u);
+        EXPECT_TRUE(invalidState.getPaths().front()->hasUnknownMemoryAccess());
+    }
+
+    TEST(ProgramStateTest, PointerRelationalComparisonRejectsDifferentObjects) {
+        ASTExtractor extractor(R"c(
+            int relational(void) {
+                int lhs[1];
+                int rhs[1];
+                return lhs < rhs;
+            }
+
+            int equality(void) {
+                int lhs[1];
+                int rhs[1];
+                return lhs == rhs;
+            }
+        )c");
+        auto *relational = extractor.findFunc("relational");
+        auto *equality = extractor.findFunc("equality");
+        ASSERT_NE(relational, nullptr);
+        ASSERT_NE(equality, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        ProgramState relationalState(
+            std::make_unique<ACSLFunction>(relational), context);
+        relationalState.init();
+        relationalState.step(relational->getBody());
+        ASSERT_EQ(relationalState.getPaths().size(), 1u);
+        EXPECT_TRUE(relationalState.getPaths().front()->hasUnknownMemoryAccess());
+
+        ProgramState equalityState(std::make_unique<ACSLFunction>(equality), context);
+        equalityState.init();
+        equalityState.step(equality->getBody());
+        ASSERT_EQ(equalityState.getPaths().size(), 1u);
+        EXPECT_FALSE(equalityState.getPaths().front()->hasUnknownMemoryAccess());
+    }
+
+    TEST(PathTest, ParameterPointerAccessRecordsUnknownExtent) {
+        ASTExtractor extractor(R"c(
+            void func(int *items, int index) {
+                items[index];
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        auto *arraySubscript = extractor.findFirstStmt<ArraySubscriptExpr>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(arraySubscript, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(
+            func, extractor.getSourceManager(), extractor.getLangOptions());
+        Path path(context, point);
+        path.allocMemory(func->getParamDecl(0), true);
+        path.allocMemory(func->getParamDecl(1), true);
+
+        auto result = path.evalExpr(arraySubscript);
+
+        ASSERT_EQ(result.second.size(), 1u);
+        EXPECT_TRUE(path.hasUnknownMemoryAccess());
+        EXPECT_TRUE(path.getMemoryAccessConditions().empty());
+        auto cloned = path.clone();
+        EXPECT_TRUE(cloned->hasUnknownMemoryAccess());
+
+        Path merged(context, point);
+        merged.allocMemory(func->getParamDecl(0), true);
+        merged.allocMemory(func->getParamDecl(1), true);
+        merged.mergeWith(path);
+        EXPECT_TRUE(merged.hasUnknownMemoryAccess());
+    }
+
     TEST(PathTest, VariableAddressFacadesSurviveAllocationAndClone) {
         ASTExtractor extractor(R"c(
             void func(void) {
@@ -653,6 +1289,199 @@ namespace acslg::test::unit::analyzer {
         EXPECT_TRUE(nodes.contains(FacadeExprForTest{context.getExprFactory(), two}));
     }
 
+    TEST(PathTest, EvalExprPreservesExplicitIntegerConversion) {
+        ASTExtractor extractor(R"c(
+            unsigned short func(int value) {
+                return (unsigned short)value;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        auto *var  = extractor.findFirstDecl<ParmVarDecl>();
+        auto *cast = extractor.findFirstStmt<CStyleCastExpr>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(var, nullptr);
+        ASSERT_NE(cast, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(func, extractor.getSourceManager(),
+                                                         extractor.getLangOptions());
+        Path path(context, point);
+        path.allocMemory(var, true);
+
+        const auto source = path.getVarState(var);
+        const auto result = path.evalExpr(cast);
+
+        ASSERT_TRUE(result.first.empty());
+        ASSERT_EQ(result.second.size(), 1U);
+        const auto converted = symbolic::CastExpr::tryFrom(result.second.front());
+        ASSERT_TRUE(converted.has_value());
+        EXPECT_EQ(converted->operand(), source);
+        EXPECT_EQ(converted->targetType(),
+                  (symbolic::ExprType{symbolic::ExprScalarKind::UInt, 16}));
+        EXPECT_EQ(&result.second.front().factory(), &context.getExprFactory());
+    }
+
+    TEST(PathTest, EvalExprPreservesIntegerToBooleanConversion) {
+        ASTExtractor extractor(R"c(
+            _Bool func(int value) {
+                return (_Bool)value;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        auto *var  = extractor.findFirstDecl<ParmVarDecl>();
+        auto *cast = extractor.findFirstStmt<CStyleCastExpr>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(var, nullptr);
+        ASSERT_NE(cast, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(func, extractor.getSourceManager(),
+                                                         extractor.getLangOptions());
+        Path path(context, point);
+        path.allocMemory(var, true);
+
+        const auto result = path.evalExpr(cast);
+
+        ASSERT_TRUE(result.first.empty());
+        ASSERT_EQ(result.second.size(), 1U);
+        const auto converted = symbolic::CastExpr::tryFrom(result.second.front());
+        ASSERT_TRUE(converted.has_value());
+        EXPECT_EQ(converted->operand(), path.getVarState(var));
+        EXPECT_EQ(converted->targetType(), (symbolic::ExprType{symbolic::ExprScalarKind::Bool, 1}));
+    }
+
+    TEST(PathTest, EvalExprPreservesImplicitIntegerPromotion) {
+        ASTExtractor extractor(R"c(
+            int func(short value) {
+                return value + 1;
+            }
+        )c");
+        auto *func   = extractor.findFirstDecl<FunctionDecl>();
+        auto *var    = extractor.findFirstDecl<ParmVarDecl>();
+        auto *binary = extractor.findFirstStmt<BinaryOperator>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(var, nullptr);
+        ASSERT_NE(binary, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(func, extractor.getSourceManager(),
+                                                         extractor.getLangOptions());
+        Path path(context, point);
+        path.allocMemory(var, true);
+
+        const auto result = path.evalExpr(binary);
+
+        ASSERT_TRUE(result.first.empty());
+        ASSERT_EQ(result.second.size(), 1U);
+        const auto addition = symbolic::BinaryExpr::tryFrom(result.second.front());
+        ASSERT_TRUE(addition.has_value());
+        const auto promotion = symbolic::CastExpr::tryFrom(addition->left());
+        ASSERT_TRUE(promotion.has_value());
+        EXPECT_EQ(promotion->operand(), path.getVarState(var));
+        EXPECT_EQ(promotion->targetType(),
+                  (symbolic::ExprType{symbolic::ExprScalarKind::Int, 32}));
+    }
+
+    TEST(PathTest, EvalExprPreservesUsualSignedToUnsignedConversion) {
+        ASTExtractor extractor(R"c(
+            unsigned func(int value, unsigned other) {
+                return value + other;
+            }
+        )c");
+        auto *func   = extractor.findFirstDecl<FunctionDecl>();
+        auto *value  = extractor.findFirstDecl<ParmVarDecl>();
+        auto *binary = extractor.findFirstStmt<BinaryOperator>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(value, nullptr);
+        ASSERT_NE(binary, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(func, extractor.getSourceManager(),
+                                                         extractor.getLangOptions());
+        Path path(context, point);
+        for (const auto *parameter : func->parameters())
+            path.allocMemory(parameter, true);
+
+        const auto result = path.evalExpr(binary);
+
+        ASSERT_TRUE(result.first.empty());
+        ASSERT_EQ(result.second.size(), 1U);
+        const auto addition = symbolic::BinaryExpr::tryFrom(result.second.front());
+        ASSERT_TRUE(addition.has_value());
+        const auto conversion = symbolic::CastExpr::tryFrom(addition->left());
+        ASSERT_TRUE(conversion.has_value());
+        EXPECT_EQ(conversion->operand(), path.getVarState(value));
+        EXPECT_EQ(conversion->targetType(),
+                  (symbolic::ExprType{symbolic::ExprScalarKind::UInt, 32}));
+    }
+
+    TEST(PathTest, EvalExprPreservesImplicitIntToInt64Conversion) {
+        ASTExtractor extractor(R"c(
+            long long func(int value) {
+                return value + 1LL;
+            }
+        )c");
+        auto *func   = extractor.findFirstDecl<FunctionDecl>();
+        auto *value  = extractor.findFirstDecl<ParmVarDecl>();
+        auto *binary = extractor.findFirstStmt<BinaryOperator>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(value, nullptr);
+        ASSERT_NE(binary, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(func, extractor.getSourceManager(),
+                                                         extractor.getLangOptions());
+        Path path(context, point);
+        path.allocMemory(value, true);
+
+        const auto result = path.evalExpr(binary);
+
+        ASSERT_TRUE(result.first.empty());
+        ASSERT_EQ(result.second.size(), 1U);
+        const auto addition = symbolic::BinaryExpr::tryFrom(result.second.front());
+        ASSERT_TRUE(addition.has_value());
+        const auto conversion = symbolic::CastExpr::tryFrom(addition->left());
+        ASSERT_TRUE(conversion.has_value());
+        EXPECT_EQ(conversion->operand(), path.getVarState(value));
+        EXPECT_EQ(conversion->targetType(),
+                  (symbolic::ExprType{symbolic::ExprScalarKind::Int, 64}));
+    }
+
+    TEST(PathTest, EvalExprDoesNotRepresentLValueToRValueAsCast) {
+        ASTExtractor extractor(R"c(
+            int func(int value) {
+                return value + 1;
+            }
+        )c");
+        auto *func   = extractor.findFirstDecl<FunctionDecl>();
+        auto *var    = extractor.findFirstDecl<ParmVarDecl>();
+        auto *binary = extractor.findFirstStmt<BinaryOperator>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(var, nullptr);
+        ASSERT_NE(binary, nullptr);
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(func, extractor.getSourceManager(),
+                                                         extractor.getLangOptions());
+        Path path(context, point);
+        path.allocMemory(var, true);
+
+        const auto result = path.evalExpr(binary);
+
+        ASSERT_TRUE(result.first.empty());
+        ASSERT_EQ(result.second.size(), 1U);
+        const auto addition = symbolic::BinaryExpr::tryFrom(result.second.front());
+        ASSERT_TRUE(addition.has_value());
+        EXPECT_FALSE(symbolic::CastExpr::tryFrom(addition->left()).has_value());
+        EXPECT_EQ(addition->left(), path.getVarState(var));
+    }
+
     TEST(PathTest, PostIncrementReturnsOldHandleAndStoresNewHandle) {
         ASTExtractor extractor(R"c(
             int func(int value) {
@@ -670,21 +1499,70 @@ namespace acslg::test::unit::analyzer {
 
         context::ACSLGContext context(extractor.getASTContext());
         symbolic::ExprFactoryScope scope(context.getExprFactory());
-        auto point = symbolic::SourcePoint::fromFuncDecl(
-            func, extractor.getSourceManager(), extractor.getLangOptions());
+        auto point = symbolic::SourcePoint::fromFuncDecl(func, extractor.getSourceManager(),
+                                                         extractor.getLangOptions());
         Path path(context, point);
         path.allocMemory(var, true);
 
         auto oldValue    = path.getVarState(var);
         auto expectedNew = oldValue.binary(symbolic::BinaryOp::Add,
                                            symbolic::LiteralExpr{context.getExprFactory(), 1});
-        auto result = path.evalExpr(inc);
+        auto result      = path.evalExpr(inc);
 
         ASSERT_TRUE(result.first.empty());
         ASSERT_EQ(result.second.size(), 1u);
         EXPECT_EQ(&result.second[0].factory(), &context.getExprFactory());
         EXPECT_EQ(result.second[0], oldValue);
         EXPECT_EQ(path.getVarState(var), expectedNew);
+    }
+
+    TEST(PathTest, NarrowPreIncrementPreservesPromotionAndWriteBack) {
+        ASTExtractor extractor(R"c(
+            short func(short value) {
+                return ++value;
+            }
+        )c");
+        auto *func = extractor.findFirstDecl<FunctionDecl>();
+        auto *var  = extractor.findFirstDecl<ParmVarDecl>();
+        auto *inc  = extractor.findFirstStmt<UnaryOperator>();
+        ASSERT_NE(func, nullptr);
+        ASSERT_NE(var, nullptr);
+        ASSERT_NE(inc, nullptr);
+        ASSERT_FALSE(inc->isPostfix());
+
+        context::ACSLGContext context(extractor.getASTContext());
+        symbolic::ExprFactoryScope scope(context.getExprFactory());
+        auto point = symbolic::SourcePoint::fromFuncDecl(func, extractor.getSourceManager(),
+                                                         extractor.getLangOptions());
+        Path path(context, point);
+        path.allocMemory(var, true);
+
+        const auto oldValue = path.getVarState(var);
+        const auto shortType =
+            symbolic::ExprType{symbolic::ExprScalarKind::Int, 16};
+        const auto intType = symbolic::ExprType{symbolic::ExprScalarKind::Int, 32};
+        const auto expected =
+            oldValue
+                .castTo(intType)
+                .binary(symbolic::BinaryOp::Add,
+                        symbolic::LiteralExpr{context.getExprFactory(), 1})
+                .castTo(shortType);
+
+        const auto result = path.evalExpr(inc);
+
+        ASSERT_TRUE(result.first.empty());
+        ASSERT_EQ(result.second.size(), 1u);
+        EXPECT_EQ(result.second.front(), expected);
+        EXPECT_EQ(path.getVarState(var), expected);
+        const auto writeBack = symbolic::CastExpr::tryFrom(expected);
+        ASSERT_TRUE(writeBack.has_value());
+        EXPECT_EQ(writeBack->targetType(), shortType);
+        const auto addition = symbolic::BinaryExpr::tryFrom(writeBack->operand());
+        ASSERT_TRUE(addition.has_value());
+        const auto promotion = symbolic::CastExpr::tryFrom(addition->left());
+        ASSERT_TRUE(promotion.has_value());
+        EXPECT_EQ(promotion->targetType(), intType);
+        EXPECT_EQ(promotion->operand(), oldValue);
     }
 
     TEST_F(MemoryModelTest, ReadAfterWrite_VarAddr) {
@@ -779,6 +1657,8 @@ namespace acslg::test::unit::analyzer {
                                                       sourceOffset, sourceLength);
             symbolic::LiteralExpr sourceValue{sourceFactory, 42};
             source.write(sourceRange, sourceValue);
+            source.setObjectExtent(sourceRange,
+                                   symbolic::LiteralExpr{sourceFactory, std::uint64_t{12}});
 
             target = source;
         }
@@ -787,6 +1667,10 @@ namespace acslg::test::unit::analyzer {
         ASSERT_TRUE(readBack);
         EXPECT_EQ(&readBack->factory(), &targetFactory);
         EXPECT_EQ(readBack->tryEvalAsConstant(), 42);
+        auto extent = target.objectExtent(targetPoint);
+        ASSERT_TRUE(extent.has_value());
+        EXPECT_EQ(&extent->factory(), &targetFactory);
+        EXPECT_EQ(extent->tryEvalAsConstant(), 12);
         for (const auto &[address, value] : target.flat()) {
             EXPECT_EQ(handle(address), importAddressHandle(targetFactory, handle(address)));
             EXPECT_EQ(&value.factory(), &targetFactory);
@@ -952,6 +1836,34 @@ namespace acslg::test::unit::analyzer {
         auto val = pathA->getMemoryState().read(addr0A);
         ASSERT_TRUE(val);
         EXPECT_TRUE(val->isUnknown());
+    }
+
+    TEST_F(MergeWithTest, ObjectExtentSurvivesOnlyWhenBothPathsAgree) {
+        auto &factory = acslContext.getExprFactory();
+        auto sharedBase =
+            symbolic::Addr::symbol(factory, QualType{}, defaultPoint);
+        auto conflictingBase =
+            symbolic::Addr::symbol(QualType{},
+                                   symbolic::Addr::variable(factory, getVarDecl(0)),
+                                   defaultPoint);
+        auto oneSidedBase =
+            symbolic::Addr::symbol(QualType{},
+                                   symbolic::Addr::variable(factory, getVarDecl(1)),
+                                   defaultPoint);
+
+        pathA->getMutMemoryState().setObjectExtent(sharedBase, makeLiteral(8));
+        pathB->getMutMemoryState().setObjectExtent(sharedBase, makeLiteral(8));
+        pathA->getMutMemoryState().setObjectExtent(conflictingBase, makeLiteral(4));
+        pathB->getMutMemoryState().setObjectExtent(conflictingBase, makeLiteral(6));
+        pathA->getMutMemoryState().setObjectExtent(oneSidedBase, makeLiteral(2));
+
+        pathA->mergeWith(*pathB);
+
+        auto sharedExtent = pathA->getMemoryState().objectExtent(sharedBase);
+        ASSERT_TRUE(sharedExtent.has_value());
+        EXPECT_EQ(*sharedExtent, makeLiteral(8));
+        EXPECT_FALSE(pathA->getMemoryState().objectExtent(conflictingBase).has_value());
+        EXPECT_FALSE(pathA->getMemoryState().objectExtent(oneSidedBase).has_value());
     }
 
     TEST_F(MergeWithTest, PathConditionsIntersect) {

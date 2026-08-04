@@ -61,6 +61,7 @@ namespace acslg::analyzer::symbolic::detail {
                                     size_t index,
                                     ExprHandle value);
         static ExprHandle unary(ExprFactory &factory, UnaryOp op, ExprHandle expression);
+        static ExprHandle cast(ExprFactory &factory, ExprHandle expression, ExprType targetType);
         static ExprHandle binary(ExprFactory &factory,
                                  ExprHandle left,
                                  BinaryOp op,

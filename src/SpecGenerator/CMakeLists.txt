@@ -2,8 +2,13 @@
 
 add_library(SpecGeneratorLib STATIC stringTemplate.cpp specGenerator.cpp)
 
-add_library(plugins_obj OBJECT functionContractPlugins.cpp loopInfoPlugins.cpp
-                               loopInvariantPlugins.cpp groups.cpp)
+add_library(
+  plugins_obj OBJECT
+  functionContractPlugins.cpp
+  loopInfoPlugins.cpp
+  loopInvariantPlugins.cpp
+  numericalInvariantPrototypePlugin.cpp
+  groups.cpp)
 
 target_include_directories(
   plugins_obj
@@ -21,6 +26,7 @@ target_link_libraries(
           UtilsLib
           $<TARGET_OBJECTS:plugins_obj>
           AnalyzerLib
+          NumericalInvariantPrototypeLib
           clangAST
           clangTooling
           clangFrontend)

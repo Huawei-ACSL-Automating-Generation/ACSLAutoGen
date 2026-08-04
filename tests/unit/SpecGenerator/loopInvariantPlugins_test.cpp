@@ -2,8 +2,10 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "groups.h"
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <cstdlib>
 #include <string>
 #include <llvm/Support/Casting.h>
 #include "testHelper.h"
@@ -23,6 +25,213 @@ namespace acslg::test::unit::spec_generator {
     using namespace utils;
 
     using ::testing::HasSubstr;
+
+    class EnvironmentVariableGuard {
+      public:
+        explicit EnvironmentVariableGuard(const char *name) : name_(name) {
+            if (const char *value = std::getenv(name))
+                original_ = value;
+        }
+
+        ~EnvironmentVariableGuard() {
+            if (original_)
+                setenv(name_, original_->c_str(), 1);
+            else
+                unsetenv(name_);
+        }
+
+      private:
+        const char *name_;
+        std::optional<std::string> original_;
+    };
+
+    TEST(Clause2InvPrototypePluginTest, IsRegisteredOnlyInExplicitPrototypeGroup) {
+        constexpr auto pluginId = "Clause2InvPrototypePlugin";
+        ASSERT_NE(ACSLPluginRegistry::instance().get(pluginId), nullptr);
+
+        const auto *prototypeGroup = ACSLPluginGroupRegistry::instance().getGroup(
+            CLAUSE2INV_PROTOTYPE_PATH_INSENSITIVE_LOOP_INV_PLUGINS);
+        ASSERT_NE(prototypeGroup, nullptr);
+        EXPECT_THAT(prototypeGroup->pluginIds, ::testing::Contains(pluginId));
+
+        for (const auto *groupName :
+             {DEFAULT_PATH_INSENSITIVE_LOOP_INV_PLUGINS, DEFAULT_PATH_SENSITIVE_LOOP_INV_PLUGINS,
+              COMPLEX_PATH_INSENSITIVE_LOOP_INV_PLUGINS, COMPLEX_PATH_SENSITIVE_LOOP_INV_PLUGINS}) {
+            const auto *group = ACSLPluginGroupRegistry::instance().getGroup(groupName);
+            ASSERT_NE(group, nullptr);
+            EXPECT_THAT(group->pluginIds, ::testing::Not(::testing::Contains(pluginId)));
+        }
+    }
+
+    TEST(Clause2InvPrototypePluginTest, OptInSelectsPrototypeGroupForNormalLoopExecution) {
+        EnvironmentVariableGuard modeGuard{"ACSLG_NUMERICAL_INVARIANTS"};
+        EnvironmentVariableGuard legacyGuard{"ACSLG_ENABLE_CLAUSE2INV_PROTOTYPE"};
+        unsetenv("ACSLG_NUMERICAL_INVARIANTS");
+        unsetenv("ACSLG_ENABLE_CLAUSE2INV_PROTOTYPE");
+        EXPECT_EQ(configuredNumericalInvariantMode(), NumericalInvariantMode::Disabled);
+        EXPECT_FALSE(clause2InvPrototypeEnabled());
+        EXPECT_EQ(configuredPathInsensitiveLoopInvariantGroup(),
+                  DEFAULT_PATH_INSENSITIVE_LOOP_INV_PLUGINS);
+
+        setenv("ACSLG_NUMERICAL_INVARIANTS", "local", 1);
+        EXPECT_EQ(configuredNumericalInvariantMode(), NumericalInvariantMode::Local);
+        EXPECT_FALSE(clause2InvPrototypeEnabled());
+        EXPECT_EQ(configuredPathInsensitiveLoopInvariantGroup(),
+                  VERIFIED_NUMERICAL_PATH_INSENSITIVE_LOOP_INV_PLUGINS);
+
+        setenv("ACSLG_NUMERICAL_INVARIANTS", "llm", 1);
+        EXPECT_EQ(configuredNumericalInvariantMode(), NumericalInvariantMode::Llm);
+        EXPECT_TRUE(clause2InvPrototypeEnabled());
+        EXPECT_EQ(configuredPathInsensitiveLoopInvariantGroup(),
+                  CLAUSE2INV_PROTOTYPE_PATH_INSENSITIVE_LOOP_INV_PLUGINS);
+
+        setenv("ACSLG_NUMERICAL_INVARIANTS", "invalid", 1);
+        EXPECT_EQ(configuredNumericalInvariantMode(), NumericalInvariantMode::Disabled);
+        EXPECT_FALSE(clause2InvPrototypeEnabled());
+        EXPECT_EQ(configuredPathInsensitiveLoopInvariantGroup(),
+                  DEFAULT_PATH_INSENSITIVE_LOOP_INV_PLUGINS);
+
+        unsetenv("ACSLG_NUMERICAL_INVARIANTS");
+        setenv("ACSLG_ENABLE_CLAUSE2INV_PROTOTYPE", "1", 1);
+        EXPECT_TRUE(clause2InvPrototypeEnabled());
+        EXPECT_EQ(configuredPathInsensitiveLoopInvariantGroup(),
+                  CLAUSE2INV_PROTOTYPE_PATH_INSENSITIVE_LOOP_INV_PLUGINS);
+
+        setenv("ACSLG_ENABLE_CLAUSE2INV_PROTOTYPE", "true", 1);
+        EXPECT_FALSE(clause2InvPrototypeEnabled());
+        EXPECT_EQ(configuredPathInsensitiveLoopInvariantGroup(),
+                  DEFAULT_PATH_INSENSITIVE_LOOP_INV_PLUGINS);
+        unsetenv("ACSLG_ENABLE_CLAUSE2INV_PROTOTYPE");
+    }
+
+    TEST(VerifiedPolynomialInvariantPluginTest, IsRegisteredInLocalAndLlmGroups) {
+        constexpr auto pluginId = "VerifiedPolynomialInvariantPlugin";
+        ASSERT_NE(ACSLPluginRegistry::instance().get(pluginId), nullptr);
+
+        for (const auto *groupName : {VERIFIED_NUMERICAL_PATH_INSENSITIVE_LOOP_INV_PLUGINS,
+                                      CLAUSE2INV_PROTOTYPE_PATH_INSENSITIVE_LOOP_INV_PLUGINS}) {
+            const auto *group = ACSLPluginGroupRegistry::instance().getGroup(groupName);
+            ASSERT_NE(group, nullptr);
+            EXPECT_THAT(group->pluginIds, ::testing::Contains(pluginId));
+        }
+
+        const auto *defaultGroup =
+            ACSLPluginGroupRegistry::instance().getGroup(DEFAULT_PATH_INSENSITIVE_LOOP_INV_PLUGINS);
+        ASSERT_NE(defaultGroup, nullptr);
+        EXPECT_THAT(defaultGroup->pluginIds, ::testing::Not(::testing::Contains(pluginId)));
+    }
+
+#if ACSLG_NUMERICAL_INVARIANT_HAS_Z3
+    TEST(VerifiedPolynomialInvariantPluginTest, EmitsVerifiedBoundedLinearRecurrence) {
+        const auto result = doPIPluginOnFirstLoop(R"(
+            int func(void) {
+                int i = 1;
+                int sn = 0;
+                while (i <= 8) {
+                    i = i + 1;
+                    sn = sn + 1;
+                }
+                return sn;
+            }
+        )",
+                                                  "VerifiedPolynomialInvariantPlugin");
+
+        ASSERT_TRUE(result.acsl.has_value());
+        EXPECT_THAT(*result.acsl, HasSubstr("loop invariant "));
+        EXPECT_THAT(*result.acsl, HasSubstr("sn"));
+        EXPECT_THAT(*result.acsl, HasSubstr("i"));
+    }
+
+    TEST(VerifiedPolynomialInvariantPluginTest, EmitsVerifiedBoundedQuadraticRecurrence) {
+        const auto result = doPIPluginOnFirstLoop(R"(
+            int func(void) {
+                int i = 0;
+                int sum = 0;
+                while (i < 8) {
+                    i = i + 1;
+                    sum = sum + i;
+                }
+                return sum;
+            }
+        )",
+                                                  "VerifiedPolynomialInvariantPlugin");
+
+        ASSERT_TRUE(result.acsl.has_value());
+        EXPECT_THAT(*result.acsl, HasSubstr("loop invariant "));
+        EXPECT_THAT(*result.acsl, HasSubstr("sum"));
+        EXPECT_THAT(*result.acsl, HasSubstr("*"));
+    }
+
+    TEST(VerifiedPolynomialInvariantPluginTest, EmitsCode2InvStyleQuadraticRecurrence) {
+        const auto result = doPIPluginOnFirstLoop(R"(
+            int func(void) {
+                int x = 1;
+                int y = 0;
+                while (y < 1000) {
+                    x = x + y;
+                    y = y + 1;
+                }
+                return x;
+            }
+        )",
+                                                  "VerifiedPolynomialInvariantPlugin");
+
+        ASSERT_TRUE(result.acsl.has_value());
+        EXPECT_THAT(*result.acsl, HasSubstr("loop invariant "));
+        EXPECT_THAT(*result.acsl, HasSubstr("x"));
+        EXPECT_THAT(*result.acsl, HasSubstr("y"));
+        EXPECT_THAT(*result.acsl, HasSubstr("y * y"));
+    }
+#else
+    TEST(VerifiedPolynomialInvariantPluginTest, EmitsNothingWithoutZ3) {
+        const auto result = doPIPluginOnFirstLoop(R"(
+            int func(void) {
+                int i = 0;
+                while (i < 8)
+                    ++i;
+                return i;
+            }
+        )",
+                                                  "VerifiedPolynomialInvariantPlugin");
+        EXPECT_FALSE(result.acsl.has_value());
+    }
+#endif
+
+    TEST(Clause2InvPrototypePluginTest, DoesNothingWithoutProviderOptIn) {
+        unsetenv("ACSLG_ENABLE_CLAUSE2INV_PROTOTYPE");
+        const auto result = doPIPluginOnFirstLoop(R"(
+            int func(int n) {
+                int x = 0;
+                while (x < n)
+                    ++x;
+                return x;
+            }
+        )",
+                                                  "Clause2InvPrototypePlugin");
+        EXPECT_FALSE(result.acsl.has_value());
+        EXPECT_TRUE(result.acslUsedPoints.empty());
+    }
+
+#if ACSLG_NUMERICAL_INVARIANT_HAS_Z3
+    TEST(Clause2InvPrototypePluginTest, LiveDeepSeekResultPassesTheFullPluginPipeline) {
+        if (!std::getenv("ACSLG_RUN_LIVE_LLM_TESTS"))
+            GTEST_SKIP() << "set ACSLG_RUN_LIVE_LLM_TESTS to enable the paid API plugin test";
+        setenv("ACSLG_ENABLE_CLAUSE2INV_PROTOTYPE", "1", 1);
+        unsetenv("ACSLG_ASSUME_MATHEMATICAL_INTEGERS");
+
+        const auto result = doPIPluginOnFirstLoop(R"(
+            int func(int n) {
+                int x = 0;
+                while (x < n)
+                    ++x;
+                return x;
+            }
+        )",
+                                                  "Clause2InvPrototypePlugin");
+        ASSERT_TRUE(result.acsl.has_value());
+        EXPECT_THAT(*result.acsl, StartsWith("loop invariant "));
+    }
+#endif
 
     TEST(LoopAssignsPluginTest, Simple_0) {
         auto pluginId                                      = "loopAssigns";
@@ -64,8 +273,7 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.getACSLOfValue(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                addr.getACSLOfValue({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
@@ -106,8 +314,7 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.getACSLOfValue(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                addr.getACSLOfValue({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
@@ -151,8 +358,7 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.getACSLOfValue(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                addr.getACSLOfValue({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
@@ -221,8 +427,7 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.getACSLOfValue(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                addr.getACSLOfValue({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
@@ -324,8 +529,7 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_TRUE(normalPostInfo.memoryMap.size() == 1);
         for (auto &[addr, value] : normalPostInfo.memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.getACSLOfValue(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                addr.getACSLOfValue({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             if (addrStr == "i") {
                 EXPECT_TRUE(value.isUnknown());
@@ -337,8 +541,7 @@ namespace acslg::test::unit::spec_generator {
         EXPECT_TRUE(interruptPostInfos.front().memoryMap.size() == 2);
         for (auto &[addr, value] : interruptPostInfos.front().memoryMap) {
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.getACSLOfValue(
-                    {.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
+                addr.getACSLOfValue({.noStateLabelFunctionAt = true, .UnknownExprAsError = false}),
                 addrStr);
             if (addrStr == "i") {
                 EXPECT_TRUE(value.isUnknown());
@@ -500,8 +703,8 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
-            ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(addr.getACSLOfValue({.noStateLabelFunctionAt = true}),
+                                           addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
                     .getACSL({.noStateLabelFunctionAt = true}),
@@ -541,8 +744,8 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
-            ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(addr.getACSLOfValue({.noStateLabelFunctionAt = true}),
+                                           addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
                     .getACSL({.noStateLabelFunctionAt = true}),
@@ -578,8 +781,8 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
-            ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(addr.getACSLOfValue({.noStateLabelFunctionAt = true}),
+                                           addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
                     .getACSL({.noStateLabelFunctionAt = true}),
@@ -614,8 +817,8 @@ namespace acslg::test::unit::spec_generator {
         ASSERT_TRUE(interruptPostInfos.empty());
         auto &postInfo = normalPostInfos.at(0);
         for (auto &[addr, value] : postInfo.memoryMap) {
-            ASSERT_OK_AND_GET_FIRST_TO_VAR(
-                addr.getACSLOfValue({.noStateLabelFunctionAt = true}), addrStr);
+            ASSERT_OK_AND_GET_FIRST_TO_VAR(addr.getACSLOfValue({.noStateLabelFunctionAt = true}),
+                                           addrStr);
             ASSERT_OK_AND_GET_FIRST_TO_VAR(
                 simplifyForTest(ExprFactoryScope::current(), facadeHandle(value))
                     .getACSL({.noStateLabelFunctionAt = true}),
@@ -753,8 +956,8 @@ int bufs_differ(const u8 *b1, const u8 *b2, u32 n)
         ASSERT_EQ(normalPostInfos.size(), 1);
         ASSERT_EQ(interruptPostInfos.size(), 1);
         ASSERT_EQ(interruptPostInfos.front().size(), 1);
-        auto &normalPath      = normalPostInfos.at(0);
-        auto &interruptedPath = interruptPostInfos.front().at(0);
+        auto &normalPath           = normalPostInfos.at(0);
+        auto &interruptedPath      = interruptPostInfos.front().at(0);
         auto &factory              = getLastExprFactory();
         auto expectOwnedQuantifier = [&](const Expr &condition) {
             EXPECT_EQ(&condition.factory(), &factory);
@@ -802,8 +1005,8 @@ int arraySearch(int *a, int x, int n) {
         ASSERT_EQ(normalPostInfos.size(), 1);
         ASSERT_EQ(interruptPostInfos.size(), 1);
         ASSERT_EQ(interruptPostInfos.front().size(), 1);
-        auto &normalPath      = normalPostInfos.at(0);
-        auto &interruptedPath = interruptPostInfos.front().at(0);
+        auto &normalPath           = normalPostInfos.at(0);
+        auto &interruptedPath      = interruptPostInfos.front().at(0);
         auto &factory              = getLastExprFactory();
         auto expectOwnedQuantifier = [&](const Expr &condition) {
             EXPECT_EQ(&condition.factory(), &factory);

@@ -83,6 +83,18 @@ namespace acslg::analyzer {
          */
         void write(const symbolic::Addr &address, const symbolic::Expr &value);
 
+        /// Associate an element-count bound with the allocation identified by address.
+        void setObjectExtent(const symbolic::Addr &address, const symbolic::Expr &extent);
+
+        /// Return the element-count bound for address's allocation, when known.
+        std::optional<symbolic::Expr> objectExtent(const symbolic::Addr &address) const;
+
+        /// Remove the allocation bound identified by address. Returns whether one existed.
+        bool eraseObjectExtent(const symbolic::Addr &address);
+
+        /// Keep only allocation bounds known with the same value in both memory states.
+        void intersectObjectExtents(const MemoryModel &other);
+
         /**
          * @brief Checks whether a given address is contained in the memory model.
          * @param addr The address to check.
@@ -95,6 +107,7 @@ namespace acslg::analyzer {
             memoryMap_variableAddr_.clear();
             memoryMap_constantRange_.clear();
             memoryMap_symbolicRange_.clear();
+            objectExtents_.clear();
         }
 
         /**
@@ -198,6 +211,8 @@ namespace acslg::analyzer {
             symbolic::SymbolAddrBaseInfo,
             symbolic::AddressBoxMap<StoredValue>>
             memoryMap_symbolicRange_;
+
+        std::unordered_map<symbolic::SymbolAddrBaseInfo, symbolic::Expr> objectExtents_;
 
         symbolic::ExprFactory &factory() const { return *factory_; }
         StoredValue copyStoredValueFrom(const MemoryModel &other, StoredValue value);
@@ -626,6 +641,10 @@ namespace acslg::analyzer {
          * @return Const reference to path condition set.
          */
         const PathConditions &getPathConditions() const;
+        const PathConditions &getMemoryAccessConditions() const {
+            return memoryAccessConditions_;
+        }
+        bool hasUnknownMemoryAccess() const { return hasUnknownMemoryAccess_; }
 
         /**
          * @brief Allocate symbolic memory for a variable if not already allocated.
@@ -719,6 +738,8 @@ namespace acslg::analyzer {
         // SET: List of symbolic expressions representing the path
         // condition.
         PathConditions pathConditions_;
+        PathConditions memoryAccessConditions_;
+        bool hasUnknownMemoryAccess_ = false;
 
         // Holds the current path state. Default is set to Step
         PathState currentState_ = PathState::Step;
@@ -730,6 +751,12 @@ namespace acslg::analyzer {
         symbolic::SourcePoint startPoint_;
 
         const clang::Stmt *stmtCtx_ = nullptr;
+
+        void recordMemoryAccess(const symbolic::Addr &address);
+        void recordPointerArithmetic(const symbolic::Expr &expression);
+        void recordPointerPairOperation(const symbolic::Expr &lhs,
+                                        const symbolic::Expr &rhs);
+        void recordAddressBounds(const symbolic::Addr &address, bool allowOnePast);
     };
 
     /**

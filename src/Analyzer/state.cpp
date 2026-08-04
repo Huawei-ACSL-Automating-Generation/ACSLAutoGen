@@ -4,6 +4,9 @@
  */
 #include "state.h"
 
+#include <cstdint>
+#include <limits>
+
 #include <clang/AST/Type.h>
 #include <llvm/Support/Casting.h>
 #include <queue>
@@ -46,6 +49,25 @@ namespace acslg::analyzer {
                                             const symbolic::Addr &base,
                                             symbolic::SourcePoint point) {
             return makeStructureForRecord(type->getAsRecordDecl(), base, point);
+        }
+
+        bool supportsExactIntegerConversion(symbolic::ExprType type) {
+            if (type.kind == symbolic::ExprScalarKind::Bool)
+                return type.bitWidth == 1;
+            return (type.kind == symbolic::ExprScalarKind::Int ||
+                    type.kind == symbolic::ExprScalarKind::UInt) &&
+                   (type.bitWidth == 8 || type.bitWidth == 16 || type.bitWidth == 32 ||
+                    type.bitWidth == 64);
+        }
+
+        symbolic::Expr convertIntegerValue(symbolic::Expr value,
+                                           symbolic::ExprType targetType) {
+            if (value.getValType() == targetType)
+                return value;
+            if (supportsExactIntegerConversion(value.getValType()) &&
+                supportsExactIntegerConversion(targetType))
+                return value.castTo(targetType);
+            return value.withType(targetType);
         }
 
         bool containsLocalVar(const symbolic::Expr &expr,
@@ -97,6 +119,9 @@ namespace acslg::analyzer {
             for (const auto &cond : other.pathConditions_) {
                 pathConditions_.emplace(cond);
             }
+            for (const auto &condition : other.memoryAccessConditions_)
+                memoryAccessConditions_.emplace(condition);
+            hasUnknownMemoryAccess_ = other.hasUnknownMemoryAccess_;
             currentState_ = other.currentState_;
             if (other.returnExpr_)
                 returnExpr_.emplace(other.returnExpr_.value());
@@ -116,6 +141,8 @@ namespace acslg::analyzer {
         swap(currentState_, o.currentState_);
         swap(returnExpr_, o.returnExpr_);
         swap(pathConditions_, o.pathConditions_);
+        swap(memoryAccessConditions_, o.memoryAccessConditions_);
+        swap(hasUnknownMemoryAccess_, o.hasUnknownMemoryAccess_);
         swap(varAddr_, o.varAddr_);
         swap(memoryState_, o.memoryState_);
         swap(startPoint_, o.startPoint_);
@@ -196,6 +223,12 @@ namespace acslg::analyzer {
             memoryState_.write(address, symbolic::Expr::unknown());
         }
 
+        memoryState_.intersectObjectExtents(other.memoryState_);
+        memoryAccessConditions_.insert(other.memoryAccessConditions_.begin(),
+                                       other.memoryAccessConditions_.end());
+        hasUnknownMemoryAccess_ =
+            hasUnknownMemoryAccess_ || other.hasUnknownMemoryAccess_;
+
         // Intersect path conditions; a merged path must satisfy constraints from both sides.
         PathConditions intersected;
         intersected.reserve(std::min(pathConditions_.size(), other.pathConditions_.size()));
@@ -225,13 +258,15 @@ namespace acslg::analyzer {
     void Path::resymbolize(symbolic::SourcePoint newStartPoint) {
         memoryState_.clear();
         pathConditions_.clear();
+        memoryAccessConditions_.clear();
+        hasUnknownMemoryAccess_ = false;
 
         startPoint_ = std::move(newStartPoint);
         for (auto &[varDecl, addr] : varAddr_) {
             clang::QualType ty = varDecl->getType();
 
             auto symbol = symbolic::Expr::symbol(ty, addr, startPoint_);
-            updateMemory(addr, symbol);
+            updateVarState(varDecl, symbol);
         }
     }
 
@@ -257,29 +292,24 @@ namespace acslg::analyzer {
         }
 
         if (auto *arr = dyn_cast<clang::ArraySubscriptExpr>(lexpr)) {
-            auto baseAddr = extractLValue(arr->getBase());
-            if (const auto symbol = memoryState_.read(baseAddr)) {
-                auto address    = symbol->tryAsAddress();
-                auto symbolAddr = address ? symbolic::SymbolAddress::tryFrom(*address)
-                                          : std::nullopt;
-                if (!symbolAddr)
-                    ERROR("Value of ArraySubscriptExpr's base is not 'symbolic::SymbolAddress', "
-                          "base is "
-                          "neither pointer nor std::array?");
-                auto idxEval    = evalExpr(arr->getIdx());
-                if (idxEval.second.size() != 1)
-                    ERROR("This location does not support control flow branches.");
-                auto resultAddr = symbolAddr->withAddedOffset(idxEval.second[0]);
+            auto baseEval = evalExpr(arr->getBase());
+            auto idxEval  = evalExpr(arr->getIdx());
+            if (baseEval.second.size() != 1 || idxEval.second.size() != 1)
+                ERROR("This location does not support control flow branches.");
+            if (auto address = baseEval.second[0].evaluatedAddress()) {
+                auto resultAddr = address->withAddedOffset(idxEval.second[0]);
+                recordMemoryAccess(resultAddr);
                 if (!memoryState_.contains(resultAddr)) {
                     auto newSymbol =
                         symbolic::Expr::symbol(arr->getType(), resultAddr, startPoint_);
                     memoryState_.write(resultAddr, newSymbol);
                 }
                 return resultAddr;
-            } else {
-                ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither pointer nor "
-                      "array?");
             }
+
+            hasUnknownMemoryAccess_ = true;
+            return symbolic::Addr::symbol(
+                context_.getExprFactory(), arr->getType(), startPoint_);
         }
 
         if (auto *uop = dyn_cast<clang::UnaryOperator>(lexpr)) {
@@ -290,13 +320,16 @@ namespace acslg::analyzer {
 
                 auto addrExpr = addrEval.second[0];
                 if (auto addr = addrExpr.evaluatedAddress()) {
+                    recordMemoryAccess(*addr);
                     if (!memoryState_.contains(*addr)) {
                         auto symbol = symbolic::Expr::symbol(uop->getType(), *addr, startPoint_);
                         memoryState_.write(*addr, symbol);
                     }
                     return *addr;
                 } else {
-                    ERROR("Expected symbolic address in deref, got: " << addrExpr.dump());
+                    hasUnknownMemoryAccess_ = true;
+                    return symbolic::Addr::symbol(
+                        context_.getExprFactory(), uop->getType(), startPoint_);
                 }
             }
         }
@@ -318,8 +351,15 @@ namespace acslg::analyzer {
                     ERROR("This location does not support control flow branches.");
                 auto baseExpr = addrEval.second[0];
                 auto baseAddr = baseExpr.evaluatedAddress();
-                if (baseAddr == std::nullopt)
-                    ERROR("Expected symbolic address for '->' base, got: " << baseExpr.dump());
+                if (baseAddr == std::nullopt) {
+                    hasUnknownMemoryAccess_ = true;
+                    baseAddr = symbolic::Addr::symbol(
+                        context_.getExprFactory(),
+                        mem->getBase()->getType()->getPointeeType(),
+                        startPoint_);
+                } else {
+                    recordMemoryAccess(*baseAddr);
+                }
 
                 if (!memoryState_.contains(*baseAddr)) {
                     auto st = makeStructureForRecord(RD, *baseAddr, startPoint_);
@@ -436,6 +476,91 @@ namespace acslg::analyzer {
 
         auto &addr = addrIt->second;
         memoryState_.write(addr, expr);
+
+        if (const auto *arrayType =
+                context_.getASTContext().getAsConstantArrayType(var->getType())) {
+            auto arrayAddress = expr.evaluatedAddress();
+            if (!arrayAddress)
+                ERROR("Constant array value must evaluate to an address.");
+            const auto &arraySize = arrayType->getSize();
+            if (arraySize.getActiveBits() > 64)
+                UNIMPLEMENT("Constant array extent exceeds 64 bits.");
+            memoryState_.setObjectExtent(
+                *arrayAddress,
+                symbolic::LiteralExpr{context_.getExprFactory(), arraySize.getZExtValue()});
+        }
+    }
+
+    void Path::recordMemoryAccess(const symbolic::Addr &address) {
+        recordAddressBounds(address, false);
+    }
+
+    void Path::recordPointerArithmetic(const symbolic::Expr &expression) {
+        auto address = expression.evaluatedAddress();
+        if (!address) {
+            hasUnknownMemoryAccess_ = true;
+            return;
+        }
+        recordAddressBounds(*address, true);
+    }
+
+    void Path::recordPointerPairOperation(const symbolic::Expr &lhs,
+                                          const symbolic::Expr &rhs) {
+        auto lhsAddress = lhs.evaluatedAddress();
+        auto rhsAddress = rhs.evaluatedAddress();
+        auto lhsSymbol =
+            lhsAddress ? symbolic::SymbolAddress::tryFrom(*lhsAddress) : std::nullopt;
+        auto rhsSymbol =
+            rhsAddress ? symbolic::SymbolAddress::tryFrom(*rhsAddress) : std::nullopt;
+        if (!lhsSymbol || !rhsSymbol ||
+            lhsSymbol->baseInfo() != rhsSymbol->baseInfo()) {
+            hasUnknownMemoryAccess_ = true;
+            return;
+        }
+        recordAddressBounds(*lhsAddress, true);
+        recordAddressBounds(*rhsAddress, true);
+    }
+
+    void Path::recordAddressBounds(const symbolic::Addr &address, bool allowOnePast) {
+        auto symbolAddress = symbolic::SymbolAddress::tryFrom(address);
+        if (!symbolAddress) {
+            hasUnknownMemoryAccess_ = true;
+            return;
+        }
+        auto extent = memoryState_.objectExtent(address);
+        if (!extent) {
+            hasUnknownMemoryAccess_ = true;
+            return;
+        }
+
+        const auto offsetType = symbolAddress->offset().getValType();
+        const auto extentType = extent->getValType();
+        const auto isInteger = [](symbolic::ExprType type) {
+            return type.kind == symbolic::ExprScalarKind::Int ||
+                   type.kind == symbolic::ExprScalarKind::UInt;
+        };
+        if (!isInteger(offsetType) || !isInteger(extentType) ||
+            extentType.kind != symbolic::ExprScalarKind::UInt ||
+            extentType.bitWidth < offsetType.bitWidth) {
+            hasUnknownMemoryAccess_ = true;
+            return;
+        }
+
+        auto offset = symbolAddress->offset();
+        const auto boolType =
+            symbolic::ExprType{symbolic::ExprScalarKind::Bool, 1};
+        symbolic::Expr lowerBound = symbolic::LiteralExpr{context_.getExprFactory(), true};
+        if (offsetType.kind == symbolic::ExprScalarKind::Int) {
+            auto zero = symbolic::LiteralExpr{context_.getExprFactory(), 0}.withType(offsetType);
+            lowerBound = offset.greaterEqual(zero).withType(boolType);
+        }
+        if (offsetType != extentType)
+            offset = offset.castTo(extentType);
+        auto upperBound =
+            (allowOnePast ? offset.lessEqual(*extent) : offset.lessThan(*extent))
+                .withType(boolType);
+        memoryAccessConditions_.emplace(
+            lowerBound.logicalAnd(upperBound).withType(boolType));
     }
 
     /**
@@ -458,6 +583,9 @@ namespace acslg::analyzer {
         cloned->memoryState_ = memoryState_;
         for (const auto &cond : pathConditions_)
             cloned->pathConditions_.emplace(cond);
+        for (const auto &condition : memoryAccessConditions_)
+            cloned->memoryAccessConditions_.emplace(condition);
+        cloned->hasUnknownMemoryAccess_ = hasUnknownMemoryAccess_;
         if (returnExpr_)
             cloned->returnExpr_.emplace(returnExpr_.value());
         else
@@ -640,6 +768,21 @@ namespace acslg::analyzer {
                             auto rhsExpr = rhs.second[j];
 
                             auto resultExpr = lhsExpr.binary(op, rhsExpr);
+                            if (binOp->getType()->isIntegerType())
+                                resultExpr =
+                                    resultExpr.withType(symbolic::deriveType(binOp->getType()));
+                            Path *resultPath =
+                                j == 0 ? path : rhs.first[j - 1].get().get();
+                            if (binOp->getType()->isPointerType())
+                                resultPath->recordPointerArithmetic(resultExpr);
+                            const bool pointerPair =
+                                binOp->getLHS()->getType()->isPointerType() &&
+                                binOp->getRHS()->getType()->isPointerType();
+                            if (pointerPair &&
+                                (binOp->getOpcode() == clang::BO_Sub ||
+                                 binOp->isRelationalOp())) {
+                                resultPath->recordPointerPairOperation(lhsExpr, rhsExpr);
+                            }
                             outExprs.emplace_back(resultExpr);
 
                             if (i == 0 && j == 0)
@@ -715,44 +858,42 @@ namespace acslg::analyzer {
                 .Case<clang::ArraySubscriptExpr>(
                     [this](const clang::ArraySubscriptExpr *arrSub) -> EvalResult {
                         DEBUG("evaluating ArraySubscriptExpr...");
-                        auto variableAddr = extractLValue(arrSub->getBase());
-                        std::optional<symbolic::Addr> addr;
-                        if (const auto symbol = memoryState_.read(variableAddr)) {
-                            auto address = symbol->tryAsAddress();
-                            auto ptr     = address ? symbolic::SymbolAddress::tryFrom(*address)
-                                                   : std::nullopt;
-                            if (!ptr)
-                                ERROR("Value of ArraySubscriptExpr's base is not "
-                                      "'symbolic::SymbolAddress', base "
-                                      "is "
-                                      "neither "
-                                      "pointer nor "
-                                      "array?");
-                            addr.emplace(*ptr);
-                        } else {
-                            ERROR("memoryState_ has no ArraySubscriptExpr's base, base is neither "
-                                  "pointer "
-                                  "nor "
-                                  "array?");
-                        }
-                        EvalResult idx = evalExpr(arrSub->getIdx());
-
+                        EvalResult bases = evalExpr(arrSub->getBase());
                         std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                         std::vector<symbolic::Expr> outExprs;
 
-                        for (size_t i = 0; i < idx.second.size(); ++i) {
-                            auto newAddr = addr->withOffset(idx.second[i]);
-                            if (auto value = memoryState_.read(newAddr); value == std::nullopt) {
-                                auto elemType = arrSub->getType();
-                                auto symbol =
-                                    symbolic::Expr::symbol(elemType, newAddr, startPoint_);
-                                memoryState_.write(newAddr, symbol);
-                                outExprs.push_back(symbol);
-                            } else {
-                                outExprs.emplace_back(*value);
+                        for (size_t i = 0; i < bases.second.size(); ++i) {
+                            Path *basePath =
+                                i == 0 ? this : bases.first[i - 1].get().get();
+                            EvalResult indices = basePath->evalExpr(arrSub->getIdx());
+
+                            for (size_t j = 0; j < indices.second.size(); ++j) {
+                                Path *resultPath =
+                                    j == 0 ? basePath : indices.first[j - 1].get().get();
+                                if (auto baseAddress = bases.second[i].evaluatedAddress()) {
+                                    auto newAddr =
+                                        baseAddress->withAddedOffset(indices.second[j]);
+                                    resultPath->recordMemoryAccess(newAddr);
+                                    if (auto value = resultPath->memoryState_.read(newAddr);
+                                        value == std::nullopt) {
+                                        auto symbol = symbolic::Expr::symbol(
+                                            arrSub->getType(), newAddr, startPoint_);
+                                        resultPath->memoryState_.write(newAddr, symbol);
+                                        outExprs.push_back(symbol);
+                                    } else {
+                                        outExprs.emplace_back(*value);
+                                    }
+                                } else {
+                                    resultPath->hasUnknownMemoryAccess_ = true;
+                                    outExprs.emplace_back(
+                                        symbolic::Expr::unknown(context_.getExprFactory()));
+                                }
+
+                                if (i != 0 || j != 0)
+                                    outPaths.emplace_back(
+                                        j == 0 ? std::move(bases.first[i - 1])
+                                               : std::move(indices.first[j - 1]));
                             }
-                            if (i > 0)
-                                outPaths.emplace_back(std::move(idx.first[i - 1]));
                         }
 
                         return {std::move(outPaths), std::move(outExprs)};
@@ -856,6 +997,30 @@ namespace acslg::analyzer {
                         auto &factory  = context_.getExprFactory();
                         auto addr      = symbolic::Addr::symbol(factory, pointeeTy, pointAfterCall);
 
+                        auto &astContext = context_.getASTContext();
+                        const auto elementSize = static_cast<uint64_t>(
+                            astContext.getTypeSizeInChars(pointeeTy).getQuantity());
+                        std::optional<symbolic::Expr> extent;
+                        if (elementSize == 1) {
+                            extent = sizeExpr;
+                        } else if (auto byteCount = sizeExpr.tryEvalAsConstant();
+                                   byteCount && *byteCount >= 0 &&
+                                   static_cast<uint64_t>(*byteCount) % elementSize == 0) {
+                            extent.emplace(symbolic::LiteralExpr{
+                                factory, static_cast<uint64_t>(*byteCount) / elementSize});
+                        } else if (auto sizeofType =
+                                       acslg::utils::findSizeofQualType(call->getArg(0));
+                                   sizeofType &&
+                                   astContext.hasSameType(sizeofType->getCanonicalType(),
+                                                          pointeeTy.getCanonicalType()) &&
+                                   acslg::utils::countSizeofInCall(call) == 1) {
+                            auto stripped = symbolic::strip_sizeof_factor(sizeExpr, elementSize);
+                            if (stripped != sizeExpr)
+                                extent = stripped;
+                        }
+                        if (extent)
+                            memoryState_.setObjectExtent(addr, *extent);
+
                         std::vector<symbolic::Expr> exprs;
                         exprs.emplace_back(addr.asExpr());
                         std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
@@ -865,6 +1030,9 @@ namespace acslg::analyzer {
                     // @WindOctober TODO: wrapped in specific function.
                     if (name == "BSL_SAL_Calloc") {
                         DEBUG("BSL_SAL_Calloc: enter, argc=" << call->getNumArgs());
+                        if (call->getNumArgs() != 2)
+                            UNIMPLEMENT("BSL_SAL_Calloc expects exactly two arguments.");
+
                         // Extract element type T from any argument that syntactically contains
                         // `sizeof(T)`.
 
@@ -882,58 +1050,36 @@ namespace acslg::analyzer {
                         DEBUG("BSL_SAL_Calloc: elemTy=" << elemTy.getAsString());
                         auto pointAfterCall    = symbolic::SourcePoint::fromStmtAfter(
                             call, context_.getSourceManager(), context_.getLangOptions());
+                        const size_t nSizeofs = acslg::utils::countSizeofInCall(call);
+                        if (nSizeofs != 1)
+                            UNIMPLEMENT("BSL_SAL_Calloc expects exactly one sizeof(T).");
+
+                        auto evalNoBranch = [this](const clang::Expr *e) -> symbolic::Expr {
+                            auto ER = this->evalExpr(e);
+                            if (ER.second.size() != 1 || !ER.first.empty())
+                                ERROR("BSL_SAL_Calloc arguments must not branch or fork.");
+                            return ER.second[0];
+                        };
+                        auto a0 = evalNoBranch(call->getArg(0));
+                        auto a1 = evalNoBranch(call->getArg(1));
+                        DEBUG("BSL_SAL_Calloc: arg0=" << a0.dump());
+                        DEBUG("BSL_SAL_Calloc: arg1=" << a1.dump());
+
+                        auto &Ctx = context_.getASTContext();
+                        const uint64_t sz =
+                            static_cast<uint64_t>(Ctx.getTypeSizeInChars(elemTy).getQuantity());
+                        auto &factory = context_.getExprFactory();
+                        auto totalSizeExpr = a0.binary(symbolic::BinaryOp::Multiply, a1);
+                        auto lengthInElems = acslg::analyzer::symbolic::strip_sizeof_factor(
+                            totalSizeExpr, sz);
+                        DEBUG("BSL_SAL_Calloc: lengthInElems=" << lengthInElems.dump());
 
                         // Handle builtin scalar pointees (e.g., uint64_t, int64_t, bool, char).
                         if (acslg::utils::isBuiltinScalar(elemTy)) {
-                            // Sanity check: exactly one syntactic occurrence of sizeof(T) is
-                            // expected.
-                            const size_t nSizeofs = acslg::utils::countSizeofInCall(call);
-                            DEBUG("BSL_SAL_Calloc: builtin scalar, nSizeofs=" << nSizeofs);
-                            if (nSizeofs != 1)
-                                UNIMPLEMENT(
-                                    "BSL_SAL_Calloc expects exactly one sizeof(T) for builtin T.");
-
-                            // Compute sizeof(T) in bytes according to the target data layout.
-                            auto &Ctx = this->context_.getASTContext();
-                            const uint64_t sz =
-                                static_cast<uint64_t>(Ctx.getTypeSizeInChars(elemTy).getQuantity());
-
-                            // @WindOctober: TODO consider make this lambda function external.
-                            // Evaluate both call arguments under the assumption of purity and
-                            // single-result semantics.
-                            auto evalNoBranch = [this](const clang::Expr *e) -> symbolic::Expr {
-                                auto ER = this->evalExpr(e);
-                                if (ER.second.size() != 1 || !ER.first.empty())
-                                    ERROR("BSL_SAL_Calloc arguments must not branch or fork.");
-                                return ER.second[0];
-                            };
-                            auto a0 = evalNoBranch(call->getArg(0));
-                            auto a1 = evalNoBranch(call->getArg(1));
-                            DEBUG("BSL_SAL_Calloc: arg0=" << a0.dump());
-                            DEBUG("BSL_SAL_Calloc: arg1=" << a1.dump());
-
-                            // Form the total-size expression by multiplying the two arguments.
-                            using Op = symbolic::BinaryOp;
-                            auto &factory = context_.getExprFactory();
-                            auto totalSizeExpr = a0.binary(Op::Multiply, a1);
-                            // Remove exactly one multiplicative factor equal to sizeof(T) to obtain
-                            // the element count. This corresponds to interpreting the product as
-                            // "bytes = elems * sizeof(T)".
-                            auto lengthInElems = acslg::analyzer::symbolic::strip_sizeof_factor(
-                                totalSizeExpr, sz);
-                            DEBUG("BSL_SAL_Calloc: lengthInElems=" << lengthInElems.dump());
-
                             // Allocate a fresh symbolic address anchored at the current allocation
                             // site.
                             auto addr = symbolic::Addr::symbol(factory, elemTy, pointAfterCall);
-
-                            // Note: The length is temporarily omitted since it conceptually
-                            // represents the legal bound of accessible memory, rather than a
-                            // physically distinct memory segment. If future semantics require
-                            // explicit range tracking, this statement can be uncommented to
-                            // re-enable length assignment.
-
-                            // addr = addr.withLength(lengthInElems);
+                            memoryState_.setObjectExtent(addr, lengthInElems);
 
                             // Materialize the first element symbol at the allocated base address.
                             memoryState_.write(addr, symbolic::Expr::unknown());
@@ -949,9 +1095,9 @@ namespace acslg::analyzer {
                         // layout.
                         if (elemTy->isStructureType()) {
                             DEBUG("BSL_SAL_Calloc: structure type");
-                            auto &factory = context_.getExprFactory();
                             auto zero     = symbolic::LiteralExpr{factory, 0};
                             auto addr     = symbolic::Addr::symbol(elemTy, pointAfterCall, zero);
+                            memoryState_.setObjectExtent(addr, lengthInElems);
 
                             // Build a Structure whose fields (and nested structs) are Unknown, then
                             // write it.
@@ -998,8 +1144,19 @@ namespace acslg::analyzer {
                         // The argument must be a symbolic address.
                         auto &factory  = context_.getExprFactory();
                         auto maybeAddr = p.evaluatedAddress();
-                        if (!maybeAddr)
-                            UNIMPLEMENT("BSL_SAL_Free argument must be a valid pointer value.");
+                        auto symbolAddress =
+                            maybeAddr ? symbolic::SymbolAddress::tryFrom(*maybeAddr) : std::nullopt;
+                        auto offset = symbolAddress
+                                          ? symbolAddress->offset().tryEvalAsConstant()
+                                          : std::nullopt;
+                        if (!maybeAddr || !symbolAddress || !offset || *offset != 0 ||
+                            !memoryState_.eraseObjectExtent(*maybeAddr)) {
+                            hasUnknownMemoryAccess_ = true;
+                            std::vector<symbolic::Expr> exprs;
+                            exprs.emplace_back(symbolic::Expr::unknown(factory));
+                            std::vector<utils::not_null<std::unique_ptr<Path>>> empty;
+                            return Path::EvalResult(std::move(empty), std::move(exprs));
+                        }
 
                         // Normalize to base address (offset = 0) for consistent memory handling.
                         symbolic::Addr normalizedFreedAddr = *maybeAddr;
@@ -1339,12 +1496,34 @@ namespace acslg::analyzer {
                                     ERROR("memoryState_ doesn't contain addr.");
                                 // compute new = old +/- 1
                                 auto &factory = context_.getExprFactory();
-                                symbolic::LiteralExpr one{factory, 1};
+                                auto oldValExpr = oldVal.value();
+                                auto computationType = oldValExpr.getValType();
+                                auto promotedOld      = oldValExpr;
+                                if (uop->getType()->isIntegerType()) {
+                                    auto computationQualType = uop->getType();
+                                    if (context_.getASTContext().isPromotableIntegerType(
+                                            computationQualType)) {
+                                        computationQualType =
+                                            context_.getASTContext().getPromotedIntegerType(
+                                                computationQualType);
+                                    }
+                                    computationType =
+                                        symbolic::deriveType(computationQualType);
+                                    promotedOld =
+                                        convertIntegerValue(oldValExpr, computationType);
+                                }
+                                auto one = symbolic::LiteralExpr{factory, 1}.withType(
+                                    computationType);
                                 auto binOp  = (op == PreInc || op == PostInc)
                                                   ? symbolic::BinaryOp::Add
                                                   : symbolic::BinaryOp::Subtract;
-                                auto oldValExpr = oldVal.value();
-                                auto newValExpr = oldValExpr.binary(binOp, one);
+                                auto newValExpr =
+                                    promotedOld.binary(binOp, one).withType(computationType);
+                                if (uop->getType()->isIntegerType())
+                                    newValExpr = convertIntegerValue(
+                                        newValExpr, symbolic::deriveType(uop->getType()));
+                                if (uop->getType()->isPointerType())
+                                    path->recordPointerArithmetic(newValExpr);
                                 // return pre vs post
                                 if (op == PreInc || op == PreDec)
                                     outExprs.emplace_back(newValExpr);
@@ -1354,16 +1533,21 @@ namespace acslg::analyzer {
                             } else if (op == Dereference) {
                                 // *x
                                 auto addr = unExpr.evaluatedAddress();
-                                if (addr == std::nullopt)
-                                    ERROR("Expected symbolic address, got: " << unExpr.dump());
-                                if (auto value = path->memoryState_.read(*addr);
-                                    value == std::nullopt) {
-                                    auto symbol =
-                                        symbolic::Expr::symbol(uop->getType(), *addr, startPoint_);
-                                    path->memoryState_.write(*addr, symbol);
-                                    outExprs.push_back(symbol);
+                                if (addr == std::nullopt) {
+                                    path->hasUnknownMemoryAccess_ = true;
+                                    outExprs.emplace_back(
+                                        symbolic::Expr::unknown(context_.getExprFactory()));
                                 } else {
-                                    outExprs.emplace_back(*value);
+                                    path->recordMemoryAccess(*addr);
+                                    if (auto value = path->memoryState_.read(*addr);
+                                        value == std::nullopt) {
+                                        auto symbol = symbolic::Expr::symbol(
+                                            uop->getType(), *addr, startPoint_);
+                                        path->memoryState_.write(*addr, symbol);
+                                        outExprs.push_back(symbol);
+                                    } else {
+                                        outExprs.emplace_back(*value);
+                                    }
                                 }
                             } else if (op == AddrOf) {
                                 // &x
@@ -1371,6 +1555,9 @@ namespace acslg::analyzer {
                                 outExprs.emplace_back(addr.asExpr());
                             } else {
                                 auto resultExpr = unExpr.unary(op);
+                                if (uop->getType()->isIntegerType())
+                                    resultExpr =
+                                        resultExpr.withType(symbolic::deriveType(uop->getType()));
                                 outExprs.emplace_back(resultExpr);
                             }
                         }();
@@ -1386,10 +1573,101 @@ namespace acslg::analyzer {
                     if (castExpr->getType()->isStructureType())
                         return sub;
 
-                    auto targetType = symbolic::deriveType(castExpr->getType());
+                    auto targetType            = symbolic::deriveType(castExpr->getType());
+                    const auto isIntegerScalar = [](clang::QualType type) {
+                        return type->isIntegerType() || type->isBooleanType();
+                    };
+                    const auto preservesValueConversion = [castExpr] {
+                        switch (castExpr->getCastKind()) {
+                            case clang::CK_IntegralCast:
+                            case clang::CK_IntegralToBoolean:
+                            case clang::CK_BooleanToSignedIntegral: return true;
+                            default: return false;
+                        }
+                    };
+                    const auto convertImplicitLiteral =
+                        [this, targetType](const symbolic::LiteralExpr &literal)
+                        -> std::optional<symbolic::Expr> {
+                        auto &factory = context_.getExprFactory();
+                        const auto integerValue = literal.integerValue();
+                        if (targetType.kind == symbolic::ExprScalarKind::Bool) {
+                            const auto nonzero =
+                                std::visit([](auto value) { return value != 0; }, integerValue);
+                            return symbolic::LiteralExpr{factory, nonzero};
+                        }
+
+                        if (targetType.kind == symbolic::ExprScalarKind::UInt) {
+                            auto value = std::visit(
+                                [](auto source) { return static_cast<std::uint64_t>(source); },
+                                integerValue);
+                            if (targetType.bitWidth < 64) {
+                                const auto mask =
+                                    (std::uint64_t{1} << targetType.bitWidth) - 1;
+                                value &= mask;
+                            }
+                            if (targetType.bitWidth <= 16) {
+                                return symbolic::LiteralExpr{
+                                           factory, static_cast<unsigned short>(value)}
+                                    .withType(targetType);
+                            }
+                            if (targetType.bitWidth == 32)
+                                return symbolic::LiteralExpr{
+                                    factory, static_cast<std::uint32_t>(value)};
+                            return symbolic::LiteralExpr{factory, value};
+                        }
+
+                        const auto minimum =
+                            targetType.bitWidth == 64
+                                ? std::numeric_limits<std::int64_t>::min()
+                                : -(std::int64_t{1} << (targetType.bitWidth - 1));
+                        const auto maximum =
+                            targetType.bitWidth == 64
+                                ? std::numeric_limits<std::int64_t>::max()
+                                : (std::int64_t{1} << (targetType.bitWidth - 1)) - 1;
+                        const auto value = std::visit(
+                            [minimum, maximum](auto source) -> std::optional<std::int64_t> {
+                                using Source = decltype(source);
+                                if constexpr (std::is_unsigned_v<Source>) {
+                                    if (source > static_cast<std::uint64_t>(maximum))
+                                        return std::nullopt;
+                                } else if (source < minimum || source > maximum) {
+                                    return std::nullopt;
+                                }
+                                return static_cast<std::int64_t>(source);
+                            },
+                            integerValue);
+                        if (!value)
+                            return std::nullopt;
+                        if (targetType.bitWidth <= 16) {
+                            return symbolic::LiteralExpr{factory, static_cast<short>(*value)}
+                                .withType(targetType);
+                        }
+                        if (targetType.bitWidth == 32)
+                            return symbolic::LiteralExpr{
+                                factory, static_cast<std::int32_t>(*value)};
+                        return symbolic::LiteralExpr{factory, *value};
+                    };
 
                     for (auto &subExpr : sub.second) {
-                        subExpr = subExpr.withType(targetType);
+                        const bool explicitCast = llvm::isa<clang::ExplicitCastExpr>(castExpr);
+                        const bool implicitValueCast =
+                            !explicitCast && preservesValueConversion() &&
+                            supportsExactIntegerConversion(targetType);
+                        if ((explicitCast || implicitValueCast) &&
+                            isIntegerScalar(castExpr->getType()) &&
+                            isIntegerScalar(castExpr->getSubExpr()->getType())) {
+                            if (implicitValueCast) {
+                                if (auto literal = symbolic::LiteralExpr::tryFrom(subExpr)) {
+                                    if (auto converted = convertImplicitLiteral(*literal)) {
+                                        subExpr = *converted;
+                                        continue;
+                                    }
+                                }
+                            }
+                            subExpr = subExpr.castTo(targetType);
+                        } else {
+                            subExpr = subExpr.withType(targetType);
+                        }
                     }
 
                     return {std::move(sub.first), std::move(sub.second)};
@@ -1413,15 +1691,15 @@ namespace acslg::analyzer {
                     std::optional<symbolic::Expr> st;
                     auto baseExpr = base.second[0];
                     if (memberExpr->isArrow()) {
-                        auto &factory = context_.getExprFactory();
                         auto baseAddr = baseExpr.evaluatedAddress();
                         if (baseAddr == std::nullopt) {
-                            WARN("LHS of '->' is not an address; fabricating symbolic pointer to "
-                                 "continue.");
-                            baseAddr = symbolic::Addr::symbol(
-                                factory, memberExpr->getBase()->getType()->getPointeeType(),
-                                startPoint_);
+                            hasUnknownMemoryAccess_ = true;
+                            EvalResult result{};
+                            result.second.emplace_back(
+                                symbolic::Expr::unknown(context_.getExprFactory()));
+                            return result;
                         }
+                        recordMemoryAccess(*baseAddr);
                         auto val = memoryState_.read(*baseAddr);
                         DEBUG("MemberExpr base in memory: " << (val ? "yes" : "no"));
                         if (val == std::nullopt) {
@@ -1430,7 +1708,11 @@ namespace acslg::analyzer {
                         } else if (auto stVal = symbolic::StructureExpr::tryFrom(*val)) {
                             st = *stVal;
                         } else {
-                            ERROR("Dereferenced value is not a structure");
+                            hasUnknownMemoryAccess_ = true;
+                            EvalResult result{};
+                            result.second.emplace_back(
+                                symbolic::Expr::unknown(context_.getExprFactory()));
+                            return result;
                         }
                     } else {
                         if (baseExpr.isStructure())
@@ -1686,6 +1968,13 @@ namespace acslg::analyzer {
         for (const auto &[address, value] : other.flat()) {
             write(address.importedInto(factory()), copyStoredValueFrom(other, value));
         }
+        for (const auto &[base, extent] : other.objectExtents_) {
+            auto from = base.fromAddress(factory());
+            auto address =
+                from ? symbolic::Addr::symbol(base.pointeeType(), *from, base.fromPoint())
+                     : symbolic::Addr::symbol(factory(), base.pointeeType(), base.fromPoint());
+            setObjectExtent(address, copyStoredValueFrom(other, extent));
+        }
     }
 
     MemoryModel::MemoryModel(const MemoryModel &other) : MemoryModel(other.factory()) {
@@ -1769,6 +2058,48 @@ namespace acslg::analyzer {
         auto addr          = address.importedInto(factory());
         auto importedValue = value.importedInto(factory());
         writeCanonical(addr, importedValue);
+    }
+
+    void MemoryModel::setObjectExtent(const symbolic::Addr &address,
+                                      const symbolic::Expr &extent) {
+        auto importedAddress = address.importedInto(factory());
+        auto symbolAddress = symbolic::SymbolAddress::tryFrom(importedAddress);
+        if (!symbolAddress)
+            ERROR("Object extent requires a symbolic address.");
+        objectExtents_.insert_or_assign(symbolAddress->baseInfo(),
+                                        extent.importedInto(factory()));
+    }
+
+    std::optional<symbolic::Expr> MemoryModel::objectExtent(
+        const symbolic::Addr &address) const {
+        auto importedAddress = address.importedInto(factory());
+        auto symbolAddress = symbolic::SymbolAddress::tryFrom(importedAddress);
+        if (!symbolAddress)
+            return std::nullopt;
+        auto it = objectExtents_.find(symbolAddress->baseInfo());
+        if (it == objectExtents_.end())
+            return std::nullopt;
+        return it->second;
+    }
+
+    bool MemoryModel::eraseObjectExtent(const symbolic::Addr &address) {
+        auto importedAddress = address.importedInto(factory());
+        auto symbolAddress = symbolic::SymbolAddress::tryFrom(importedAddress);
+        if (!symbolAddress)
+            return false;
+        return objectExtents_.erase(symbolAddress->baseInfo()) != 0;
+    }
+
+    void MemoryModel::intersectObjectExtents(const MemoryModel &other) {
+        for (auto it = objectExtents_.begin(); it != objectExtents_.end();) {
+            const auto otherIt = other.objectExtents_.find(it->first);
+            if (otherIt == other.objectExtents_.end() ||
+                !it->second.structurallyEqual(otherIt->second)) {
+                it = objectExtents_.erase(it);
+                continue;
+            }
+            ++it;
+        }
     }
 
     void MemoryModel::writeCanonical(const symbolic::Addr &addr, const StoredValue &value) {
@@ -1883,6 +2214,10 @@ namespace acslg::analyzer {
             if (fromRoot == std::nullopt)
                 return false;
             return localVars.contains(fromRoot.value());
+        });
+        std::erase_if(objectExtents_, [&](auto const &kv) {
+            auto fromRoot = kv.first.getFromRoot();
+            return fromRoot && localVars.contains(*fromRoot);
         });
     }
 
@@ -2453,7 +2788,10 @@ namespace acslg::analyzer {
 
         spec_generator::EmitLoopInvResult res;
         if (ok) {
-            res = emitLoopInvariant(*preState, *loopEntry, loopInfo);
+            res = emitLoopInvariant(
+                *preState, *loopEntry, loopInfo,
+                spec_generator::configuredPathInsensitiveLoopInvariantGroup(),
+                spec_generator::DEFAULT_PATH_SENSITIVE_LOOP_INV_PLUGINS);
         } else {
             parseComplexLoopInfo(*preState, *loopEntry, loopInfo);
             res = emitLoopInvariant(*preState, *loopEntry, loopInfo,
@@ -2533,6 +2871,7 @@ namespace acslg::analyzer {
             if (binOp->isCompoundAssignmentOp()) {
                 symbolic::BinaryOp op = symbolic::getCompoundAssignOp(binOp->getOpcode());
                 Path::EvalResult lhs = path->evalExpr(binOp->getLHS());
+                const auto *compound = llvm::cast<clang::CompoundAssignOperator>(binOp);
 
                 std::vector<utils::not_null<std::unique_ptr<Path>>> outPaths;
                 std::vector<symbolic::Expr> outExprs;
@@ -2543,10 +2882,32 @@ namespace acslg::analyzer {
                     Path::EvalResult rhs = lhsPath.evalExpr(binOp->getRHS());
 
                     for (size_t j = 0; j < rhs.second.size(); ++j) {
-                        outExprs.emplace_back(lhs.second[i].binary(op, rhs.second[j]));
+                        auto lhsExpr = lhs.second[i];
+                        auto rhsExpr = rhs.second[j];
+                        if (binOp->getLHS()->getType()->isIntegerType()) {
+                            lhsExpr = convertIntegerValue(
+                                lhsExpr,
+                                symbolic::deriveType(compound->getComputationLHSType()));
+                            if (op != symbolic::BinaryOp::ShiftLeft &&
+                                op != symbolic::BinaryOp::ShiftRight) {
+                                rhsExpr = convertIntegerValue(
+                                    rhsExpr,
+                                    symbolic::deriveType(compound->getComputationResultType()));
+                            }
+                        }
+                        auto result = lhsExpr.binary(op, rhsExpr);
+                        if (binOp->getLHS()->getType()->isIntegerType())
+                            result = convertIntegerValue(
+                                result, symbolic::deriveType(binOp->getLHS()->getType()));
+                        Path *resultPath =
+                            j == 0 ? &lhsPath : rhs.first[j - 1].get().get();
+                        if (binOp->getLHS()->getType()->isPointerType())
+                            resultPath->recordPointerArithmetic(result);
+                        outExprs.emplace_back(result);
 
                         if (i != 0 || j != 0)
-                            outPaths.emplace_back(std::move(rhs.first[j - 1]));
+                            outPaths.emplace_back(j == 0 ? std::move(lhs.first[i - 1])
+                                                         : std::move(rhs.first[j - 1]));
                     }
                 }
                 eval = {std::move(outPaths), std::move(outExprs)};

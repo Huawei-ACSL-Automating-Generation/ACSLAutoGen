@@ -11,6 +11,7 @@
 #include <cstring>
 #include <string_view>
 #include <ranges>
+#include <llvm/ADT/APInt.h>
 #include <llvm/ADT/TypeSwitch.h>
 #include <llvm/Support/Casting.h>
 
@@ -249,6 +250,8 @@ namespace acslg::analyzer::symbolic {
 
     bool Expr::isUnknown() const { return handle().isUnknown(); }
 
+    bool Expr::isCast() const { return handle().isCastExpr(); }
+
     bool Expr::isRangeIndex() const { return handle().isRangeIndex(); }
 
     bool Expr::isSymbolValue() const { return handle().isSymbolValue(); }
@@ -299,6 +302,10 @@ namespace acslg::analyzer::symbolic {
     Expr Expr::withType(ExprType newType) const {
         return Expr{factory(),
                     detail::ExprFactoryInternals::withValType(factory(), handle(), newType)};
+    }
+
+    Expr Expr::castTo(ExprType targetType) const {
+        return Expr{factory(), detail::ExprFactoryInternals::cast(factory(), handle(), targetType)};
     }
 
     Expr Expr::withField(size_t index, const Expr &value) const {
@@ -401,6 +408,7 @@ namespace acslg::analyzer::symbolic {
                              SourcePoint fromPoint);
         ExprHandle withField(ExprHandle structure, size_t index, ExprHandle value);
         ExprHandle unary(UnaryOp op, ExprHandle expr);
+        ExprHandle cast(ExprHandle expr, ExprType targetType);
         ExprHandle binary(ExprHandle left, BinaryOp op, ExprHandle right);
         ExprHandle simplifiedBinary(ExprHandle left, BinaryOp op, ExprHandle right);
         ExprHandle withValType(ExprHandle expr, ExprType newType);
@@ -561,6 +569,12 @@ namespace acslg::analyzer::symbolic {
         return factory.backend_->unary(op, expression);
     }
 
+    ExprHandle detail::ExprFactoryInternals::cast(ExprFactory &factory,
+                                                  ExprHandle expression,
+                                                  ExprType targetType) {
+        return factory.backend_->cast(expression, targetType);
+    }
+
     ExprHandle detail::ExprFactoryInternals::binary(ExprFactory &factory,
                                                     ExprHandle left,
                                                     BinaryOp op,
@@ -684,6 +698,7 @@ namespace acslg::analyzer::symbolic {
     bool detail::ExprHandle::isLiteralExpr() const { return expr_->isLiteralExpr(); }
     bool detail::ExprHandle::isUnaryExpr() const { return expr_->isUnaryExpr(); }
     bool detail::ExprHandle::isBinaryExpr() const { return expr_->isBinaryExpr(); }
+    bool detail::ExprHandle::isCastExpr() const { return expr_->isCastExpr(); }
     bool detail::ExprHandle::isStructure() const { return expr_->isStructure(); }
     bool detail::ExprHandle::isSymbolValue() const { return expr_->isSymbolValue(); }
     bool detail::ExprHandle::isSymbolAddress() const { return expr_->isSymbolAddress(); }
@@ -875,6 +890,9 @@ namespace acslg::analyzer::symbolic {
             return internTyped(makeNode<detail::UnaryOpExprNode>(
                 unaryExpr->getOperator(), importExpr(unaryExpr->getSub()), newType));
 
+        if (auto *castExpr = detail::HandleAccess::dynCast<const detail::CastExprNode>(expr))
+            return cast(importExpr(castExpr->getOperand()), newType);
+
         if (auto *binaryExpr = detail::HandleAccess::dynCast<const detail::BinaryOpExprNode>(expr))
             return internTyped(makeNode<detail::BinaryOpExprNode>(
                 importExpr(binaryExpr->getLeft()), binaryExpr->getOperator(),
@@ -1023,6 +1041,9 @@ namespace acslg::analyzer::symbolic {
                         detail::HandleAccess::dynCast<const detail::UnaryOpExprNode>(expr))
                     return detail::ExprFactoryInternals::unary(factory, unary->getOperator(),
                                                                run(unary->getSub()));
+                if (auto *cast = detail::HandleAccess::dynCast<const detail::CastExprNode>(expr))
+                    return detail::ExprFactoryInternals::cast(factory, run(cast->getOperand()),
+                                                              cast->getValType());
                 if (auto *structure = detail::HandleAccess::dynCast<const StructureNode>(expr)) {
                     auto rebuilt = detail::ExprFactoryInternals::importExpr(factory, expr);
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
@@ -1186,6 +1207,9 @@ namespace acslg::analyzer::symbolic {
                         detail::HandleAccess::dynCast<const detail::UnaryOpExprNode>(expr))
                     return detail::ExprFactoryInternals::unary(factory, unary->getOperator(),
                                                                run(unary->getSub()));
+                if (auto *cast = detail::HandleAccess::dynCast<const detail::CastExprNode>(expr))
+                    return detail::ExprFactoryInternals::cast(factory, run(cast->getOperand()),
+                                                              cast->getValType());
                 if (auto *structure = detail::HandleAccess::dynCast<const StructureNode>(expr)) {
                     auto rebuilt = detail::ExprFactoryInternals::importExpr(factory, expr);
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
@@ -1309,6 +1333,9 @@ namespace acslg::analyzer::symbolic {
                         detail::HandleAccess::dynCast<const detail::UnaryOpExprNode>(expr))
                     return detail::ExprFactoryInternals::unary(factory, unary->getOperator(),
                                                                run(unary->getSub()));
+                if (auto *cast = detail::HandleAccess::dynCast<const detail::CastExprNode>(expr))
+                    return detail::ExprFactoryInternals::cast(factory, run(cast->getOperand()),
+                                                              cast->getValType());
                 if (auto *structure = detail::HandleAccess::dynCast<const StructureNode>(expr)) {
                     auto rebuilt = detail::ExprFactoryInternals::importExpr(factory, expr);
                     for (size_t i = 0; i < structure->getNumFields(); ++i)
@@ -1391,6 +1418,10 @@ namespace acslg::analyzer::symbolic {
             return preserveImportedType(
                 unary(unaryExpr->getOperator(),
                       importNode(detail::HandleAccess::node(unaryExpr->getSub()))));
+
+        if (auto *castExpr = dyn_cast<detail::CastExprNode>(&expr))
+            return cast(importNode(detail::HandleAccess::node(castExpr->getOperand())),
+                        castExpr->getValType());
 
         if (auto *binaryExpr = dyn_cast<detail::BinaryOpExprNode>(&expr)) {
             auto left  = importNode(detail::HandleAccess::node(binaryExpr->getLeft()));
@@ -1638,6 +1669,15 @@ namespace acslg::analyzer::symbolic {
         return intern(makeNode<detail::UnaryOpExprNode>(op, expr));
     }
 
+    ExprHandle detail::ExprFactoryBackend::cast(ExprHandle expr, ExprType targetType) {
+        if (expr.getValType() == targetType)
+            return importExpr(expr);
+        if (targetType.kind == ExprScalarKind::Void ||
+            targetType.kind == ExprScalarKind::Structure || targetType.bitWidth == 0)
+            ERROR("CastExpr requires a scalar target type.");
+        return intern(makeNode<detail::CastExprNode>(importExpr(expr), targetType));
+    }
+
     ExprHandle detail::ExprFactoryBackend::binary(ExprHandle left, BinaryOp op, ExprHandle right) {
         return intern(makeNode<detail::BinaryOpExprNode>(left, op, right));
     }
@@ -1799,6 +1839,19 @@ namespace acslg::analyzer::symbolic {
     }
 
     namespace {
+        bool containsCast(ExprHandle expr) {
+            if (expr.isCastExpr())
+                return true;
+            if (auto *binary =
+                    detail::HandleAccess::dynCast<const detail::BinaryOpExprNode>(expr)) {
+                return containsCast(binary->getLeft()) || containsCast(binary->getRight());
+            }
+            if (auto *unary =
+                    detail::HandleAccess::dynCast<const detail::UnaryOpExprNode>(expr))
+                return containsCast(unary->getSub());
+            return false;
+        }
+
         ExprHandle simplifyHandle(ExprFactory &factory, ExprHandle expr) {
             ExprFactoryScope scope(factory);
             if (expr.isUnknown())
@@ -1813,7 +1866,7 @@ namespace acslg::analyzer::symbolic {
 
             if (auto *binary =
                     detail::HandleAccess::dynCast<const detail::BinaryOpExprNode>(expr)) {
-                if (binary->isLinear())
+                if (binary->isLinear() && !containsCast(expr))
                     return binary->simplifiedExprIfLinear();
 
                 if (auto c = evaluateToLiteralNode(*binary))
@@ -1880,7 +1933,7 @@ namespace acslg::analyzer::symbolic {
             }
 
             if (auto *unary = detail::HandleAccess::dynCast<const detail::UnaryOpExprNode>(expr)) {
-                if (unary->isLinear())
+                if (unary->isLinear() && !containsCast(expr))
                     return unary->simplifiedExprIfLinear();
                 return detail::ExprFactoryInternals::unary(
                     factory, unary->getOperator(), simplifyHandle(factory, unary->getSub()));
@@ -1969,10 +2022,10 @@ namespace acslg::analyzer::symbolic {
 
         using enum detail::BinaryOpExprNode::Operator;
         for (auto symbol : usedSymbols) {
-            auto C = linearExpr
-                         .coefficient(Parma_Polyhedra_Library::Variable{
-                             expressionIndexMap.at(symbol)})
-                         .get_si();
+            auto C =
+                linearExpr
+                    .coefficient(Parma_Polyhedra_Library::Variable{expressionIndexMap.at(symbol)})
+                    .get_si();
             if (C == 0)
                 continue;
 
@@ -2082,6 +2135,24 @@ namespace acslg::analyzer::symbolic {
         return 0;
     }
 
+    std::variant<std::int64_t, std::uint64_t>
+    detail::LiteralExprNode::getIntegerValue() const {
+        switch (getLiteralType()) {
+            case LiteralType::Boolean: return static_cast<std::int64_t>(data_.boolValue);
+            case LiteralType::Int: return static_cast<std::int64_t>(data_.intValue);
+            case LiteralType::UnsignedInt:
+                return static_cast<std::uint64_t>(data_.uintValue);
+            case LiteralType::Short: return static_cast<std::int64_t>(data_.shortValue);
+            case LiteralType::UnsignedShort:
+                return static_cast<std::uint64_t>(data_.ushortValue);
+            case LiteralType::Int64: return data_.int64Value;
+            case LiteralType::UInt64: return data_.uint64Value;
+        }
+
+        UNREACHABLE();
+        return std::int64_t{0};
+    }
+
     size_t detail::LiteralExprNode::hash() const {
         size_t seed = utils::hash_val(getKind(), type_);
 
@@ -2106,6 +2177,12 @@ namespace acslg::analyzer::symbolic {
 
     size_t detail::UnaryOpExprNode::hash() const {
         return utils::hash_val(getKind(), static_cast<size_t>(op_), expr_.hash());
+    }
+
+    size_t detail::CastExprNode::hash() const {
+        const auto target = getValType();
+        return utils::hash_val(getKind(), static_cast<size_t>(target.kind), target.bitWidth,
+                               operand_.hash());
     }
 
     size_t detail::BinaryOpExprNode::hash() const {
@@ -2216,6 +2293,15 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
+    std::string detail::CastExprNode::dump() const {
+        using namespace utils::dump_fmt;
+        std::ostringstream oss;
+        const auto target = getValType();
+        oss << type("Cast") << "(" << static_cast<unsigned>(target.kind) << ":" << target.bitWidth
+            << ", " << operand_.dump() << ")";
+        return oss.str();
+    }
+
     std::string detail::UnknownExprNode::dump() const { return utils::dump_fmt::hint("{unknown}"); }
 
     detail::LiteralExprView::LiteralExprView(ExprHandle handle) : handle_(handle) {
@@ -2231,6 +2317,11 @@ namespace acslg::analyzer::symbolic {
 
     int64_t detail::LiteralExprView::value() const {
         return detail::HandleAccess::cast<detail::LiteralExprNode>(handle_).getLiteralValue();
+    }
+
+    std::variant<std::int64_t, std::uint64_t>
+    detail::LiteralExprView::integerValue() const {
+        return detail::HandleAccess::cast<detail::LiteralExprNode>(handle_).getIntegerValue();
     }
 
     detail::UnaryExprView::UnaryExprView(ExprHandle handle) : handle_(handle) {
@@ -2251,6 +2342,23 @@ namespace acslg::analyzer::symbolic {
     ExprHandle detail::UnaryExprView::operand() const {
         return detail::HandleAccess::cast<detail::UnaryOpExprNode>(handle_).getSub();
     }
+
+    detail::CastExprView::CastExprView(ExprHandle handle) : handle_(handle) {
+        if (!handle_.isCastExpr())
+            ERROR("CastExprView requires a cast expression.");
+    }
+
+    std::optional<detail::CastExprView> detail::CastExprView::tryFrom(ExprHandle handle) {
+        if (!handle.isCastExpr())
+            return std::nullopt;
+        return CastExprView{handle};
+    }
+
+    ExprHandle detail::CastExprView::operand() const {
+        return detail::HandleAccess::cast<detail::CastExprNode>(handle_).getOperand();
+    }
+
+    ExprType detail::CastExprView::targetType() const { return handle_.getValType(); }
 
     detail::BinaryExprView::BinaryExprView(ExprHandle handle) : handle_(handle) {
         if (!handle_.isBinaryExpr())
@@ -2327,6 +2435,10 @@ namespace acslg::analyzer::symbolic {
         return detail::LiteralExprView{FacadeAccess::exprHandle(*this)}.value();
     }
 
+    std::variant<std::int64_t, std::uint64_t> LiteralExpr::integerValue() const {
+        return detail::LiteralExprView{FacadeAccess::exprHandle(*this)}.integerValue();
+    }
+
     UnaryExpr::UnaryExpr(const Expr &expression) : Expr(expression) {
         if (!FacadeAccess::exprHandle(*this).isUnaryExpr())
             ERROR("UnaryExpr requires a unary expression.");
@@ -2345,6 +2457,26 @@ namespace acslg::analyzer::symbolic {
     Expr UnaryExpr::operand() const {
         auto handle = detail::UnaryExprView{FacadeAccess::exprHandle(*this)}.operand();
         return FacadeAccess::makeExpr(factory(), handle);
+    }
+
+    CastExpr::CastExpr(const Expr &expression) : Expr(expression) {
+        if (!FacadeAccess::exprHandle(*this).isCastExpr())
+            ERROR("CastExpr requires a cast expression.");
+    }
+
+    std::optional<CastExpr> CastExpr::tryFrom(const Expr &expression) {
+        if (!FacadeAccess::exprHandle(expression).isCastExpr())
+            return std::nullopt;
+        return CastExpr{expression};
+    }
+
+    Expr CastExpr::operand() const {
+        auto handle = detail::CastExprView{FacadeAccess::exprHandle(*this)}.operand();
+        return FacadeAccess::makeExpr(factory(), handle);
+    }
+
+    ExprType CastExpr::targetType() const {
+        return detail::CastExprView{FacadeAccess::exprHandle(*this)}.targetType();
     }
 
     BinaryExpr::BinaryExpr(const Expr &expression) : Expr(expression) {
@@ -2905,6 +3037,49 @@ namespace acslg::analyzer::symbolic {
         return oss.str();
     }
 
+    utils::expected<std::string, ACSLError> detail::CastExprNode::doGetACSL(
+        const ACSLConfig &config,
+        std::unordered_set<SourcePoint> &usedPoints,
+        std::optional<SourcePoint> currentPoint,
+        unsigned,
+        bool) const {
+        const auto target = getValType();
+        std::string typeName;
+        switch (target.kind) {
+            case ExprScalarKind::Bool: typeName = "_Bool"; break;
+            case ExprScalarKind::Int:
+                if (target.bitWidth == 8)
+                    typeName = "signed char";
+                else if (target.bitWidth == 16)
+                    typeName = "short";
+                else if (target.bitWidth == 32)
+                    typeName = "int";
+                else if (target.bitWidth == 64)
+                    typeName = "long long";
+                break;
+            case ExprScalarKind::UInt:
+                if (target.bitWidth == 8)
+                    typeName = "unsigned char";
+                else if (target.bitWidth == 16)
+                    typeName = "unsigned short";
+                else if (target.bitWidth == 32)
+                    typeName = "unsigned int";
+                else if (target.bitWidth == 64)
+                    typeName = "unsigned long long";
+                break;
+            case ExprScalarKind::Void:
+            case ExprScalarKind::Structure: break;
+        }
+        if (typeName.empty())
+            ERROR("CastExpr has an unsupported target type.");
+
+        auto operand =
+            callGetACSL(detail::HandleAccess::node(operand_), config, usedPoints, currentPoint);
+        if (!operand)
+            return operand.error();
+        return "(" + typeName + ")(" + operand.value() + ")";
+    }
+
     utils::expected<std::string, ACSLError> detail::UnknownExprNode::doGetACSL(
         const ACSLConfig &config,
         std::unordered_set<SourcePoint> &,
@@ -3278,8 +3453,15 @@ namespace acslg::analyzer::symbolic {
                                                       (uint64_t)coerceS(bw, literalRawU(*C)));
             }
             case Op::Minus: {
-                int64_t s = -coerceS(bw, literalRawU(*C));
-                return makeLiteralFromUnifiedType({ScalarKind::Int, bw}, false, (uint64_t)s);
+                llvm::APInt value{bw, literalRawU(*C)};
+                if (vt.kind == ScalarKind::UInt) {
+                    return makeLiteralFromUnifiedType({ScalarKind::UInt, bw}, false,
+                                                      (-value).getZExtValue());
+                }
+                if (value.isMinSignedValue())
+                    return nullptr;
+                return makeLiteralFromUnifiedType({ScalarKind::Int, bw}, false,
+                                                  (-value).getZExtValue());
             }
             case Op::PreInc:
             case Op::PreDec:
@@ -3386,6 +3568,8 @@ namespace acslg::analyzer::symbolic {
         } else {
             int64_t L = coerceS(bw, literalRawU(*Lc));
             int64_t R = coerceS(bw, literalRawU(*Rc));
+            llvm::APInt leftBits{bw, static_cast<uint64_t>(L)};
+            llvm::APInt rightBits{bw, static_cast<uint64_t>(R)};
 
             switch (op_) {
                 case BO::Equal: return emitBool(L == R);
@@ -3395,33 +3579,71 @@ namespace acslg::analyzer::symbolic {
                 case BO::GreaterThan: return emitBool(L > R);
                 case BO::GreaterEqual: return emitBool(L >= R);
 
-                case BO::Add: return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L + R));
-                case BO::Subtract: return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L - R));
-                case BO::Multiply: return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L * R));
-                case BO::Divide:
+                case BO::Add: {
+                    bool overflow = false;
+                    auto result   = leftBits.sadd_ov(rightBits, overflow);
+                    if (overflow)
+                        return nullptr;
+                    return makeLiteralFromUnifiedType(tgt, false, result.getZExtValue());
+                }
+                case BO::Subtract: {
+                    bool overflow = false;
+                    auto result   = leftBits.ssub_ov(rightBits, overflow);
+                    if (overflow)
+                        return nullptr;
+                    return makeLiteralFromUnifiedType(tgt, false, result.getZExtValue());
+                }
+                case BO::Multiply: {
+                    bool overflow = false;
+                    auto result   = leftBits.smul_ov(rightBits, overflow);
+                    if (overflow)
+                        return nullptr;
+                    return makeLiteralFromUnifiedType(tgt, false, result.getZExtValue());
+                }
+                case BO::Divide: {
                     if (R == 0)
                         return nullptr;
-                    return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L / R));
-                case BO::Remainder:
+                    bool overflow = false;
+                    auto result   = leftBits.sdiv_ov(rightBits, overflow);
+                    if (overflow)
+                        return nullptr;
+                    return makeLiteralFromUnifiedType(tgt, false, result.getZExtValue());
+                }
+                case BO::Remainder: {
                     if (R == 0)
                         return nullptr;
-                    return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L % R));
+                    bool overflow = false;
+                    (void)leftBits.sdiv_ov(rightBits, overflow);
+                    if (overflow)
+                        return nullptr;
+                    return makeLiteralFromUnifiedType(tgt, false,
+                                                      leftBits.srem(rightBits).getZExtValue());
+                }
 
-                case BO::ShiftLeft:
-                    if ((uint64_t)R >= 64)
+                case BO::ShiftLeft: {
+                    if (R < 0 || static_cast<uint64_t>(R) >= bw || L < 0)
                         return nullptr;
-                    return makeLiteralFromUnifiedType(tgt, false, (uint64_t(L) << (unsigned)R));
+                    bool overflow = false;
+                    auto result   = leftBits.sshl_ov(static_cast<unsigned>(R), overflow);
+                    if (overflow)
+                        return nullptr;
+                    return makeLiteralFromUnifiedType(tgt, false, result.getZExtValue());
+                }
                 case BO::ShiftRight:
-                    if ((uint64_t)R >= 64)
+                    if (R < 0 || static_cast<uint64_t>(R) >= bw || L < 0)
                         return nullptr;
-                    return makeLiteralFromUnifiedType(tgt, false, (uint64_t)(L >> (unsigned)R));
+                    return makeLiteralFromUnifiedType(
+                        tgt, false, leftBits.lshr(static_cast<unsigned>(R)).getZExtValue());
 
                 case BO::BitAnd:
-                    return makeLiteralFromUnifiedType(tgt, false, uint64_t(L) & uint64_t(R));
+                    return makeLiteralFromUnifiedType(tgt, false,
+                                                      (leftBits & rightBits).getZExtValue());
                 case BO::BitOr:
-                    return makeLiteralFromUnifiedType(tgt, false, uint64_t(L) | uint64_t(R));
+                    return makeLiteralFromUnifiedType(tgt, false,
+                                                      (leftBits | rightBits).getZExtValue());
                 case BO::BitXor:
-                    return makeLiteralFromUnifiedType(tgt, false, uint64_t(L) ^ uint64_t(R));
+                    return makeLiteralFromUnifiedType(tgt, false,
+                                                      (leftBits ^ rightBits).getZExtValue());
 
                 default: return nullptr;
             }
@@ -3476,6 +3698,12 @@ namespace acslg::analyzer::symbolic {
             return false;
 
         return op_ == unary->op_ && expr_.structurallyEqual(unary->expr_);
+    }
+
+    bool detail::CastExprNode::equal(const detail::SymbolicExprNode &expr) const {
+        const auto cast = dyn_cast<const detail::CastExprNode>(&expr);
+        return cast && getValType() == cast->getValType() &&
+               operand_.structurallyEqual(cast->operand_);
     }
 
     bool detail::UnknownExprNode::equal(const detail::SymbolicExprNode &expr) const {
@@ -3616,6 +3844,10 @@ namespace acslg::analyzer::symbolic {
         return expr_.collectUsedSymbols();
     }
 
+    detail::SymbolicExprNode::UsedSet detail::CastExprNode::collectUsedSymbols() const {
+        return operand_.collectUsedSymbols();
+    }
+
     detail::SymbolicExprNode::UsedSet SymbolAddressNode::collectUsedSymbols() const {
         if (length_)
             ERROR("Address range is solely for address representation and should not be "
@@ -3697,6 +3929,7 @@ namespace acslg::analyzer::symbolic {
             case K_FieldAddress: os << "FieldAddr"; break;
             case K_BinaryOpExpr: os << "BinaryOp"; break;
             case K_UnaryOpExpr: os << "UnaryOp"; break;
+            case K_CastExpr: os << "Cast"; break;
             case K_Structure: os << "Structure"; break;
             case K_UnknownExpr: os << "Unknown"; break;
             default: UNREACHABLE();

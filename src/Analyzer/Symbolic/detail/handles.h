@@ -25,6 +25,7 @@ namespace acslg::analyzer::symbolic::detail {
         bool isLiteralExpr() const;
         bool isUnaryExpr() const;
         bool isBinaryExpr() const;
+        bool isCastExpr() const;
         bool isStructure() const;
         bool isSymbolValue() const;
         bool isSymbolAddress() const;

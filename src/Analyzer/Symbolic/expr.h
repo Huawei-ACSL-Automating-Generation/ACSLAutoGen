@@ -8,6 +8,7 @@
 #ifndef __ACSLG_SRC_ANALYZER_SYMBOLIC_EXPR_H__
 #define __ACSLG_SRC_ANALYZER_SYMBOLIC_EXPR_H__
 
+#include <cstdint>
 #include <clang/AST/Type.h>
 #include <string>
 #include <memory>
@@ -17,6 +18,7 @@
 #include <ranges>
 #include <algorithm>
 #include <type_traits>
+#include <variant>
 #include <ppl.hh>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
@@ -336,6 +338,7 @@ namespace acslg::analyzer::symbolic {
     };
 
     class Expr;
+    class CastExpr;
     class ExprSubstitutions;
     struct ExprIdentityHash {
         std::size_t operator()(const Expr &expression) const;
@@ -434,6 +437,7 @@ namespace acslg::analyzer::symbolic {
         std::string dump() const;
         ExprType getValType() const;
         bool isUnknown() const;
+        bool isCast() const;
         bool isRangeIndex() const;
         bool isSymbolValue() const;
         bool isStructure() const;
@@ -450,6 +454,7 @@ namespace acslg::analyzer::symbolic {
             const ACSLConfig &config,
             std::optional<SourcePoint> currentPoint = std::nullopt) const;
         Expr withType(ExprType newType) const;
+        Expr castTo(ExprType targetType) const;
         Expr withField(size_t index, const Expr &value) const;
         Expr simplified() const;
         std::optional<Addr> tryAsAddress() const;
@@ -495,6 +500,7 @@ namespace acslg::analyzer::symbolic {
 
       private:
         friend class Addr;
+        friend class CastExpr;
         friend class LiteralExpr;
         friend class SumOverRangeExpr;
         friend class QuantifierOverRangeExpr;
@@ -614,6 +620,7 @@ namespace acslg::analyzer::symbolic {
         LiteralExpr(ExprFactory &factory, uint64_t value);
 
         int64_t value() const;
+        std::variant<std::int64_t, std::uint64_t> integerValue() const;
     };
 
     class UnaryExpr : public Expr {
@@ -624,6 +631,16 @@ namespace acslg::analyzer::symbolic {
 
         UnaryOp operation() const;
         Expr operand() const;
+    };
+
+    class CastExpr : public Expr {
+      public:
+        explicit CastExpr(const Expr &expression);
+
+        static std::optional<CastExpr> tryFrom(const Expr &expression);
+
+        Expr operand() const;
+        ExprType targetType() const;
     };
 
     class BinaryExpr : public Expr {

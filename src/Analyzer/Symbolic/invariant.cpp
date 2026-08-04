@@ -21,6 +21,22 @@ namespace acslg::analyzer::symbolic {
     using detail::VariableAddressNode;
     using detail::SumOverRangeNode;
 
+    namespace {
+        bool isValuePreservingIntegerCast(ExprType source, ExprType target) {
+            using enum ExprScalarKind;
+
+            if (source.bitWidth == 0 || target.bitWidth == 0)
+                return false;
+            if (source.kind == Int && target.kind == Int)
+                return target.bitWidth >= source.bitWidth;
+            if (source.kind == UInt && target.kind == UInt)
+                return target.bitWidth >= source.bitWidth;
+            if (source.kind == UInt && target.kind == Int)
+                return target.bitWidth > source.bitWidth;
+            return false;
+        }
+    } // namespace
+
     /**
      * @brief Determine whether the unary operation preserves linearity.
      * @return True for + or - over a linear operand; false otherwise.
@@ -43,6 +59,15 @@ namespace acslg::analyzer::symbolic {
             case Operator::Minus: return expr_.getMaxDegree();
             default: return -1; // undefined / invalid
         }
+    }
+
+    bool detail::CastExprNode::isLinear() const {
+        return isValuePreservingIntegerCast(operand_.getValType(), getValType()) &&
+               operand_.isLinear();
+    }
+
+    int detail::CastExprNode::getMaxDegree() const {
+        return isLinear() ? operand_.getMaxDegree() : -1;
     }
 
     /**
@@ -124,10 +149,12 @@ namespace acslg::analyzer::symbolic {
             case LiteralType::Boolean: return Linear_Expression(data_.boolValue ? 1 : 0);
             case LiteralType::Int: return Linear_Expression(data_.intValue);
             case LiteralType::UnsignedInt:
-                return Linear_Expression(static_cast<int>(data_.uintValue));
+                return Linear_Expression(
+                    static_cast<Coefficient>(static_cast<std::uint64_t>(data_.uintValue)));
             case LiteralType::Short: return Linear_Expression(static_cast<int>(data_.shortValue));
             case LiteralType::UnsignedShort:
-                return Linear_Expression(static_cast<int>(data_.ushortValue));
+                return Linear_Expression(
+                    static_cast<Coefficient>(static_cast<std::uint64_t>(data_.ushortValue)));
             case LiteralType::Int64:
                 return Linear_Expression(static_cast<Coefficient>(data_.int64Value));
             case LiteralType::UInt64:
@@ -195,6 +222,13 @@ namespace acslg::analyzer::symbolic {
         }
     }
 
+    std::optional<Parma_Polyhedra_Library::Linear_Expression> detail::CastExprNode::toLinearExpr(
+        const std::unordered_map<std::string, size_t> &varIndexMap) const {
+        if (!isLinear())
+            return std::nullopt;
+        return operand_.toLinearExpr(varIndexMap);
+    }
+
     /**
      * @brief Convert variable-backed symbol to a linear expression using a variable index map.
      */
@@ -229,13 +263,15 @@ namespace acslg::analyzer::symbolic {
                 return Parma_Polyhedra_Library::Linear_Expression(data_.intValue);
             case LiteralType::UnsignedInt:
                 return Parma_Polyhedra_Library::Linear_Expression(
-                    static_cast<int>(data_.uintValue));
+                    static_cast<Parma_Polyhedra_Library::Coefficient>(
+                        static_cast<std::uint64_t>(data_.uintValue)));
             case LiteralType::Short:
                 return Parma_Polyhedra_Library::Linear_Expression(
                     static_cast<int>(data_.shortValue));
             case LiteralType::UnsignedShort:
                 return Parma_Polyhedra_Library::Linear_Expression(
-                    static_cast<int>(data_.ushortValue));
+                    static_cast<Parma_Polyhedra_Library::Coefficient>(
+                        static_cast<std::uint64_t>(data_.ushortValue)));
             case LiteralType::Int64:
                 return Parma_Polyhedra_Library::Linear_Expression(
                     static_cast<Parma_Polyhedra_Library::Coefficient>(data_.int64Value));
@@ -323,6 +359,13 @@ namespace acslg::analyzer::symbolic {
         }
 
         ERROR("non-affine or unsupported op");
+    }
+
+    Parma_Polyhedra_Library::Linear_Expression detail::CastExprNode::toLinearExpr(
+        const detail::ExprHandleIndexMap &expressionIndexMap) const {
+        if (!isLinear())
+            ERROR("non-value-preserving cast cannot be linearized");
+        return operand_.toLinearExpr(expressionIndexMap);
     }
 
     Parma_Polyhedra_Library::Linear_Expression detail::SymbolValueNode::toLinearExpr(

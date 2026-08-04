@@ -19,6 +19,7 @@ namespace acslg::analyzer::symbolic::detail {
             K_Structure,
             K_BinaryOpExpr,
             K_UnaryOpExpr,
+            K_CastExpr,
             K_UnknownExpr,
 
             K_RangeIndex,
@@ -77,6 +78,7 @@ namespace acslg::analyzer::symbolic::detail {
         bool isLiteralExpr() const { return kind_ == ExprKind::K_LiteralExpr; }
         bool isUnaryExpr() const { return kind_ == ExprKind::K_UnaryOpExpr; }
         bool isBinaryExpr() const { return kind_ == ExprKind::K_BinaryOpExpr; }
+        bool isCastExpr() const { return kind_ == ExprKind::K_CastExpr; }
         bool isStructure() const { return kind_ == ExprKind::K_Structure; }
         bool isSymbolValue() const { return kind_ == ExprKind::K_SymbolValue; }
         bool isSymbolAddress() const { return kind_ == ExprKind::K_SymbolAddress; }

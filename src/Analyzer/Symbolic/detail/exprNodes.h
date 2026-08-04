@@ -83,6 +83,7 @@ namespace acslg::analyzer::symbolic::detail {
         Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
             const ExprHandleIndexMap &) const override;
         int64_t getLiteralValue() const;
+        std::variant<std::int64_t, std::uint64_t> getIntegerValue() const;
 
       private:
         utils::expected<std::string, ACSLError> doGetACSL(
@@ -222,6 +223,39 @@ namespace acslg::analyzer::symbolic::detail {
 
         Operator op_;
         ExprHandle expr_;
+    };
+
+    /// Internal node representing an explicit scalar value conversion.
+    class CastExprNode : public SymbolicExprNode {
+      public:
+        ExprHandle getOperand() const { return operand_; }
+
+        std::string dump() const override;
+        std::size_t hash() const override;
+        bool equal(const SymbolicExprNode &expr) const override;
+        bool isUnknown() const override { return operand_.isUnknown(); }
+        UsedSet collectUsedSymbols() const override;
+        bool isLinear() const override;
+        int getMaxDegree() const override;
+        std::optional<Parma_Polyhedra_Library::Linear_Expression> toLinearExpr(
+            const std::unordered_map<std::string, size_t> &) const override;
+        Parma_Polyhedra_Library::Linear_Expression toLinearExpr(
+            const ExprHandleIndexMap &) const override;
+
+      private:
+        friend struct ExprFactoryInternals;
+
+        CastExprNode(ExprHandle operand, ExprType targetType)
+            : SymbolicExprNode(ExprKind::K_CastExpr, targetType), operand_(operand) {}
+
+        utils::expected<std::string, ACSLError> doGetACSL(
+            const ACSLConfig &config,
+            std::unordered_set<SourcePoint> &usedPoints,
+            std::optional<SourcePoint> currentPoint,
+            unsigned parentPrec,
+            bool isRightChild) const override;
+
+        ExprHandle operand_;
     };
 
     /// Internal node representing a symbolic value that cannot be modeled.

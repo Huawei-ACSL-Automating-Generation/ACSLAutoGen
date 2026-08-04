@@ -27,3 +27,5 @@ target_link_libraries(
           ${PPL_LIBRARY}
           ${GMP_LIBRARY}
           ${GMPXX_LIBRARY})
+
+add_subdirectory(NumericalInvariant)

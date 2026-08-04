@@ -12,6 +12,9 @@ test.c
 doxygen/
 docs/refactor-plans/
 
+# Local credentials and external-provider settings.
+.acslg-local/
+
 benchmark_results.tsv
 benchmark_logs
 *.txt
